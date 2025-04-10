@@ -135,7 +135,7 @@ object BlazeConverters extends Logging {
   val enableScanParquet: Boolean =
     SparkEnv.get.conf.getBoolean("spark.blaze.enable.scan.parquet", defaultValue = true)
   val enableScanOrc: Boolean =
-    SparkEnv.get.conf.getBoolean("spark.blaze.enable.scan.orc", defaultValue = true)
+    SparkEnv.get.conf.getBoolean("spark.blaze.enable.scan.orc", defaultValue = false)
 
   import org.apache.spark.sql.catalyst.plans._
   import org.apache.spark.sql.catalyst.optimizer._
@@ -313,16 +313,22 @@ object BlazeConverters extends Logging {
       getShuffleOrigin(exec))
   }
 
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  def getIsSkewJoinFromSMJ(exec: SortMergeJoinExec): Boolean = exec.isSkewJoin
+
+  @sparkver("241kwaiae")
+  def getIsSkewJoinFromSMJ(exec: SortMergeJoinExec): Boolean = false
+
   @sparkver(" 3.2 / 3.3 / 3.4 / 3.5")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
 
-  @sparkver("3.0 / 3.1")
+  @sparkver("3.0 / 3.1 / 241kwaiae")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
 
-  @sparkver("3.0")
+  @sparkver("3.0 / 241kwaiae")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = None
 
   def convertFileSourceScanExec(exec: FileSourceScanExec): SparkPlan = {
@@ -353,6 +359,9 @@ object BlazeConverters extends Logging {
     relation.fileFormat match {
       case p if p.getClass.getName.endsWith("ParquetFileFormat") =>
         assert(enableScanParquet)
+        assert(
+          !p.getClass.getName.endsWith("HoodieFileGroupReaderBasedParquetFileFormat"),
+          "Hudi MOR table not supported")
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
       case p if p.getClass.getName.endsWith("OrcFileFormat") =>
         assert(enableScanOrc)
@@ -419,7 +428,7 @@ object BlazeConverters extends Logging {
           exec.condition,
           exec.left,
           exec.right,
-          exec.isSkewJoin)
+          getIsSkewJoinFromSMJ(exec))
       logDebug(
         s"Converting SortMergeJoinExec (with forceShuffledHashJoin): ${Shims.get.simpleStringWithNodeId(exec)}")
       logDebug(s"  leftKeys: $leftKeys")
@@ -455,7 +464,7 @@ object BlazeConverters extends Logging {
         exec.condition,
         exec.left,
         exec.right,
-        exec.isSkewJoin)
+        getIsSkewJoinFromSMJ(exec))
     logDebug(s"Converting SortMergeJoinExec: ${Shims.get.simpleStringWithNodeId(exec)}")
     logDebug(s"  leftKeys: $leftKeys")
     logDebug(s"  rightKeys: $rightKeys")

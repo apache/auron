@@ -19,18 +19,15 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.math.max
 import scala.math.min
-
 import org.apache.arrow.c.CDataDictionaryProvider
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.commons.lang3.reflect.FieldUtils
 import org.apache.commons.lang3.reflect.MethodUtils
-
 import com.google.protobuf.ByteString
 import org.apache.spark.SparkEnv
 import org.blaze.{protobuf => pb}
@@ -48,7 +45,8 @@ import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.RightOuter
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
+import org.blaze.protobuf.ScalarFunction
+// import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution.blaze.plan.Util
 import org.apache.spark.sql.execution.ExecSubqueryExpression
@@ -339,13 +337,16 @@ object NativeConverters extends Logging {
     convertExprWithFallback(
       sparkExpr,
       isPruningExpr = true,
-      { _ =>
-        buildExprNode(
-          _.setColumn(
-            pb.PhysicalColumn
+      { e => // convert unsupported expression to a placeholder
+        pb.PhysicalExprNode
+          .newBuilder()
+          .setScalarFunction(
+            pb.PhysicalScalarFunctionNode
               .newBuilder()
-              .setName("!__unsupported_pruning_expr__")
-              .setIndex(Int.MaxValue)))
+              .setFun(pb.ScalarFunction.SparkExtFunctions)
+              .setName("Placeholder")
+              .setReturnType(NativeConverters.convertDataType(e.dataType)))
+          .build()
       })
   }
 
@@ -957,9 +958,9 @@ object NativeConverters extends Logging {
             .apply(precision, IntegerType) :: Literal.apply(scale, IntegerType) :: Nil
         buildExtScalarFunction("CheckOverflow", args, DecimalType(precision, scale))
 
-      case e: NormalizeNaNAndZero
-          if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
-        buildExtScalarFunction("NormalizeNanAndZero", e.children, e.dataType)
+      // case e: NormalizeNaNAndZero
+      //     if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
+      //   buildExtScalarFunction("NormalizeNanAndZero", e.children, e.dataType)
 
       case e: CreateArray => buildExtScalarFunction("MakeArray", e.children, e.dataType)
 
