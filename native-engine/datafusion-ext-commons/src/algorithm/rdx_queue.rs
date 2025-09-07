@@ -161,13 +161,13 @@ mod test {
     #[test]
     fn fuzztest() {
         for _ in 0..10 {
-            let num_nodes = rand::thread_rng().gen_range(1..=999);
+            let num_nodes = rand::rng().random_range(1..=999);
             let mut nodes = vec![];
             for _ in 0..num_nodes {
-                let node_len = rand::thread_rng().gen_range(1..=999);
+                let node_len = rand::rng().random_range(1..=999);
                 let mut node = vec![];
                 for _ in 0..node_len {
-                    node.push(rand::thread_rng().gen_range(1000..=9999));
+                    node.push(rand::rng().random_range(1000..=9999));
                 }
                 nodes.push(node);
             }

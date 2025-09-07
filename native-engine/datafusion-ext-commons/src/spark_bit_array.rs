@@ -147,7 +147,7 @@ mod tests {
 
         let mut bit_array = SparkBitArray::new_with_num_bits(320);
         let indexes: Vec<usize> = (1..=100)
-            .map(|_| r.gen_range(0..320) as usize)
+            .map(|_| r.random_range(0..320) as usize)
             .unique()
             .collect();
 
@@ -166,11 +166,11 @@ mod tests {
         let mut bit_array2 = SparkBitArray::new_with_num_bits(64 * 6);
 
         let indexes1: Vec<usize> = (1..=100)
-            .map(|_| r.gen_range(0..64 * 6) as usize)
+            .map(|_| r.random_range(0..64 * 6) as usize)
             .unique()
             .collect();
         let indexes2: Vec<usize> = (1..=100)
-            .map(|_| r.gen_range(0..64 * 6) as usize)
+            .map(|_| r.random_range(0..64 * 6) as usize)
             .unique()
             .collect();
 
