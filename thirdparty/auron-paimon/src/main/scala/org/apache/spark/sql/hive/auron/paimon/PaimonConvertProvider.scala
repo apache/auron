@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.hive.auron
+package org.apache.spark.sql.hive.auron.paimon
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.AuronConverters

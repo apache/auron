@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.PartitionedFile
-import org.apache.spark.sql.hive.auron.PaimonUtil
+import org.apache.spark.sql.hive.auron.paimon.PaimonUtil
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.types.StructType
 
