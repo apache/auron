@@ -60,9 +60,7 @@ import org.apache.spark.sql.execution.ShuffledRowRDD
 import org.apache.spark.sql.execution.ShufflePartitionSpec
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.UnaryExecNode
-import org.apache.spark.sql.execution.adaptive.BroadcastQueryStageExec
-import org.apache.spark.sql.execution.adaptive.QueryStageExec
-import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageExec
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, BroadcastQueryStageExec, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.auron.plan._
 import org.apache.spark.sql.execution.auron.plan.ConvertToNativeExec
 import org.apache.spark.sql.execution.auron.plan.NativeAggBase
@@ -974,6 +972,15 @@ class ShimsImpl extends Shims with Logging {
       isPruningExpr: Boolean,
       fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = None
 
+  @sparkver("3.0")
+  override def getAdaptiveInputPlan(exec: AdaptiveSparkPlanExec): SparkPlan = {
+    exec.initialPlan
+  }
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  override def getAdaptiveInputPlan(exec: AdaptiveSparkPlanExec): SparkPlan = {
+    exec.inputPlan
+  }
 }
 
 case class ForceNativeExecutionWrapper(override val child: SparkPlan)

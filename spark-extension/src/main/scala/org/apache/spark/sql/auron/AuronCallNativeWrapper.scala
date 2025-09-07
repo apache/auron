@@ -65,7 +65,7 @@ case class AuronCallNativeWrapper(
   private val batchRows: ArrayBuffer[InternalRow] = ArrayBuffer()
   private var batchCurRowIdx = 0
 
-  logInfo(s"Start executing native plan")
+  logInfo(s"Start executing native plan ${nativePlan.getPhysicalPlanTypeCase}")
   private var nativeRuntimePtr =
     JniBridge.callNative(NativeHelper.nativeMemory, AuronConf.NATIVE_LOG_LEVEL.stringConf(), this)
 

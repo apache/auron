@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.TakeOrderedAndProjectExec
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
@@ -174,7 +175,10 @@ object AuronConvertStrategy extends Logging {
         e.setTagValue(convertStrategyTag, AlwaysConvert)
       case e: LocalTableScanExec =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
-      case e: DataWritingCommandExec if isNative(e.child) =>
+      case e: DataWritingCommandExec
+          if isNative(e.child) ||
+            (e.child.isInstanceOf[AdaptiveSparkPlanExec] && isNative(
+              Shims.get.getAdaptiveInputPlan(e.child.asInstanceOf[AdaptiveSparkPlanExec]))) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
 
       case e if e.getTagValue(convertToNonNativeTag).contains(true) =>
