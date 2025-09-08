@@ -34,7 +34,6 @@ class AuronAdaptiveQueryExecSuite
   import org.apache.spark.sql.test.SQLTestData.TestData
   import testImplicits._
 
-  // Copy from spark/sql/core/src/test/scala/org/apache/spark/sql/execution/adaptive/AdaptiveQueryExecSuite.scala
   test("SPARK-35725: Support optimize skewed partitions in RebalancePartitions") {
     withTempView("v") {
       withSQLConf(
