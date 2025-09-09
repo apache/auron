@@ -342,7 +342,7 @@ jobs:
           export RUST_LOG=ERROR
           export RUST_BACKTRACE=1
           export SCALA_VERSION=${{ inputs.scalaver }}
-          SPARK_HOME=spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
+          export SPARK_HOME=spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
           dev/run-tpcds-test \
             ${{ inputs.extrasparkconf }} \
             --data-location dev/tpcds_1g \
