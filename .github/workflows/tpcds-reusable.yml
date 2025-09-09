@@ -203,8 +203,8 @@ jobs:
         id: get-spark-version
         run: |
           SPARK_VERSION=$(./build/mvn help:evaluate -N -Dexpression=sparkVersion -P ${{ inputs.sparkver }} -q -DforceStdout)
-          if [ "$SCALAVER" = "2.13" ]; then
-            SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${{ inputs.hadoop-profile }}-scala${SCALAVER}.tgz"
+          if [ ${{inputs.scalaver}} = "2.13" ]; then
+            SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${{ inputs.hadoop-profile }}-scala${{inputs.scalaver}}.tgz"
           else
             SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${{ inputs.hadoop-profile }}.tgz"
           fi
