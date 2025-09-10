@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - celebornver: "0.6.0"
+          - celebornver: "0.6.1"
             celebornprofile: "celeborn,celeborn-0.6"
           - celebornver: "0.5.4"
             celebornprofile: "celeborn,celeborn-0.5"

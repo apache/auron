@@ -696,7 +696,7 @@
         <module>thirdparty/auron-celeborn-0.6</module>
       </modules>
       <properties>
-        <celebornVersion>0.6.0</celebornVersion>
+        <celebornVersion>0.6.1</celebornVersion>
       </properties>
     </profile>
 
