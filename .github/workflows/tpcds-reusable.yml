@@ -21,56 +21,71 @@ on:
   workflow_call:
     inputs:
       sparkver:
+        description: 'Maven profile id to resolve sparkVersion (e.g., spark-3.5)'
         required: true
         type: string
-      sparkurl:
+      hadoop-profile:
+        description: 'Hadoop profile (e.g., hadoop2.7, hadoop3)'
         required: true
         type: string
+        default: ''
       javaver:
+        description: 'Optional Java version'
         required: false
         type: string
         default: '8'
       scalaver:
+        description: 'Optional Scala version'
         required: false
         type: string
         default: '2.12'
       celebornver:
+        description: 'Optional Celeborn version'
         required: false
         type: string
         default: ''
       celebornurl:
+        description: 'Optional Celeborn URL'
         required: false
         type: string
         default: ''
       unifflever:
+        description: 'Optional Uniffle version'
         required: false
         type: string
         default: ''
       uniffleurl:
+        description: 'Optional Uniffle URL'
         required: false
         type: string
         default: ''
       hadoopver:
+        description: 'Optional Hadoop version'
         required: false
         type: string
         default: ''
       hadoopurl:
+        description: 'Optional Hadoop URL'
         required: false
         type: string
         default: ''
       extrabuildopt:
+        description: 'Optional extra build options for Maven'
         required: false
         type: string
         default: ''
       extraidentifier:
+        description: 'Optional extra identifier for artifact names'
         required: false
         type: string
         default: ''
       extrasparkconf:
+        description: 'Optional extra Spark conf to pass'
         required: false
         type: string
         default: ''
       queries:
+        description: 'Optional list of queries to run'
         required: false
         type: string
         default: |
@@ -89,32 +104,35 @@ on:
 
 jobs:
   build-validator:
-    name: Build Validator
+    name: Build TPC-DS Validator
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/cache@v4
+      - name: Cache TPC-DS Validator
+        uses: actions/cache@v4
         id: cache-tpcds-validator
         with:
           key: tpcds-validator_${{ inputs.scalaver }}
           path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
 
-      - uses: actions/checkout@v4
+      - name: Checkout TPC-DS Validator
+        uses: actions/checkout@v4
         if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
         with:
           repository: auron-project/tpcds-validator
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java and Maven cache
+        uses: actions/setup-java@v4
         if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
           cache: 'maven'
 
-      - name: Build
+      - name: Build TPC-DS Validator
         if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
         run: ./build/mvn package -DskipTests -Pscala-${{ inputs.scalaver }}
 
-      - name: Upload Artifact
+      - name: Upload TPC-DS Validator
         uses: actions/upload-artifact@v4
         with:
           name: tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.extraidentifier }}
@@ -125,21 +143,26 @@ jobs:
     name: Build Auron JAR
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Auron
+        uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-java@v4
+
+      - name: Setup Java and Maven cache
+        uses: actions/setup-java@v4
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
           cache: 'maven'
 
-      - uses: arduino/setup-protoc@v2
+      - name: Setup protoc
+        uses: arduino/setup-protoc@v2
         with:
           version: "21.7"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses:  ./.github/actions/setup-rust-toolchain
+      - name: Setup Rust toolchain
+        uses:  ./.github/actions/setup-rust-toolchain
         with:
           rustflags: --allow warnings -C target-feature=+aes
           components:
@@ -151,13 +174,13 @@ jobs:
           cargo --version
           cargo test --workspace --all-features
 
-      - name: Build ${{ inputs.sparkver }}_${{ inputs.scalaver }} jdk-${{ inputs.javaver }}
+      - name: Build auron (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
         run: |
           sed -i 's/opt-level = 1/opt-level = 0/g' Cargo.toml # use opt-level 0
           rm -f .build-checksum_*.cache
           ./build/mvn package -Ppre -P${{ inputs.sparkver }} -Pscala-${{ inputs.scalaver }} -Pjdk-${{ inputs.javaver }} ${{ inputs.extrabuildopt }}
 
-      - name: Upload ${{ inputs.sparkver }}_${{ inputs.scalaver }} jdk-${{ inputs.javaver }}
+      - name: Upload auron (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
         uses: actions/upload-artifact@v4
         with:
           name: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.extraidentifier }}
@@ -173,27 +196,44 @@ jobs:
       matrix:
         query: ${{ fromJson(inputs.queries) }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Auron
+        uses: actions/checkout@v4
 
-      - uses: actions/cache@v4
+      - name: Get Spark actual version from pom
+        id: get-spark-version
+        run: |
+          SPARK_VERSION=$(./build/mvn help:evaluate -N -Dexpression=sparkVersion -P ${{ inputs.sparkver }} -q -DforceStdout)
+          if [ ${{inputs.scalaver}} = "2.13" ]; then
+            SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${{ inputs.hadoop-profile }}-scala${{inputs.scalaver}}.tgz"
+          else
+            SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${{ inputs.hadoop-profile }}.tgz"
+          fi
+          echo "Detected Spark VERSION: $SPARK_VERSION"
+          echo "Detected SPARK URL: $SPARK_URL"
+          echo "sparkurl=$SPARK_URL" >> $GITHUB_OUTPUT
+
+      - name: Cache Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }})
+        uses: actions/cache@v4
         id: cache-spark-bin
         with:
           path: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
           key: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
 
-      - name: Setup ${{ inputs.sparkver }}
+      - name: Setup Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }})
         id: setup-spark-bin
         if: steps.cache-spark-bin.outputs.cache-hit != 'true'
         run: |
-          wget -c ${{ inputs.sparkurl }}
+          wget -c ${{ steps.get-spark-version.outputs.sparkurl }}
           mkdir -p spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
           cd spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }} && tar -xf ../spark-*.tgz --strip-component=1
 
-      - uses: actions/download-artifact@v4
+      - name: Download Auron JAR
+        uses: actions/download-artifact@v4
         with:
           name: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.extraidentifier }}
 
-      - uses: actions/download-artifact@v4
+      - name: Download TPC-DS Validator JAR
+        uses: actions/download-artifact@v4
         with:
           name: tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.extraidentifier }}
 
@@ -208,13 +248,15 @@ jobs:
           ls -la
           cp auron-*${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java and Maven cache
+        uses: actions/setup-java@v4
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
           cache: 'maven'
 
-      - uses: actions/cache@v4
+      - name: Cache Celeborn-${{ inputs.celebornver }}
+        uses: actions/cache@v4
         if: ${{ inputs.celebornver != '' && inputs.celebornurl != '' }}
         id: cache-celeborn-bin
         with:
@@ -223,7 +265,7 @@ jobs:
 
       - name: Setup Celeborn-${{ inputs.celebornver }}
         id: setup-celeborn-bin
-        if: ${{ inputs.celebornver != '' && inputs.celebornurl != '' &&  steps.cache-celeborn-bin.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.celebornver != '' && inputs.celebornurl != '' && steps.cache-celeborn-bin.outputs.cache-hit != 'true' }}
         run: |
           wget -c ${{ inputs.celebornurl }} && \
           mkdir -p celeborn-bin-${{ inputs.celebornver }} && \
@@ -245,7 +287,8 @@ jobs:
           ls -la celeborn-bin-${{ inputs.celebornver }}/spark
           cp celeborn-bin-${{ inputs.celebornver }}/spark/celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
-      - uses: actions/cache@v4
+      - name: Cache Uniffle-${{ inputs.unifflever }}
+        uses: actions/cache@v4
         if: ${{ inputs.unifflever != '' && inputs.uniffleurl != '' }}
         id: cache-uniffle-bin
         with:
@@ -254,13 +297,14 @@ jobs:
 
       - name: Setup Uniffle-${{ inputs.unifflever }}
         id: setup-uniffle-bin
-        if: ${{ inputs.unifflever != '' && inputs.uniffleurl != '' &&  steps.cache-uniffle-bin.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.unifflever != '' && inputs.uniffleurl != '' && steps.cache-uniffle-bin.outputs.cache-hit != 'true' }}
         run: |
           wget -c ${{ inputs.uniffleurl }} && \
           mkdir -p uniffle-bin-${{ inputs.unifflever }} && \
           tar -xf ./apache-uniffle-${{ inputs.unifflever }}-incubating-bin.tar.gz -C uniffle-bin-${{ inputs.unifflever }} --strip-component=1
 
-      - uses: actions/cache@v4
+      - name: Cache hadoop-${{ inputs.hadoopver }}
+        uses: actions/cache@v4
         if: ${{ inputs.hadoopver != '' && inputs.hadoopurl != '' }}
         id: cache-hadoop-bin
         with:
@@ -269,7 +313,7 @@ jobs:
 
       - name: Setup hadoop-${{ inputs.hadoopver }}
         id: setup-hadoop-bin
-        if: ${{ inputs.hadoopver != '' && inputs.hadoopurl != '' &&  steps.cache-hadoop-bin.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.hadoopver != '' && inputs.hadoopurl != '' && steps.cache-hadoop-bin.outputs.cache-hit != 'true' }}
         run: |
           wget -c ${{ inputs.hadoopurl }} && \
           mkdir -p hadoop-bin-${{ inputs.hadoopver }} && \
@@ -292,13 +336,14 @@ jobs:
           ls -la uniffle-bin-${{ inputs.unifflever }}/jars/client/spark3/
           cp uniffle-bin-${{ inputs.unifflever }}/jars/client/spark3/*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
-      - name: Run
+      - name: Run TPC-DS Query ${{ matrix.query }}
         run: |
           ls -la
           export RUST_LOG=ERROR
           export RUST_BACKTRACE=1
           export SCALA_VERSION=${{ inputs.scalaver }}
-          SPARK_HOME=spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }} dev/run-tpcds-test \
+          export SPARK_HOME=spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
+          dev/run-tpcds-test \
             ${{ inputs.extrasparkconf }} \
             --data-location dev/tpcds_1g \
             --query-filter ${{ matrix.query }}

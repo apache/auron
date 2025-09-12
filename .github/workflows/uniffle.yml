@@ -44,15 +44,15 @@ jobs:
     uses: ./.github/workflows/tpcds-reusable.yml
     name: Test Uniffle ${{ matrix.unifflever }}
     with:
+      sparkver: "spark-3.5"
+      hadoop-profile: 'hadoop3'
+      scalaver: "2.12"
+      hadoopver: ${{ matrix.hadoopver }}
       unifflever: ${{ matrix.unifflever }}
       uniffleurl: https://archive.apache.org/dist/uniffle/${{ matrix.unifflever }}/apache-uniffle-${{ matrix.unifflever }}-incubating-bin.tar.gz
-      hadoopver: ${{ matrix.hadoopver }}
       hadoopurl: https://archive.apache.org/dist/hadoop/common/hadoop-${{ matrix.hadoopver }}/hadoop-${{ matrix.hadoopver }}.tar.gz
       extrabuildopt: -P${{ matrix.uniffleprofile }} -DuniffleVersion=${{ matrix.unifflever }}
       extraidentifier: uniffle-${{ matrix.unifflever }}
-      sparkver: "spark-3.5"
-      sparkurl: "https://archive.apache.org/dist/spark/spark-3.5.6/spark-3.5.6-bin-hadoop3.tgz"
-      scalaver: "2.12"
       extrasparkconf: >-
         --conf spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.uniffle.AuronUniffleShuffleManager
         --conf spark.serializer=org.apache.spark.serializer.KryoSerializer

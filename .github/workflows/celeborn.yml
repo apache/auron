@@ -50,7 +50,7 @@ jobs:
       extrabuildopt: -P${{ matrix.celebornprofile }} -DcelebornVersion=${{ matrix.celebornver }}
       extraidentifier: celeborn-${{ matrix.celebornver }}
       sparkver: "spark-3.5"
-      sparkurl: "https://archive.apache.org/dist/spark/spark-3.5.6/spark-3.5.6-bin-hadoop3.tgz"
+      hadoop-profile: 'hadoop3'
       scalaver: "2.12"
       extrasparkconf: >-
         --conf spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.celeborn.AuronCelebornShuffleManager
