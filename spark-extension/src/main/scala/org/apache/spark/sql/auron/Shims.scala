@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.auron.plan._
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
@@ -255,6 +256,8 @@ abstract class Shims {
   def getMinPartitionNum(sparkSession: SparkSession): Int
 
   def postTransform(plan: SparkPlan, sc: SparkContext): Unit = {}
+
+  def getAdaptiveInputPlan(exec: AdaptiveSparkPlanExec): SparkPlan
 }
 
 object Shims {
