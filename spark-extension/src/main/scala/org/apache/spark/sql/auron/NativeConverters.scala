@@ -1028,7 +1028,6 @@ object NativeConverters extends Logging {
         }
 
       // hive UDFJson
-      // hive UDFJson
       case e
           if udfJsonEnabled && (
             e.isInstanceOf[GetJsonObject]
@@ -1036,7 +1035,11 @@ object NativeConverters extends Logging {
           )
             && e.children.map(_.dataType) == Seq(StringType, StringType)
             && e.children(1).isInstanceOf[Literal] =>
-        // use GetParsedJsonObject + ParseJson for reusing parsed json value in native
+        // Auron will convert the call to get_json_object(json_str, '$.path') into two function calls:
+        // the first step parse json_str into a JSON object,
+        // the second step extracts the value of path from the JSON object.
+        // The benefit of this approach is that if there are multiple calls,
+        // the JSON object can be reused, which can significantly improve performance.
         val parsed = Shims.get.createNativeExprWrapper(
           buildExtScalarFunction("ParseJson", e.children(0) :: Nil, BinaryType),
           BinaryType,
