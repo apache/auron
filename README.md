@@ -126,4 +126,4 @@ If you meet any questions, connect us and fix it by submitting a 🔗[Pull Reque
 ## License
 
 Auron is licensed under the Apache 2.0 License. A copy of the license
-[can be found here.](LICENSE.txt)
+[can be found here.](LICENSE)
