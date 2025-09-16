@@ -141,35 +141,41 @@ impl ExecutionPlan for FFIReaderExec {
     }
 }
 
-/// Reads Arrow data from a Java-side exporter via FFI (Foreign Function Interface).
+/// Reads Arrow data from a Java-side exporter via FFI (Foreign Function
+/// Interface).
 ///
-/// This function establishes a bridge between Java and Rust to read Arrow data efficiently
-/// using the Arrow C Data Interface. It continuously fetches record batches from the Java
-/// exporter, converts them from FFI format to native Rust Arrow format, and streams them
-/// back to the execution engine.
+/// This function establishes a bridge between Java and Rust to read Arrow data
+/// efficiently using the Arrow C Data Interface. It continuously fetches record
+/// batches from the Java exporter, converts them from FFI format to native Rust
+/// Arrow format, and streams them back to the execution engine.
 ///
 /// # Arguments
 ///
 /// * `schema` - The Arrow schema reference defining the structure of the data
-/// * `exporter` - A JNI global reference to the Java-side Arrow FFI exporter object
-/// * `exec_ctx` - The execution context for metrics collection and stream management
+/// * `exporter` - A JNI global reference to the Java-side Arrow FFI exporter
+///   object
+/// * `exec_ctx` - The execution context for metrics collection and stream
+///   management
 ///
 /// # Returns
 ///
-/// Returns a `Result<SendableRecordBatchStream>` containing a stream of record batches
-/// on success, or an error if the FFI operation fails.
+/// Returns a `Result<SendableRecordBatchStream>` containing a stream of record
+/// batches on success, or an error if the FFI operation fails.
 ///
 /// # Behavior
 ///
-/// - Continuously polls the Java exporter for new batches until no more data is available
+/// - Continuously polls the Java exporter for new batches until no more data is
+///   available
 /// - Converts FFI Arrow arrays to native Rust Arrow data structures
 /// - Tracks memory usage and output row counts via metrics
-/// - Automatically closes the Java exporter resource when the stream ends or fails
+/// - Automatically closes the Java exporter resource when the stream ends or
+///   fails
 /// - Processes batches asynchronously using tokio's blocking task spawning
 ///
 /// # FFI Safety
 ///
-/// This function uses unsafe operations to convert FFI Arrow data. The safety is ensured by:
+/// This function uses unsafe operations to convert FFI Arrow data. The safety
+/// is ensured by:
 /// - Proper FFI Arrow array initialization and cleanup
 /// - Correct data type matching between Java and Rust sides
 /// - Automatic resource management through RAII patterns

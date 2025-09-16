@@ -173,20 +173,23 @@ impl ExecuteWithColumnPruning for FilterExec {
 
 /// Executes filtering operation on the input record batch stream.
 ///
-/// This function applies the provided predicates to filter records from the input stream.
-/// It uses a cached expression evaluator for efficient predicate evaluation and returns
-/// a filtered stream containing only records that satisfy all predicates.
+/// This function applies the provided predicates to filter records from the
+/// input stream. It uses a cached expression evaluator for efficient predicate
+/// evaluation and returns a filtered stream containing only records that
+/// satisfy all predicates.
 ///
 /// # Arguments
 ///
 /// * `input` - The input record batch stream to be filtered
-/// * `predicates` - A vector of physical expressions representing filter predicates
-/// * `exec_ctx` - The execution context containing metrics and runtime information
+/// * `predicates` - A vector of physical expressions representing filter
+///   predicates
+/// * `exec_ctx` - The execution context containing metrics and runtime
+///   information
 ///
 /// # Returns
 ///
-/// Returns a `Result<SendableRecordBatchStream>` containing the filtered record batch stream
-/// on success, or an error if the filtering operation fails.
+/// Returns a `Result<SendableRecordBatchStream>` containing the filtered record
+/// batch stream on success, or an error if the filtering operation fails.
 ///
 /// # Behavior
 ///
