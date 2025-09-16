@@ -80,5 +80,5 @@ features = ["rustls", "test"]
 
 
 [dependencies.serde]
-version = "1.0.223"
+version = "1.0.225"
 optional = true
