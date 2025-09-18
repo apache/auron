@@ -107,7 +107,7 @@ mod tests {
     /// Helper function to run a test for a given hash function and scalar
     /// input.
     fn run_scalar_test(
-        // Accepts any function that matches the signature of your spark_sha* functions.
+        // Accepts any function that matches the signature of the spark_sha* functions.
         hash_fn: impl Fn(&[ColumnarValue]) -> DataFusionResult<ColumnarValue>,
         input_value: ColumnarValue,
         expected_output: &str,
