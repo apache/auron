@@ -43,8 +43,6 @@ Top level targets are:
 All other inputs are environment variables
 
 RELEASE_RC_NO   - Release RC number, (e.g. 0)
-JAVA8_HOME - Location where the JDK or JRE is installed for JDK 8
-JAVA11_HOME - Location where the JDK or JRE is installed for JDK 11
 
 ASF_USERNAME - Username of ASF committer account
 ASF_PASSWORD - Password of ASF committer account
