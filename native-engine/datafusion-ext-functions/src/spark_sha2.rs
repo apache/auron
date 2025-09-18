@@ -93,3 +93,92 @@ fn hex_encode<T: AsRef<[u8]>>(data: T) -> String {
     }
     s
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use datafusion::{
+        common::ScalarValue, error::Result as DataFusionResult, physical_plan::ColumnarValue,
+    };
+
+    use crate::spark_sha2::{spark_sha224, spark_sha256, spark_sha384, spark_sha512};
+
+    /// Helper function to run a test for a given hash function and scalar
+    /// input.
+    fn run_scalar_test(
+        // Accepts any function that matches the signature of your spark_sha* functions.
+        hash_fn: impl Fn(&[ColumnarValue]) -> DataFusionResult<ColumnarValue>,
+        input_value: ColumnarValue,
+        expected_output: &str,
+    ) -> Result<(), Box<dyn Error>> {
+        // 1. Call the provided hash function.
+        let result = hash_fn(&[input_value])?;
+
+        // 2. Unwrap the result, panicking if it's not the expected type.
+        let ColumnarValue::Scalar(ScalarValue::Utf8(actual)) = result else {
+            panic!("expected UTF-8 scalar");
+        };
+
+        // 3. Assert the actual output matches the expected output.
+        assert_eq!(actual.as_deref(), Some(expected_output));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sha224_scalar_utf8() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
+        let expected = "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad";
+        run_scalar_test(spark_sha224, input, expected)
+    }
+
+    #[test]
+    fn test_sha256_scalar_utf8() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
+        let expected = "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78";
+        run_scalar_test(spark_sha256, input, expected)
+    }
+
+    #[test]
+    fn test_sha384_scalar_utf8() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
+        let expected = "1e02dc92a41db610c9bcdc9b5935d1fb9be5639116f6c67e97bc1a3ac649753baba7ba021c813e1fe20c0480213ad371";
+        run_scalar_test(spark_sha384, input, expected)
+    }
+
+    #[test]
+    fn test_sha512_scalar_utf8() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
+        let expected = "397118fdac8d83ad98813c50759c85b8c47565d8268bf10da483153b747a74743a58a90e85aa9f705ce6984ffc128db567489817e4092d050d8a1cc596ddc119";
+        run_scalar_test(spark_sha512, input, expected)
+    }
+
+    #[test]
+    fn test_sha224_scalar_binary() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
+        let expected = "4225cbc32d17010d1a440de9e34504c1fae29b8ee5e527e191ff9a82";
+        run_scalar_test(spark_sha224, input, expected)
+    }
+
+    #[test]
+    fn test_sha256_scalar_binary() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
+        let expected = "7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89";
+        run_scalar_test(spark_sha256, input, expected)
+    }
+
+    #[test]
+    fn test_sha384_scalar_binary() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
+        let expected = "557cfe660c753b830efa61528fc350ef384a7a4b9d3467c6230049bc59548eb8a404874baff89cb0f9bd18400829fdc2";
+        run_scalar_test(spark_sha384, input, expected)
+    }
+
+    #[test]
+    fn test_sha512_scalar_binary() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
+        let expected = "178d767c364244ede054ebb3cc4af0ac2b307a86fba6a32706ce4f692642674d2ab8f51ee738ecb09bc296918aa85db48abe28fcaef7aa2da81a618cc6d891c3";
+        run_scalar_test(spark_sha512, input, expected)
+    }
+}
