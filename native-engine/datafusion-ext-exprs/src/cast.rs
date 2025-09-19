@@ -214,7 +214,11 @@ mod test {
     #[test]
     fn cast_trimmed_utf8_into_int32() {
         let batch = make_batch(
-            Arc::new(StringArray::from(vec![Some(" 2"), Some("3 "), Some(" 4 ")])),
+            Arc::new(StringArray::from(vec![
+                Some(" 2"),
+                Some("3 "),
+                Some(" 4 "),
+            ])),
             DataType::Utf8,
         );
 
@@ -245,8 +249,11 @@ mod test {
         ));
 
         let actual = evaluate(expr, &batch);
-        let expected: ArrayRef =
-            Arc::new(Float32Array::from(vec![Some(2.5), Some(6.75), Some(8.125)]));
+        let expected: ArrayRef = Arc::new(Float32Array::from(vec![
+            Some(2.5),
+            Some(6.75),
+            Some(8.125),
+        ]));
         assert_eq!(&actual, &expected);
     }
 }
