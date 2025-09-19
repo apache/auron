@@ -446,8 +446,8 @@ object NativeConverters extends Logging {
       // cast
       // not performing native cast for timestamp/dates (will use UDFWrapper instead)
       case cast: Cast
-        if !Seq(cast.dataType, cast.child.dataType).exists(t =>
-          t.isInstanceOf[TimestampType] || t.isInstanceOf[DateType]) =>
+          if !Seq(cast.dataType, cast.child.dataType).exists(t =>
+            t.isInstanceOf[TimestampType] || t.isInstanceOf[DateType]) =>
         val castChild =
           if (cast.child.dataType == StringType && cast.dataType.isInstanceOf[NumericType] &&
             AuronConf.CAST_STRING_TRIM_ENABLE.booleanConf()) {

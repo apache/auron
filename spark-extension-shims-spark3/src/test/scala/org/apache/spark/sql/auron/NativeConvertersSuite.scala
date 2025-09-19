@@ -16,15 +16,15 @@
  */
 package org.apache.spark.sql.auron
 
-import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.types.UTF8String
+
 import org.apache.auron.protobuf.ScalarFunction
 
-class NativeConvertersSuite extends QueryTest with BaseAuronSQLSuite
-  with AuronSQLTestHelper {
+class NativeConvertersSuite extends QueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
 
   test("cast from string to numeric adds trim wrapper before native cast when enabled") {
     withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "true") {
