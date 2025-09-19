@@ -19,16 +19,15 @@ package org.apache.spark.sql.auron
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
-
 import org.apache.auron.protobuf.ScalarFunction
 
 class NativeConvertersSuite extends QueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
 
   test("cast from string to numeric adds trim wrapper before native cast when enabled") {
     withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "true") {
-      val expr = Cast(Literal(UTF8String.fromString(" 42 ")), IntegerType)
+      val expr = Cast(Literal.create(" 42 ", StringType), IntegerType)
       val nativeExpr = NativeConverters.convertExpr(expr)
 
       assert(nativeExpr.hasTryCast)
@@ -42,7 +41,7 @@ class NativeConvertersSuite extends QueryTest with BaseAuronSQLSuite with AuronS
 
   test("cast trim disabled via auron conf") {
     withEnvConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "false") {
-      val expr = Cast(Literal(UTF8String.fromString(" 42 ")), IntegerType)
+      val expr = Cast(Literal.create(" 42 ", StringType), IntegerType)
       val nativeExpr = NativeConverters.convertExpr(expr)
 
       assert(nativeExpr.hasTryCast)

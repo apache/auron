@@ -284,7 +284,8 @@ fn try_cast_string_array_to_date(array: &dyn Array) -> Result<ArrayRef> {
 }
 
 // this implementation is original copied from spark UTF8String.scala
-// The original implementation included trimming logic, but it was omitted here since Auron’s NativeConverters will handle trimming.
+// The original implementation included trimming logic, but it was omitted here
+// since Auron’s NativeConverters will handle trimming.
 fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str) -> Option<T> {
     let bytes = input.as_bytes();
 
