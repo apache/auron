@@ -22,13 +22,9 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.auron.protobuf.ScalarFunction
-import org.apache.auron.sparkverEnableMembers
 
-@sparkverEnableMembers("3.5")
 class NativeConvertersSuite extends QueryTest with BaseAuronSQLSuite
   with AuronSQLTestHelper {
-
-  import testImplicits._
 
   test("cast from string to numeric adds trim wrapper before native cast when enabled") {
     withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "true") {
