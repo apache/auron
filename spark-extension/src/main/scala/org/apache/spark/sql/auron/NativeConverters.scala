@@ -70,6 +70,7 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.types.MapType
 import org.apache.spark.sql.types.NullType
+import org.apache.spark.sql.types.NumericType
 import org.apache.spark.sql.types.ShortType
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.types.StructField
@@ -447,11 +448,18 @@ object NativeConverters extends Logging {
       case cast: Cast
           if !Seq(cast.dataType, cast.child.dataType).exists(t =>
             t.isInstanceOf[TimestampType] || t.isInstanceOf[DateType]) =>
+        val castChild =
+          if (cast.child.dataType == StringType && cast.dataType.isInstanceOf[NumericType] &&
+              AuronConf.CAST_STRING_TRIM_ENABLE.booleanConf()) {
+            StringTrim(cast.child)
+          } else {
+            cast.child
+          }
         buildExprNode {
           _.setTryCast(
             pb.PhysicalTryCastNode
               .newBuilder()
-              .setExpr(convertExprWithFallback(cast.child, isPruningExpr, fallback))
+              .setExpr(convertExprWithFallback(castChild, isPruningExpr, fallback))
               .setArrowType(convertDataType(cast.dataType))
               .build())
         }
