@@ -19,7 +19,7 @@ use arrow::{array::*, datatypes::*};
 use bigdecimal::BigDecimal;
 use chrono::Datelike;
 use datafusion::common::Result;
-use num::{Bounded, FromPrimitive, Integer, Signed};
+use num::{Bounded, FromPrimitive, Integer, Signed, traits::float};
 
 use crate::df_execution_err;
 
@@ -49,6 +49,11 @@ pub fn cast_impl(
         // spark compatible str to date
         (&DataType::Utf8, &DataType::Date32) => {
             return try_cast_string_array_to_date(array);
+        }
+
+        // use std parse to cast string to float
+        (&DataType::Utf8, to_dt) if to_dt.is_floating() => {
+            return try_cast_string_array_to_float(array, to_dt);
         }
 
         // float to int
@@ -248,6 +253,31 @@ fn to_plain_string_array(array: &dyn Array) -> ArrayRef {
     Arc::new(StringArray::from(converted_values))
 }
 
+fn try_cast_string_array_to_float(array: &dyn Array, cast_type: &DataType) -> Result<ArrayRef> {
+    macro_rules! cast {
+        ($target_type:ident) => {{
+            type B = paste::paste! {[<$target_type Builder>]};
+            let array = array.as_any().downcast_ref::<StringArray>().unwrap();
+            let mut builder = B::new();
+
+            for v in array.iter() {
+                match v {
+                    Some(s) => builder.append_option(s.trim().parse().ok()),
+                    None => builder.append_null(),
+                }
+            }
+            let result = Arc::new(builder.finish());
+            result
+        }};
+    }
+
+    Ok(match cast_type {
+        DataType::Float32 => cast!(Float32),
+        DataType::Float64 => cast!(Float64),
+        _ => arrow::compute::cast(array, cast_type)?,
+    })
+}
+
 fn try_cast_string_array_to_integer(array: &dyn Array, cast_type: &DataType) -> Result<ArrayRef> {
     macro_rules! cast {
         ($target_type:ident) => {{
@@ -261,7 +291,8 @@ fn try_cast_string_array_to_integer(array: &dyn Array, cast_type: &DataType) -> 
                     None => builder.append_null(),
                 }
             }
-            Arc::new(builder.finish())
+            let result = Arc::new(builder.finish());
+            result
         }};
     }
 
@@ -285,15 +316,26 @@ fn try_cast_string_array_to_date(array: &dyn Array) -> Result<ArrayRef> {
 
 // this implementation is original copied from spark UTF8String.scala
 fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str) -> Option<T> {
+    let mut offset = 0;
+    while offset < input.len() && input.as_bytes()[offset].is_ascii_whitespace() {
+        offset += 1;
+    }
+    if offset == input.len() {
+        return None;
+    }
+    let mut end = input.len() - 1;
+    while end > offset && input.as_bytes()[end].is_ascii_whitespace() {
+        end -= 1;
+    }
+
     let bytes = input.as_bytes();
 
     if bytes.is_empty() {
         return None;
     }
 
-    let b = bytes[0];
+    let b = bytes[offset];
     let negative = b == b'-';
-    let mut offset = 0;
 
     if negative || b == b'+' {
         offset += 1;
@@ -307,7 +349,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
     let stop_value = T::min_value() / radix;
     let mut result = T::zero();
 
-    while offset < bytes.len() {
+    while offset <= end {
         let b = bytes[offset];
         offset += 1;
         if b == separator {
@@ -343,7 +385,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well-formed.
-    while offset < bytes.len() {
+    while offset < end {
         let current_byte = bytes[offset];
         if !current_byte.is_ascii_digit() {
             return None;
@@ -517,6 +559,7 @@ mod test {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("1e-8"),
+            Some("  123.456  "),
             Some("1.012345678911111111e10"),
             Some("1.42e-6"),
             Some("0.00000142"),
@@ -531,6 +574,7 @@ mod test {
             &Decimal128Array::from_iter(vec![
                 None,
                 Some(10000000000),
+                Some(123456000000000000000i128),
                 Some(10123456789111111110000000000i128),
                 Some(1420000000000),
                 Some(1420000000000),
@@ -579,6 +623,13 @@ mod test {
             Some("123"),
             Some("987"),
             Some("987.654"),
+            Some(" 123"),
+            Some(" 123 "),
+            Some("\t123 "),
+            Some("\t123\t"),
+            Some(" +123 "),
+            Some(" -456 "),
+            Some(" 987.654 "),
             Some("123456789012345"),
             Some("-123456789012345"),
             Some("999999999999999999999999999999999"),
@@ -591,8 +642,51 @@ mod test {
                 Some(123),
                 Some(987),
                 Some(987),
+                Some(123),
+                Some(123),
+                Some(123),
+                Some(123),
+                Some(123),
+                Some(-456),
+                Some(987),
                 Some(123456789012345),
                 Some(-123456789012345),
+                None,
+            ])
+        );
+    }
+
+    #[test]
+    fn test_string_to_float() {
+        let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
+            None,
+            Some("1.23"),
+            Some("+1.23"),
+            Some("-4.56"),
+            Some("  1.23"),
+            Some(" 1.23 "),
+            Some(" 1.23\t"),
+            Some("\t1.23"),
+            Some("  -4.56  "),
+            Some("  +1.23  "),
+            Some("123.a"),
+            Some("1.23中文"),
+        ]));
+        let casted = cast(&string_array, &DataType::Float32).unwrap();
+        assert_eq!(
+            casted.as_any().downcast_ref::<Float32Array>().unwrap(),
+            &Float32Array::from_iter(vec![
+                None,
+                Some(1.23),
+                Some(1.23),
+                Some(-4.56),
+                Some(1.23),
+                Some(1.23),
+                Some(1.23),
+                Some(1.23),
+                Some(-4.56),
+                Some(1.23),
+                None,
                 None,
             ])
         );
