@@ -19,7 +19,7 @@ use arrow::{array::*, datatypes::*};
 use bigdecimal::BigDecimal;
 use chrono::Datelike;
 use datafusion::common::Result;
-use num::{Bounded, FromPrimitive, Integer, Signed};
+use num::{Bounded, FromPrimitive, Integer, Signed, traits::float};
 
 use crate::df_execution_err;
 
