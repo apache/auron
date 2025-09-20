@@ -449,7 +449,9 @@ object NativeConverters extends Logging {
           if !Seq(cast.dataType, cast.child.dataType).exists(t =>
             t.isInstanceOf[TimestampType] || t.isInstanceOf[DateType]) =>
         val castChild =
-          if (cast.child.dataType == StringType && cast.dataType.isInstanceOf[NumericType] &&
+          if (cast.child.dataType == StringType &&
+            (cast.dataType.isInstanceOf[NumericType] || cast.dataType
+              .isInstanceOf[BooleanType]) &&
             AuronConf.CAST_STRING_TRIM_ENABLE.booleanConf()) {
             // converting Cast(str as num) to StringTrim(Cast(str as num)) if enabled
             StringTrim(cast.child)
