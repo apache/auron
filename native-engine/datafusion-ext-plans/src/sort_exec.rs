@@ -1393,12 +1393,12 @@ fn common_prefix_len(a: &[u8], b: &[u8]) -> usize {
         }};
     }
 
-    while lcp + 8 < min_len && pread!(a, lcp, 8) == pread!(b, lcp, 8) {
+    while lcp + 8 <= min_len && pread!(a, lcp, 8) == pread!(b, lcp, 8) {
         lcp += 8;
     }
-    lcp += (lcp + 4 < min_len && pread!(a, lcp, 4) == pread!(b, lcp, 4)) as usize * 4;
-    lcp += (lcp + 2 < min_len && pread!(a, lcp, 2) == pread!(b, lcp, 2)) as usize * 2;
-    lcp += (lcp + 1 < min_len && pread!(a, lcp, 1) == pread!(b, lcp, 1)) as usize;
+    lcp += (lcp + 4 <= min_len && pread!(a, lcp, 4) == pread!(b, lcp, 4)) as usize * 4;
+    lcp += (lcp + 2 <= min_len && pread!(a, lcp, 2) == pread!(b, lcp, 2)) as usize * 2;
+    lcp += (lcp + 1 <= min_len && pread!(a, lcp, 1) == pread!(b, lcp, 1)) as usize;
     lcp
 }
 
