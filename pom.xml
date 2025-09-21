@@ -43,6 +43,19 @@
     <module>dev/mvn-build-helper/proto</module>
   </modules>
 
+  <distributionManagement>
+    <repository>
+      <id>${distMgmtReleaseId}</id>
+      <name>${distMgmtReleaseName}</name>
+      <url>${distMgmtReleaseUrl}</url>
+    </repository>
+    <snapshotRepository>
+      <id>${distMgmtSnapshotsId}</id>
+      <name>${distMgmtSnapshotsName}</name>
+      <url>${distMgmtSnapshotsUrl}</url>
+    </snapshotRepository>
+  </distributionManagement>
+
   <properties>
     <project.version>5.0.0-SNAPSHOT</project.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -90,6 +103,17 @@
       -Dio.netty.tryReflectionSetAccessible=true</extraJavaTestArgs>
 
     <debugArgLine>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005</debugArgLine>
+
+    <mavenCentralId>central</mavenCentralId>
+    <mavenCentralName>Maven Central</mavenCentralName>
+    <mavenCentralUrl>https://repo.maven.apache.org/maven2</mavenCentralUrl>
+
+    <distMgmtReleaseId>apache.releases.https</distMgmtReleaseId>
+    <distMgmtReleaseName>Apache Release Distribution Repository</distMgmtReleaseName>
+    <distMgmtReleaseUrl>https://repository.apache.org/service/local/staging/deploy/maven2</distMgmtReleaseUrl>
+    <distMgmtSnapshotsId>apache.snapshots.https</distMgmtSnapshotsId>
+    <distMgmtSnapshotsName>Apache Development Snapshot Repository</distMgmtSnapshotsName>
+    <distMgmtSnapshotsUrl>https://repository.apache.org/content/repositories/snapshots</distMgmtSnapshotsUrl>
   </properties>
 
   <dependencyManagement>
@@ -250,6 +274,25 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <repositories>
+    <repository>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <id>${mavenCentralId}</id>
+      <name>${mavenCentralName}</name>
+      <url>${mavenCentralUrl}</url>
+    </repository>
+    <repository>
+      <id>apache-release-candidates</id>
+      <name>Apache Release Candidates Repository</name>
+      <url>https://repository.apache.org/content/repositories/staging</url>
+    </repository>
+  </repositories>
 
   <build>
     <plugins>
