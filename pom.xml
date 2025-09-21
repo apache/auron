@@ -294,6 +294,20 @@
     </repository>
   </repositories>
 
+  <pluginRepositories>
+    <pluginRepository>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <id>${mavenCentralId}</id>
+      <name>${mavenCentralName}</name>
+      <url>${mavenCentralUrl}</url>
+    </pluginRepository>
+  </pluginRepositories>
+
   <build>
     <plugins>
       <!-- compile java -->
@@ -520,6 +534,15 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>google-mirror</id>
+      <properties>
+        <mavenCentralId>gcs-maven-central-mirror</mavenCentralId>
+        <mavenCentralName>GCS Maven Central mirror</mavenCentralName>
+        <mavenCentralUrl>https://maven-central.storage-download.googleapis.com/maven2</mavenCentralUrl>
+      </properties>
+    </profile>
+
     <profile>
       <id>release</id>
       <properties>
