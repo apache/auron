@@ -16,11 +16,10 @@
  */
 package org.apache.auron.util
 
-import org.apache.spark.SPARK_VERSION
-
 object AuronTestUtils {
-
-  lazy val SPARK_RUNTIME_VERSION: SemanticVersion = SemanticVersion(SPARK_VERSION)
+  // mock spark version.
+  // The auron common module does not depend on any engine jars.
+  lazy val SPARK_RUNTIME_VERSION: SemanticVersion = SemanticVersion("3.2.0")
   lazy val isSparkV30OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.0"
   lazy val isSparkV31OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.1"
   lazy val isSparkV32OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.2"
