@@ -31,7 +31,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.auron</groupId>
-      <artifactId>auron-common_2.12</artifactId>
+      <artifactId>auron-common_${scalaVersion}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
