@@ -49,7 +49,6 @@
     <arrowVersion>16.0.0</arrowVersion>
     <bytebuddyVersion>1.12.10</bytebuddyVersion>
     <hadoopVersion>3.4.2</hadoopVersion>
-    <commons-collections4.version>4.4</commons-collections4.version>
     <protobufVersion>3.25.5</protobufVersion>
 
     <javaVersion>8</javaVersion>
