@@ -154,9 +154,9 @@
         <version>${hadoopVersion}</version>
       </dependency>
       <dependency>
-         <groupId>org.apache.hadoop</groupId>
-         <artifactId>hadoop-client-runtime</artifactId>
-         <version>${hadoopVersion}</version>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-runtime</artifactId>
+        <version>${hadoopVersion}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.paimon</groupId>
