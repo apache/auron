@@ -34,6 +34,7 @@
   <url>https://github.com/apache/auron.git</url>
 
   <modules>
+    <module>auron-core</module>
     <module>common</module>
     <module>spark-version-annotation-macros</module>
     <module>spark-extension</module>
