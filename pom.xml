@@ -48,7 +48,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <arrowVersion>16.0.0</arrowVersion>
     <bytebuddyVersion>1.12.10</bytebuddyVersion>
-    <hadoopVersion>3.4.1</hadoopVersion>
+    <hadoopVersion>3.4.2</hadoopVersion>
     <protobufVersion>3.25.5</protobufVersion>
 
     <javaVersion>8</javaVersion>
@@ -150,6 +150,11 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client-api</artifactId>
+        <version>${hadoopVersion}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-runtime</artifactId>
         <version>${hadoopVersion}</version>
       </dependency>
       <dependency>

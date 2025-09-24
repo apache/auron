@@ -44,38 +44,13 @@ on:
         required: false
         type: string
         default: ''
-      celebornurl:
-        description: 'Optional Celeborn URL'
-        required: false
-        type: string
-        default: ''
       unifflever:
         description: 'Optional Uniffle version'
         required: false
         type: string
         default: ''
-      uniffleurl:
-        description: 'Optional Uniffle URL'
-        required: false
-        type: string
-        default: ''
       hadoopver:
         description: 'Optional Hadoop version'
-        required: false
-        type: string
-        default: ''
-      hadoopurl:
-        description: 'Optional Hadoop URL'
-        required: false
-        type: string
-        default: ''
-      extrabuildopt:
-        description: 'Optional extra build options for Maven'
-        required: false
-        type: string
-        default: ''
-      extraidentifier:
-        description: 'Optional extra identifier for artifact names'
         required: false
         type: string
         default: ''
@@ -101,6 +76,10 @@ on:
             "q80,q81,q82,q83,q84,q85,q86,q87,q88,q89",
             "q90,q91,q92,q93,q94,q95,q96,q97,q98,q99"
           ]
+
+env:
+  APACHE_MIRROR: "https://archive.apache.org/dist"
+  WGET_OPTS: "--tries=3 --timeout=30 -c"
 
 jobs:
   build-validator:
@@ -135,7 +114,10 @@ jobs:
       - name: Upload TPC-DS Validator
         uses: actions/upload-artifact@v4
         with:
-          name: tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.extraidentifier }}
+          name: >
+            tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
+            ${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}
+            ${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
           overwrite: true
 
@@ -178,12 +160,38 @@ jobs:
         run: |
           sed -i 's/opt-level = 1/opt-level = 0/g' Cargo.toml # use opt-level 0
           rm -f .build-checksum_*.cache
-          ./build/mvn package -Ppre -P${{ inputs.sparkver }} -Pscala-${{ inputs.scalaver }} -Pjdk-${{ inputs.javaver }} ${{ inputs.extrabuildopt }}
+          
+          SPARK_NUMBER="${{ inputs.sparkver }}"
+          SPARK_NUMBER="${SPARK_NUMBER#spark-}"
+          
+          CELEBORN_NUMBER="${{ inputs.celebornver }}"
+          if [ -n "${{ inputs.celebornver }}" ]; then
+            CELEBORN_NUMBER="${CELEBORN_NUMBER#celeborn-}"
+          fi
+          
+          UNIFFLE_NUMBER="${{ inputs.unifflever }}"
+          if [ -n "${{ inputs.unifflever }}" ]; then
+            UNIFFLE_NUMBER="${UNIFFLE_NUMBER#uniffle-}"
+          fi
+          
+          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }}"
+          if [ -n "${{ inputs.celebornver }}" ]; then
+            CMD="$CMD --celeborn $CELEBORN_NUMBER"
+          fi
+          if [ -n "${{ inputs.unifflever }}" ]; then
+            CMD="$CMD --uniffle $UNIFFLE_NUMBER"
+          fi
+
+          echo "Running: $CMD"
+          exec $CMD
 
       - name: Upload auron (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
         uses: actions/upload-artifact@v4
         with:
-          name: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.extraidentifier }}
+          name: >
+            auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
+            ${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}
+            ${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: target/auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-pre-*.jar
           overwrite: true
 
@@ -199,18 +207,24 @@ jobs:
       - name: Checkout Auron
         uses: actions/checkout@v4
 
-      - name: Get Spark actual version from pom
-        id: get-spark-version
+      - name: Get dependency version from pom
+        id: get-dependency-version
         run: |
-          SPARK_VERSION=$(./build/mvn help:evaluate -N -Dexpression=sparkVersion -P ${{ inputs.sparkver }} -q -DforceStdout)
-          if [ ${{inputs.scalaver}} = "2.13" ]; then
-            SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${{ inputs.hadoop-profile }}-scala${{inputs.scalaver}}.tgz"
-          else
-            SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${{ inputs.hadoop-profile }}.tgz"
-          fi
+          SPARK_VERSION=$(./build/mvn help:evaluate -N -Dexpression=sparkVersion -P${{ inputs.sparkver }} -q -DforceStdout)
           echo "Detected Spark VERSION: $SPARK_VERSION"
-          echo "Detected SPARK URL: $SPARK_URL"
-          echo "sparkurl=$SPARK_URL" >> $GITHUB_OUTPUT
+          echo "sparkversion=$SPARK_VERSION" >> $GITHUB_OUTPUT
+
+          if [ -n "${{ inputs.celebornver }}" ]; then
+            CELEBORN_VERSION=$(./build/mvn help:evaluate -N -Dexpression=celebornVersion -P${{ inputs.sparkver }} -P${{ inputs.celebornver }} -q -DforceStdout)
+            echo "Detected Celeborn VERSION: $CELEBORN_VERSION"
+            echo "celebornversion=$CELEBORN_VERSION" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -n "${{ inputs.unifflever }}" ]; then
+            UNIFFLE_VERSION=$(./build/mvn help:evaluate -N -Dexpression=uniffleVersion -P${{ inputs.sparkver }} -P${{ inputs.unifflever }} -q -DforceStdout)
+            echo "Detected Uniffle VERSION: $UNIFFLE_VERSION"
+            echo "uniffleversion=$UNIFFLE_VERSION" >> $GITHUB_OUTPUT
+          fi
 
       - name: Cache Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }})
         uses: actions/cache@v4
@@ -223,19 +237,33 @@ jobs:
         id: setup-spark-bin
         if: steps.cache-spark-bin.outputs.cache-hit != 'true'
         run: |
-          wget -c ${{ steps.get-spark-version.outputs.sparkurl }}
+          SPARK_PATH="spark/spark-${{ steps.get-dependency-version.outputs.sparkversion }}"
+          if [ ${{ inputs.scalaver }} = "2.13" ]; then
+            SPARK_FILE="spark-${{ steps.get-dependency-version.outputs.sparkversion }}-bin-${{ inputs.hadoop-profile }}-scala${{ inputs.scalaver }}.tgz"
+          else
+            SPARK_FILE="spark-${{ steps.get-dependency-version.outputs.sparkversion }}-bin-${{ inputs.hadoop-profile }}.tgz"
+          fi
+          SPARK_URL="${APACHE_MIRROR}/${SPARK_PATH}/${SPARK_FILE}"
+          
+          wget ${WGET_OPTS} ${SPARK_URL}
           mkdir -p spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
           cd spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }} && tar -xf ../spark-*.tgz --strip-component=1
 
       - name: Download Auron JAR
         uses: actions/download-artifact@v4
         with:
-          name: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.extraidentifier }}
+          name: >
+            auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
+            ${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}
+            ${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Download TPC-DS Validator JAR
         uses: actions/download-artifact@v4
         with:
-          name: tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.extraidentifier }}
+          name: >
+            tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
+            ${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}
+            ${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Checkout TPC-DS Data
         uses: actions/checkout@v4
@@ -255,57 +283,65 @@ jobs:
           java-version: ${{ inputs.javaver }}
           cache: 'maven'
 
-      - name: Cache Celeborn-${{ inputs.celebornver }}
+      - name: Cache Celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}
         uses: actions/cache@v4
-        if: ${{ inputs.celebornver != '' && inputs.celebornurl != '' }}
+        if: ${{ inputs.celebornver != '' }}
         id: cache-celeborn-bin
         with:
-          path: celeborn-bin-${{ inputs.celebornver }}
-          key: celeborn-bin-${{ inputs.celebornver }}
+          path: celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }}
+          key: celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }}
 
-      - name: Setup Celeborn-${{ inputs.celebornver }}
+      - name: Setup Celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}
         id: setup-celeborn-bin
-        if: ${{ inputs.celebornver != '' && inputs.celebornurl != '' && steps.cache-celeborn-bin.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.celebornver != '' && steps.cache-celeborn-bin.outputs.cache-hit != 'true' }}
         run: |
-          wget -c ${{ inputs.celebornurl }} && \
-          mkdir -p celeborn-bin-${{ inputs.celebornver }} && \
-          cd celeborn-bin-${{ inputs.celebornver }} && tar -xf ../apache-celeborn-*.tgz --strip-component=1
+          CELEBORN_PATH="celeborn/celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}"
+          CELEBORN_FILE="apache-celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}-bin.tgz"
+          CELEBORN_URL="${APACHE_MIRROR}/${CELEBORN_PATH}/${CELEBORN_FILE}"
+          
+          wget ${WGET_OPTS} ${CELEBORN_URL} && \
+          mkdir -p celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }} && \
+          cd celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }} && tar -xf ../apache-celeborn-*.tgz --strip-component=1
 
-      - name: Start Celeborn-${{ inputs.celebornver }}
-        if: ${{ inputs.celebornver != '' && inputs.celebornurl != '' }}
+      - name: Start Celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}
+        if: ${{ inputs.celebornver != '' }}
         run: |
           mkdir -p /tmp/rss/data && mkdir -p /tmp/rss/logs && \
-          cd celeborn-bin-${{ inputs.celebornver }} && \
+          cd celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }} && \
           bash -c "echo -e 'CELEBORN_MASTER_MEMORY=4g\nCELEBORN_WORKER_MEMORY=4g\nCELEBORN_WORKER_OFFHEAP_MEMORY=8g\nCELEBORN_LOG_DIR=/tmp/rss/logs' > ./conf/celeborn-env.sh" && \
           bash -c "echo -e 'celeborn.worker.storage.dirs /tmp/rss\nceleborn.worker.storage.workingDir data\nceleborn.worker.commitFiles.threads 128\nceleborn.worker.sortPartition.threads 64' > ./conf/celeborn-defaults.conf" && \
           bash ./sbin/start-master.sh && \
           bash ./sbin/start-worker.sh
 
       - name: Install Celeborn JAR
-        if: ${{ inputs.celebornver != '' && inputs.celebornurl != '' }}
+        if: ${{ inputs.celebornver != '' }}
         run: |
-          ls -la celeborn-bin-${{ inputs.celebornver }}/spark
-          cp celeborn-bin-${{ inputs.celebornver }}/spark/celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
+          ls -la celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }}/spark
+          cp celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }}/spark/celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
-      - name: Cache Uniffle-${{ inputs.unifflever }}
+      - name: Cache Uniffle-${{ steps.get-dependency-version.outputs.uniffleversion }}
         uses: actions/cache@v4
-        if: ${{ inputs.unifflever != '' && inputs.uniffleurl != '' }}
+        if: ${{ inputs.unifflever != '' }}
         id: cache-uniffle-bin
         with:
-          path: uniffle-bin-${{ inputs.unifflever }}
-          key: uniffle-bin-${{ inputs.unifflever }}
+          path: uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }}
+          key: uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }}
 
-      - name: Setup Uniffle-${{ inputs.unifflever }}
+      - name: Setup Uniffle-${{ steps.get-dependency-version.outputs.uniffleversion }}
         id: setup-uniffle-bin
-        if: ${{ inputs.unifflever != '' && inputs.uniffleurl != '' && steps.cache-uniffle-bin.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.unifflever != '' && steps.cache-uniffle-bin.outputs.cache-hit != 'true' }}
         run: |
-          wget -c ${{ inputs.uniffleurl }} && \
-          mkdir -p uniffle-bin-${{ inputs.unifflever }} && \
-          tar -xf ./apache-uniffle-${{ inputs.unifflever }}-incubating-bin.tar.gz -C uniffle-bin-${{ inputs.unifflever }} --strip-component=1
+          UNIFFLE_PATH="uniffle/${{ steps.get-dependency-version.outputs.uniffleversion }}"
+          UNIFFLE_FILE="apache-uniffle-${{ steps.get-dependency-version.outputs.uniffleversion }}-incubating-bin.tar.gz"
+          UNIFFLE_URL="${APACHE_MIRROR}/${UNIFFLE_PATH}/${UNIFFLE_FILE}"
+
+          wget ${WGET_OPTS} ${UNIFFLE_URL} && \
+          mkdir -p uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} && \
+          tar -xf ./${UNIFFLE_FILE} -C uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} --strip-component=1
 
       - name: Cache hadoop-${{ inputs.hadoopver }}
         uses: actions/cache@v4
-        if: ${{ inputs.hadoopver != '' && inputs.hadoopurl != '' }}
+        if: ${{ inputs.hadoopver != '' }}
         id: cache-hadoop-bin
         with:
           path: hadoop-bin-${{ inputs.hadoopver }}
@@ -313,28 +349,32 @@ jobs:
 
       - name: Setup hadoop-${{ inputs.hadoopver }}
         id: setup-hadoop-bin
-        if: ${{ inputs.hadoopver != '' && inputs.hadoopurl != '' && steps.cache-hadoop-bin.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.hadoopver != '' && steps.cache-hadoop-bin.outputs.cache-hit != 'true' }}
         run: |
-          wget -c ${{ inputs.hadoopurl }} && \
+          HADOOP_PATH="hadoop/common/hadoop-${{ inputs.hadoopver }}"
+          HADOOP_FILE="hadoop-${{ inputs.hadoopver }}.tar.gz"
+          HADOOP_URL="${APACHE_MIRROR}/${HADOOP_PATH}/${HADOOP_FILE}"
+          
+          wget ${WGET_OPTS} ${HADOOP_URL} && \
           mkdir -p hadoop-bin-${{ inputs.hadoopver }} && \
-          tar -xf ./hadoop-${{ inputs.hadoopver }}.tar.gz -C hadoop-bin-${{ inputs.hadoopver }} --strip-component=1  && \
+          tar -xf ./$HADOOP_FILE -C hadoop-bin-${{ inputs.hadoopver }} --strip-component=1  && \
           ls -la hadoop-bin-${{ inputs.hadoopver }}
 
-      - name: Start Uniffle-${{ inputs.unifflever }}
-        if: ${{ inputs.unifflever != '' && inputs.uniffleurl != '' }}
+      - name: Start Uniffle-${{ steps.get-dependency-version.outputs.uniffleversion }}
+        if: ${{ inputs.unifflever != '' }}
         run: |
           mkdir -p /tmp/rss/data && mkdir -p /tmp/rss/logs && \
-          cd uniffle-bin-${{ inputs.unifflever }} && \
+          cd uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} && \
           bash -c "echo -e 'XMX_SIZE=16g\nHADOOP_HOME=../hadoop-bin-${{ inputs.hadoopver }}\nRSS_LOG_DIR=/tmp/rss/logs' > ./bin/rss-env.sh" && \
           bash -c "echo -e 'rss.coordinator.shuffle.nodes.max 1\nrss.rpc.server.port 19999' > ./conf/coordinator.conf" && \
           bash -c "echo -e 'rss.server.app.expired.withoutHeartbeat 7200000\nrss.server.heartbeat.delay 3000\nrss.rpc.server.port 19997\nrss.rpc.server.type GRPC_NETTY\nrss.jetty.http.port 19996\nrss.server.netty.port 19995\nrss.storage.basePath /tmp/rss/data\nrss.storage.type MEMORY_LOCALFILE\nrss.coordinator.quorum localhost:19999\nrss.server.flush.thread.alive 10\nrss.server.single.buffer.flush.threshold 64m' > ./conf/server.conf" && \
           bash ./bin/start-coordinator.sh && bash ./bin/start-shuffle-server.sh
 
       - name: Install Uniffle JAR
-        if: ${{ inputs.unifflever != '' && inputs.uniffleurl != '' }}
+        if: ${{ inputs.unifflever != '' }}
         run: |
-          ls -la uniffle-bin-${{ inputs.unifflever }}/jars/client/spark3/
-          cp uniffle-bin-${{ inputs.unifflever }}/jars/client/spark3/*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
+          ls -la uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }}/jars/client/spark3/
+          cp uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }}/jars/client/spark3/*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Run TPC-DS Query ${{ matrix.query }}
         run: |
@@ -352,6 +392,9 @@ jobs:
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
         uses: actions/upload-artifact@v4
         with:
-          name: rss-log-${{ inputs.extraidentifier }}
+          name: >
+            rss-log-
+            ${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}
+            ${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: |
             /tmp/rss/logs/*

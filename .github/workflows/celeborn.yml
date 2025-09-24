@@ -38,17 +38,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - celebornver: "0.6.1"
-            celebornprofile: "celeborn,celeborn-0.6"
-          - celebornver: "0.5.4"
-            celebornprofile: "celeborn,celeborn-0.5"
+          - celebornver: "celeborn-0.6"
+          - celebornver: "celeborn-0.5"
     uses: ./.github/workflows/tpcds-reusable.yml
     name: Test Celeborn ${{ matrix.celebornver }}
     with:
       celebornver: ${{ matrix.celebornver }}
-      celebornurl: https://archive.apache.org/dist/celeborn/celeborn-${{ matrix.celebornver }}/apache-celeborn-${{ matrix.celebornver }}-bin.tgz
-      extrabuildopt: -P${{ matrix.celebornprofile }} -DcelebornVersion=${{ matrix.celebornver }}
-      extraidentifier: celeborn-${{ matrix.celebornver }}
       sparkver: "spark-3.5"
       hadoop-profile: 'hadoop3'
       scalaver: "2.12"

@@ -38,9 +38,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - unifflever: "0.9.2"
+          - unifflever: "uniffle-0.9"
             hadoopver: "2.8.5"
-            uniffleprofile: "uniffle,uniffle-0.9"
     uses: ./.github/workflows/tpcds-reusable.yml
     name: Test Uniffle ${{ matrix.unifflever }}
     with:
@@ -49,10 +48,6 @@ jobs:
       scalaver: "2.12"
       hadoopver: ${{ matrix.hadoopver }}
       unifflever: ${{ matrix.unifflever }}
-      uniffleurl: https://archive.apache.org/dist/uniffle/${{ matrix.unifflever }}/apache-uniffle-${{ matrix.unifflever }}-incubating-bin.tar.gz
-      hadoopurl: https://archive.apache.org/dist/hadoop/common/hadoop-${{ matrix.hadoopver }}/hadoop-${{ matrix.hadoopver }}.tar.gz
-      extrabuildopt: -P${{ matrix.uniffleprofile }} -DuniffleVersion=${{ matrix.unifflever }}
-      extraidentifier: uniffle-${{ matrix.unifflever }}
       extrasparkconf: >-
         --conf spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.uniffle.AuronUniffleShuffleManager
         --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
