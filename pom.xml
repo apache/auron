@@ -44,7 +44,7 @@
   </modules>
 
   <properties>
-    <project.version>6.0.0-incubating</project.version>
+    <project.version>7.0.0-SNAPSHOT</project.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <arrowVersion>16.0.0</arrowVersion>
     <bytebuddyVersion>1.12.10</bytebuddyVersion>
