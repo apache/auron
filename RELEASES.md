@@ -30,7 +30,7 @@
 
 ## Improvement
 Improved memory management in AggExec/SortMergeJoinExec, reducing number of OOMs.
-Imptoved metric statistics.
+Improved metric statistics.
 
 ## Bug fixes
 * Fixed inconsistent string to data casting.
