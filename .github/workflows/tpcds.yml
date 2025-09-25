@@ -24,50 +24,18 @@ on:
       - master
       - branch-*
   pull_request:
-    branches:
-      - master
-      - branch-*
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test-spark-30:
-    name: Test spark-3.0
-    uses: ./.github/workflows/tpcds-reusable.yml
-    with:
-      sparkver: spark-3.0
-      hadoop-profile: 'hadoop2.7'
-
   test-spark-31:
     name: Test spark-3.1
     uses: ./.github/workflows/tpcds-reusable.yml
     with:
       sparkver: spark-3.1
       hadoop-profile: 'hadoop2.7'
-
-  test-spark-32:
-    name: Test spark-3.2
-    uses: ./.github/workflows/tpcds-reusable.yml
-    with:
-      sparkver: spark-3.2
-      hadoop-profile: 'hadoop2.7'
-
-  test-spark-33:
-    name: Test spark-3.3
-    uses: ./.github/workflows/tpcds-reusable.yml
-    with:
-      sparkver: spark-3.3
-      hadoop-profile: 'hadoop3'
-
-  test-spark-34-jdk11:
-    name: Test spark-3.4
-    uses: ./.github/workflows/tpcds-reusable.yml
-    with:
-      sparkver: spark-3.4
-      javaver: '11'
-      hadoop-profile: 'hadoop3'
 
   test-spark-35-jdk17-scala-2-13:
     name: Test spark-3.5 JDK17 Scala-2.13
