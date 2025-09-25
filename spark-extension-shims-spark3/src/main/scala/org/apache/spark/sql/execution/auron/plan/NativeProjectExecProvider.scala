@@ -39,7 +39,7 @@ case object NativeProjectExecProvider {
 
       override protected def orderingExpressions = child.outputOrdering
 
-      override def nodeName: String = "NativeProjectExec"
+      override def nodeName: String = "NativeProject"
     }
     NativeProjectExec(projectList, child)
   }
@@ -66,7 +66,7 @@ case object NativeProjectExecProvider {
 
       override protected def orderingExpressions = child.outputOrdering
 
-      override def nodeName: String = "NativeProjectExec"
+      override def nodeName: String = "NativeProject"
     }
     NativeProjectExec(projectList, child)
   }
@@ -80,7 +80,7 @@ case object NativeProjectExecProvider {
       override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
         copy(child = newChildren.head)
 
-      override def nodeName: String = "NativeProjectExec"
+      override def nodeName: String = "NativeProject"
     }
     NativeProjectExec(projectList, child)
   }

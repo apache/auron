@@ -75,7 +75,7 @@ case object NativeShuffledHashJoinExecProvider {
         copy(left = newLeft, right = newRight)
 
       override def nodeName: String =
-        "NativeShuffledHashJoinExec" + (if (skewJoin) "(skew=true)" else "")
+        "NativeShuffledHashJoin" + (if (skewJoin) "(skew=true)" else "")
     }
     NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, buildSide, isSkewJoin)
   }
@@ -123,7 +123,7 @@ case object NativeShuffledHashJoinExecProvider {
       override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
         copy(left = newChildren(0), right = newChildren(1))
 
-      override def nodeName: String = "NativeShuffledHashJoinExec"
+      override def nodeName: String = "NativeShuffledHashJoin"
     }
     NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, buildSide)
   }
@@ -177,7 +177,7 @@ case object NativeShuffledHashJoinExecProvider {
       override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
         copy(left = newChildren(0), right = newChildren(1))
 
-      override def nodeName: String = "NativeShuffledHashJoinExec"
+      override def nodeName: String = "NativeShuffledHashJoin"
     }
     NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, buildSide)
   }

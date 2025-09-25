@@ -68,7 +68,7 @@ case object NativeSortMergeJoinExecProvider {
         copy(left = newLeft, right = newRight)
 
       override def nodeName: String =
-        "NativeSortMergeJoinExec" + (if (skewJoin) "(skew=true)" else "")
+        "NativeSortMergeJoin" + (if (skewJoin) "(skew=true)" else "")
     }
     NativeSortMergeJoinExec(left, right, leftKeys, rightKeys, joinType, skewJoin)
   }
@@ -106,7 +106,7 @@ case object NativeSortMergeJoinExecProvider {
         copy(left = newChildren(0), right = newChildren(1))
 
       override def nodeName: String =
-        "NativeSortMergeJoinExec" + (if (skewJoin) "(skew=true)" else "")
+        "NativeSortMergeJoin" + (if (skewJoin) "(skew=true)" else "")
     }
     NativeSortMergeJoinExec(left, right, leftKeys, rightKeys, joinType, skewJoin)
   }
