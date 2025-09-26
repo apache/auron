@@ -1583,7 +1583,7 @@ pub struct AuronFSDataInputWrapper<'a> {
 }
 
 impl<'a> AuronFSDataInputWrapper<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/auron/FSDataInputWrapper";
+    pub const SIG_TYPE: &'static str = "org/apache/auron/hadoop/fs/FSDataInputWrapper";
 
     pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronFSDataInputWrapper<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;
@@ -1603,7 +1603,7 @@ pub struct AuronFSDataOutputWrapper<'a> {
 }
 
 impl<'a> AuronFSDataOutputWrapper<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/auron/FSDataOutputWrapper";
+    pub const SIG_TYPE: &'static str = "org/apache/auron/hadoop/fs/FSDataOutputWrapper";
 
     pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronFSDataOutputWrapper<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;

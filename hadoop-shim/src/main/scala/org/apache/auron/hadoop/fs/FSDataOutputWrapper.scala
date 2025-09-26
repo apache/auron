@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.auron
+package org.apache.auron.hadoop.fs
 
 import java.io.EOFException
 import java.nio.ByteBuffer
