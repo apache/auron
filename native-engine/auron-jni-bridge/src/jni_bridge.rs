@@ -623,13 +623,13 @@ impl<'a> JniBridge<'a> {
             method_openFileAsDataInputWrapper: env.get_static_method_id(
                 class,
                 "openFileAsDataInputWrapper",
-                "(Lorg/apache/hadoop/fs/FileSystem;Ljava/lang/String;)Lorg/apache/spark/auron/FSDataInputWrapper;",
+                "(Lorg/apache/hadoop/fs/FileSystem;Ljava/lang/String;)Lorg/apache/auron/hadoop/fs/FSDataInputWrapper;",
             )?,
             method_openFileAsDataInputWrapper_ret: ReturnType::Object,
             method_createFileAsDataOutputWrapper: env.get_static_method_id(
                 class,
                 "createFileAsDataOutputWrapper",
-                "(Lorg/apache/hadoop/fs/FileSystem;Ljava/lang/String;)Lorg/apache/spark/auron/FSDataOutputWrapper;",
+                "(Lorg/apache/hadoop/fs/FileSystem;Ljava/lang/String;)Lorg/apache/auron/hadoop/fs/FSDataOutputWrapper;",
             )?,
             method_createFileAsDataOutputWrapper_ret: ReturnType::Object,
             method_isDriverSide_ret: ReturnType::Primitive(Primitive::Boolean),
