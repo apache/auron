@@ -212,13 +212,13 @@ if [[ -n "$SCALA_VER" ]]; then
     BUILD_ARGS+=("-Pscala-$SCALA_VER")
 fi
 if [[ -n "$CELEBORN_VER" ]]; then
-    BUILD_ARGS+=("-Pceleborn,celeborn-$CELEBORN_VER")
+    BUILD_ARGS+=("-Pceleborn-$CELEBORN_VER")
 fi
 if [[ -n "$UNIFFLE_VER" ]]; then
-    BUILD_ARGS+=("-Puniffle,uniffle-$UNIFFLE_VER")
+    BUILD_ARGS+=("-Puniffle-$UNIFFLE_VER")
 fi
 if [[ -n "$PAIMON_VER" ]]; then
-    BUILD_ARGS+=("-Ppaimon,paimon-$PAIMON_VER")
+    BUILD_ARGS+=("-Ppaimon-$PAIMON_VER")
 fi
 
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
