@@ -40,7 +40,7 @@ public enum AuronConf {
     INPUT_BATCH_STATISTICS_ENABLE("spark.auron.enableInputBatchStatistics", true),
 
     /// supports UDAF and other aggregate functions not implemented
-    UDAF_FALLBACK_ENABLE("spark.auron.udafFallback.enable", false),
+    UDAF_FALLBACK_ENABLE("spark.auron.udafFallback.enable", true),
 
     // TypedImperativeAggregate one row mem use size
     SUGGESTED_UDAF_ROW_MEM_USAGE("spark.auron.suggested.udaf.memUsedSize", 64),
