@@ -49,7 +49,7 @@ jobs:
           build/mvn org.apache.rat:apache-rat-plugin:check \
           -Pscala-2.12 -Pspark-3.5 \
           -Pceleborn,celeborn-0.6 \
-          -Puniffle,uniffle-0.9 \
+          -Puniffle,uniffle-0.10 \
           -Ppaimon,paimon-1.2
       - name: Upload rat report
         if: failure()

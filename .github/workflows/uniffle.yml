@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - unifflever: "uniffle-0.9"
+          - unifflever: "uniffle-0.10"
             hadoopver: "2.8.5"
     uses: ./.github/workflows/tpcds-reusable.yml
     name: Test Uniffle ${{ matrix.unifflever }}

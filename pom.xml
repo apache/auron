@@ -697,12 +697,12 @@
     </profile>
 
     <profile>
-      <id>uniffle-0.9</id>
+      <id>uniffle-0.10</id>
       <modules>
         <module>thirdparty/auron-uniffle</module>
       </modules>
       <properties>
-        <uniffleVersion>0.9.2</uniffleVersion>
+        <uniffleVersion>0.10.0</uniffleVersion>
       </properties>
     </profile>
 
