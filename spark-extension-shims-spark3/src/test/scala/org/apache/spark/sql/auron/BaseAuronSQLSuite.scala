@@ -28,7 +28,7 @@ trait BaseAuronSQLSuite extends SharedSparkSession {
         "spark.shuffle.manager",
         "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
       .set("spark.memory.offHeap.enabled", "false")
-      .set("spark.auron.enable", "true")
+      .set("spark.auron.enabled", "true")
   }
 
 }

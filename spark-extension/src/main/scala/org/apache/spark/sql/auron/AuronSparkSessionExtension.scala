@@ -46,7 +46,7 @@ class AuronSparkSessionExtension extends (SparkSessionExtensions => Unit) with L
 
 object AuronSparkSessionExtension extends Logging {
   lazy val auronEnabledKey: ConfigEntry[Boolean] = SQLConf
-    .buildConf("spark.auron.enable")
+    .buildConf("spark.auron.enabled")
     .booleanConf
     .createWithDefault(true)
 
