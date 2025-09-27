@@ -32,4 +32,19 @@ public class ConfigOptionTest {
                 ConfigOptions.key("boolean").booleanType().defaultValue(true);
         Assert.assertEquals(true, booleanOption.defaultValue());
     }
+
+    @Test
+    public void testConfigOptionAddDesc() {
+        ConfigOption<String> keyOption = ConfigOptions.key("key")
+                .description("this is a description of the key")
+                .stringType()
+                .noDefaultValue();
+        Assert.assertEquals("key", keyOption.key());
+        Assert.assertEquals(null, keyOption.defaultValue());
+        Assert.assertEquals(false, keyOption.hasDefaultValue());
+        ConfigOption<Boolean> booleanOption =
+                ConfigOptions.key("boolean").booleanType().defaultValue(true);
+        Assert.assertEquals(true, booleanOption.defaultValue());
+        Assert.assertEquals("this is a description of the key", keyOption.description());
+    }
 }

@@ -77,6 +77,15 @@ public class ConfigOption<T> {
     }
 
     /**
+     * Gets the description of configuration key
+     *
+     * @return
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
      * Checks if this option has a default value.
      *
      * @return True if it has a default value, false if not.
