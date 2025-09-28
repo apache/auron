@@ -23,7 +23,7 @@ import java.util.Optional;
  */
 public abstract class AuronConfiguration {
 
-    public static final ConfigOption<Integer> BATCH_SIZE = ConfigOptions.key("batch.size")
+    public static final ConfigOption<Integer> BATCH_SIZE = ConfigOptions.key("auron.batchSize")
             .description("Suggested batch size for arrow batches.")
             .intType()
             .defaultValue(10000);
