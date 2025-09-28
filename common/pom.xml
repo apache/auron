@@ -30,34 +30,8 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-c-data</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-compression</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-memory-unsafe</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-vector</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.auron</groupId>
-      <artifactId>proto</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.auron</groupId>
-      <artifactId>hadoop-shim_${scalaVersion}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client-api</artifactId>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scalaVersion}</artifactId>
       <scope>provided</scope>
     </dependency>
   </dependencies>
