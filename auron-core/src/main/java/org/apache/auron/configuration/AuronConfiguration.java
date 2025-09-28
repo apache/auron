@@ -23,6 +23,22 @@ import java.util.Optional;
  */
 public abstract class AuronConfiguration {
 
+    public static final ConfigOption<Integer> BATCH_SIZE = ConfigOptions.key("batch.size")
+            .description("Suggested batch size for arrow batches.")
+            .intType()
+            .defaultValue(10000);
+
+    public static final ConfigOption<Double> MEMORY_FRACTION = ConfigOptions.key("auron.memoryFraction")
+            .description("Suggested fraction of off-heap memory used in native execution. "
+                    + "actual off-heap memory usage is expected to be spark.executor.memoryOverhead * fraction.")
+            .doubleType()
+            .defaultValue(0.6);
+
+    public static final ConfigOption<String> NATIVE_LOG_LEVEL = ConfigOptions.key("auron.native.log.level")
+            .description("Log level for native execution.")
+            .stringType()
+            .defaultValue("info");
+
     public abstract <T> Optional<T> getOptional(ConfigOption<T> option);
 
     public abstract <T> Optional<T> getOptional(String key);

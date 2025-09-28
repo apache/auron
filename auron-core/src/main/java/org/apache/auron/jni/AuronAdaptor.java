@@ -18,15 +18,19 @@ package org.apache.auron.jni;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import org.apache.auron.conf.AuronBoxedConfiguration;
-import org.apache.auron.functions.AuronUDFWrapperContext;
+import org.apache.auron.configuration.AuronConfiguration;
 import org.apache.auron.memory.OnHeapSpillManager;
 
+/**
+ * Auron Adaptor abstraction for Auron Native engine.
+ * Each engine must implement its own {@link AuronAdaptor} to interact with the Auron Native engine.
+ */
 public abstract class AuronAdaptor {
-    private static class Instance {
-        static AuronAdaptor INSTANCE = null;
-    }
+
+    /**
+     * The static instance of the AuronAdaptor.
+     */
+    private static AuronAdaptor INSTANCE = null;
 
     /**
      * Initializes a static instance of the AuronAdaptor.
@@ -34,7 +38,9 @@ public abstract class AuronAdaptor {
      * @param auronAdaptor The implementation of AuronAdaptor to be set as the static instance.
      */
     public static synchronized void initInstance(AuronAdaptor auronAdaptor) {
-        Instance.INSTANCE = auronAdaptor;
+        if (INSTANCE == null) {
+            INSTANCE = auronAdaptor;
+        }
     }
 
     /**
@@ -43,7 +49,7 @@ public abstract class AuronAdaptor {
      * @return The current AuronAdaptor instance, or null if none has been set.
      */
     public static AuronAdaptor getInstance() {
-        return Instance.INSTANCE;
+        return INSTANCE;
     }
 
     /**
@@ -110,20 +116,7 @@ public abstract class AuronAdaptor {
     }
 
     /**
-     * Retrieves the Auron UDF wrapper context.
-     *
-     * @param udfSerialized The serialized UDF context.
-     * @return An instance of AuronUDFWrapperContext.
-     * @throws UnsupportedOperationException If the method is not implemented.
+     * Retrieves the AuronConfiguration, It bundles the corresponding engine's Config.
      */
-    public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
-        throw new UnsupportedOperationException();
-    }
-
-    /**
-     * Retrieves the AuronBoxedConfiguration, It bundles the corresponding engine's Config.
-     */
-    public AuronBoxedConfiguration getAuronBoxedConfiguration() {
-        throw new UnsupportedOperationException();
-    }
+    public abstract AuronConfiguration getAuronConfiguration();
 }

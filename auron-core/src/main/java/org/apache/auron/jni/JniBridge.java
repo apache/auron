@@ -20,15 +20,13 @@ import java.io.IOException;
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.auron.functions.AuronUDFWrapperContext;
+import org.apache.auron.hadoop.fs.FSDataInputWrapper;
+import org.apache.auron.hadoop.fs.FSDataOutputWrapper;
 import org.apache.auron.memory.OnHeapSpillManager;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.spark.auron.FSDataInputWrapper;
-import org.apache.spark.auron.FSDataOutputWrapper;
 
 /**
  * This class is the entry point for the JNI bridge.
@@ -77,10 +75,6 @@ public class JniBridge {
 
     public static OnHeapSpillManager getTaskOnHeapSpillManager() {
         return AuronAdaptor.getInstance().getOnHeapSpillManager();
-    }
-
-    public static AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
-        return AuronAdaptor.getInstance().getAuronUDFWrapperContext(udfSerialized);
     }
 
     public static long getTotalMemoryLimited() {

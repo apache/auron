@@ -14,16 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.auron.util
+package org.apache.auron.jni;
 
-object AuronTestUtils {
-  // mock spark version.
-  // The auron common module does not depend on any engine jars.
-  lazy val SPARK_RUNTIME_VERSION: SemanticVersion = SemanticVersion("3.2.0")
-  lazy val isSparkV30OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.0"
-  lazy val isSparkV31OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.1"
-  lazy val isSparkV32OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.2"
-  lazy val isSparkV33OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.3"
-  lazy val isSparkV34OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.4"
-  lazy val isSparkV35OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "3.5"
+import org.apache.auron.configuration.AuronConfiguration;
+import org.apache.auron.configuration.MockAuronConfiguration;
+
+/**
+ * This is a mock class for testing the AuronAdaptor.
+ */
+public class MockAuronAdaptor extends AuronAdaptor {
+    @Override
+    public void loadAuronLib() {
+        // Mock implementation, no need to load auron library
+    }
+
+    @Override
+    public AuronConfiguration getAuronConfiguration() {
+        return new MockAuronConfiguration();
+    }
 }

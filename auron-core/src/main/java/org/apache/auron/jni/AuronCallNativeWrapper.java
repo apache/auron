@@ -25,7 +25,7 @@ import org.apache.arrow.c.Data;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.pojo.Schema;
-import org.apache.auron.conf.AuronConf;
+import org.apache.auron.configuration.AuronConfiguration;
 import org.apache.auron.metric.MetricNode;
 import org.apache.auron.protobuf.PartitionId;
 import org.apache.auron.protobuf.PhysicalPlanNode;
@@ -43,7 +43,6 @@ public class AuronCallNativeWrapper {
     private final int partitionId;
     private final int stageId;
     private final int taskId;
-
     private final AtomicReference<Throwable> error = new AtomicReference<>(null);
     private final CDataDictionaryProvider dictionaryProvider = new CDataDictionaryProvider();
     private Schema arrowSchema;
@@ -52,9 +51,10 @@ public class AuronCallNativeWrapper {
 
     // initialize native environment
     static {
-        LOG.info("Initializing native environment (" + "batchSize="
-                + AuronConf.BATCH_SIZE.intConf() + ", " + "memoryFraction="
-                + AuronConf.MEMORY_FRACTION.doubleConf() + ")");
+        LOG.info("Initializing native environment (batchSize="
+                + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.BATCH_SIZE) + ", "
+                + "memoryFraction="
+                + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.MEMORY_FRACTION) + ")");
 
         // arrow configuration
         System.setProperty("arrow.struct.conflict.policy", "CONFLICT_APPEND");
@@ -86,7 +86,10 @@ public class AuronCallNativeWrapper {
         this.taskId = taskId;
 
         LOG.warn("Start executing native plan");
-        this.nativeRuntimePtr = JniBridge.callNative(nativeMemory, AuronConf.NATIVE_LOG_LEVEL.stringConf(), this);
+        this.nativeRuntimePtr = JniBridge.callNative(
+                nativeMemory,
+                AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.NATIVE_LOG_LEVEL),
+                this);
     }
 
     /**
