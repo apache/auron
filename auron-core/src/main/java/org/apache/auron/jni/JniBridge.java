@@ -23,7 +23,6 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-
 import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.hadoop.fs.FSDataInputWrapper;
 import org.apache.auron.hadoop.fs.FSDataOutputWrapper;
@@ -100,7 +99,7 @@ public class JniBridge {
         return AuronAdaptor.getInstance().getDirectWriteSpillToDiskFile();
     }
 
-    public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
+    public static AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
         return AuronAdaptor.getInstance().getAuronUDFWrapperContext(udfSerialized);
     }
 }
