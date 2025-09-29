@@ -439,7 +439,7 @@ pub struct JavaClasses<'a> {
     pub cSparkFileSegment: SparkFileSegment<'a>,
     pub cSparkSQLMetric: SparkSQLMetric<'a>,
     pub cSparkMetricNode: SparkMetricNode<'a>,
-    pub cSparkUDFWrapperContext: SparkUDFWrapperContext<'a>,
+    pub cSparkAuronUDFWrapperContext: SparkAuronUDFWrapperContext<'a>,
     pub cSparkUDAFWrapperContext: SparkUDAFWrapperContext<'a>,
     pub cSparkUDTFWrapperContext: SparkUDTFWrapperContext<'a>,
     pub cSparkUDAFMemTracker: SparkUDAFMemTracker<'a>,
@@ -453,6 +453,8 @@ pub struct JavaClasses<'a> {
     pub cAuronFSDataInputWrapper: AuronFSDataInputWrapper<'a>,
     pub cAuronFSDataOutputWrapper: AuronFSDataOutputWrapper<'a>,
     pub cAuronJsonFallbackWrapper: AuronJsonFallbackWrapper<'a>,
+
+    pub cAuronUDFWrapperContext: AuronUDFWrapperContext<'a>,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -503,7 +505,7 @@ impl JavaClasses<'static> {
                 cSparkFileSegment: SparkFileSegment::new(env)?,
                 cSparkSQLMetric: SparkSQLMetric::new(env)?,
                 cSparkMetricNode: SparkMetricNode::new(env)?,
-                cSparkUDFWrapperContext: SparkUDFWrapperContext::new(env)?,
+                cSparkAuronUDFWrapperContext: SparkAuronUDFWrapperContext::new(env)?,
                 cSparkUDAFWrapperContext: SparkUDAFWrapperContext::new(env)?,
                 cSparkUDTFWrapperContext: SparkUDTFWrapperContext::new(env)?,
                 cSparkUDAFMemTracker: SparkUDAFMemTracker::new(env)?,
@@ -517,6 +519,8 @@ impl JavaClasses<'static> {
                 cAuronFSDataInputWrapper: AuronFSDataInputWrapper::new(env)?,
                 cAuronFSDataOutputWrapper: AuronFSDataOutputWrapper::new(env)?,
                 cAuronJsonFallbackWrapper: AuronJsonFallbackWrapper::new(env)?,
+
+                cAuronUDFWrapperContext: AuronUDFWrapperContext::new(env)?,
             };
             log::info!("Initializing JavaClasses finished");
             Ok(java_classes)
@@ -573,6 +577,9 @@ pub struct JniBridge<'a> {
     pub method_getDirectWriteSpillToDiskFile_ret: ReturnType,
     pub method_initNativeThread: JStaticMethodID,
     pub method_initNativeThread_ret: ReturnType,
+
+    pub method_getAuronUDFWrapperContext: JStaticMethodID,
+    pub method_getAuronUDFWrapperContext_ret: ReturnType,
 }
 impl<'a> JniBridge<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/JniBridge";
@@ -657,6 +664,13 @@ impl<'a> JniBridge<'a> {
                 "(Ljava/lang/ClassLoader;Lorg/apache/spark/TaskContext;)V",
             )?,
             method_initNativeThread_ret: ReturnType::Primitive(Primitive::Void),
+
+            method_getAuronUDFWrapperContext: env.get_static_method_id(
+                class,
+                "getAuronUDFWrapperContext",
+                "(Ljava/nio/ByteBuffer;)Lorg/apache/auron/functions/AuronUDFWrapperContext;",
+            )?,
+            method_getAuronUDFWrapperContext_ret: ReturnType::Object,
         })
     }
 }
@@ -1193,20 +1207,39 @@ impl<'a> AuronRssPartitionWriterBase<'_> {
 }
 
 #[allow(non_snake_case)]
-pub struct SparkUDFWrapperContext<'a> {
+pub struct SparkAuronUDFWrapperContext<'a> {
     pub class: JClass<'a>,
     pub ctor: JMethodID,
     pub method_eval: JMethodID,
     pub method_eval_ret: ReturnType,
 }
-impl<'a> SparkUDFWrapperContext<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/SparkUDFWrapperContext";
+impl<'a> SparkAuronUDFWrapperContext<'a> {
+    pub const SIG_TYPE: &'static str = "org/apache/auron/spark/sql/SparkAuronUDFWrapperContext";
 
-    pub fn new(env: &JNIEnv<'a>) -> JniResult<SparkUDFWrapperContext<'a>> {
+    pub fn new(env: &JNIEnv<'a>) -> JniResult<SparkAuronUDFWrapperContext<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;
-        Ok(SparkUDFWrapperContext {
+        Ok(SparkAuronUDFWrapperContext {
             class,
             ctor: env.get_method_id(class, "<init>", "(Ljava/nio/ByteBuffer;)V")?,
+            method_eval: env.get_method_id(class, "eval", "(JJ)V")?,
+            method_eval_ret: ReturnType::Primitive(Primitive::Void),
+        })
+    }
+}
+
+#[allow(non_snake_case)]
+pub struct AuronUDFWrapperContext<'a> {
+    pub class: JClass<'a>,
+    pub method_eval: JMethodID,
+    pub method_eval_ret: ReturnType,
+}
+impl<'a> AuronUDFWrapperContext<'a> {
+    pub const SIG_TYPE: &'static str = "org/apache/auron/functions/AuronUDFWrapperContext";
+
+    pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronUDFWrapperContext<'a>> {
+        let class = get_global_jclass(env, Self::SIG_TYPE)?;
+        Ok(AuronUDFWrapperContext {
+            class,
             method_eval: env.get_method_id(class, "eval", "(JJ)V")?,
             method_eval_ret: ReturnType::Primitive(Primitive::Void),
         })

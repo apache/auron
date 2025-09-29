@@ -94,7 +94,7 @@ impl SparkUDFWrapperExpr {
             .get_or_try_init(|| {
                 let serialized_buf = jni_new_direct_byte_buffer!(&self.serialized)?;
                 let jcontext_local =
-                    jni_new_object!(SparkUDFWrapperContext(serialized_buf.as_obj()))?;
+                    jni_new_object!(SparkAuronUDFWrapperContext(serialized_buf.as_obj()))?;
                 jni_new_global_ref!(jcontext_local.as_obj())
             })
             .cloned()
@@ -213,7 +213,7 @@ fn invoke_udf(
     let struct_array = StructArray::from(params_batch);
     let mut export_ffi_array = FFI_ArrowArray::new(&struct_array.to_data());
     let mut import_ffi_array = FFI_ArrowArray::empty();
-    jni_call!(SparkUDFWrapperContext(jcontext.as_obj()).eval(
+    jni_call!(SparkAuronUDFWrapperContext(jcontext.as_obj()).eval(
         &mut export_ffi_array as *mut FFI_ArrowArray as i64,
         &mut import_ffi_array as *mut FFI_ArrowArray as i64,
     ) -> ())?;

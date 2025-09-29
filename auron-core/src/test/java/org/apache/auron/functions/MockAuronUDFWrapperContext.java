@@ -14,30 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.auron.jni;
+package org.apache.auron.functions;
 
 import java.nio.ByteBuffer;
-import org.apache.auron.configuration.AuronConfiguration;
-import org.apache.auron.configuration.MockAuronConfiguration;
-import org.apache.auron.functions.AuronUDFWrapperContext;
-import org.apache.auron.functions.MockAuronUDFWrapperContext;
 
 /**
- * This is a mock class for testing the AuronAdaptor.
+ * Mock class for AuronUDFWrapperContext.
  */
-public class MockAuronAdaptor extends AuronAdaptor {
-    @Override
-    public void loadAuronLib() {
-        // Mock implementation, no need to load auron library
+public class MockAuronUDFWrapperContext implements AuronUDFWrapperContext {
+
+    public MockAuronUDFWrapperContext(ByteBuffer udfSerialized) {
+        // Mock implementation, We can obtain some information required for initializing the UDF through
+        // deserialization.
+        byte[] bytes = new byte[udfSerialized.remaining()];
+        udfSerialized.get(bytes);
+        // Deserialize the UDF information.
+        // get the UDF class name and initialize the UDF.
     }
 
     @Override
-    public AuronConfiguration getAuronConfiguration() {
-        return new MockAuronConfiguration();
-    }
-
-    @Override
-    public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
-        return new MockAuronUDFWrapperContext(udfSerialized);
+    public void eval(long inputPtr, long outputPtr) {
+        // Mock implementation, we can use the inputPtr and outputPtr to process the data.
     }
 }

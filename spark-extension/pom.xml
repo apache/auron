@@ -31,6 +31,11 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.auron</groupId>
+      <artifactId>auron-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
       <artifactId>hadoop-shim_${scalaVersion}</artifactId>
       <version>${project.version}</version>
     </dependency>

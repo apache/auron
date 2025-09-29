@@ -14,29 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron.spark.sql
 
 import java.nio.ByteBuffer
 
-import org.apache.arrow.c.ArrowArray
-import org.apache.arrow.c.Data
+import org.apache.arrow.c.{ArrowArray, Data}
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.dictionary.DictionaryProvider
 import org.apache.arrow.vector.dictionary.DictionaryProvider.MapDictionaryProvider
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.util.Using
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.expressions.Nondeterministic
-import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Nondeterministic}
+import org.apache.spark.sql.execution.auron.arrowio.util.{ArrowUtils, ArrowWriter}
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils.ROOT_ALLOCATOR
-import org.apache.spark.sql.execution.auron.arrowio.util.ArrowWriter
 import org.apache.spark.sql.execution.auron.columnar.ColumnarHelper
-import org.apache.spark.sql.types.StructField
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
-case class SparkUDFWrapperContext(serialized: ByteBuffer) extends Logging {
+import org.apache.auron.functions.AuronUDFWrapperContext
+
+case class SparkAuronUDFWrapperContext(serialized: ByteBuffer)
+    extends AuronUDFWrapperContext
+    with Logging {
   private val (expr, javaParamsSchema) =
     NativeConverters.deserializeExpression[Expression, StructType]({
       val bytes = new Array[Byte](serialized.remaining())

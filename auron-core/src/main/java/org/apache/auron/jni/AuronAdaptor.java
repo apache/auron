@@ -18,7 +18,9 @@ package org.apache.auron.jni;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import org.apache.auron.configuration.AuronConfiguration;
+import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.memory.OnHeapSpillManager;
 
 /**
@@ -119,4 +121,13 @@ public abstract class AuronAdaptor {
      * Retrieves the AuronConfiguration, It bundles the corresponding engine's Config.
      */
     public abstract AuronConfiguration getAuronConfiguration();
+
+    /**
+     * Retrieves the UDF wrapper context. Each engine requires its own implementation.
+     *
+     * @param udfSerialized The serialized UDF context.
+     * @return An instance of AuronUDFWrapperContext.
+     * @throws UnsupportedOperationException If the method is not implemented.
+     */
+    public abstract AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized);
 }
