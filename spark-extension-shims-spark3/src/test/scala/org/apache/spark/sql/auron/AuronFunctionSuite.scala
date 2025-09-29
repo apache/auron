@@ -111,12 +111,12 @@ class AuronFunctionSuite
       }
     }
   }
- 
-  test("regexp_extract function") {
+
+  test("regexp_extract function with UDF failback") {
     withTable("t1") {
       sql("create table t1(c1 string) using parquet")
       sql("insert into t1 values('Auron Spark SQL')")
-      val df = sql("select regexp_extract(c1, '^S(.*)L$', 1) from t1")
+      val df = sql("select regexp_extract(c1, '^A(.*)L$', 1) from t1")
       checkAnswer(df, Seq(Row("uron Spark SQ")))
     }
   }
