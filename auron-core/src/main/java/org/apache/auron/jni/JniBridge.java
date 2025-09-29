@@ -20,8 +20,11 @@ import java.io.IOException;
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.hadoop.fs.FSDataInputWrapper;
 import org.apache.auron.hadoop.fs.FSDataOutputWrapper;
 import org.apache.auron.memory.OnHeapSpillManager;
@@ -95,5 +98,9 @@ public class JniBridge {
 
     public static String getDirectWriteSpillToDiskFile() throws IOException {
         return AuronAdaptor.getInstance().getDirectWriteSpillToDiskFile();
+    }
+
+    public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
+        return AuronAdaptor.getInstance().getAuronUDFWrapperContext(udfSerialized);
     }
 }

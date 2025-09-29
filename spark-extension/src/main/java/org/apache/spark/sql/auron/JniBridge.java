@@ -19,8 +19,11 @@ package org.apache.spark.sql.auron;
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.hadoop.fs.FSDataInputWrapper;
 import org.apache.auron.hadoop.fs.FSDataInputWrapper$;
 import org.apache.auron.hadoop.fs.FSDataOutputWrapper;
@@ -120,5 +123,9 @@ public class JniBridge {
         TaskContext$.MODULE$.setTaskContext(tc);
         TaskContextHelper$.MODULE$.setNativeThreadName();
         TaskContextHelper$.MODULE$.setHDFSCallerContext();
+    }
+
+    public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
+        throw new UnsupportedOperationException("This API is designed to support next-generation multi-engine.");
     }
 }
