@@ -28,14 +28,14 @@ import org.junit.Test;
 public class AuronAdaptorTest {
 
     @Test
-    public void testLoadAuronLib() {
+    public void testRetrieveConfigWithAuronAdaptor() {
         MockAuronAdaptor auronAdaptor = new MockAuronAdaptor();
         AuronAdaptor.initInstance(auronAdaptor);
         AuronAdaptor.getInstance().loadAuronLib();
         assertNotNull(AuronAdaptor.getInstance().getAuronConfiguration());
         AuronConfiguration auronConfig = AuronAdaptor.getInstance().getAuronConfiguration();
         assertEquals(auronConfig.getInteger(AuronConfiguration.BATCH_SIZE), 10000);
-        assertEquals(auronConfig.getDouble(AuronConfiguration.MEMORY_FRACTION), 0.6);
+        assertEquals(auronConfig.getDouble(AuronConfiguration.MEMORY_FRACTION), 0.6, 0.0);
         assertEquals(auronConfig.getString(AuronConfiguration.NATIVE_LOG_LEVEL), "info");
     }
 }
