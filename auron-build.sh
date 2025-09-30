@@ -35,6 +35,7 @@ print_help() {
     echo "  --paimon <VERSION>       Specify Paimon version (e.g. 1.2)"
     echo "  --clean <true|false>     Clean before build (default: true)"
     echo "  --skiptests <true|false> Skip unit tests (default: true)"
+    echo "  --flink <VERSION>        Specify Flink version (e.g. 1.18)"
     echo "  -h, --help               Show this help message"
     echo
     echo "Examples:"
@@ -56,6 +57,7 @@ SCALA_VER=""
 CELEBORN_VER=""
 UNIFFLE_VER=""
 PAIMON_VER=""
+FLINK_VER=""
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -140,6 +142,15 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --flink)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                FLINK_VER="$2"
+                shift 2
+            else
+                echo "ERROR: --flink requires version argument" >&2
+                exit 1
+            fi
+            ;;
         -h|--help)
             print_help
             ;;
@@ -219,6 +230,9 @@ if [[ -n "$UNIFFLE_VER" ]]; then
 fi
 if [[ -n "$PAIMON_VER" ]]; then
     BUILD_ARGS+=("-Ppaimon,paimon-$PAIMON_VER")
+fi
+if [[ -n "$FLINK_VER" ]]; then
+    BUILD_ARGS+=("-Pflink-$FLINK_VER")
 fi
 
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")

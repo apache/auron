@@ -715,5 +715,16 @@
         <paimonVersion>1.2.0</paimonVersion>
       </properties>
     </profile>
+
+    <profile>
+      <id>flink-1.18</id>
+      <modules>
+        <module>auron-flink-extension</module>
+      </modules>
+      <properties>
+        <flink.shortVersion>1.18</flink.shortVersion>
+        <flink.version>1.18.1</flink.version>
+      </properties>
+    </profile>
   </profiles>
 </project>
