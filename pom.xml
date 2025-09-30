@@ -315,7 +315,7 @@
         <version>${maven.plugin.surefire.version}</version>
         <!-- Note config is repeated in scalatest config -->
         <configuration>
-          <skipTests>true</skipTests>
+          <skipTests>false</skipTests>
           <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
           <argLine>${extraJavaTestArgs}</argLine>
           <environmentVariables />
