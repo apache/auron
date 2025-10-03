@@ -263,7 +263,7 @@ abstract class Shims {
 object Shims {
   lazy val get: Shims = {
     classOf[Shims].getClassLoader
-      .loadClass("org.apache.spark.sql.auron.ShimsImpl")
+      .loadClass(AuronConverters.shimsImpl)
       .newInstance()
       .asInstanceOf[Shims]
   }

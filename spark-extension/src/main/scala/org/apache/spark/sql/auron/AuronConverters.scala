@@ -138,6 +138,8 @@ object AuronConverters extends Logging {
     getBooleanConf("spark.auron.enable.scan.parquet", defaultValue = true)
   def enableScanOrc: Boolean =
     getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
+  def shimsImpl: String =
+    getStringConf("spark.auron.shims.impl", "org.apache.spark.sql.auron.ShimsImpl")
 
   private val extConvertProviders = ServiceLoader.load(classOf[AuronConvertProvider]).asScala
   def extConvertSupported(exec: SparkPlan): Boolean = {
@@ -1095,6 +1097,10 @@ object AuronConverters extends Logging {
         transformedAggExprs.toList,
         transformedGroupingExprs.toList,
         projections.map(kv => Alias(kv._1, kv._2.name)(kv._2.exprId)).toList))
+  }
+
+  def getStringConf(key: String, defaultValue: String): String = {
+    SQLConf.get.getConfString(key, defaultValue)
   }
 
   def getBooleanConf(key: String, defaultValue: Boolean): Boolean = {
