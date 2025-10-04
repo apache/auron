@@ -70,7 +70,7 @@
 
     <scalamacros.paradise.version>2.1.1</scalamacros.paradise.version>
     <semanticdb.version>4.8.1</semanticdb.version>
-    <junit.jupiter.version>5.13.3</junit.jupiter.version>
+    <junit.jupiter.version>5.13.4</junit.jupiter.version>
     <restrict-imports.enforcer.version>2.6.0</restrict-imports.enforcer.version>
 
     <extraJavaTestArgs>-XX:+IgnoreUnrecognizedVMOptions
