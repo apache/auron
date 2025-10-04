@@ -24,7 +24,7 @@ import java.util.List;
 import org.apache.auron.flink.table.AuronFlinkTableTestBase;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.CollectionUtil;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * IT case for Flink Calc Operator on Auron.
