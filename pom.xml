@@ -62,7 +62,7 @@
     <maven.plugin.scalatest.exclude.tags />
     <maven.plugin.scalatest.include.tags />
     <maven.plugin.scalatest.debug.enabled>false</maven.plugin.scalatest.debug.enabled>
-    <maven.plugin.surefire.version>3.3.0</maven.plugin.surefire.version>
+    <maven.plugin.surefire.version>3.5.3</maven.plugin.surefire.version>
     <maven.plugin.shade.version>3.5.2</maven.plugin.shade.version>
     <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
     <maven.plugin.templating.version>3.0.0</maven.plugin.templating.version>
