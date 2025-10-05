@@ -31,7 +31,7 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.ShuffleHandle
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.auron.AuronConverters.ForceNativeExecutionWrapperBase
 import org.apache.spark.sql.auron.NativeConverters.NativeExprWrapperBase
 import org.apache.spark.sql.catalyst.InternalRow
@@ -626,9 +626,7 @@ class ShimsImpl extends Shims with Logging {
   }
 
   @sparkver("4.0")
-  override def getSqlContext(
-      sparkPlan: org.apache.spark.sql.execution.SparkPlan): org.apache.spark.sql.SQLContext =
-    sparkPlan.session.sqlContext
+  override def getSqlContext(sparkPlan: SparkPlan): SQLContext = ???
 
   override def createNativeExprWrapper(
       nativeExpr: pb.PhysicalExprNode,

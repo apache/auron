@@ -34,7 +34,10 @@ import org.apache.spark.sql.types.MapType
 import org.apache.spark.sql.types.ShortType
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.UTF8String
+
+import org.apache.auron.sparkver
 
 class AuronColumnarBatchRow(columns: Array[AuronColumnVector], var rowId: Int = 0)
     extends InternalRow {
@@ -133,7 +136,8 @@ class AuronColumnarBatchRow(columns: Array[AuronColumnVector], var rowId: Int = 
     throw new UnsupportedOperationException
   }
 
-  override def getVariant(i: Int): VariantVal = {
+  @sparkver("4.0")
+  override def getVariant(i: Int): org.apache.spark.unsafe.types.VariantVal = {
     throw new UnsupportedOperationException
   }
 }

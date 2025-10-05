@@ -27,6 +27,7 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.ShuffleHandle
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -239,7 +240,7 @@ abstract class Shims {
 
   def convertMoreSparkPlan(exec: SparkPlan): Option[SparkPlan]
 
-  def getSqlContext(sparkPlan: SparkPlan): org.apache.spark.sql.SQLContext
+  def getSqlContext(sparkPlan: SparkPlan): SQLContext
 
   def createNativeExprWrapper(
       nativeExpr: pb.PhysicalExprNode,

@@ -129,14 +129,12 @@ case class NativeShuffleExchangeExec(
           dep: ShuffleDependency[_, _, _],
           mapId: Long,
           mapIndex: Int,
-          context: TaskContext): MapStatus = super.write(inputs, dep, mapId, mapIndex, context)
+          context: TaskContext): MapStatus = {
 
-      def write(
-          rdd: RDD[_],
-          dep: ShuffleDependency[_, _, _],
-          mapId: Long,
-          context: TaskContext,
-          partition: Partition): MapStatus = {
+        // [SPARK-44605][CORE] Refined the internal ShuffleWriteProcessor API.
+        // Due to the restructuring of the write method in the API, we optimized and refactored the original Partition.
+        val rdd = dep.rdd
+        val partition = rdd.partitions(mapIndex)
 
         val writer = SparkEnv.get.shuffleManager.getWriter(
           dep.shuffleHandle,
@@ -167,31 +165,20 @@ case class NativeShuffleExchangeExec(
     }
   }
 
-  // for databricks testing
-  val causedBroadcastJoinBuildOOM = false
-
-  @sparkver("3.5 / 4.0")
+  @sparkver("4.0")
   override def advisoryPartitionSize: Option[Long] = None
 
-  // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
-  // For `SinglePartition`, it requires exactly one partition and we can't change it either.
-  @sparkver("3.0")
-  override def canChangeNumPartitions: Boolean =
-    outputPartitioning != SinglePartition
-
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
+  @sparkver("4.0")
   override def shuffleOrigin = {
     import org.apache.spark.sql.execution.exchange.ShuffleOrigin;
     _shuffleOrigin.get.asInstanceOf[ShuffleOrigin]
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
+  @sparkver("4.0")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
-  @sparkver("3.0 / 3.1")
-  override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
-    copy(child = newChildren.head)
-
-  override def shuffleId: Int = ???
+  override def shuffleId: Int = {
+    shuffleDependency.shuffleId;
+  }
 }
