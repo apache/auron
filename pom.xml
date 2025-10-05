@@ -68,7 +68,7 @@
     <maven.plugin.templating.version>3.0.0</maven.plugin.templating.version>
 
     <scalamacros.paradise.version>2.1.1</scalamacros.paradise.version>
-    <semanticdb.version>4.8.1</semanticdb.version>
+    <semanticdb.version>4.9.9</semanticdb.version>
 
     <extraJavaTestArgs>-XX:+IgnoreUnrecognizedVMOptions
       --add-opens=java.base/java.lang=ALL-UNNAMED
@@ -379,7 +379,7 @@
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>
-        <version>2.30.0</version>
+        <version>2.45.0</version>
         <configuration>
           <java>
             <palantirJavaFormat />
@@ -577,6 +577,17 @@
     </profile>
 
     <profile>
+      <id>spark-4.0</id>
+      <properties>
+        <shimName>spark-4.0</shimName>
+        <shimPkg>spark-extension-shims-spark4</shimPkg>
+        <scalaTestVersion>3.2.10</scalaTestVersion>
+        <scalafmtVersion>3.9.9</scalafmtVersion>
+        <sparkVersion>4.0.1</sparkVersion>
+      </properties>
+    </profile>
+
+    <profile>
       <id>jdk-8</id>
       <activation>
         <jdk>1.8</jdk>
@@ -648,7 +659,7 @@
       </activation>
       <properties>
         <scalaVersion>2.13</scalaVersion>
-        <scalaLongVersion>2.13.8</scalaLongVersion>
+        <scalaLongVersion>2.13.13</scalaLongVersion>
       </properties>
       <build>
         <plugins>

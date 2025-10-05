@@ -138,8 +138,10 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
   }
 
   def doExecuteBroadcastNative[T](): broadcast.Broadcast[T] = {
-    val conf = SparkSession.getActiveSession.map(_.sqlContext.conf).orNull
-    val timeout: Long = conf.broadcastTimeout
+    SparkSession.getActiveSession.map(_.conf).orNull
+    val timeout: Long = SparkSession.getActiveSession
+      .map(s => s.conf.get("spark.sql.broadcastTimeout", "300").toLong)
+      .getOrElse(300L)
     try {
       relationFuture.get(timeout, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
     } catch {
@@ -260,7 +262,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
   @transient
   lazy val relationFuture: Future[Broadcast[Any]] = {
     SQLExecution.withThreadLocalCaptured[Broadcast[Any]](
-      Shims.get.getSqlContext(this).sparkSession,
+      this.session.sqlContext.sparkSession,
       BroadcastExchangeExec.executionContext) {
       try {
         sparkContext.setJobGroup(

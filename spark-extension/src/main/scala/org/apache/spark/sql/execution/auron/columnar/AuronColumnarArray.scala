@@ -31,8 +31,7 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.types.ShortType
 import org.apache.spark.sql.types.TimestampType
-import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
 class AuronColumnarArray(data: AuronColumnVector, offset: Int, length: Int) extends ArrayData {
   override def numElements: Int = length
@@ -152,6 +151,10 @@ class AuronColumnarArray(data: AuronColumnVector, offset: Int, length: Int) exte
   }
 
   override def setNullAt(ordinal: Int): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getVariant(i: Int): VariantVal = {
     throw new UnsupportedOperationException
   }
 }
