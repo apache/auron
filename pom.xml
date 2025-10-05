@@ -663,7 +663,7 @@
       </activation>
       <properties>
         <scalaVersion>2.13</scalaVersion>
-        <scalaLongVersion>2.13.8</scalaLongVersion>
+        <scalaLongVersion>2.13.13</scalaLongVersion>
       </properties>
       <build>
         <plugins>
