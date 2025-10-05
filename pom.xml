@@ -68,8 +68,6 @@
     <maven.plugin.templating.version>3.0.0</maven.plugin.templating.version>
 
     <scalamacros.paradise.version>2.1.1</scalamacros.paradise.version>
-    <semanticdb.version>4.8.1</semanticdb.version>
-    <spotless.plugin.version>2.30.0</spotless.plugin.version>
 
     <extraJavaTestArgs>-XX:+IgnoreUnrecognizedVMOptions
       --add-opens=java.base/java.lang=ALL-UNNAMED
@@ -579,7 +577,7 @@
       <properties>
         <javaVersion>8</javaVersion>
         <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.1</semanticdb.version>
+        <semanticdb.version>4.8.8</semanticdb.version>
         <scalafmtVersion>3.0.0</scalafmtVersion>
       </properties>
     </profile>
@@ -592,7 +590,7 @@
       <properties>
         <javaVersion>11</javaVersion>
         <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.1</semanticdb.version>
+        <semanticdb.version>4.8.8</semanticdb.version>
         <scalafmtVersion>3.0.0</scalafmtVersion>
       </properties>
     </profile>
@@ -665,7 +663,7 @@
       </activation>
       <properties>
         <scalaVersion>2.13</scalaVersion>
-        <scalaLongVersion>2.13.13</scalaLongVersion>
+        <scalaLongVersion>2.13.8</scalaLongVersion>
       </properties>
       <build>
         <plugins>
