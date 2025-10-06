@@ -27,6 +27,12 @@ RUN yum install -y centos-release-scl epel-release
 RUN sed -i "s/mirror.centos.org/vault.centos.org/g" /etc/yum.repos.d/*.repo
 RUN sed -i "s/^#.*baseurl=http/baseurl=https/g" /etc/yum.repos.d/*.repo
 RUN sed -i "s/^mirrorlist/#mirrorlist/g" /etc/yum.repos.d/*.repo
+RUN sed -i "s|#baseurl=http://mirror.centos.org/centos/7/sclo/|baseurl=https://vault.centos.org/7.9.2009/sclo/|g" /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo
+RUN sed -i "s|^mirrorlist=http://mirrorlist.centos.org.*sclo-sclo|#mirrorlist=http://mirrorlist.centos.org/?arch=$basearch&release=7&repo=sclo-sclo|g" /etc/yum.repos.d/CentOS-SCLo-scl.repo
+RUN sed -i "s|#baseurl=http://mirror.centos.org/centos/7/sclo/|baseurl=https://vault.centos.org/7.9.2009/sclo/|g" /etc/yum.repos.d/CentOS-SCLo-scl.repo
+RUN sed -i "s|^metalink=|#metalink=|g" /etc/yum.repos.d/epel.repo
+RUN sed -i "s|https://download.fedoraproject.org/pub/epel|https://archives.fedoraproject.org/pub/archive/epel|g" /etc/yum.repos.d/epel.repo
+RUN yum clean all && yum makecache
 RUN yum install -y libzip unzip openssl-devel
 
 # install gcc-11
