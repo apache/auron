@@ -31,7 +31,7 @@ print_help() {
     echo "  --sparkver <VERSION>     Specify Spark version (e.g. 3.0/3.1/3.2/3.3/3.4/3.5)"
     echo "  --scalaver <VERSION>     Specify Scala version (e.g. 2.12/2.13)"
     echo "  --celeborn <VERSION>     Specify Celeborn version (e.g. 0.5/0.6)"
-    echo "  --uniffle <VERSION>      Specify Uniffle version (e.g. 0.9)"
+    echo "  --uniffle <VERSION>      Specify Uniffle version (e.g. 0.10)"
     echo "  --paimon <VERSION>       Specify Paimon version (e.g. 1.2)"
     echo "  --clean <true|false>     Clean before build (default: true)"
     echo "  --skiptests <true|false> Skip unit tests (default: true)"
@@ -40,7 +40,7 @@ print_help() {
     echo
     echo "Examples:"
     echo "  $0 --pre --sparkver 3.5 --scalaver 2.12 -DskipBuildNative"
-    echo "  $0 --docker true --clean true --skiptests true --release --sparkver 3.5 --scalaver 2.12 --celeborn 0.5 --uniffle 0.9 --paimon 1.2"
+    echo "  $0 --docker true --clean true --skiptests true --release --sparkver 3.5 --scalaver 2.12 --celeborn 0.5 --uniffle 0.10 --paimon 1.2"
     exit 0
 }
 
