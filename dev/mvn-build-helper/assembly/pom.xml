@@ -26,6 +26,8 @@
   </parent>
   <artifactId>assembly</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Assembly</name>
+  <description>Apache Auron Assembly Project</description>
 
   <properties>
     <auron.shade.packageName>auron</auron.shade.packageName>

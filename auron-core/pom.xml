@@ -27,6 +27,8 @@
 
   <artifactId>auron-core</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Core</name>
+  <description>Apache Auron Core Project</description>
 
   <dependencies>
 

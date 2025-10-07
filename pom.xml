@@ -29,7 +29,7 @@
   <version>${project.version}</version>
   <packaging>pom</packaging>
 
-  <name>Auron Parent Pom</name>
+  <name>Apache Auron Parent Pom</name>
   <description>Apache Auron (incubating)</description>
   <url>https://github.com/apache/auron.git</url>
 
