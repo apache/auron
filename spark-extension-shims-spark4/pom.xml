@@ -27,7 +27,6 @@
   <artifactId>spark-extension-shims-spark4_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
 
-  <url>http://maven.apache.org</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
