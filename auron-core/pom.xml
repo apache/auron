@@ -27,6 +27,8 @@
 
   <artifactId>auron-core</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Core</name>
+  <description>Apache Auron Core Project</description>
 
   <dependencies>
 
@@ -76,9 +78,9 @@
     </dependency>
 
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>4.13.2</version>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <version>${junit.jupiter.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

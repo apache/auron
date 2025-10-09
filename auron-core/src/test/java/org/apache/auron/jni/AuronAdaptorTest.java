@@ -16,11 +16,11 @@
  */
 package org.apache.auron.jni;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import org.apache.auron.configuration.AuronConfiguration;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This is a test class for {@link AuronAdaptor}.

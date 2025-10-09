@@ -27,6 +27,7 @@
 
   <artifactId>auron-celeborn_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Celeborn 0.6 ${scalaVersion}</name>
 
   <dependencies>
     <dependency>

@@ -27,6 +27,8 @@
 
   <artifactId>spark-extension-shims-spark3_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Spark Extension Shims Spark3_${scalaVersion}</name>
+  <description>Apache Auron Spark Extension Shims Project</description>
 
   <dependencies>
     <dependency>
