@@ -27,10 +27,10 @@ mod spark_make_array;
 mod spark_make_decimal;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
+mod spark_round;
 mod spark_sha2;
 mod spark_strings;
 mod spark_unscaled_value;
-mod spark_round;
 
 pub fn create_spark_ext_function(name: &str) -> Result<ScalarFunctionImplementation> {
     Ok(match name {

@@ -21,10 +21,10 @@ use arrow::{
 };
 use datafusion::{
     common::{
+        DataFusionError, Result, ScalarValue,
         cast::{
             as_decimal128_array, as_float64_array, as_int16_array, as_int32_array, as_int64_array,
         },
-        DataFusionError, Result, ScalarValue,
     },
     physical_plan::ColumnarValue,
 };
@@ -51,14 +51,14 @@ pub fn spark_round(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         _ => {
             return Err(DataFusionError::Execution(
                 "spark_round() scale must be a literal integer".to_string(),
-            ))
+            ));
         }
     };
 
     match value {
         // ---------- Array input ----------
         ColumnarValue::Array(arr) => match arr.data_type() {
-            DataType::Decimal128(_, _) => {
+            DataType::Decimal128(..) => {
                 let dec_arr = as_decimal128_array(arr)?;
                 let precision = dec_arr.precision();
                 let in_scale = dec_arr.scale();
@@ -73,8 +73,8 @@ pub fn spark_round(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                         }
                     })
                 }))
-                    .with_precision_and_scale(precision, in_scale)
-                    .map_err(|e| DataFusionError::Execution(e.to_string()))?;
+                .with_precision_and_scale(precision, in_scale)
+                .map_err(|e| DataFusionError::Execution(e.to_string()))?;
 
                 Ok(ColumnarValue::Array(Arc::new(result)))
             }
@@ -127,7 +127,9 @@ pub fn spark_round(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                 }
                 ScalarValue::Float32(Some(v)) => {
                     let f = 10_f64.powi(scale);
-                    ColumnarValue::Scalar(ScalarValue::Float32(Some((round_half_up_f64((*v as f64) * f) / f) as f32)))
+                    ColumnarValue::Scalar(ScalarValue::Float32(Some(
+                        (round_half_up_f64((*v as f64) * f) / f) as f32,
+                    )))
                 }
                 ScalarValue::Int64(Some(v)) => ColumnarValue::Scalar(ScalarValue::Int64(Some(
                     round_i128_half_up(*v as i128, scale) as i64,
@@ -144,7 +146,7 @@ pub fn spark_round(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                 _ => {
                     return Err(DataFusionError::Execution(
                         "Unsupported type for spark_round()".to_string(),
-                    ))
+                    ));
                 }
             })
         }
@@ -184,11 +186,15 @@ fn round_i128_half_up(value: i128, scale: i32) -> i128 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use datafusion::common::{cast::*, Result, ScalarValue};
-    use datafusion::physical_plan::ColumnarValue;
+    use datafusion::{
+        common::{Result, ScalarValue, cast::*},
+        physical_plan::ColumnarValue,
+    };
 
-    /// Unit test for `spark_round()` verifying correct rounding behavior on Decimal128 inputs.
+    use super::*;
+
+    /// Unit test for `spark_round()` verifying correct rounding behavior on
+    /// Decimal128 inputs.
     #[test]
     fn test_round_decimal() -> Result<()> {
         let arr = Arc::new(
@@ -206,16 +212,14 @@ mod tests {
         let out = result.into_array(2)?;
         let arr = as_decimal128_array(&out)?;
         let values: Vec<_> = arr.iter().collect();
-        assert_eq!(
-            values,
-            vec![Some(12350_i128), Some(-67900_i128)]
-        );
+        assert_eq!(values, vec![Some(12350_i128), Some(-67900_i128)]);
 
         Ok(())
     }
 
     /// Unit test for `spark_round()` verifying correct rounding behavior
-    /// when a **negative scale** is provided (i.e., rounding to tens, hundreds, etc.).
+    /// when a **negative scale** is provided (i.e., rounding to tens, hundreds,
+    /// etc.).
     #[test]
     fn test_round_negative_scale() -> Result<()> {
         let arr = Arc::new(Float64Array::from(vec![Some(123.45), Some(-678.9)]));
@@ -232,7 +236,8 @@ mod tests {
         Ok(())
     }
 
-    /// Unit test for `spark_round()` verifying rounding of Float64 values to a positive decimal
+    /// Unit test for `spark_round()` verifying rounding of Float64 values to a
+    /// positive decimal
     #[test]
     fn test_round_float() -> Result<()> {
         let arr = Arc::new(Float64Array::from(vec![
@@ -259,7 +264,8 @@ mod tests {
         Ok(())
     }
 
-    /// Unit test for `spark_round()` verifying Spark-style half-away-from-zero rounding on scalar Float64.
+    /// Unit test for `spark_round()` verifying Spark-style half-away-from-zero
+    /// rounding on scalar Float64.
     #[test]
     fn test_round_scalar() -> Result<()> {
         let s = ColumnarValue::Scalar(ScalarValue::Float64(Some(-1.5)));
@@ -276,8 +282,7 @@ mod tests {
     fn test_spark_round_short_pi_scales() -> Result<()> {
         let short_pi: i16 = 31415;
         let expected: Vec<i16> = vec![
-            0, 0, 30000, 31000, 31400, 31420,
-            31415, 31415, 31415, 31415, 31415, 31415, 31415,
+            0, 0, 30000, 31000, 31400, 31420, 31415, 31415, 31415, 31415, 31415, 31415, 31415,
         ];
 
         for (i, scale) in (-6..=6).enumerate() {
@@ -298,9 +303,7 @@ mod tests {
     fn test_spark_round_float_pi_scales() -> Result<()> {
         let float_pi = 3.1415_f32;
         let expected = vec![
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-            3.0, 3.1, 3.14, 3.141,
-            3.1415, 3.1415, 3.1415,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.141, 3.1415, 3.1415, 3.1415,
         ];
 
         for (i, scale) in (-6..=6).enumerate() {
@@ -326,9 +329,7 @@ mod tests {
     fn test_spark_round_double_pi_scales() -> Result<()> {
         let double_pi = std::f64::consts::PI;
         let expected = vec![
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-            3.0, 3.1, 3.14, 3.142,
-            3.1416, 3.14159, 3.141593,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142, 3.1416, 3.14159, 3.141593,
         ];
 
         for (i, scale) in (-6..=6).enumerate() {
@@ -355,8 +356,8 @@ mod tests {
     fn test_spark_round_int_pi_scales() -> Result<()> {
         let int_pi = 314159265_i32;
         let expected = vec![
-            314000000, 314200000, 314160000, 314159000, 314159300, 314159270,
-            314159265, 314159265, 314159265, 314159265, 314159265, 314159265, 314159265,
+            314000000, 314200000, 314160000, 314159000, 314159300, 314159270, 314159265, 314159265,
+            314159265, 314159265, 314159265, 314159265, 314159265,
         ];
 
         for (i, scale) in (-6..=6).enumerate() {
@@ -383,10 +384,19 @@ mod tests {
     fn test_spark_round_long_pi_scales() -> Result<()> {
         let long_pi = 31415926535897932_i128;
         let expected = vec![
-            31415926536000000, 31415926535900000, 31415926535900000,
-            31415926535898000, 31415926535897900, 31415926535897930,
-            31415926535897932, 31415926535897932, 31415926535897932,
-            31415926535897932, 31415926535897932, 31415926535897932, 31415926535897932,
+            31415926536000000,
+            31415926535900000,
+            31415926535900000,
+            31415926535898000,
+            31415926535897900,
+            31415926535897930,
+            31415926535897932,
+            31415926535897932,
+            31415926535897932,
+            31415926535897932,
+            31415926535897932,
+            31415926535897932,
+            31415926535897932,
         ];
 
         for (i, scale) in (-6..=6).enumerate() {
