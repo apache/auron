@@ -27,12 +27,7 @@ import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.auron.AuronConvertStrategy.childOrderingRequiredTag
-import org.apache.spark.sql.auron.AuronConvertStrategy.convertibleTag
-import org.apache.spark.sql.auron.AuronConvertStrategy.convertStrategyTag
-import org.apache.spark.sql.auron.AuronConvertStrategy.convertToNonNativeTag
-import org.apache.spark.sql.auron.AuronConvertStrategy.isNeverConvert
-import org.apache.spark.sql.auron.AuronConvertStrategy.joinSmallerSideTag
+import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
 import org.apache.spark.sql.auron.NativeConverters.{roundRobinTypeSupported, scalarTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
@@ -138,6 +133,8 @@ object AuronConverters extends Logging {
     getBooleanConf("spark.auron.enable.scan.parquet", defaultValue = true)
   def enableScanOrc: Boolean =
     getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
+  def enableBroadcastExchange: Boolean =
+    getBooleanConf("spark.auron.enable.broadcastExchange", defaultValue = true)
 
   private val extConvertProviders = ServiceLoader.load(classOf[AuronConvertProvider]).asScala
   def extConvertSupported(exec: SparkPlan): Boolean = {
@@ -178,7 +175,8 @@ object AuronConverters extends Logging {
   def convertSparkPlan(exec: SparkPlan): SparkPlan = {
     exec match {
       case e: ShuffleExchangeExec => tryConvert(e, convertShuffleExchangeExec)
-      case e: BroadcastExchangeExec => tryConvert(e, convertBroadcastExchangeExec)
+      case e: BroadcastExchangeExec if enableBroadcastExchange =>
+        tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
         tryConvert(e, convertFileSourceScanExec)
       case e: ProjectExec if enableProject => // project
@@ -265,14 +263,68 @@ object AuronConverters extends Logging {
                 if (Shims.get.isNative(exec)) { // for QueryStageInput and CustomShuffleReader
                   exec.setTagValue(convertibleTag, true)
                   exec.setTagValue(convertStrategyTag, AlwaysConvert)
+                  exec
                 } else {
-                  exec.setTagValue(convertibleTag, false)
-                  exec.setTagValue(convertStrategyTag, NeverConvert)
+                  addNeverConvertReasonTag(exec)
                 }
-                exec
             }
         }
     }
+  }
+
+  private def addNeverConvertReasonTag(exec: SparkPlan) = {
+    val neverConvertReason =
+      exec match {
+        case _: FileSourceScanExec if !enableScan =>
+          "Conversion disabled: spark.auron.enable.scan=false."
+        case _: ProjectExec if !enableProject =>
+          "Conversion disabled: spark.auron.enable.project=false."
+        case _: FilterExec if !enableFilter =>
+          "Conversion disabled: spark.auron.enable.filter=false."
+        case _: SortExec if !enableSort =>
+          "Conversion disabled: spark.auron.enable.sort=false."
+        case _: UnionExec if !enableUnion =>
+          "Conversion disabled: spark.auron.enable.union=false."
+        case _: SortMergeJoinExec if !enableSmj =>
+          "Conversion disabled: spark.auron.enable.smj=false."
+        case _: ShuffledHashJoinExec if !enableShj =>
+          "Conversion disabled: spark.auron.enable.shj=false."
+        case _: BroadcastHashJoinExec if !enableBhj =>
+          "Conversion disabled: spark.auron.enable.bhj=false."
+        case _: BroadcastNestedLoopJoinExec if !enableBnlj =>
+          "Conversion disabled: spark.auron.enable.bnlj=false."
+        case _: LocalLimitExec if !enableLocalLimit =>
+          "Conversion disabled: spark.auron.enable.local.limit=false."
+        case _: GlobalLimitExec if !enableGlobalLimit =>
+          "Conversion disabled: spark.auron.enable.global.limit=false."
+        case _: TakeOrderedAndProjectExec if !enableTakeOrderedAndProject =>
+          "Conversion disabled: spark.auron.enable.take.ordered.and.project=false."
+        case _: HashAggregateExec if !enableAggr =>
+          "Conversion disabled: spark.auron.enable.aggr=false."
+        case _: ObjectHashAggregateExec if !enableAggr =>
+          "Conversion disabled: spark.auron.enable.aggr=false."
+        case _: SortAggregateExec if !enableAggr =>
+          "Conversion disabled: spark.auron.enable.aggr=false."
+        case _: ExpandExec if !enableExpand =>
+          "Conversion disabled: spark.auron.enable.expand=false."
+        case _: WindowExec if !enableWindow =>
+          "Conversion disabled: spark.auron.enable.window=false."
+        case _: UnaryExecNode
+            if exec.getClass.getSimpleName == "WindowGroupLimitExec" && !enableWindowGroupLimit =>
+          "Conversion disabled: spark.auron.enable.window.group.limit=false."
+        case _: GenerateExec if !enableGenerate =>
+          "Conversion disabled: spark.auron.enable.generate=false."
+        case _: LocalTableScanExec if !enableLocalTableScan =>
+          "Conversion disabled: spark.auron.enable.local.table.scan=false."
+        case _: DataWritingCommandExec if !enableDataWriting =>
+          "Conversion disabled: spark.auron.enable.data.writing=false."
+        case _ =>
+          s"${exec.getClass.getSimpleName} is not supported yet."
+      }
+    exec.setTagValue(convertibleTag, false)
+    exec.setTagValue(convertStrategyTag, NeverConvert)
+    exec.setTagValue(neverConvertReasonTag, neverConvertReason)
+    exec
   }
 
   def tryConvert[T <: SparkPlan](exec: T, convert: T => SparkPlan): SparkPlan = {
@@ -283,8 +335,26 @@ object AuronConverters extends Logging {
     } catch {
       case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
         logWarning(s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}")
+        val neverConvertReason = e match {
+          case _: AssertionError =>
+            exec match {
+              case _: FileSourceScanExec if enableScan =>
+                if (!enableScanParquet) {
+                  "Conversion disabled: spark.auron.enable.scan.parquet=false."
+                } else if (!enableScanOrc) {
+                  "Conversion disabled: spark.auron.enable.scan.orc=false."
+                } else {
+                  s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}"
+                }
+              case _ =>
+                s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}"
+            }
+          case _ =>
+            s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}"
+        }
         exec.setTagValue(convertibleTag, false)
         exec.setTagValue(convertStrategyTag, NeverConvert)
+        exec.setTagValue(neverConvertReasonTag, neverConvertReason)
         exec
     }
   }
@@ -648,15 +718,11 @@ object AuronConverters extends Logging {
     }
   }
 
-  def convertBroadcastExchangeExec(exec: SparkPlan): SparkPlan = {
-    exec match {
-      case exec: BroadcastExchangeExec =>
-        logDebugPlanConversion(exec, Seq("mode" -> exec.mode))
-        val converted = Shims.get.createNativeBroadcastExchangeExec(exec.mode, exec.child)
-        converted.setTagValue(NativeBroadcastExchangeBase.nativeExecutionTag, true)
-        return converted
-    }
-    exec
+  def convertBroadcastExchangeExec(exec: BroadcastExchangeExec): SparkPlan = {
+    logDebugPlanConversion(exec, Seq("mode" -> exec.mode))
+    val converted = Shims.get.createNativeBroadcastExchangeExec(exec.mode, exec.child)
+    converted.setTagValue(NativeBroadcastExchangeBase.nativeExecutionTag, true)
+    converted
   }
 
   def convertLocalLimitExec(exec: LocalLimitExec): SparkPlan = {

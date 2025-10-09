@@ -26,7 +26,7 @@ import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.planner.factories.TestValuesTableFactory;
 import org.apache.flink.types.Row;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 
 /**
  * Base class for Flink Table Tests.
@@ -36,7 +36,7 @@ public class AuronFlinkTableTestBase {
     protected StreamExecutionEnvironment environment;
     protected StreamTableEnvironment tableEnvironment;
 
-    @Before
+    @BeforeEach
     public void before() {
         environment = StreamExecutionEnvironment.getExecutionEnvironment();
         Configuration configuration = new Configuration();

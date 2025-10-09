@@ -16,8 +16,9 @@
  */
 package org.apache.auron.configuration;
 
-import org.junit.Assert;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
 
 /** Tests for the {@link ConfigOption}. */
 public class ConfigOptionTest {
@@ -25,12 +26,12 @@ public class ConfigOptionTest {
     @Test
     public void testConfigOption() {
         ConfigOption<String> keyOption = ConfigOptions.key("key").stringType().noDefaultValue();
-        Assert.assertEquals("key", keyOption.key());
-        Assert.assertEquals(null, keyOption.defaultValue());
-        Assert.assertEquals(false, keyOption.hasDefaultValue());
+        assertEquals("key", keyOption.key());
+        assertEquals(null, keyOption.defaultValue());
+        assertEquals(false, keyOption.hasDefaultValue());
         ConfigOption<Boolean> booleanOption =
                 ConfigOptions.key("boolean").booleanType().defaultValue(true);
-        Assert.assertEquals(true, booleanOption.defaultValue());
+        assertEquals(true, booleanOption.defaultValue());
     }
 
     @Test
@@ -39,12 +40,12 @@ public class ConfigOptionTest {
                 .description("this is a description of the key")
                 .stringType()
                 .noDefaultValue();
-        Assert.assertEquals("key", keyOption.key());
-        Assert.assertEquals(null, keyOption.defaultValue());
-        Assert.assertEquals(false, keyOption.hasDefaultValue());
+        assertEquals("key", keyOption.key());
+        assertEquals(null, keyOption.defaultValue());
+        assertEquals(false, keyOption.hasDefaultValue());
         ConfigOption<Boolean> booleanOption =
                 ConfigOptions.key("boolean").booleanType().defaultValue(true);
-        Assert.assertEquals(true, booleanOption.defaultValue());
-        Assert.assertEquals("this is a description of the key", keyOption.description());
+        assertEquals(true, booleanOption.defaultValue());
+        assertEquals("this is a description of the key", keyOption.description());
     }
 }
