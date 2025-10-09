@@ -27,6 +27,8 @@
 
   <artifactId>spark-version-annotation-macros_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Spark Version Annotation Macros ${scalaVersion}</name>
+  <description>Apache Auron Spark Version Annotation Macros Project</description>
 
   <dependencies>
     <dependency>

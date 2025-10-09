@@ -27,6 +27,8 @@
 
   <artifactId>proto</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Proto</name>
+  <description>Apache Auron Proto Project</description>
 
   <dependencies>
     <dependency>

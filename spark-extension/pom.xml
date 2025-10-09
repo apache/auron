@@ -27,6 +27,8 @@
 
   <artifactId>spark-extension_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Spark Extension ${scalaVersion}</name>
+  <description>Apache Auron Spark Extension Project</description>
 
   <dependencies>
     <dependency>

@@ -27,6 +27,8 @@
 
   <artifactId>hadoop-shim_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Hadoop Shim ${scalaVersion}</name>
+  <description>Apache Auron Hadoop Shim Project</description>
 
   <dependencies>
     <dependency>

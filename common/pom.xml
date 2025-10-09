@@ -27,6 +27,8 @@
 
   <artifactId>auron-common_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Common ${scalaVersion}</name>
+  <description>Apache Auron Common Project</description>
 
   <dependencies>
     <dependency>

@@ -53,6 +53,7 @@ object AuronConvertStrategy extends Logging {
   val convertibleTag: TreeNodeTag[Boolean] = TreeNodeTag("auron.convertible")
   val convertToNonNativeTag: TreeNodeTag[Boolean] = TreeNodeTag("auron.convertToNonNative")
   val convertStrategyTag: TreeNodeTag[ConvertStrategy] = TreeNodeTag("auron.convert.strategy")
+  val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
   val childOrderingRequiredTag: TreeNodeTag[Boolean] = TreeNodeTag(
     "auron.child.ordering.required")
   val joinSmallerSideTag: TreeNodeTag[BuildSide] = TreeNodeTag("auron.join.smallerSide")
@@ -79,6 +80,9 @@ object AuronConvertStrategy extends Logging {
         case _ =>
           exec.setTagValue(convertibleTag, false)
           exec.setTagValue(convertStrategyTag, NeverConvert)
+          exec.setTagValue(
+            neverConvertReasonTag,
+            s"${exec.getClass.getSimpleName} is not supported yet.")
       }
       danglingChildren = newDangling :+ converted
     }
@@ -190,6 +194,9 @@ object AuronConvertStrategy extends Logging {
       case e =>
         // not marked -- default to NeverConvert
         e.setTagValue(convertStrategyTag, NeverConvert)
+        e.setTagValue(
+          neverConvertReasonTag,
+          s"${exec.getClass.getSimpleName} not marked, default to NeverConvert.")
     }
   }
 
@@ -206,9 +213,10 @@ object AuronConvertStrategy extends Logging {
 
     while (!finished) {
       finished = true
-      val dontConvertIf = (exec: SparkPlan, condition: Boolean) => {
+      val dontConvertIf = (exec: SparkPlan, condition: Boolean, neverConvertReason: String) => {
         if (condition) {
           exec.setTagValue(convertStrategyTag, NeverConvert)
+          exec.setTagValue(neverConvertReasonTag, neverConvertReason)
           finished = false
         }
       }
@@ -218,28 +226,41 @@ object AuronConvertStrategy extends Logging {
         // don't use NativeFilter because it requires ConvertToNative with a lot of records
         if (!isNeverConvert(e) && e.isInstanceOf[FilterExec]) {
           val child = e.children.head
-          dontConvertIf(e, isNeverConvert(child))
+          dontConvertIf(
+            e,
+            isNeverConvert(child),
+            s"${e.getClass.getSimpleName}, children is not native.")
         }
 
         // NonNative -> NativeAgg
         // don't use NativeAgg because it requires ConvertToNative with a lot of records
         if (!isNeverConvert(e) && isAggregate(e)) {
           val child = e.children.head
-          dontConvertIf(e, isNeverConvert(child))
+          dontConvertIf(
+            e,
+            isNeverConvert(child),
+            s"${e.getClass.getSimpleName}, children is not native.")
         }
 
         // Agg -> NativeShuffle
         // don't use NativeShuffle because the next stage is like to use non-native shuffle reader
         if (!isNeverConvert(e) && e.isInstanceOf[ShuffleExchangeLike]) {
           val child = e.children.head
-          dontConvertIf(e, isAggregate(child) && isNeverConvert(child))
+          dontConvertIf(
+            e,
+            isAggregate(child) && isNeverConvert(child),
+            s"${e.getClass.getSimpleName}, children is not native and children is agg.")
         }
 
         // NativeExpand -> NonNative
         // don't use NativeExpand because it requires C2R with a lot of records
         if (isNeverConvert(e)) {
           e.children.find(_.isInstanceOf[ExpandExec]) match {
-            case Some(expand) => dontConvertIf(expand, !isNeverConvert(expand))
+            case Some(expand) =>
+              dontConvertIf(
+                expand,
+                !isNeverConvert(expand),
+                s"${e.getClass.getSimpleName}, children is nativeExpand.")
             case _ =>
           }
         }
@@ -248,7 +269,11 @@ object AuronConvertStrategy extends Logging {
         // don't use NativeParquetScan because it requires C2R with a lot of records
         if (isNeverConvert(e)) {
           e.children.find(_.isInstanceOf[FileSourceScanExec]) match {
-            case Some(scan) => dontConvertIf(scan, !isNeverConvert(scan))
+            case Some(scan) =>
+              dontConvertIf(
+                scan,
+                !isNeverConvert(scan),
+                s"${e.getClass.getSimpleName}, children is nativeParquetScan.")
             case _ =>
           }
         }
@@ -257,7 +282,10 @@ object AuronConvertStrategy extends Logging {
         // don't use native sort
         if (isNeverConvert(e)) {
           e.children.filter(_.isInstanceOf[SortExec]).foreach { sort =>
-            dontConvertIf(sort, !isNeverConvert(sort) && isNeverConvert(sort.children.head))
+            dontConvertIf(
+              sort,
+              !isNeverConvert(sort) && isNeverConvert(sort.children.head),
+              s"${e.getClass.getSimpleName}, children and parent both are not native.")
           }
         }
       }

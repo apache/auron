@@ -27,6 +27,7 @@
 
   <artifactId>auron-paimon_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Paimon ${paimonVersion} ${scalaVersion}</name>
 
   <dependencies>
     <dependency>

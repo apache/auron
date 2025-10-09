@@ -16,9 +16,10 @@
  */
 package org.apache.auron.configuration;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * This is a test class for {@link AuronConfiguration}.
@@ -27,7 +28,7 @@ public class AuronConfigurationTest {
 
     private MockAuronConfiguration config;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         config = new MockAuronConfiguration();
         config.addConfig(MockAuronConfiguration.STRING_WITHOUT_DEFAULT_CONFIG_OPTION.key(), "str1");
@@ -40,12 +41,12 @@ public class AuronConfigurationTest {
 
     @Test
     public void testGetConfig() {
-        Assert.assertEquals("str1", config.get(MockAuronConfiguration.STRING_WITHOUT_DEFAULT_CONFIG_OPTION));
-        Assert.assertEquals("zm", config.get(MockAuronConfiguration.STRING_CONFIG_OPTION));
-        Assert.assertEquals(100, config.getInteger(MockAuronConfiguration.INT_CONFIG_OPTION));
-        Assert.assertEquals(false, config.get(MockAuronConfiguration.BOOLEAN_CONFIG_OPTION));
-        Assert.assertEquals(99.9, config.get(MockAuronConfiguration.DOUBLE_CONFIG_OPTION), 0.0000000001);
-        Assert.assertEquals(10000000000L, config.getLong(MockAuronConfiguration.LONG_CONFIG_OPTION));
-        Assert.assertEquals(1.2f, config.get(MockAuronConfiguration.FLOAT_CONFIG_OPTION), 0.0000000001);
+        assertEquals("str1", config.get(MockAuronConfiguration.STRING_WITHOUT_DEFAULT_CONFIG_OPTION));
+        assertEquals("zm", config.get(MockAuronConfiguration.STRING_CONFIG_OPTION));
+        assertEquals(100, config.getInteger(MockAuronConfiguration.INT_CONFIG_OPTION));
+        assertEquals(false, config.get(MockAuronConfiguration.BOOLEAN_CONFIG_OPTION));
+        assertEquals(99.9, config.get(MockAuronConfiguration.DOUBLE_CONFIG_OPTION), 0.0000000001);
+        assertEquals(10000000000L, config.getLong(MockAuronConfiguration.LONG_CONFIG_OPTION));
+        assertEquals(1.2f, config.get(MockAuronConfiguration.FLOAT_CONFIG_OPTION), 0.0000000001);
     }
 }

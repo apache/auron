@@ -27,6 +27,7 @@
 
   <artifactId>auron-uniffle_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Uniffle ${uniffleVersion} ${scalaVersion}</name>
 
   <dependencies>
     <dependency>
