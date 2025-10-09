@@ -188,18 +188,87 @@ mod tests {
     use datafusion::common::{cast::*, Result, ScalarValue};
     use datafusion::physical_plan::ColumnarValue;
 
-    /// Helper to evaluate `spark_round()` and return an f64 scalar result.
-    fn eval_f64(value: f64, scale: i32) -> f64 {
-        let result = spark_round(&[
-            ColumnarValue::Scalar(ScalarValue::Float64(Some(value))),
-            ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
-        ])
-            .unwrap();
+    /// Unit test for `spark_round()` verifying correct rounding behavior on Decimal128 inputs.
+    #[test]
+    fn test_round_decimal() -> Result<()> {
+        let arr = Arc::new(
+            Decimal128Array::from_iter_values([12345_i128, -67895_i128])
+                .with_precision_and_scale(10, 2)?,
+        );
 
-        // ✅ Store ArrayRef first to avoid "temporary dropped while borrowed"
-        let arr = result.into_array(1).unwrap();
-        let out = as_float64_array(&arr).unwrap();
-        out.value(0)
+        let result = spark_round(&[
+            ColumnarValue::Array(arr.clone()),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
+        ])?;
+
+        assert!(matches!(result, ColumnarValue::Array(_)));
+
+        let out = result.into_array(2)?;
+        let arr = as_decimal128_array(&out)?;
+        let values: Vec<_> = arr.iter().collect();
+        assert_eq!(
+            values,
+            vec![Some(12350_i128), Some(-67900_i128)]
+        );
+
+        Ok(())
+    }
+
+    /// Unit test for `spark_round()` verifying correct rounding behavior
+    /// when a **negative scale** is provided (i.e., rounding to tens, hundreds, etc.).
+    #[test]
+    fn test_round_negative_scale() -> Result<()> {
+        let arr = Arc::new(Float64Array::from(vec![Some(123.45), Some(-678.9)]));
+        let result = spark_round(&[
+            ColumnarValue::Array(arr),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(-1))),
+        ])?;
+
+        let out = result.into_array(2)?;
+        let out = as_float64_array(&out)?;
+        let v: Vec<_> = out.iter().collect();
+
+        assert_eq!(v, vec![Some(120.0), Some(-680.0)]);
+        Ok(())
+    }
+
+    /// Unit test for `spark_round()` verifying rounding of Float64 values to a positive decimal
+    #[test]
+    fn test_round_float() -> Result<()> {
+        let arr = Arc::new(Float64Array::from(vec![
+            Some(1.2345),
+            Some(-2.3456),
+            Some(0.5),
+            Some(-0.5),
+            None,
+        ]));
+
+        let result = spark_round(&[
+            ColumnarValue::Array(arr),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(2))),
+        ])?;
+
+        let out = result.into_array(5)?;
+        let out = as_float64_array(&out)?;
+        let v: Vec<_> = out.iter().collect();
+
+        assert_eq!(
+            v,
+            vec![Some(1.23), Some(-2.35), Some(0.5), Some(-0.5), None]
+        );
+        Ok(())
+    }
+
+    /// Unit test for `spark_round()` verifying Spark-style half-away-from-zero rounding on scalar Float64.
+    #[test]
+    fn test_round_scalar() -> Result<()> {
+        let s = ColumnarValue::Scalar(ScalarValue::Float64(Some(-1.5)));
+        let result = spark_round(&[s, ColumnarValue::Scalar(ScalarValue::Int32(Some(0)))])?;
+        match result {
+            ColumnarValue::Scalar(ScalarValue::Float64(Some(v))) => assert_eq!(v, -2.0),
+            _ => panic!("wrong result"),
+        }
+        Ok(())
     }
 
     /// Tests Spark-compatible rounding for 16-bit integer (Short).
@@ -217,7 +286,6 @@ mod tests {
                 ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
             ])?;
 
-            // ✅ Fixed temporary value issue
             let arr = result.into_array(1)?;
             let out = as_int16_array(&arr)?;
             assert_eq!(out.value(0), expected[i]);
@@ -241,7 +309,6 @@ mod tests {
                 ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
             ])?;
 
-            // ✅ Safe borrow pattern
             let arr = result.into_array(1)?;
             let out = as_float32_array(&arr)?;
             assert!(
