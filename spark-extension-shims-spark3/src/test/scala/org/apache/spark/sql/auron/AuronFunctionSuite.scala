@@ -234,8 +234,7 @@ class AuronFunctionSuite
         3 -> 31415.toShort,
         4 -> 31415.toShort,
         5 -> 31415.toShort,
-        6 -> 31415.toShort
-      )
+        6 -> 31415.toShort)
 
       scales.foreach { scale =>
         val df = sql(s"SELECT round(c1, $scale) FROM t1")
@@ -266,8 +265,7 @@ class AuronFunctionSuite
         3 -> 31415926535897932L,
         4 -> 31415926535897932L,
         5 -> 31415926535897932L,
-        6 -> 31415926535897932L
-      )
+        6 -> 31415926535897932L)
 
       scales.foreach { scale =>
         val df = sql(s"SELECT round(c1, $scale) FROM t1")
