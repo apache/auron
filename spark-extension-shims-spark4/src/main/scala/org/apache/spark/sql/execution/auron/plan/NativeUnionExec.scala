@@ -26,11 +26,7 @@ case class NativeUnionExec(
     override val output: Seq[Attribute])
     extends NativeUnionBase(children, output) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
+  @sparkver("4.0")
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan =
-    copy(children = newChildren)
-
-  @sparkver("3.0 / 3.1")
-  override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
     copy(children = newChildren)
 }

@@ -18,7 +18,7 @@ package org.apache.spark.sql.auron
 
 import org.apache.auron.sparkverEnableMembers
 
-@sparkverEnableMembers("3.5")
+@sparkverEnableMembers("4.0")
 class AuronAdaptiveQueryExecSuite
     extends org.apache.spark.sql.QueryTest
     with BaseAuronSQLSuite
