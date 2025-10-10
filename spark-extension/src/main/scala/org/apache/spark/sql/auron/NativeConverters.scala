@@ -818,12 +818,9 @@ object NativeConverters extends Logging {
       case e: Round =>
         e.scale match {
           case Literal(n: Int, _) =>
-            buildScalarFunction(
-              pb.ScalarFunction.Round,
-              Seq(e.child, Literal(n.toLong)),
-              e.dataType)
+            buildExtScalarFunction("Round", Seq(e.child, Literal(n.toLong)), e.dataType)
           case _ =>
-            buildScalarFunction(pb.ScalarFunction.Round, Seq(e.child, Literal(0L)), e.dataType)
+            buildExtScalarFunction("Round", Seq(e.child, Literal(0L)), e.dataType)
         }
 
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)

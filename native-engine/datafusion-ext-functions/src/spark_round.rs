@@ -16,14 +16,15 @@
 use std::sync::Arc;
 
 use arrow::{
-    array::{Decimal128Array, Float64Array, Int16Array, Int32Array, Int64Array},
+    array::{Decimal128Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array},
     datatypes::DataType,
 };
 use datafusion::{
     common::{
         DataFusionError, Result, ScalarValue,
         cast::{
-            as_decimal128_array, as_float64_array, as_int16_array, as_int32_array, as_int64_array,
+            as_decimal128_array, as_float32_array, as_float64_array, as_int16_array,
+            as_int32_array, as_int64_array,
         },
     },
     physical_plan::ColumnarValue,
@@ -97,6 +98,23 @@ pub fn spark_round(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                     .map(|opt| opt.map(|v| round_i128_half_up(v as i128, scale) as i16)),
             )))),
 
+            DataType::Float32 => {
+                // Handle Float32 Array case
+                let arr = as_float32_array(arr)?;
+                let factor = 10_f32.powi(scale);
+                let result = Float32Array::from_iter(arr.iter().map(|opt| {
+                    opt.map(|v| {
+                        if v.is_nan() || v.is_infinite() {
+                            v
+                        } else {
+                            round_half_up_f32(v * factor) / factor
+                        }
+                    })
+                }));
+
+                Ok(ColumnarValue::Array(Arc::new(result)))
+            }
+
             // Float64 fallback
             _ => {
                 let arr = as_float64_array(arr)?;
@@ -155,6 +173,15 @@ pub fn spark_round(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
 /// Spark-style HALF_UP rounding (0.5 → 1, -0.5 → -1)
 fn round_half_up_f64(x: f64) -> f64 {
+    if x >= 0.0 {
+        (x + 0.5).floor()
+    } else {
+        (x - 0.5).ceil()
+    }
+}
+
+/// Spark-style HALF_UP rounding (0.5 → 1, -0.5 → -1) for Float32
+fn round_half_up_f32(x: f32) -> f32 {
     if x >= 0.0 {
         (x + 0.5).floor()
     } else {
