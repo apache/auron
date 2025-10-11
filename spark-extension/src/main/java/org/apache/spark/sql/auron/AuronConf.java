@@ -21,6 +21,9 @@ import org.apache.spark.SparkEnv$;
 
 @SuppressWarnings("unused")
 public enum AuronConf {
+    // support spark.auron.ui.enabled
+    UI_ENABLED("spark.auron.ui.enabled", true),
+
     /// suggested batch size for arrow batches.
     BATCH_SIZE("spark.auron.batchSize", 10000),
 

@@ -275,6 +275,31 @@ fi
 
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
 
+# -----------------------------------------------------------------------------
+# Write build information to auron-build-info.properties
+# -----------------------------------------------------------------------------
+BUILD_INFO_FILE="common/src/main/resources/auron-build-info.properties"
+mkdir -p "$(dirname "$BUILD_INFO_FILE")"
+
+JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk '{print $3}' | tr -d '"')
+PROJECT_VERSION=$(xmllint --xpath "/*[local-name()='project']/*[local-name()='properties']/*[local-name()='project.version']/text()" pom.xml)
+RUST_VERSION=$(rustc --version | awk '{print $2}')
+
+{
+  echo "spark.version=${SPARK_VER}"
+  echo "rust.version=${RUST_VERSION}"
+  echo "java.version=${JAVA_VERSION}"
+  echo "project.version=${PROJECT_VERSION}"
+  echo "scala.version=${SCALA_VER}"
+  echo "celeborn.version=${CELEBORN_VER}"
+  echo "uniffle.version=${UNIFFLE_VER}"
+  echo "paimon.version=${PAIMON_VER}"
+  echo "flink.version=${FLINK_VER}"
+  echo "build.timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+} > "$BUILD_INFO_FILE"
+
+echo "[INFO] Build info written to $BUILD_INFO_FILE"
+
 # Execute Maven command
 if [[ "$USE_DOCKER" == true ]]; then
     # In Docker mode, use multi-threaded Maven build with -T8 for faster compilation
