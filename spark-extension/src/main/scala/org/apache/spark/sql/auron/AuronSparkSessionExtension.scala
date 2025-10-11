@@ -31,8 +31,8 @@ class AuronSparkSessionExtension extends (SparkSessionExtensions => Unit) with L
   Shims.get.initExtension()
 
   override def apply(extensions: SparkSessionExtensions): Unit = {
-    SparkEnv.get.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
-    SparkEnv.get.conf.set(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key, "true")
+    SparkEnv.get.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    SparkEnv.get.conf.set(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key, "false")
     logInfo(s"${classOf[AuronSparkSessionExtension].getName} enabled")
 
     assert(AuronSparkSessionExtension.auronEnabledKey != null)
