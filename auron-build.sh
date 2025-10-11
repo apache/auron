@@ -25,7 +25,8 @@ print_help() {
     echo "Build Auron project with specified Maven profiles"
     echo
     echo "Options:"
-    echo "  --docker <true|false>    Build in Docker with CentOS7 (default: false)"
+    echo "  --docker <true|false>    Build in Docker environment (default: false)"
+    echo "  --image <NAME>           Docker image to use (centos7|ubuntu24|rockylinux8|debian11, default: centos7)"
     echo "  --pre                    Activate pre-release profile"
     echo "  --release                Activate release profile"
     echo "  --sparkver <VERSION>     Specify Spark version (e.g. 3.0/3.1/3.2/3.3/3.4/3.5)"
@@ -40,7 +41,7 @@ print_help() {
     echo
     echo "Examples:"
     echo "  $0 --pre --sparkver 3.5 --scalaver 2.12 -DskipBuildNative"
-    echo "  $0 --docker true --clean true --skiptests true --release --sparkver 3.5 --scalaver 2.12 --celeborn 0.5 --uniffle 0.10 --paimon 1.2"
+    echo "  $0 --docker true --image centos7 --clean true --skiptests true --release --sparkver 3.5 --scalaver 2.12 --celeborn 0.5 --uniffle 0.10 --paimon 1.2"
     exit 0
 }
 
@@ -48,6 +49,7 @@ MVN_CMD="$(dirname "$0")/build/mvn"
 
 # Initialize variables
 USE_DOCKER=false
+IMAGE_NAME="centos7"
 PRE_PROFILE=false
 RELEASE_PROFILE=false
 CLEAN=true
@@ -76,6 +78,19 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "ERROR: --docker requires true/false" >&2
+                exit 1
+            fi
+            ;;
+        --image)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                IMAGE_NAME="$2"
+                if [[ ! "$IMAGE_NAME" =~ ^(centos7|ubuntu24|rockylinux8|debian11)$ ]]; then
+                    echo "ERROR: Unsupported image '$IMAGE_NAME'. Supported: centos7, ubuntu24, rockylinux8, debian11" >&2
+                    exit 1
+                fi
+                shift 2
+            else
+                echo "ERROR: --image requires one of: centos7, ubuntu24, rockylinux8, debian11" >&2
                 exit 1
             fi
             ;;
@@ -277,6 +292,7 @@ MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
 
 # Execute Maven command
 if [[ "$USE_DOCKER" == true ]]; then
+    echo "[INFO] Compiling inside Docker container using image: $IMAGE_NAME"
     # In Docker mode, use multi-threaded Maven build with -T8 for faster compilation
     BUILD_ARGS+=("-T8")
     if [[ "$CLEAN" == true ]]; then
@@ -288,6 +304,7 @@ if [[ "$USE_DOCKER" == true ]]; then
 
     echo "[INFO] Compiling inside Docker container..."
     export AURON_BUILD_ARGS="${BUILD_ARGS[*]}"
+    export BUILD_CONTEXT="./${IMAGE_NAME}"
     exec docker-compose -f dev/docker-build/docker-compose.yml up --abort-on-container-exit
 else
     echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} $@"
