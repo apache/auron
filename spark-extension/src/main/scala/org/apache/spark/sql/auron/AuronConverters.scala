@@ -91,8 +91,8 @@ import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.sparkver
 
 object AuronConverters extends Logging {
-  def enableScan: Boolean =
-    getBooleanConf("spark.auron.enable.scan", defaultValue = true)
+  def enableFileScan: Boolean =
+    getBooleanConf("spark.auron.enable.fileScan", defaultValue = true)
   def enableProject: Boolean =
     getBooleanConf("spark.auron.enable.project", defaultValue = true)
   def enableFilter: Boolean =
@@ -129,10 +129,10 @@ object AuronConverters extends Logging {
     getBooleanConf("spark.auron.enable.local.table.scan", defaultValue = true)
   def enableDataWriting: Boolean =
     getBooleanConf("spark.auron.enable.data.writing", defaultValue = false)
-  def enableScanParquet: Boolean =
-    getBooleanConf("spark.auron.enable.scan.parquet", defaultValue = true)
-  def enableScanOrc: Boolean =
-    getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
+  def enableFileScanParquet: Boolean =
+    getBooleanConf("spark.auron.enable.fileScan.parquet", defaultValue = true)
+  def enableFileScanOrc: Boolean =
+    getBooleanConf("spark.auron.enable.fileScan.orc", defaultValue = true)
   def enableBroadcastExchange: Boolean =
     getBooleanConf("spark.auron.enable.broadcastExchange", defaultValue = true)
   def enableShuffleExechange: Boolean =
@@ -183,13 +183,10 @@ object AuronConverters extends Logging {
 
   def convertSparkPlan(exec: SparkPlan): SparkPlan = {
     exec match {
-      case e: ShuffleExchangeExec => tryConvert(e, convertShuffleExchangeExec)
+      case e: ShuffleExchangeExec if enableExchange => tryConvert(e, convertShuffleExchangeExec)
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
-      case e: ShuffleExchangeExec if enableExchange => tryConvert(e, convertShuffleExchangeExec)
-      case e: BroadcastExchangeExec =>
-        tryConvert(e, convertBroadcastExchangeExec)
-      case e: FileSourceScanExec if enableScan => // scan
+      case e: FileSourceScanExec if enableFileScan => // scan
         tryConvert(e, convertFileSourceScanExec)
       case e: ProjectExec if enableProject => // project
         tryConvert(e, convertProjectExec)
@@ -287,7 +284,7 @@ object AuronConverters extends Logging {
   private def addNeverConvertReasonTag(exec: SparkPlan) = {
     val neverConvertReason =
       exec match {
-        case _: FileSourceScanExec if !enableScan =>
+        case _: FileSourceScanExec if !enableFileScan =>
           "Conversion disabled: spark.auron.enable.scan=false."
         case _: ProjectExec if !enableProject =>
           "Conversion disabled: spark.auron.enable.project=false."
@@ -350,10 +347,10 @@ object AuronConverters extends Logging {
         val neverConvertReason = e match {
           case _: AssertionError =>
             exec match {
-              case _: FileSourceScanExec if enableScan =>
-                if (!enableScanParquet) {
+              case _: FileSourceScanExec if enableFileScan =>
+                if (!enableFileScanParquet) {
                   "Conversion disabled: spark.auron.enable.scan.parquet=false."
-                } else if (!enableScanOrc) {
+                } else if (!enableFileScanOrc) {
                   "Conversion disabled: spark.auron.enable.scan.orc=false."
                 } else {
                   s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}"
@@ -454,10 +451,10 @@ object AuronConverters extends Logging {
         "tableIdentifier" -> tableIdentifier))
     relation.fileFormat match {
       case p if p.getClass.getName.endsWith("ParquetFileFormat") =>
-        assert(enableScanParquet)
+        assert(enableFileScanParquet)
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
       case p if p.getClass.getName.endsWith("OrcFileFormat") =>
-        assert(enableScanOrc)
+        assert(enableFileScanOrc)
         addRenameColumnsExec(Shims.get.createNativeOrcScanExec(exec))
       case p =>
         throw new NotImplementedError(
