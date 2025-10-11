@@ -68,6 +68,29 @@ class NativeRDD(
   }
 }
 
+class EmptyNativeRDD(@transient private val rddSparkContext: SparkContext)
+    extends NativeRDD(
+      rddSparkContext = rddSparkContext,
+      metrics = MetricNode(Map.empty, Seq(), None),
+      rddPartitions = Array.empty,
+      rddPartitioner = None,
+      rddDependencies = Seq.empty,
+      rddShuffleReadFull = false,
+      nativePlan = (_, _) => null,
+      friendlyName = "EmptyNativeRDD")
+    with Logging
+    with Serializable {
+
+  setName(friendlyName)
+
+  override protected def getPartitions: Array[Partition] = Array.empty
+
+  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException("empty RDD")
+  }
+
+}
+
 class NativePlanWrapper(var p: (Partition, TaskContext) => PhysicalPlanNode)
     extends Serializable {
   def plan(split: Partition, context: TaskContext): PhysicalPlanNode = {
