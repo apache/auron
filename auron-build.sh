@@ -102,10 +102,10 @@ while [[ $# -gt 0 ]]; do
                 SPARK_VER="$2"
                 if [ "$SPARK_VER" = "3.0" ] || [ "$SPARK_VER" = "3.1" ] \
                   || [ "$SPARK_VER" = "3.2" ] || [ "$SPARK_VER" = "3.3" ] \
-                  || [ "$SPARK_VER" = "3.4" ] || [ "$SPARK_VER" = "3.5" ]; then
+                  || [ "$SPARK_VER" = "3.4" ] || [ "$SPARK_VER" = "3.5" ] || [ "$SPARK_VER" = "4.0" ]; then
                   echo "Building for Spark $SPARK_VER"
                 else
-                  echo "ERROR: Invalid Spark version: $SPARK_VER. The currently supported versions are: 3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5."
+                  echo "ERROR: Invalid Spark version: $SPARK_VER. The currently supported versions are: 3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0."
                   exit 1
                 fi
                 shift 2
