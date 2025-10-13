@@ -20,12 +20,12 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.BlockingQueue
-
 import org.apache.arrow.c.ArrowArray
 import org.apache.arrow.c.ArrowSchema
 import org.apache.arrow.c.Data
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.dictionary.DictionaryProvider.MapDictionaryProvider
+import org.apache.auron.arrowio.AuronArrowFFIExporter
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.auron.{AuronConf, NativeHelper}
 import org.apache.spark.sql.auron.util.Using
@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils.ROOT_ALLOCAT
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowWriter
 import org.apache.spark.sql.types.StructType
 
-class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType) extends AutoCloseable {
+class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType) extends AuronArrowFFIExporter with AutoCloseable {
   private val maxBatchNumRows = AuronConf.BATCH_SIZE.intConf()
   private val maxBatchMemorySize = AuronConf.SUGGESTED_BATCH_MEM_SIZE.intConf()
 
