@@ -158,7 +158,9 @@ class ShimsImpl extends Shims with Logging {
         .get(AuronConf.UI_ENABLED.key, "true"))
 
     if (SparkEnv.get.conf.get(AuronConf.UI_ENABLED.key, "true").equals("true")) {
-      val sparkContext = SparkContext.getOrCreate()
+      val sparkContext = SparkContext.getActive.getOrElse{
+        throw new IllegalStateException("No active spark context found that should not happen")
+      }
       val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
       val statusStore = new AuronSQLAppStatusStore(kvStore)
       sparkContext.ui.foreach(new AuronSQLTab(statusStore, _))
