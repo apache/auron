@@ -58,7 +58,7 @@ RUN gcc --version && g++ --version
 # ---------------------------------------------------------------------
 RUN curl https://sh.rustup.rs -sSf -o rustup-init && \
     chmod +x rustup-init && \
-    ./rustup-init -y --default-toolchain nightly-2023-08-01-x86_64-unknown-linux-gnu && \
+    ./rustup-init -y --default-toolchain nightly-2025-05-09-x86_64-unknown-linux-gnu && \
     rm rustup-init
 ENV PATH="/root/.cargo/bin:${PATH}"
 
