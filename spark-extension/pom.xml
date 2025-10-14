@@ -27,8 +27,15 @@
 
   <artifactId>spark-extension_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Spark Extension ${scalaVersion}</name>
+  <description>Apache Auron Spark Extension Project</description>
 
   <dependencies>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>auron-spark-ui_${scalaVersion}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.apache.auron</groupId>
       <artifactId>auron-core</artifactId>

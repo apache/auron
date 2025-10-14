@@ -27,8 +27,15 @@
 
   <artifactId>spark-extension-shims-spark3_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Spark Extension Shims Spark3_${scalaVersion}</name>
+  <description>Apache Auron Spark Extension Shims Project</description>
 
   <dependencies>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>auron-spark-ui_${scalaVersion}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.apache.auron</groupId>
       <artifactId>auron-common_${scalaVersion}</artifactId>

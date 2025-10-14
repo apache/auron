@@ -19,12 +19,10 @@ package org.apache.spark.sql.auron
 import java.io.File
 import java.util.UUID
 
+import scala.collection.mutable
+
 import org.apache.commons.lang3.reflect.FieldUtils
-import org.apache.spark.OneToOneDependency
-import org.apache.spark.ShuffleDependency
-import org.apache.spark.SparkEnv
-import org.apache.spark.SparkException
-import org.apache.spark.TaskContext
+import org.apache.spark.{OneToOneDependency, ShuffleDependency, SparkContext, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MapStatus
@@ -102,14 +100,18 @@ import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 import org.apache.spark.sql.execution.joins.auron.plan.NativeShuffledHashJoinExecProvider
 import org.apache.spark.sql.execution.joins.auron.plan.NativeSortMergeJoinExecProvider
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
+import org.apache.spark.sql.execution.ui.{AuronEventUtils, AuronSQLAppStatusListener, AuronSQLAppStatusStore, AuronSQLTab}
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.storage.FileSegment
 
 import org.apache.auron.{protobuf => pb, sparkver}
+import org.apache.auron.common.AuronBuildInfo
+import org.apache.auron.spark.ui.AuronBuildInfoEvent
 
 class ShimsImpl extends Shims with Logging {
 
@@ -146,6 +148,49 @@ class ShimsImpl extends Shims with Logging {
     if (AuronConf.FORCE_SHUFFLED_HASH_JOIN.booleanConf()) {
       logWarning(s"${AuronConf.FORCE_SHUFFLED_HASH_JOIN.key} is not supported in $shimVersion")
     }
+
+  }
+
+  // set Auron spark ui if spark.auron.ui.enabled is true
+  override def onApplyingExtension(): Unit = {
+    logInfo(
+      " onApplyingExtension get ui_enabled : " + SparkEnv.get.conf
+        .get(AuronConf.UI_ENABLED.key, "true"))
+
+    if (SparkEnv.get.conf.get(AuronConf.UI_ENABLED.key, "true").equals("true")) {
+      val sparkContext = SparkContext.getOrCreate()
+      val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
+      val statusStore = new AuronSQLAppStatusStore(kvStore)
+      sparkContext.ui.foreach(new AuronSQLTab(statusStore, _))
+      logInfo(" onApplyingExtension add register ")
+      AuronSQLAppStatusListener.register(sparkContext)
+      postBuildInfoEvent(sparkContext)
+    }
+
+  }
+
+  private def postBuildInfoEvent(sparkContext: SparkContext): Unit = {
+    val auronBuildInfo = new mutable.LinkedHashMap[String, String]()
+    auronBuildInfo.put(AuronBuildInfo.VERSION_STRING, AuronBuildInfo.VERSION)
+    auronBuildInfo.put(
+      AuronBuildInfo.JAVA_COMPILE_VERSION_STRING,
+      AuronBuildInfo.JAVA_COMPILE_VERSION)
+    auronBuildInfo.put(
+      AuronBuildInfo.SCALA_COMPILE_VERSION_STRING,
+      AuronBuildInfo.SCALA_COMPILE_VERSION)
+    auronBuildInfo.put(
+      AuronBuildInfo.SPARK_COMPILE_VERSION_STRING,
+      AuronBuildInfo.SPARK_COMPILE_VERSION)
+    auronBuildInfo.put(
+      AuronBuildInfo.RUST_COMPILE_VERSION_STRING,
+      AuronBuildInfo.RUST_COMPILE_VERSION)
+    auronBuildInfo.put(AuronBuildInfo.CELEBORN_VERSION_STRING, AuronBuildInfo.CELEBORN_VERSION)
+    auronBuildInfo.put(AuronBuildInfo.UNIFFLE_VERSION_STRING, AuronBuildInfo.UNIFFLE_VERSION)
+    auronBuildInfo.put(AuronBuildInfo.PAIMON_VERSION_STRING, AuronBuildInfo.PAIMON_VERSION)
+    auronBuildInfo.put(AuronBuildInfo.FLINK_VERSION_STRING, AuronBuildInfo.FLINK_VERSION)
+    auronBuildInfo.put(AuronBuildInfo.BUILD_DATE_STRING, AuronBuildInfo.BUILD_DATE)
+    val event = AuronBuildInfoEvent(auronBuildInfo)
+    AuronEventUtils.post(sparkContext, event)
   }
 
   override def createConvertToNativeExec(child: SparkPlan): ConvertToNativeBase =

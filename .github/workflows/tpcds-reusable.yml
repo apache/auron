@@ -78,7 +78,8 @@ on:
           ]
 
 env:
-  APACHE_MIRROR: "https://archive.apache.org/dist"
+  APACHE_MIRROR: "https://www.apache.org/dyn/closer.lua"
+  MIRROR_URL_QUERY: "?action=download"
   WGET_OPTS: "--tries=3 --timeout=30 -c"
 
 jobs:
@@ -243,9 +244,9 @@ jobs:
           else
             SPARK_FILE="spark-${{ steps.get-dependency-version.outputs.sparkversion }}-bin-${{ inputs.hadoop-profile }}.tgz"
           fi
-          SPARK_URL="${APACHE_MIRROR}/${SPARK_PATH}/${SPARK_FILE}"
+          SPARK_URL="${APACHE_MIRROR}/${SPARK_PATH}/${SPARK_FILE}${MIRROR_URL_QUERY}"
           
-          wget ${WGET_OPTS} ${SPARK_URL}
+          wget ${WGET_OPTS} ${SPARK_URL} -O "$SPARK_FILE"
           mkdir -p spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
           cd spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }} && tar -xf ../spark-*.tgz --strip-component=1
 
@@ -297,9 +298,9 @@ jobs:
         run: |
           CELEBORN_PATH="celeborn/celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}"
           CELEBORN_FILE="apache-celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}-bin.tgz"
-          CELEBORN_URL="${APACHE_MIRROR}/${CELEBORN_PATH}/${CELEBORN_FILE}"
+          CELEBORN_URL="${APACHE_MIRROR}/${CELEBORN_PATH}/${CELEBORN_FILE}${MIRROR_URL_QUERY}"
           
-          wget ${WGET_OPTS} ${CELEBORN_URL} && \
+          wget ${WGET_OPTS} ${CELEBORN_URL} -O "$CELEBORN_FILE" && \
           mkdir -p celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }} && \
           cd celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }} && tar -xf ../apache-celeborn-*.tgz --strip-component=1
 
@@ -333,11 +334,11 @@ jobs:
         run: |
           UNIFFLE_PATH="uniffle/${{ steps.get-dependency-version.outputs.uniffleversion }}"
           UNIFFLE_FILE="apache-uniffle-${{ steps.get-dependency-version.outputs.uniffleversion }}-bin.tar.gz"
-          UNIFFLE_URL="${APACHE_MIRROR}/${UNIFFLE_PATH}/${UNIFFLE_FILE}"
+          UNIFFLE_URL="${APACHE_MIRROR}/${UNIFFLE_PATH}/${UNIFFLE_FILE}${MIRROR_URL_QUERY}"
 
-          wget ${WGET_OPTS} ${UNIFFLE_URL} && \
+          wget ${WGET_OPTS} ${UNIFFLE_URL} -O "$UNIFFLE_FILE" && \
           mkdir -p uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} && \
-          tar -xf ./${UNIFFLE_FILE} -C uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} --strip-component=1
+          tar -xf ./$UNIFFLE_FILE -C uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} --strip-component=1
 
       - name: Cache hadoop-${{ inputs.hadoopver }}
         uses: actions/cache@v4
@@ -353,9 +354,9 @@ jobs:
         run: |
           HADOOP_PATH="hadoop/common/hadoop-${{ inputs.hadoopver }}"
           HADOOP_FILE="hadoop-${{ inputs.hadoopver }}.tar.gz"
-          HADOOP_URL="${APACHE_MIRROR}/${HADOOP_PATH}/${HADOOP_FILE}"
+          HADOOP_URL="${APACHE_MIRROR}/${HADOOP_PATH}/${HADOOP_FILE}${MIRROR_URL_QUERY}"
           
-          wget ${WGET_OPTS} ${HADOOP_URL} && \
+          wget ${WGET_OPTS} ${HADOOP_URL} -O "$HADOOP_FILE" && \
           mkdir -p hadoop-bin-${{ inputs.hadoopver }} && \
           tar -xf ./$HADOOP_FILE -C hadoop-bin-${{ inputs.hadoopver }} --strip-component=1  && \
           ls -la hadoop-bin-${{ inputs.hadoopver }}
