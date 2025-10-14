@@ -1,0 +1,70 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Flink
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - branch-*
+  pull_request:
+    branches:
+      - master
+      - branch-*
+
+concurrency:
+  group: flink-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-flink:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        flinkver: [ "1.18" ]
+        javaver: [ "8" ]
+        scalaver: [ "2.12" ]
+        module: [ "auron-flink-extension" ]
+        sparkver: [ "spark-3.5" ]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+        submodules: recursive
+    - uses: ./.github/actions/setup-rust-toolchain
+
+    - name: Setup Java and Maven cache
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'adopt-hotspot'
+        java-version: ${{ matrix.javaver }}
+        cache: 'maven'
+
+    - name: Test Flink Module
+      run: ./build/mvn -B test -pl ${{ matrix.module }} -am -Pscala-${{ matrix.scalaver }} -Pflink-${{ matrix.flinkver }} -P${{ matrix.sparkver }} -Prelease
+
+    - name: Upload reports
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.module }}-test-report
+        path: ${{ matrix.module }}/target/surefire-reports
