@@ -21,7 +21,7 @@ package org.apache.auron.arrowio;
  * This class serves as a bridge between SQL's execution engine and Arrow data structures,
  * allowing efficient data transfer between JVM and native code.
  */
-public abstract class AuronArrowFFIExporter {
+public abstract class AuronArrowFFIExporter implements AutoCloseable {
 
     /**
      * Exports the next batch of data to Arrow format.
