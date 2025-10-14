@@ -36,7 +36,10 @@ import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils.ROOT_ALLOCAT
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowWriter
 import org.apache.spark.sql.types.StructType
 
-class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType) extends AutoCloseable {
+import org.apache.auron.arrowio.AuronArrowFFIExporter
+
+class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
+    extends AuronArrowFFIExporter {
   private val maxBatchNumRows = AuronConf.BATCH_SIZE.intConf()
   private val maxBatchMemorySize = AuronConf.SUGGESTED_BATCH_MEM_SIZE.intConf()
 
@@ -60,7 +63,7 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType) exten
     }
   }
 
-  def exportNextBatch(exportArrowArrayPtr: Long): Boolean = {
+  override def exportNextBatch(exportArrowArrayPtr: Long): Boolean = {
     if (!hasNext) {
       return false
     }

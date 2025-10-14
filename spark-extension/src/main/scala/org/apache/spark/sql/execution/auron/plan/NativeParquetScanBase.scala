@@ -22,8 +22,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.auron.MetricNode
-import org.apache.spark.sql.auron.NativeRDD
+import org.apache.spark.sql.auron.{EmptyNativeRDD, MetricNode, NativeRDD}
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.FilePartition
 
@@ -34,62 +33,66 @@ abstract class NativeParquetScanBase(basedFileScan: FileSourceScanExec)
 
   override def doExecuteNative(): NativeRDD = {
     val partitions = inputFileScanRDD.filePartitions.toArray
-    val nativeMetrics = MetricNode(
-      metrics,
-      Nil,
-      Some({
-        case ("bytes_scanned", v) =>
-          val inputMetric = TaskContext.get.taskMetrics().inputMetrics
-          inputMetric.incBytesRead(v)
-        case ("output_rows", v) =>
-          val inputMetric = TaskContext.get.taskMetrics().inputMetrics
-          inputMetric.incRecordsRead(v)
-        case _ =>
-      }))
-    val nativePruningPredicateFilters = this.nativePruningPredicateFilters
-    val nativeFileSchema = this.nativeFileSchema
-    val nativeFileGroups = this.nativeFileGroups
-    val nativePartitionSchema = this.nativePartitionSchema
+    if (partitions.length > 0) {
+      val nativeMetrics = MetricNode(
+        metrics,
+        Nil,
+        Some({
+          case ("bytes_scanned", v) =>
+            val inputMetric = TaskContext.get.taskMetrics().inputMetrics
+            inputMetric.incBytesRead(v)
+          case ("output_rows", v) =>
+            val inputMetric = TaskContext.get.taskMetrics().inputMetrics
+            inputMetric.incRecordsRead(v)
+          case _ =>
+        }))
+      val nativePruningPredicateFilters = this.nativePruningPredicateFilters
+      val nativeFileSchema = this.nativeFileSchema
+      val nativeFileGroups = this.nativeFileGroups
+      val nativePartitionSchema = this.nativePartitionSchema
 
-    val projection = schema.map(field => basedFileScan.relation.schema.fieldIndex(field.name))
-    val broadcastedHadoopConf = this.broadcastedHadoopConf
-    val numPartitions = partitions.length
+      val projection = schema.map(field => basedFileScan.relation.schema.fieldIndex(field.name))
+      val broadcastedHadoopConf = this.broadcastedHadoopConf
+      val numPartitions = partitions.length
 
-    new NativeRDD(
-      sparkContext,
-      nativeMetrics,
-      partitions.asInstanceOf[Array[Partition]],
-      None,
-      Nil,
-      rddShuffleReadFull = true,
-      (partition, _context) => {
-        val resourceId = s"NativeParquetScanExec:${UUID.randomUUID().toString}"
-        putJniBridgeResource(resourceId, broadcastedHadoopConf)
+      new NativeRDD(
+        sparkContext,
+        nativeMetrics,
+        partitions.asInstanceOf[Array[Partition]],
+        None,
+        Nil,
+        rddShuffleReadFull = true,
+        (partition, _context) => {
+          val resourceId = s"NativeParquetScanExec:${UUID.randomUUID().toString}"
+          putJniBridgeResource(resourceId, broadcastedHadoopConf)
 
-        val nativeFileGroup = nativeFileGroups(partition.asInstanceOf[FilePartition])
-        val nativeParquetScanConf = pb.FileScanExecConf
-          .newBuilder()
-          .setNumPartitions(numPartitions)
-          .setPartitionIndex(partition.index)
-          .setStatistics(pb.Statistics.getDefaultInstance)
-          .setSchema(nativeFileSchema)
-          .setFileGroup(nativeFileGroup)
-          .addAllProjection(projection.map(Integer.valueOf).asJava)
-          .setPartitionSchema(nativePartitionSchema)
-          .build()
+          val nativeFileGroup = nativeFileGroups(partition.asInstanceOf[FilePartition])
+          val nativeParquetScanConf = pb.FileScanExecConf
+            .newBuilder()
+            .setNumPartitions(numPartitions)
+            .setPartitionIndex(partition.index)
+            .setStatistics(pb.Statistics.getDefaultInstance)
+            .setSchema(nativeFileSchema)
+            .setFileGroup(nativeFileGroup)
+            .addAllProjection(projection.map(Integer.valueOf).asJava)
+            .setPartitionSchema(nativePartitionSchema)
+            .build()
 
-        val nativeParquetScanExecBuilder = pb.ParquetScanExecNode
-          .newBuilder()
-          .setBaseConf(nativeParquetScanConf)
-          .setFsResourceId(resourceId)
-          .addAllPruningPredicates(nativePruningPredicateFilters.asJava)
+          val nativeParquetScanExecBuilder = pb.ParquetScanExecNode
+            .newBuilder()
+            .setBaseConf(nativeParquetScanConf)
+            .setFsResourceId(resourceId)
+            .addAllPruningPredicates(nativePruningPredicateFilters.asJava)
 
-        pb.PhysicalPlanNode
-          .newBuilder()
-          .setParquetScan(nativeParquetScanExecBuilder.build())
-          .build()
-      },
-      friendlyName = "NativeRDD.ParquetScan")
+          pb.PhysicalPlanNode
+            .newBuilder()
+            .setParquetScan(nativeParquetScanExecBuilder.build())
+            .build()
+        },
+        friendlyName = "NativeRDD.ParquetScan")
+    } else {
+      new EmptyNativeRDD(sparkContext)
+    }
   }
 
   override val nodeName: String =

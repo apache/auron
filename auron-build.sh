@@ -25,7 +25,8 @@ print_help() {
     echo "Build Auron project with specified Maven profiles"
     echo
     echo "Options:"
-    echo "  --docker <true|false>    Build in Docker with CentOS7 (default: false)"
+    echo "  --docker <true|false>    Build in Docker environment (default: false)"
+    echo "  --image <NAME>           Docker image to use (centos7|ubuntu24|rockylinux8|debian11, default: centos7)"
     echo "  --pre                    Activate pre-release profile"
     echo "  --release                Activate release profile"
     echo "  --sparkver <VERSION>     Specify Spark version (e.g. 3.0/3.1/3.2/3.3/3.4/3.5)"
@@ -40,7 +41,7 @@ print_help() {
     echo
     echo "Examples:"
     echo "  $0 --pre --sparkver 3.5 --scalaver 2.12 -DskipBuildNative"
-    echo "  $0 --docker true --clean true --skiptests true --release --sparkver 3.5 --scalaver 2.12 --celeborn 0.5 --uniffle 0.10 --paimon 1.2"
+    echo "  $0 --docker true --image centos7 --clean true --skiptests true --release --sparkver 3.5 --scalaver 2.12 --celeborn 0.5 --uniffle 0.10 --paimon 1.2"
     exit 0
 }
 
@@ -48,6 +49,7 @@ MVN_CMD="$(dirname "$0")/build/mvn"
 
 # Initialize variables
 USE_DOCKER=false
+IMAGE_NAME="centos7"
 PRE_PROFILE=false
 RELEASE_PROFILE=false
 CLEAN=true
@@ -76,6 +78,19 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "ERROR: --docker requires true/false" >&2
+                exit 1
+            fi
+            ;;
+        --image)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                IMAGE_NAME="$2"
+                if [[ ! "$IMAGE_NAME" =~ ^(centos7|ubuntu24|rockylinux8|debian11)$ ]]; then
+                    echo "ERROR: Unsupported image '$IMAGE_NAME'. Supported: centos7, ubuntu24, rockylinux8, debian11" >&2
+                    exit 1
+                fi
+                shift 2
+            else
+                echo "ERROR: --image requires one of: centos7, ubuntu24, rockylinux8, debian11" >&2
                 exit 1
             fi
             ;;
@@ -275,8 +290,34 @@ fi
 
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
 
+# -----------------------------------------------------------------------------
+# Write build information to auron-build-info.properties
+# -----------------------------------------------------------------------------
+BUILD_INFO_FILE="common/src/main/resources/auron-build-info.properties"
+mkdir -p "$(dirname "$BUILD_INFO_FILE")"
+
+JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk '{print $3}' | tr -d '"')
+PROJECT_VERSION=$(xmllint --xpath "/*[local-name()='project']/*[local-name()='properties']/*[local-name()='project.version']/text()" pom.xml)
+RUST_VERSION=$(rustc --version | awk '{print $2}')
+
+{
+  echo "spark.version=${SPARK_VER}"
+  echo "rust.version=${RUST_VERSION}"
+  echo "java.version=${JAVA_VERSION}"
+  echo "project.version=${PROJECT_VERSION}"
+  echo "scala.version=${SCALA_VER}"
+  echo "celeborn.version=${CELEBORN_VER}"
+  echo "uniffle.version=${UNIFFLE_VER}"
+  echo "paimon.version=${PAIMON_VER}"
+  echo "flink.version=${FLINK_VER}"
+  echo "build.timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+} > "$BUILD_INFO_FILE"
+
+echo "[INFO] Build info written to $BUILD_INFO_FILE"
+
 # Execute Maven command
 if [[ "$USE_DOCKER" == true ]]; then
+    echo "[INFO] Compiling inside Docker container using image: $IMAGE_NAME"
     # In Docker mode, use multi-threaded Maven build with -T8 for faster compilation
     BUILD_ARGS+=("-T8")
     if [[ "$CLEAN" == true ]]; then
@@ -288,6 +329,7 @@ if [[ "$USE_DOCKER" == true ]]; then
 
     echo "[INFO] Compiling inside Docker container..."
     export AURON_BUILD_ARGS="${BUILD_ARGS[*]}"
+    export BUILD_CONTEXT="./${IMAGE_NAME}"
     exec docker-compose -f dev/docker-build/docker-compose.yml up --abort-on-container-exit
 else
     echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} $@"

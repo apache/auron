@@ -42,6 +42,7 @@
     <module>hadoop-shim</module>
     <module>dev/mvn-build-helper/assembly</module>
     <module>dev/mvn-build-helper/proto</module>
+    <module>auron-spark-ui</module>
   </modules>
 
   <properties>
@@ -54,7 +55,7 @@
 
     <javaVersion>8</javaVersion>
     <scalaVersion>2.12</scalaVersion>
-    <scalaLongVersion>2.12.17</scalaLongVersion>
+    <scalaLongVersion>2.12.18</scalaLongVersion>
     <scalaJava8CompatVersion>1.0.2</scalaJava8CompatVersion>
     <maven.version>3.9.11</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
@@ -69,7 +70,6 @@
     <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
 
     <scalamacros.paradise.version>2.1.1</scalamacros.paradise.version>
-    <semanticdb.version>4.8.1</semanticdb.version>
     <junit.jupiter.version>5.13.4</junit.jupiter.version>
     <restrict-imports.enforcer.version>2.6.0</restrict-imports.enforcer.version>
 

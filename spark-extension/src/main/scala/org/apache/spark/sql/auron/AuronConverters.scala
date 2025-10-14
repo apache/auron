@@ -26,7 +26,7 @@ import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
 import org.apache.spark.sql.auron.NativeConverters.{roundRobinTypeSupported, scalarTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
@@ -135,10 +135,19 @@ object AuronConverters extends Logging {
     getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
   def enableBroadcastExchange: Boolean =
     getBooleanConf("spark.auron.enable.broadcastExchange", defaultValue = true)
+  def enableShuffleExechange: Boolean =
+    getBooleanConf("spark.auron.enable.shuffleExchange", defaultValue = true)
 
   private val extConvertProviders = ServiceLoader.load(classOf[AuronConvertProvider]).asScala
   def extConvertSupported(exec: SparkPlan): Boolean = {
     extConvertProviders.exists(_.isSupported(exec))
+  }
+
+  def enableExchange(): Boolean = {
+    val shuffleMangerName = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
+    enableShuffleExechange && !shuffleMangerName.isEmpty && (shuffleMangerName.contains(
+      "AuronShuffleManager") || shuffleMangerName.contains(
+      "AuronUniffleShuffleManager") || shuffleMangerName.contains("AuronCelebornShuffleManager"))
   }
 
   // format: off
@@ -176,6 +185,9 @@ object AuronConverters extends Logging {
     exec match {
       case e: ShuffleExchangeExec => tryConvert(e, convertShuffleExchangeExec)
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
+        tryConvert(e, convertBroadcastExchangeExec)
+      case e: ShuffleExchangeExec if enableExchange => tryConvert(e, convertShuffleExchangeExec)
+      case e: BroadcastExchangeExec =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
         tryConvert(e, convertFileSourceScanExec)

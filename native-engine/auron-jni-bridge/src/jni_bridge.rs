@@ -1595,8 +1595,7 @@ pub struct AuronArrowFFIExporter<'a> {
 }
 
 impl<'a> AuronArrowFFIExporter<'a> {
-    pub const SIG_TYPE: &'static str =
-        "org/apache/spark/sql/execution/auron/arrowio/ArrowFFIExporter";
+    pub const SIG_TYPE: &'static str = "org/apache/auron/arrowio/AuronArrowFFIExporter";
 
     pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronArrowFFIExporter<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;

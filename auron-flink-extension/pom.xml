@@ -27,6 +27,8 @@
 
   <artifactId>auron-flink-extension</artifactId>
   <packaging>jar</packaging>
+  <name>Apache Auron Flink ${flink.version}</name>
+  <description>Apache Auron Flink Project</description>
 
   <properties>
     <flink.markBundledAsOptional>false</flink.markBundledAsOptional>

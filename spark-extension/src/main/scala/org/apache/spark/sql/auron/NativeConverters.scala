@@ -815,9 +815,13 @@ object NativeConverters extends Logging {
         buildScalarFunction(pb.ScalarFunction.Factorial, e.children, e.dataType)
       case e: Hex => buildScalarFunction(pb.ScalarFunction.Hex, e.children, e.dataType)
 
-      // TODO: datafusion's round() has different behavior from spark
-      // case e @ Round(_1, Literal(n: Int, _)) if _1.dataType.isInstanceOf[FractionalType] =>
-      //   buildScalarFunction(pb.ScalarFunction.Round, Seq(_1, Literal(n.toLong)), e.dataType)
+      case e: Round =>
+        e.scale match {
+          case Literal(n: Int, _) =>
+            buildExtScalarFunction("Round", Seq(e.child, Literal(n.toLong)), e.dataType)
+          case _ =>
+            buildExtScalarFunction("Round", Seq(e.child, Literal(0L)), e.dataType)
+        }
 
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)
       case e: Abs if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>

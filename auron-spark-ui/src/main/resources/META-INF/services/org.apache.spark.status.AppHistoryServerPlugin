@@ -15,22 +15,4 @@
 # limitations under the License.
 #
 
-[package]
-name = "datafusion-ext-functions"
-version = "0.1.0"
-edition = "2024"
-resolver = "1"
-
-[dependencies]
-arrow = { workspace = true }
-async-trait = "0.1.89"
-auron-jni-bridge = { workspace = true }
-datafusion = { workspace = true }
-datafusion-ext-commons = { workspace = true }
-
-itertools = { workspace = true }
-log = { workspace = true }
-num = { workspace = true }
-paste = { workspace = true }
-serde_json = { workspace = true }
-sonic-rs = { workspace = true }
+org.apache.spark.sql.execution.ui.AuronSQLHistoryServerPlugin

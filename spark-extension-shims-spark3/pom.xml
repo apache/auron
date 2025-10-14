@@ -33,6 +33,11 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.auron</groupId>
+      <artifactId>auron-spark-ui_${scalaVersion}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
       <artifactId>auron-common_${scalaVersion}</artifactId>
       <version>${project.version}</version>
     </dependency>
