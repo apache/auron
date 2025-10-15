@@ -46,12 +46,8 @@ jobs:
         sparkver: [ "spark-3.5" ]
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
-        fetch-depth: 0
-        submodules: recursive
-    - uses: ./.github/actions/setup-rust-toolchain
+    - name: Checkout Auron
+      uses: actions/checkout@v4
 
     - name: Setup Java and Maven cache
       uses: actions/setup-java@v4
