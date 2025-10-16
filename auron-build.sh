@@ -298,7 +298,7 @@ mkdir -p "$(dirname "$BUILD_INFO_FILE")"
 
 JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk '{print $3}' | tr -d '"')
 PROJECT_VERSION=$(xmllint --xpath "/*[local-name()='project']/*[local-name()='properties']/*[local-name()='project.version']/text()" pom.xml)
-RUST_VERSION=$(rustc --version | awk '{print $2}')
+RUST_VERSION=$(command -v rustc >/dev/null 2>&1 && rustc --version | awk '{print $2}' || echo "")
 
 {
   echo "spark.version=${SPARK_VER}"
