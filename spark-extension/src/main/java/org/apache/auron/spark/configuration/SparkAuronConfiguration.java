@@ -27,7 +27,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.internal.config.ConfigEntry;
 import org.apache.spark.internal.config.ConfigEntryWithDefault;
 import scala.Option;
-import scala.collection.immutable.List;
+import scala.collection.immutable.List$;
 
 /**
  * Spark configuration proxy for Auron.
@@ -228,9 +228,8 @@ public class SparkAuronConfiguration extends AuronConfiguration {
 
     public static final ConfigOption<Integer> SUGGESTED_BATCH_MEM_SIZE_KWAY_MERGE = ConfigOptions.key(
                     "auron.suggested.batch.memSize.multiwayMerging")
-            .description(
-                    "suggested memory size for k-way merging use smaller batch memory size for " +
-                            "k-way merging since there will be multiple batches in memory at the same time.")
+            .description("suggested memory size for k-way merging use smaller batch memory size for "
+                    + "k-way merging since there will be multiple batches in memory at the same time.")
             .intType()
             .defaultValue(1048576);
     public static final ConfigOption<Boolean> ORC_FORCE_POSITIONAL_EVOLUTION = ConfigOptions.key(
@@ -268,9 +267,9 @@ public class SparkAuronConfiguration extends AuronConfiguration {
         if (entry == null) {
             entry = new ConfigEntryWithDefault<>(
                     key,
-                    Option.empty(),
+                    Option.<String>empty(),
                     "",
-                    List.empty(),
+                    List$.MODULE$.empty(),
                     defaultValue,
                     (val) -> valueConverter(val, defaultValue, defaultValue == null),
                     String::valueOf,
