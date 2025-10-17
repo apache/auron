@@ -77,7 +77,7 @@ abstract class AuronRssShuffleWriterBase[K, V](metrics: ShuffleWriteMetricsRepor
 
   def rssStop(success: Boolean): Option[MapStatus]
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def getPartitionLengths(): Array[Long] = rpw.getPartitionLengthMap
 
   override def write(records: Iterator[Product2[K, V]]): Unit = {
