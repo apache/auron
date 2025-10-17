@@ -135,19 +135,18 @@ object AuronConverters extends Logging {
     getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
   def enableBroadcastExchange: Boolean =
     getBooleanConf("spark.auron.enable.broadcastExchange", defaultValue = true)
-  def enableShuffleExechange: Boolean =
-    getBooleanConf("spark.auron.enable.shuffleExchange", defaultValue = true)
+  def enableShuffleExchange: Boolean = {
+    val shuffleManager = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
+    getBooleanConf(
+      "spark.auron.enable.shuffleExchange",
+      defaultValue = true) && !shuffleManager.isEmpty && (shuffleManager.contains(
+      "AuronShuffleManager") || shuffleManager.contains(
+      "AuronUniffleShuffleManager") || shuffleManager.contains("AuronCelebornShuffleManager"))
+  }
 
   private val extConvertProviders = ServiceLoader.load(classOf[AuronConvertProvider]).asScala
   def extConvertSupported(exec: SparkPlan): Boolean = {
     extConvertProviders.exists(_.isSupported(exec))
-  }
-
-  def enableExchange(): Boolean = {
-    val shuffleMangerName = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
-    enableShuffleExechange && !shuffleMangerName.isEmpty && (shuffleMangerName.contains(
-      "AuronShuffleManager") || shuffleMangerName.contains(
-      "AuronUniffleShuffleManager") || shuffleMangerName.contains("AuronCelebornShuffleManager"))
   }
 
   // format: off
@@ -183,11 +182,9 @@ object AuronConverters extends Logging {
 
   def convertSparkPlan(exec: SparkPlan): SparkPlan = {
     exec match {
-      case e: ShuffleExchangeExec => tryConvert(e, convertShuffleExchangeExec)
+      case e: ShuffleExchangeExec if enableShuffleExchange =>
+        tryConvert(e, convertShuffleExchangeExec)
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
-        tryConvert(e, convertBroadcastExchangeExec)
-      case e: ShuffleExchangeExec if enableExchange => tryConvert(e, convertShuffleExchangeExec)
-      case e: BroadcastExchangeExec =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
         tryConvert(e, convertFileSourceScanExec)
