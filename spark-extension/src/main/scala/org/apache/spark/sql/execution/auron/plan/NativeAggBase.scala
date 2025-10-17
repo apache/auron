@@ -23,7 +23,6 @@ import scala.collection.immutable.SortedMap
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.AuronConf
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -58,6 +57,7 @@ import org.apache.spark.sql.types.BinaryType
 import org.apache.spark.sql.types.DataType
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.metric.SparkMetricNode
 
 abstract class NativeAggBase(
     execMode: AggExecMode,
@@ -162,7 +162,7 @@ abstract class NativeAggBase(
 
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
-    val nativeMetrics = MetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeExecMode = this.nativeExecMode
     val nativeAggrNames = this.nativeAggrNames
     val nativeGroupingNames = this.nativeGroupingNames

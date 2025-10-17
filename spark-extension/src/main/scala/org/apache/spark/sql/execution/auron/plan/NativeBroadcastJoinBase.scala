@@ -21,7 +21,6 @@ import scala.collection.immutable.SortedMap
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.Partition
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -43,6 +42,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.LongType
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.JoinOn
 
 abstract class NativeBroadcastJoinBase(
@@ -126,7 +126,7 @@ abstract class NativeBroadcastJoinBase(
   override def doExecuteNative(): NativeRDD = {
     val leftRDD = NativeHelper.executeNative(left)
     val rightRDD = NativeHelper.executeNative(right)
-    val nativeMetrics = MetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
     val nativeSchema = this.nativeSchema
     val nativeJoinType = this.nativeJoinType
     val nativeJoinOn = this.nativeJoinOn

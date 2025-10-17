@@ -38,7 +38,6 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.auron.JniBridge
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
@@ -53,6 +52,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.hive.auron.HiveClientHelper
 import org.apache.spark.util.SerializableConfiguration
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.ParquetProp
 import org.apache.auron.protobuf.ParquetSinkExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
@@ -88,7 +88,7 @@ abstract class NativeParquetSinkBase(
     val numDynParts = partition.count(_._2.isEmpty)
 
     val inputRDD = NativeHelper.executeNative(child)
-    val nativeMetrics = MetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeDependencies = new OneToOneDependency(inputRDD) :: Nil
     new NativeRDD(
       sparkSession.sparkContext,

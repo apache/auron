@@ -20,7 +20,6 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 
 import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -49,6 +48,7 @@ import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.WindowGroupLimit
 
 abstract class NativeWindowBase(
@@ -191,7 +191,7 @@ abstract class NativeWindowBase(
 
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
-    val nativeMetrics = MetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeWindowExprs = this.nativeWindowExprs
     val nativeOrderSpecExprs = this.nativeOrderSpecExprs
     val nativePartitionSpecExprs = this.nativePartitionSpecExprs

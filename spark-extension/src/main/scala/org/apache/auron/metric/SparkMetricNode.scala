@@ -14,18 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron.metric
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.metric.SQLMetric
 
-case class MetricNode(
+case class SparkMetricNode(
     metrics: Map[String, SQLMetric],
     children: Seq[MetricNode],
     metricValueHandler: Option[(String, Long) => Unit] = None)
-    extends Logging {
+    extends MetricNode(children.asJava)
+    with Logging {
 
-  def getChild(i: Int): MetricNode = {
+  override def getChild(i: Int): MetricNode = {
     if (i < children.length) {
       children(i)
     } else {
@@ -40,8 +43,8 @@ case class MetricNode(
     }
   }
 
-  def foreach(fn: MetricNode => Unit): Unit = {
+  def foreach(fn: SparkMetricNode => Unit): Unit = {
     fn(this)
-    this.children.foreach(_.foreach(fn))
+    this.children.foreach(_.asInstanceOf[SparkMetricNode].foreach(fn))
   }
 }

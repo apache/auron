@@ -21,7 +21,6 @@ import scala.collection.immutable.SortedMap
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -37,6 +36,7 @@ import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.auron.plan.NativeProjectBase.getNativeProjectBuilder
 import org.apache.spark.sql.execution.metric.SQLMetric
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.ArrowType
 import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.protobuf.PhysicalPlanNode
@@ -70,7 +70,7 @@ abstract class NativeProjectBase(projectList: Seq[NamedExpression], override val
 
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
-    val nativeMetrics = MetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeProject = this.nativeProject
 
     new NativeRDD(

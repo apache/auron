@@ -37,7 +37,6 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.auron.JniBridge
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -66,6 +65,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.BinaryType
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.metric.SparkMetricNode
 
 abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val child: SparkPlan)
     extends BroadcastExchangeLike
@@ -110,7 +110,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
     val broadcastReadNativePlan = doExecuteNative().nativePlan(singlePartition, null)
     val rowsIter = NativeHelper.executeNativePlan(
       broadcastReadNativePlan,
-      MetricNode(Map(), Nil, None),
+      SparkMetricNode(Map(), Nil, None),
       singlePartition,
       None)
     val pruneKeyField = new InterpretedUnsafeProjection(
@@ -155,7 +155,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
 
   override def doExecuteNative(): NativeRDD = {
     val broadcast = doExecuteBroadcastNative[Array[Array[Byte]]]()
-    val nativeMetrics = MetricNode(metrics, Nil)
+    val nativeMetrics = SparkMetricNode(metrics, Nil)
     val partitions = Array(new Partition() {
       override def index: Int = 0
     })
@@ -199,7 +199,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
       case child => Shims.get.createConvertToNativeExec(child)
     })
     val modifiedMetrics = metrics ++ Map("output_rows" -> metrics("numOutputRows"))
-    val nativeMetrics = MetricNode(modifiedMetrics, inputRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(modifiedMetrics, inputRDD.metrics :: Nil)
 
     val ipcRDD =
       new RDD[Array[Byte]](sparkContext, new OneToOneDependency(inputRDD) :: Nil) {

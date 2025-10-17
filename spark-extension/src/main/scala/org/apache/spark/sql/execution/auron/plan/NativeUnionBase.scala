@@ -24,7 +24,6 @@ import org.apache.spark.rdd.PartitionerAwareUnionRDD
 import org.apache.spark.rdd.PartitionerAwareUnionRDDPartition
 import org.apache.spark.rdd.UnionPartition
 import org.apache.spark.rdd.UnionRDD
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
@@ -32,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.EmptyPartitionsExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.protobuf.Schema
@@ -52,7 +52,8 @@ abstract class NativeUnionBase(
 
   override def doExecuteNative(): NativeRDD = {
     val rdds = children.map(c => NativeHelper.executeNative(c))
-    val nativeMetrics = MetricNode(metrics, rdds.filter(_.partitions.nonEmpty).map(_.metrics))
+    val nativeMetrics =
+      SparkMetricNode(metrics, rdds.filter(_.partitions.nonEmpty).map(_.metrics))
     val unionRDD = sparkContext.union(rdds)
     val unionedPartitions = unionRDD.partitions
     val unionedPartitioner = unionRDD.partitioner

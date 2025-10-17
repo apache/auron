@@ -29,11 +29,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 
 class NativeRDD(
     @transient private val rddSparkContext: SparkContext,
-    val metrics: MetricNode,
+    val metrics: SparkMetricNode,
     private val rddPartitions: Array[Partition],
     private val rddPartitioner: Option[Partitioner],
     private val rddDependencies: Seq[Dependency[_]],
@@ -71,7 +72,7 @@ class NativeRDD(
 class EmptyNativeRDD(@transient private val rddSparkContext: SparkContext)
     extends NativeRDD(
       rddSparkContext = rddSparkContext,
-      metrics = MetricNode(Map.empty, Seq(), None),
+      metrics = SparkMetricNode(Map.empty, Seq(), None),
       rddPartitions = Array.empty,
       rddPartitioner = None,
       rddDependencies = Seq.empty,
@@ -103,7 +104,7 @@ class NativePlanWrapper(var p: (Partition, TaskContext) => PhysicalPlanNode)
   @throws[IOException]
   @throws[ClassNotFoundException]
   private def readObject(in: ObjectInputStream): Unit = {
-    val _init: Unit = NativePlanWrapper.changeProtobufDefaultRecursionLimit
+    NativePlanWrapper.changeProtobufDefaultRecursionLimit
     p = in.readObject.asInstanceOf[(Partition, TaskContext) => PhysicalPlanNode]
   }
 }

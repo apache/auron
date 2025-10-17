@@ -20,7 +20,6 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 
 import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -32,6 +31,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.metric.SQLMetric
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.ExpandExecNode
 import org.apache.auron.protobuf.ExpandProjection
 import org.apache.auron.protobuf.PhysicalPlanNode
@@ -72,7 +72,7 @@ abstract class NativeExpandBase(
 
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
-    val nativeMetrics = MetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeSchema = this.nativeSchema
     val nativeProjections = this.nativeProjections
 
