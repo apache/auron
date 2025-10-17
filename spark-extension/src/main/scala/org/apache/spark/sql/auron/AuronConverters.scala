@@ -1095,7 +1095,7 @@ object AuronConverters extends Logging {
           rddPartitioner = None,
           rddDependencies = Nil,
           false,
-          (_, _) => {
+          (_partition, _taskContext) => {
             val nativeEmptyExec = EmptyPartitionsExecNode
               .newBuilder()
               .setNumPartitions(outputPartitioning.numPartitions)

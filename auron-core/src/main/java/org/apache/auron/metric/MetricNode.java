@@ -16,6 +16,7 @@
  */
 package org.apache.auron.metric;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,7 +24,7 @@ import java.util.List;
  * Abstract class representing a metric node in the Auron system.
  * This class provides functionality for hierarchical metrics tracking.
  */
-public abstract class MetricNode {
+public abstract class MetricNode implements Serializable {
     private final List<MetricNode> children = new ArrayList<>();
 
     public MetricNode(List<MetricNode> children) {
