@@ -21,7 +21,6 @@ import scala.collection.immutable.SortedMap
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -40,6 +39,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.metric.SQLMetric
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.FetchLimit
 import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.protobuf.PhysicalPlanNode
@@ -130,7 +130,7 @@ abstract class NativeTakeOrderedBase(
     // take top-K from the final partition
     new NativeRDD(
       sparkContext,
-      metrics = MetricNode(metrics, shuffledRDD.metrics :: Nil),
+      metrics = SparkMetricNode(metrics, shuffledRDD.metrics :: Nil),
       shuffledRDD.partitions,
       shuffledRDD.partitioner,
       new OneToOneDependency(shuffledRDD) :: Nil,
@@ -182,7 +182,7 @@ abstract class NativePartialTakeOrderedBase(
 
     new NativeRDD(
       sparkContext,
-      metrics = MetricNode(metrics, inputRDD.metrics :: Nil),
+      metrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil),
       inputRDD.partitions,
       inputRDD.partitioner,
       new OneToOneDependency(inputRDD) :: Nil,

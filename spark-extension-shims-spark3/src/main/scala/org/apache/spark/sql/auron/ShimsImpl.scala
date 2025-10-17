@@ -111,6 +111,7 @@ import org.apache.spark.storage.FileSegment
 
 import org.apache.auron.{protobuf => pb, sparkver}
 import org.apache.auron.common.AuronBuildInfo
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.spark.ui.AuronBuildInfoEvent
 
 class ShimsImpl extends Shims with Logging {
@@ -616,7 +617,7 @@ class ShimsImpl extends Shims with Logging {
 
         val requiredMetrics = nativeShuffle.readMetrics ++
           nativeShuffle.metrics.filterKeys(_ == "shuffle_read_total_time")
-        val metrics = MetricNode(
+        val metrics = SparkMetricNode(
           requiredMetrics,
           inputRDD.metrics :: Nil,
           Some({
@@ -719,7 +720,7 @@ class ShimsImpl extends Shims with Logging {
 
         val requiredMetrics = nativeShuffle.readMetrics ++
           nativeShuffle.metrics.filterKeys(_ == "shuffle_read_total_time")
-        val metrics = MetricNode(
+        val metrics = SparkMetricNode(
           requiredMetrics,
           inputRDD.metrics :: Nil,
           Some({
@@ -812,7 +813,7 @@ class ShimsImpl extends Shims with Logging {
 
         val requiredMetrics = nativeShuffle.readMetrics ++
           nativeShuffle.metrics.filterKeys(_ == "shuffle_read_total_time")
-        val metrics = MetricNode(
+        val metrics = SparkMetricNode(
           requiredMetrics,
           inputRDD.metrics :: Nil,
           Some({

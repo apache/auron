@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.protobuf.ByteString
 import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -44,6 +43,7 @@ import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 
 abstract class NativeGenerateBase(
@@ -130,7 +130,7 @@ abstract class NativeGenerateBase(
 
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
-    val nativeMetrics = MetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeGenerator = this.nativeGenerator
     val nativeGeneratorOutput = this.nativeGeneratorOutput
     val nativeRequiredChildOutput = this.nativeRequiredChildOutput

@@ -29,7 +29,6 @@ import org.apache.spark.Partition
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.InternalRow
@@ -45,6 +44,7 @@ import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.types.StructType
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.metric.SparkMetricNode
 
 case class NativePaimonTableScanExec(basedHiveScan: HiveTableScanExec)
     extends NativeHiveTableScanBase(basedHiveScan)
@@ -55,7 +55,7 @@ case class NativePaimonTableScanExec(basedHiveScan: HiveTableScanExec)
   private lazy val fileFormat = PaimonUtil.paimonFileFormat(table)
 
   override def doExecuteNative(): NativeRDD = {
-    val nativeMetrics = MetricNode(
+    val nativeMetrics = SparkMetricNode(
       metrics,
       Nil,
       Some({

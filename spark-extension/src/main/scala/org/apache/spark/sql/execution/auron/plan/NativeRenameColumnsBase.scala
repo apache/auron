@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.auron.plan
 import scala.collection.JavaConverters._
 
 import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
@@ -31,6 +30,7 @@ import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.auron.plan.NativeRenameColumnsBase.buildRenameColumnsExec
 import org.apache.spark.sql.execution.metric.SQLMetric
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.protobuf.RenameColumnsExecNode
 
@@ -53,7 +53,7 @@ abstract class NativeRenameColumnsBase(
 
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
-    val nativeMetrics = MetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
 
     new NativeRDD(
       sparkContext,

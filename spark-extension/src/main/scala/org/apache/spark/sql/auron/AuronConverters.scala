@@ -86,6 +86,7 @@ import org.apache.spark.sql.hive.execution.auron.plan.NativeHiveTableScanBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.EmptyPartitionsExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.sparkver
@@ -1089,7 +1090,7 @@ object AuronConverters extends Logging {
 
         new NativeRDD(
           sparkContext,
-          MetricNode(Map(), Nil),
+          SparkMetricNode(Map(), Nil),
           rddPartitions = partitions,
           rddPartitioner = None,
           rddDependencies = Nil,

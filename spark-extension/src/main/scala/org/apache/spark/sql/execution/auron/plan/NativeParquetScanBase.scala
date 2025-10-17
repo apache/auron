@@ -22,11 +22,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.auron.{EmptyNativeRDD, MetricNode, NativeRDD}
+import org.apache.spark.sql.auron.{EmptyNativeRDD, NativeRDD}
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.FilePartition
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.metric.SparkMetricNode
 
 abstract class NativeParquetScanBase(basedFileScan: FileSourceScanExec)
     extends NativeFileSourceScanBase(basedFileScan) {
@@ -34,7 +35,7 @@ abstract class NativeParquetScanBase(basedFileScan: FileSourceScanExec)
   override def doExecuteNative(): NativeRDD = {
     val partitions = inputFileScanRDD.filePartitions.toArray
     if (partitions.length > 0) {
-      val nativeMetrics = MetricNode(
+      val nativeMetrics = SparkMetricNode(
         metrics,
         Nil,
         Some({

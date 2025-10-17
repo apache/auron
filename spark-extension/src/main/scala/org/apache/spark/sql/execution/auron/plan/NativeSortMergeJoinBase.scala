@@ -20,7 +20,6 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 
 import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.MetricNode
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -38,6 +37,7 @@ import org.apache.spark.sql.execution.BinaryExecNode
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.JoinOn
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.protobuf.SortMergeJoinExecNode
@@ -104,7 +104,7 @@ abstract class NativeSortMergeJoinBase(
   override def doExecuteNative(): NativeRDD = {
     val leftRDD = NativeHelper.executeNative(left)
     val rightRDD = NativeHelper.executeNative(right)
-    val nativeMetrics = MetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
+    val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
     val nativeSortOptions = this.nativeSortOptions
     val nativeJoinOn = this.nativeJoinOn
     val nativeJoinType = this.nativeJoinType

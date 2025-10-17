@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
+import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 
 object NativeHelper extends Logging {
@@ -78,7 +79,7 @@ object NativeHelper extends Logging {
 
   def executeNativePlan(
       nativePlan: PhysicalPlanNode,
-      metrics: MetricNode,
+      metrics: SparkMetricNode,
       partition: Partition,
       context: Option[TaskContext]): Iterator[InternalRow] = {
 
