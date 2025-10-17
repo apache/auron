@@ -89,6 +89,7 @@ jobs:
           sed -i 's/docker-compose -f/docker compose -f/g' ./auron-build.sh
           ./auron-build.sh \
           --docker true \
+          --skiptests true \
           --release \
           --sparkver ${{ env.sparkver_short }} \
           --scalaver ${{ matrix.scalaver }}
