@@ -21,9 +21,7 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.atomic.AtomicReference
-
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.arrow.c.ArrowArray
 import org.apache.arrow.c.ArrowSchema
 import org.apache.arrow.c.CDataDictionaryProvider
@@ -43,8 +41,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.Utils
-
-import org.apache.auron.metric.SparkMetricNode
+import org.apache.auron.metric.{MetricNode, SparkMetricNode}
 import org.apache.auron.protobuf.PartitionId
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.protobuf.TaskDefinition
@@ -108,7 +105,7 @@ case class AuronCallNativeWrapper(
     CompletionIterator[InternalRow, Iterator[InternalRow]](rowIterator, close())
   }
 
-  protected def getMetrics: SparkMetricNode =
+  protected def getMetrics: MetricNode =
     metrics
 
   protected def importSchema(ffiSchemaPtr: Long): Unit = {

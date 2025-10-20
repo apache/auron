@@ -1111,7 +1111,7 @@ pub struct SparkMetricNode<'a> {
     pub method_add_ret: ReturnType,
 }
 impl<'a> SparkMetricNode<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/MetricNode";
+    pub const SIG_TYPE: &'static str = "org/apache/auron/metric/SparkMetricNode";
 
     pub fn new(env: &JNIEnv<'a>) -> JniResult<SparkMetricNode<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;
@@ -1120,7 +1120,7 @@ impl<'a> SparkMetricNode<'a> {
             method_getChild: env.get_method_id(
                 class,
                 "getChild",
-                "(I)Lorg/apache/spark/sql/auron/MetricNode;",
+                "(I)Lorg/apache/auron/metric/MetricNode;",
             )?,
             method_getChild_ret: ReturnType::Object,
             method_add: env.get_method_id(class, "add", "(Ljava/lang/String;J)V")?,
@@ -1435,7 +1435,7 @@ impl<'a> AuronCallNativeWrapper<'a> {
             method_getMetrics: env.get_method_id(
                 class,
                 "getMetrics",
-                "()Lorg/apache/spark/sql/auron/MetricNode;",
+                "()Lorg/apache/auron/metric/MetricNode;",
             )?,
             method_getMetrics_ret: ReturnType::Object,
             method_importSchema: env.get_method_id(class, "importSchema", "(J)V")?,
