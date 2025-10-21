@@ -32,7 +32,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.auron</groupId>
-      <artifactId>spark-extension-shims-spark3_${scalaVersion}</artifactId>
+      <artifactId>spark-extension-shims-spark_${scalaVersion}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

@@ -25,9 +25,9 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-extension-shims-spark3_${scalaVersion}</artifactId>
+  <artifactId>spark-extension-shims-spark_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
-  <name>Apache Auron Spark Extension Shims Spark3_${scalaVersion}</name>
+  <name>Apache Auron Spark Extension Shims Spark ${sparkVersion}_${scalaVersion}</name>
   <description>Apache Auron Spark Extension Shims Project</description>
 
   <dependencies>
