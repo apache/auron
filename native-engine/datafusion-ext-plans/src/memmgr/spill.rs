@@ -89,7 +89,8 @@ fn spill_compression_codec() -> &'static str {
 }
 
 pub fn try_new_spill(spill_metrics: &SpillMetrics) -> Result<Box<dyn Spill>> {
-    if !is_jni_bridge_inited() || jni_call_static!(JniBridge.isDriverSide() -> bool)? {
+    if !is_jni_bridge_inited() {
+        // is driver
         Ok(Box::new(FileSpill::try_new(spill_metrics)?))
     } else {
         // use on heap spill if on-heap memory is available, otherwise use file spill

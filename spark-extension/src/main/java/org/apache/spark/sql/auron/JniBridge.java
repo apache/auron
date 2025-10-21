@@ -80,11 +80,6 @@ public class JniBridge {
         return !tc.isCompleted() && !tc.isInterrupted();
     }
 
-    public static boolean isDriverSide() {
-        TaskContext tc = getTaskContext();
-        return tc == null;
-    }
-
     public static FSDataInputWrapper openFileAsDataInputWrapper(FileSystem fs, String path) throws Exception {
         // the path is a URI string, so we need to convert it to a URI object, ref:
         // org.apache.spark.paths.SparkPath.toPath

@@ -563,8 +563,6 @@ pub struct JniBridge<'a> {
     pub method_getTaskOnHeapSpillManager_ret: ReturnType,
     pub method_isTaskRunning: JStaticMethodID,
     pub method_isTaskRunning_ret: ReturnType,
-    pub method_isDriverSide: JStaticMethodID,
-    pub method_isDriverSide_ret: ReturnType,
     pub method_openFileAsDataInputWrapper: JStaticMethodID,
     pub method_openFileAsDataInputWrapper_ret: ReturnType,
     pub method_createFileAsDataOutputWrapper: JStaticMethodID,
@@ -626,7 +624,6 @@ impl<'a> JniBridge<'a> {
             method_getTaskOnHeapSpillManager_ret: ReturnType::Object,
             method_isTaskRunning: env.get_static_method_id(class, "isTaskRunning", "()Z")?,
             method_isTaskRunning_ret: ReturnType::Primitive(Primitive::Boolean),
-            method_isDriverSide: env.get_static_method_id(class, "isDriverSide", "()Z")?,
             method_openFileAsDataInputWrapper: env.get_static_method_id(
                 class,
                 "openFileAsDataInputWrapper",
@@ -639,7 +636,6 @@ impl<'a> JniBridge<'a> {
                 "(Lorg/apache/hadoop/fs/FileSystem;Ljava/lang/String;)Lorg/apache/auron/hadoop/fs/FSDataOutputWrapper;",
             )?,
             method_createFileAsDataOutputWrapper_ret: ReturnType::Object,
-            method_isDriverSide_ret: ReturnType::Primitive(Primitive::Boolean),
             method_getDirectMemoryUsed: env.get_static_method_id(
                 class,
                 "getDirectMemoryUsed",

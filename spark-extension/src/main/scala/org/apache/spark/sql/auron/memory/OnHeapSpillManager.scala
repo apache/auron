@@ -63,6 +63,10 @@ class OnHeapSpillManager(taskContext: TaskContext)
    */
   @SuppressWarnings(Array("unused"))
   def isOnHeapAvailable: Boolean = {
+    // if driver, tc always null.
+    if (taskContext == null) {
+      return false
+    }
     val memoryPool = OnHeapSpillManagerHelper.getOnHeapExecutionMemoryPool
     val memoryUsed = memoryPool.memoryUsed
     val memoryFree = memoryPool.memoryFree
