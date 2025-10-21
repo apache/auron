@@ -165,9 +165,12 @@ impl Agg for AggAvg {
             Ok(Arc::new(avgs.with_precision_and_scale(prec, scale)?))
         } else {
             let counts = counts_zero_free;
-            Ok(arrow::compute::kernels::numeric::div(
-                &arrow::compute::cast(&sums, &DataType::Float64)?,
-                &arrow::compute::cast(&counts, &DataType::Float64)?,
+            Ok(arrow::compute::cast(
+                &arrow::compute::kernels::numeric::div(
+                    &arrow::compute::cast(&sums, &DataType::Float64)?,
+                    &arrow::compute::cast(&counts, &DataType::Float64)?,
+                )?,
+                &self.data_type,
             )?)
         }
     }
