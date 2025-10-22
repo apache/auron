@@ -59,7 +59,7 @@ optional = true
 features = ["stats", "profiling", "unprefixed_malloc_on_supported_platforms", "disable_initial_exec_tls"]
 
 [dependencies.tikv-jemallocator]
-version = "0.6.0"
+version = "0.6.1"
 optional = true
 features = ["disable_initial_exec_tls"]
 
