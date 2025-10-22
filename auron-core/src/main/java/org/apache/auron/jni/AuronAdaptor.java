@@ -16,7 +16,6 @@
  */
 package org.apache.auron.jni;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import org.apache.auron.configuration.AuronConfiguration;
@@ -84,29 +83,21 @@ public abstract class AuronAdaptor {
      * @return Absolute path of the created temporary file.
      * @throws IOException If the temporary file cannot be created.
      */
-    public String getDirectWriteSpillToDiskFile() throws IOException {
-        File tempFile = File.createTempFile("auron-spill-", ".tmp");
-        tempFile.deleteOnExit();
-        return tempFile.getAbsolutePath();
-    }
+    public abstract String getDirectWriteSpillToDiskFile() throws IOException;
 
     /**
      * Retrieves the context classloader of the current thread.
      *
-     * @return The context classloader of the current thread.
+     * @return For Spark, return TaskContext of the current thread.
      */
-    public Object getThreadContext() {
-        return Thread.currentThread().getContextClassLoader();
-    }
+    public abstract Object getThreadContext();
 
     /**
-     * Sets the context classloader for the current thread.
+     * Sets the context for the current thread.
      *
-     * @param context The classloader to set as the context classloader.
+     * @param context For spark is TaskContext.
      */
-    public void setThreadContext(Object context) {
-        Thread.currentThread().setContextClassLoader((ClassLoader) context);
-    }
+    public abstract void setThreadContext(Object context);
 
     /**
      * Retrieves the on-heap spill manager implementation.

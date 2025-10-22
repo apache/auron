@@ -132,6 +132,10 @@ public class AuronCallNativeWrapper {
         }
     }
 
+    public Schema getArrowSchema() {
+        return arrowSchema;
+    }
+
     protected void importBatch(long ffiArrayPtr) {
         if (nativeRuntimePtr == 0) {
             throw new RuntimeException("Native runtime is finalized");
@@ -172,7 +176,7 @@ public class AuronCallNativeWrapper {
         return taskDefinition.toByteArray();
     }
 
-    private synchronized void close() {
+    public synchronized void close() {
         if (nativeRuntimePtr != 0) {
             JniBridge.finalizeNative(nativeRuntimePtr);
             nativeRuntimePtr = 0;

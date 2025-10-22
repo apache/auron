@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.auron
 
-import scala.collection.immutable.TreeMap
+import org.apache.arrow.vector.types.pojo.Schema
 
+import scala.collection.immutable.TreeMap
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.Partition
 import org.apache.spark.SparkConf
@@ -30,9 +31,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.metric.SQLMetrics
-
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.PhysicalPlanNode
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils
+import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils.ROOT_ALLOCATOR
+import org.apache.spark.sql.execution.auron.columnar.ColumnarHelper
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.CompletionIterator
+
+import scala.collection.mutable.ArrayBuffer
 
 object NativeHelper extends Logging {
   val currentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
@@ -89,7 +97,51 @@ object NativeHelper extends Logging {
     if (nativePlan == null) {
       return Iterator.empty
     }
-    AuronCallNativeWrapper(nativePlan, partition, context, metrics).getRowIterator
+    val auronCallNativeWrapper = new org.apache.auron.jni.AuronCallNativeWrapper(ROOT_ALLOCATOR, nativePlan, metrics, partition.index, context.map(_.stageId()).getOrElse(0), context.map(_.taskAttemptId()).getOrElse(0).asInstanceOf[Int], NativeHelper.nativeMemory)
+    while(auronCallNativeWrapper.loadNextBatch(root =>  {
+      if (arrowSchema == null) {
+        arrowSchema = auronCallNativeWrapper.getArrowSchema
+        schema = ArrowUtils.fromArrowSchema(arrowSchema)
+        toUnsafe = UnsafeProjection.create(schema)
+      }
+      batchRows.append(
+        ColumnarHelper
+          .rootRowsIter(root)
+          .map(row => toUnsafe(row).copy().asInstanceOf[InternalRow])
+          .toSeq: _*)
+    })){}
+    CompletionIterator[InternalRow, Iterator[InternalRow]](rowIterator, ()->{
+      synchronized {
+        batchRows.clear()
+        batchCurRowIdx = 0
+        auronCallNativeWrapper.close()
+      }
+    })
+  }
+
+  private var arrowSchema: Schema = _
+  private var schema: StructType = _
+  private var toUnsafe: UnsafeProjection = _
+  private val batchRows: ArrayBuffer[InternalRow] = ArrayBuffer()
+  private var batchCurRowIdx = 0
+  private lazy val rowIterator = new Iterator[InternalRow] {
+    override def hasNext: Boolean = {
+      // if current batch is not empty, return true
+      if (batchCurRowIdx < batchRows.length) {
+        return true
+      }
+
+      // clear current batch
+      batchRows.clear()
+      batchCurRowIdx = 0
+      false
+    }
+
+    override def next(): InternalRow = {
+      val batchRow = batchRows(batchCurRowIdx)
+      batchCurRowIdx += 1
+      batchRow
+    }
   }
 
   def getDefaultNativeMetrics(sc: SparkContext): Map[String, SQLMetric] = {

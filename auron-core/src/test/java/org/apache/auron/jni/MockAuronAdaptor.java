@@ -16,6 +16,8 @@
  */
 package org.apache.auron.jni;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import org.apache.auron.configuration.AuronConfiguration;
 import org.apache.auron.configuration.MockAuronConfiguration;
@@ -29,6 +31,23 @@ public class MockAuronAdaptor extends AuronAdaptor {
     @Override
     public void loadAuronLib() {
         // Mock implementation, no need to load auron library
+    }
+
+    @Override
+    public String getDirectWriteSpillToDiskFile() throws IOException {
+        File tempFile = File.createTempFile("auron-spill-", ".tmp");
+        tempFile.deleteOnExit();
+        return tempFile.getAbsolutePath();
+    }
+
+    @Override
+    public Object getThreadContext() {
+        return null;
+    }
+
+    @Override
+    public void setThreadContext(Object context) {
+        // Mock implementation, no need to set thread context
     }
 
     @Override

@@ -555,8 +555,10 @@ pub struct JniBridge<'a> {
     pub method_setContextClassLoader_ret: ReturnType,
     pub method_getResource: JStaticMethodID,
     pub method_getResource_ret: ReturnType,
-    pub method_getTaskContext: JStaticMethodID,
-    pub method_getTaskContext_ret: ReturnType,
+    pub method_getThreadContext: JStaticMethodID,
+    pub method_getThreadContext_ret: ReturnType,
+    pub method_setThreadContext: JStaticMethodID,
+    pub method_setThreadContext_ret: ReturnType,
     pub method_getTaskOnHeapSpillManager: JStaticMethodID,
     pub method_getTaskOnHeapSpillManager_ret: ReturnType,
     pub method_isTaskRunning: JStaticMethodID,
@@ -571,14 +573,12 @@ pub struct JniBridge<'a> {
     pub method_getTotalMemoryLimited_ret: ReturnType,
     pub method_getDirectWriteSpillToDiskFile: JStaticMethodID,
     pub method_getDirectWriteSpillToDiskFile_ret: ReturnType,
-    pub method_initNativeThread: JStaticMethodID,
-    pub method_initNativeThread_ret: ReturnType,
 
     pub method_getAuronUDFWrapperContext: JStaticMethodID,
     pub method_getAuronUDFWrapperContext_ret: ReturnType,
 }
 impl<'a> JniBridge<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/JniBridge";
+    pub const SIG_TYPE: &'static str = "org/apache/auron/jni/JniBridge";
 
     pub fn new(env: &JNIEnv<'a>) -> JniResult<JniBridge<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;
@@ -602,12 +602,18 @@ impl<'a> JniBridge<'a> {
                 "(Ljava/lang/String;)Ljava/lang/Object;",
             )?,
             method_getResource_ret: ReturnType::Object,
-            method_getTaskContext: env.get_static_method_id(
+            method_getThreadContext: env.get_static_method_id(
                 class,
                 "getTaskContext",
-                "()Lorg/apache/spark/TaskContext;",
+                "()Ljava/lang/Object;",
             )?,
-            method_getTaskContext_ret: ReturnType::Object,
+            method_getThreadContext_ret: ReturnType::Object,
+            method_setThreadContext: env.get_static_method_id(
+                class,
+                "setThreadContext",
+                "(Ljava/lang/Object;)V",
+            )?,
+            method_setThreadContext_ret: ReturnType::Primitive(Primitive::Void),
             method_getTaskOnHeapSpillManager: env.get_static_method_id(
                 class,
                 "getTaskOnHeapSpillManager",
@@ -646,12 +652,6 @@ impl<'a> JniBridge<'a> {
                 "()Ljava/lang/String;",
             )?,
             method_getDirectWriteSpillToDiskFile_ret: ReturnType::Object,
-            method_initNativeThread: env.get_static_method_id(
-                class,
-                "initNativeThread",
-                "(Ljava/lang/ClassLoader;Lorg/apache/spark/TaskContext;)V",
-            )?,
-            method_initNativeThread_ret: ReturnType::Primitive(Primitive::Void),
 
             method_getAuronUDFWrapperContext: env.get_static_method_id(
                 class,
@@ -1408,7 +1408,7 @@ pub struct AuronCallNativeWrapper<'a> {
     pub method_setError_ret: ReturnType,
 }
 impl<'a> AuronCallNativeWrapper<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/AuronCallNativeWrapper";
+    pub const SIG_TYPE: &'static str = "org/apache/auron/jni/AuronCallNativeWrapper";
 
     pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronCallNativeWrapper<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;

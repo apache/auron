@@ -26,10 +26,8 @@ use arrow::{
 };
 use auron_jni_bridge::{
     conf::{IntConf, SPARK_TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU},
-    is_task_running,
-    jni_bridge::JavaClasses,
-    jni_call, jni_call_static, jni_convert_byte_array, jni_exception_check, jni_exception_occurred,
-    jni_new_global_ref, jni_new_object, jni_new_string,
+    is_task_running, jni_call, jni_call_static, jni_convert_byte_array, jni_exception_check,
+    jni_exception_occurred, jni_new_global_ref, jni_new_object, jni_new_string,
 };
 use auron_serde::protobuf::TaskDefinition;
 use datafusion::{
@@ -105,17 +103,22 @@ impl NativeExecutionRuntime {
 
         // create tokio runtime
         // propagate classloader and task context to spawned children threads
-        let spark_task_context = jni_call_static!(JniBridge.getTaskContext() -> JObject)?;
-        let spark_task_context_global = jni_new_global_ref!(spark_task_context.as_obj())?;
+        let thread_context = jni_call_static!(JniBridge.getThreadContext() -> JObject)?;
+        let thread_context_global = jni_new_global_ref!(thread_context.as_obj())?;
+        // classloader
+        let classloader = jni_call_static!(JniBridge.getContextClassLoader() -> JObject)?;
+        let classloader_global = jni_new_global_ref!(classloader.as_obj())?;
         let mut tokio_runtime_builder = tokio::runtime::Builder::new_multi_thread();
         tokio_runtime_builder
             .thread_name(format!(
                 "auron-native-stage-{stage_id}-part-{partition_id}-tid-{tid}"
             ))
             .on_thread_start(move || {
-                let classloader = JavaClasses::get().classloader;
                 let _ = jni_call_static!(
-                    JniBridge.initNativeThread(classloader,spark_task_context_global.as_obj()) -> ()
+                    JniBridge.setContextClassLoader(classloader_global.as_obj()) -> ()
+                );
+                let _ = jni_call_static!(
+                    JniBridge.setThreadContext(thread_context_global.as_obj()) -> ()
                 );
                 THREAD_STAGE_ID.set(stage_id);
                 THREAD_PARTITION_ID.set(partition_id);

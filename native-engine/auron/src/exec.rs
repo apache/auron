@@ -39,7 +39,7 @@ use crate::{handle_unwinded_scope, logging::init_logging, rt::NativeExecutionRun
 
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_apache_spark_sql_auron_JniBridge_callNative(
+pub extern "system" fn Java_org_apache_auron_jni_JniBridge_callNative(
     env: JNIEnv,
     _: JClass,
     executor_memory_overhead: i64,
@@ -113,7 +113,7 @@ pub extern "system" fn Java_org_apache_spark_sql_auron_JniBridge_callNative(
 
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_apache_spark_sql_auron_JniBridge_nextBatch(
+pub extern "system" fn Java_org_apache_auron_jni_JniBridge_nextBatch(
     _: JNIEnv,
     _: JClass,
     raw_ptr: i64,
@@ -124,7 +124,7 @@ pub extern "system" fn Java_org_apache_spark_sql_auron_JniBridge_nextBatch(
 
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_apache_spark_sql_auron_JniBridge_finalizeNative(
+pub extern "system" fn Java_org_apache_auron_jni_JniBridge_finalizeNative(
     _: JNIEnv,
     _: JClass,
     raw_ptr: i64,
@@ -135,7 +135,7 @@ pub extern "system" fn Java_org_apache_spark_sql_auron_JniBridge_finalizeNative(
 
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_apache_spark_sql_auron_JniBridge_onExit(_: JNIEnv, _: JClass) {
+pub extern "system" fn Java_org_apache_auron_jni_JniBridge_onExit(_: JNIEnv, _: JClass) {
     log::info!("exiting native environment");
     if MemManager::initialized() {
         MemManager::get().dump_status();
