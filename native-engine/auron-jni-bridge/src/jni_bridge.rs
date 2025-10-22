@@ -611,7 +611,7 @@ impl<'a> JniBridge<'a> {
             method_getTaskOnHeapSpillManager: env.get_static_method_id(
                 class,
                 "getTaskOnHeapSpillManager",
-                "()Lorg/apache/spark/sql/auron/memory/OnHeapSpillManager;",
+                "()Lorg/apache/auron/memory/OnHeapSpillManager;",
             )?,
             method_getTaskOnHeapSpillManager_ret: ReturnType::Object,
             method_isTaskRunning: env.get_static_method_id(class, "isTaskRunning", "()Z")?,
