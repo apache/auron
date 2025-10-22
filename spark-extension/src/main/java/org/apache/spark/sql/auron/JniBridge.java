@@ -27,13 +27,13 @@ import org.apache.auron.hadoop.fs.FSDataInputWrapper;
 import org.apache.auron.hadoop.fs.FSDataInputWrapper$;
 import org.apache.auron.hadoop.fs.FSDataOutputWrapper;
 import org.apache.auron.hadoop.fs.FSDataOutputWrapper$;
+import org.apache.auron.memory.OnHeapSpillManager;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
-import org.apache.spark.sql.auron.memory.OnHeapSpillManager;
-import org.apache.spark.sql.auron.memory.OnHeapSpillManager$;
+import org.apache.spark.sql.auron.memory.SparkOnHeapSpillManager$;
 import org.apache.spark.sql.auron.util.TaskContextHelper$;
 
 @SuppressWarnings("unused")
@@ -65,7 +65,7 @@ public class JniBridge {
     }
 
     public static OnHeapSpillManager getTaskOnHeapSpillManager() {
-        return OnHeapSpillManager$.MODULE$.current();
+        return SparkOnHeapSpillManager$.MODULE$.current();
     }
 
     public static boolean isTaskRunning() {

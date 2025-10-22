@@ -38,7 +38,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.memory.MemoryConsumer
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.sql.auron.memory.OnHeapSpillManager
+import org.apache.spark.sql.auron.memory.SparkOnHeapSpillManager
 import org.apache.spark.sql.auron.util.Using
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, JoinedRow, Nondeterministic, UnsafeProjection, UnsafeRow}
@@ -211,7 +211,7 @@ trait AggregateEvaluator[B, R <: BufferRowsColumn[B]] extends Logging {
       rows: R,
       indices: Iterator[Int],
       spillIdx: Long): Int = {
-    val hsm = OnHeapSpillManager.current
+    val hsm = SparkOnHeapSpillManager.current
     val spillId = memTracker.getSpill(spillIdx)
     val byteBuffer =
       ByteBuffer.wrap(serializeRows(rows, indices, spillCodec.compressedOutputStream))
@@ -224,7 +224,7 @@ trait AggregateEvaluator[B, R <: BufferRowsColumn[B]] extends Logging {
       memTracker: SparkUDAFMemTracker,
       spillBlockSize: Int,
       spillIdx: Long): BufferRowsColumn[B] = {
-    val hsm = OnHeapSpillManager.current
+    val hsm = SparkOnHeapSpillManager.current
     val spillId = memTracker.getSpill(spillIdx)
     val byteBuffer = ByteBuffer.allocate(spillBlockSize)
     val readSize = hsm.readSpill(spillId, byteBuffer).toLong
@@ -539,7 +539,7 @@ class SparkUDAFMemTracker
   def getSpill(spillIdx: Long): Int = {
     this.spills.getOrElseUpdate(
       spillIdx, {
-        OnHeapSpillManager.current.newSpill()
+        SparkOnHeapSpillManager.current.newSpill()
       })
   }
 

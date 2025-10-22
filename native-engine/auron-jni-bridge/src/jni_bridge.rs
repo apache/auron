@@ -1455,7 +1455,7 @@ pub struct AuronOnHeapSpillManager<'a> {
     pub method_releaseSpill_ret: ReturnType,
 }
 impl<'a> AuronOnHeapSpillManager<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/memory/OnHeapSpillManager";
+    pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/memory/SparkOnHeapSpillManager";
 
     pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronOnHeapSpillManager<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;

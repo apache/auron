@@ -20,7 +20,7 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.internal.Logging
 
-case class OnHeapSpill(hsm: OnHeapSpillManager, id: Int) extends Logging {
+case class OnHeapSpill(hsm: SparkOnHeapSpillManager, id: Int) extends Logging {
   private var spillBuf: SpillBuf = new MemBasedSpillBuf
 
   def memUsed: Long = spillBuf.memUsed

@@ -32,13 +32,16 @@ import org.apache.spark.sql.auron.AuronConf
 import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.Utils
 
-class OnHeapSpillManager(taskContext: TaskContext)
+import org.apache.auron.memory.OnHeapSpillManager
+
+class SparkOnHeapSpillManager(taskContext: TaskContext)
     extends MemoryConsumer(
       taskContext.taskMemoryManager,
       taskContext.taskMemoryManager.pageSizeBytes(),
       MemoryMode.ON_HEAP)
+    with OnHeapSpillManager
     with Logging {
-  import org.apache.spark.sql.auron.memory.OnHeapSpillManager._
+  import org.apache.spark.sql.auron.memory.SparkOnHeapSpillManager._
 
   private val _blockManager = SparkEnv.get.blockManager
   private val spills = ArrayBuffer[Option[OnHeapSpill]]()
@@ -62,7 +65,7 @@ class OnHeapSpillManager(taskContext: TaskContext)
    * @return
    */
   @SuppressWarnings(Array("unused"))
-  def isOnHeapAvailable: Boolean = {
+  override def isOnHeapAvailable: Boolean = {
     // if driver, tc always null.
     if (taskContext == null) {
       return false
@@ -96,7 +99,7 @@ class OnHeapSpillManager(taskContext: TaskContext)
    * @return
    *   allocated spill id
    */
-  def newSpill(): Int = {
+  override def newSpill(): Int = {
     synchronized {
       val spill = OnHeapSpill(this, spills.length)
       spills.append(Some(spill))
@@ -108,7 +111,7 @@ class OnHeapSpillManager(taskContext: TaskContext)
     }
   }
 
-  def writeSpill(spillId: Int, data: ByteBuffer): Unit = {
+  override def writeSpill(spillId: Int, data: ByteBuffer): Unit = {
     spills(spillId)
       .getOrElse(
         throw new RuntimeException(
@@ -116,7 +119,7 @@ class OnHeapSpillManager(taskContext: TaskContext)
       .write(data)
   }
 
-  def readSpill(spillId: Int, buf: ByteBuffer): Int = {
+  override def readSpill(spillId: Int, buf: ByteBuffer): Int = {
     spills(spillId)
       .getOrElse(
         throw new RuntimeException(
@@ -128,15 +131,15 @@ class OnHeapSpillManager(taskContext: TaskContext)
     spills(spillId).map(_.size).getOrElse(0)
   }
 
-  def getSpillDiskUsage(spillId: Int): Long = {
+  override def getSpillDiskUsage(spillId: Int): Long = {
     spills(spillId).map(_.diskUsed).getOrElse(0)
   }
 
-  def getSpillDiskIOTime(spillId: Int): Long = {
+  override def getSpillDiskIOTime(spillId: Int): Long = {
     spills(spillId).map(_.diskIOTime).getOrElse(0) // time unit: ns
   }
 
-  def releaseSpill(spillId: Int): Unit = {
+  override def releaseSpill(spillId: Int): Unit = {
     spills(spillId) match {
       case Some(spill) =>
         spill.release()
@@ -185,11 +188,11 @@ class OnHeapSpillManager(taskContext: TaskContext)
   }
 }
 
-object OnHeapSpillManager extends Logging {
+object SparkOnHeapSpillManager extends Logging {
   val all: mutable.Map[Long, OnHeapSpillManager] = concurrent.TrieMap[Long, OnHeapSpillManager]()
 
   def current: OnHeapSpillManager = {
     val tc = TaskContext.get
-    all.getOrElseUpdate(tc.taskAttemptId(), new OnHeapSpillManager(tc))
+    all.getOrElseUpdate(tc.taskAttemptId(), new SparkOnHeapSpillManager(tc))
   }
 }

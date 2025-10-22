@@ -81,7 +81,7 @@ class MemBasedSpillBuf extends SpillBuf with Logging {
   override def diskIOTime: Long = 0
   override def size: Long = numWrittenBytes
 
-  def spill(hsm: OnHeapSpillManager): FileBasedSpillBuf = {
+  def spill(hsm: SparkOnHeapSpillManager): FileBasedSpillBuf = {
     logWarning(s"spilling in-mem spill buffer to disk, size=${Utils.bytesToString(size)}")
 
     val startTimeNs = System.nanoTime()
