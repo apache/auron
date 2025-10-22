@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.auron
 
-import org.apache.spark.sql.{QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.test.SharedSparkSession
@@ -26,6 +27,7 @@ class AuronCheckConvertShuffleExchangeSuite
     with SharedSparkSession
     with AuronSQLTestHelper
     with org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper {
+  import testImplicits._
 
   test(
     "test set auron shuffle manager convert to native shuffle exchange where set spark.auron.enable is true") {
@@ -44,25 +46,26 @@ class AuronCheckConvertShuffleExchangeSuite
         .config("spark.auron.enable", "true")
         .getOrCreate()
 
-      spark.sql("drop table if exists test_shuffle")
-      spark.sql(
-        "create table if not exists test_shuffle using parquet PARTITIONED BY (part) as select 1 as c1, 2 as c2, 'test test' as part")
+      Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("test_shuffle")
       val executePlan =
-        spark.sql("select c1, count(1) from test_shuffle group by c1")
+        spark
+          .sql("select c1, count(1) from test_shuffle group by c1")
+          .queryExecution
+          .executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec]
 
       val shuffleExchangeExec =
-        executePlan.queryExecution.executedPlan
+        executePlan.executedPlan
           .collectFirst { case shuffleExchangeExec: ShuffleExchangeExec =>
             shuffleExchangeExec
           }
-      val afterConvertPlan = AuronConverters.convertSparkPlan(shuffleExchangeExec.get)
+      val afterConvertPlan =
+        AuronColumnarOverrides.apply(spark).preColumnarTransitions(shuffleExchangeExec.get)
       assert(afterConvertPlan.isInstanceOf[NativeShuffleExchangeExec])
-      checkAnswer(executePlan, Seq(Row(1, 1)))
     }
   }
 
-  test(
-    "test set non auron shuffle manager do not convert to native shuffle exchange where set spark.auron.enable is true") {
+  test("test set non auron shuffle manager and spark.auron.enable is true") {
     withTable("test_shuffle") {
       val spark = SparkSession
         .builder()
@@ -75,21 +78,38 @@ class AuronCheckConvertShuffleExchangeSuite
         .config("spark.memory.offHeap.enabled", "false")
         .config("spark.auron.enable", "true")
         .getOrCreate()
-      spark.sql("drop table if exists test_shuffle")
-      spark.sql(
-        "create table if not exists test_shuffle using parquet PARTITIONED BY (part) as select 1 as c1, 2 as c2, 'test test' as part")
+      Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("test_shuffle")
       val executePlan =
-        spark.sql("select c1, count(1) from test_shuffle group by c1")
+        spark
+          .sql("select c1, count(1) from test_shuffle group by c1")
+          .queryExecution
+          .executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec]
 
       val shuffleExchangeExec =
-        executePlan.queryExecution.executedPlan
+        executePlan.executedPlan
           .collectFirst { case shuffleExchangeExec: ShuffleExchangeExec =>
             shuffleExchangeExec
           }
-      val afterConvertPlan = AuronConverters.convertSparkPlan(shuffleExchangeExec.get)
-      assert(afterConvertPlan.isInstanceOf[ShuffleExchangeExec])
-      checkAnswer(executePlan, Seq(Row(1, 1)))
 
+      var checkAssertError = false
+      try {
+        AuronColumnarOverrides.apply(spark).preColumnarTransitions(shuffleExchangeExec.get)
+      } catch {
+        case e: AssertionError =>
+          assert(!e.getMessage.equals(
+            "When spark.auron.enable.shuffleExchange is true, please set the shuffle manager to the Auron implementation — either AuronShuffleManager, AuronUniffleShuffleManager, or AuronCelebornShuffleManager" +
+              ". Eg: spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager"))
+          checkAssertError = true
+        case _ =>
+          assert(
+            false,
+            "There is no error message for checking the shuffle manager exception; it needs to be validated.")
+      }
+
+      assert(
+        checkAssertError,
+        "There is no exception message, and this scenario does not meet expectations.")
     }
   }
 

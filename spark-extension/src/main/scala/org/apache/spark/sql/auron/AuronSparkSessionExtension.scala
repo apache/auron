@@ -17,7 +17,7 @@
 package org.apache.spark.sql.auron
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.SparkSessionExtensions
@@ -70,6 +70,17 @@ case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
       override def apply(sparkPlan: SparkPlan): SparkPlan = {
         if (!sparkPlan.conf.getConf(auronEnabledKey)) {
           return sparkPlan // performs no conversion if auron is not enabled
+        }
+
+        if (AuronConverters.enableShuffleExchange) {
+          val shuffleMangerName = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
+
+          assert(
+            shuffleMangerName.contains("AuronShuffleManager") || shuffleMangerName.contains(
+              "AuronUniffleShuffleManager") || shuffleMangerName.contains(
+              "AuronCelebornShuffleManager"),
+            "When spark.auron.enable.shuffleExchange is true, please set the shuffle manager to the Auron implementation — either AuronShuffleManager, AuronUniffleShuffleManager, or AuronCelebornShuffleManager" +
+              ". Eg: spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
         }
 
         if (sparkPlan.isInstanceOf[LocalTableScanExec]) {
