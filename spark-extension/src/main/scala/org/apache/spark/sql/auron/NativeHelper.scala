@@ -121,6 +121,7 @@ object NativeHelper extends Logging {
       rowIterator,
       () -> {
         synchronized {
+          arrowSchema = null
           batchRows.clear()
           batchCurRowIdx = 0
           auronCallNativeWrapper.close()
