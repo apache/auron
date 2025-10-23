@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.auron
 
-import org.apache.auron.jni.{AuronAdaptor, SparkAuronAdaptor}
-
 import java.io.File
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.SparkContext
@@ -55,6 +53,7 @@ import org.apache.spark.sql.types.DataType
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.storage.FileSegment
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.jni.{AuronAdaptor, SparkAuronAdaptor}
 
 abstract class Shims {
 
