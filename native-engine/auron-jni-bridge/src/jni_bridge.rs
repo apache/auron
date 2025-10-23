@@ -604,7 +604,7 @@ impl<'a> JniBridge<'a> {
             method_getResource_ret: ReturnType::Object,
             method_getThreadContext: env.get_static_method_id(
                 class,
-                "getTaskContext",
+                "getThreadContext",
                 "()Ljava/lang/Object;",
             )?,
             method_getThreadContext_ret: ReturnType::Object,

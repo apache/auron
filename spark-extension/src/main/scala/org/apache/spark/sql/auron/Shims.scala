@@ -17,6 +17,7 @@
 package org.apache.spark.sql.auron
 
 import java.io.File
+
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.SparkContext
 import org.apache.spark.TaskContext
@@ -52,6 +53,7 @@ import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.storage.FileSegment
+
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.jni.{AuronAdaptor, SparkAuronAdaptor}
 
