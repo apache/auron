@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.auron.JniBridge
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeSupports
@@ -43,6 +42,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.jni.JniBridge
 import org.apache.auron.sparkver
 
 abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
@@ -117,7 +117,7 @@ abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
       resourceId: String,
       broadcastedHadoopConf: Broadcast[SerializableConfiguration]): Unit = {
     val sharedConf = broadcastedHadoopConf.value.value
-    JniBridge.resourcesMap.put(
+    JniBridge.putResource(
       resourceId,
       (location: String) => {
         val getFsTimeMetric = metrics("io_time_getfs")

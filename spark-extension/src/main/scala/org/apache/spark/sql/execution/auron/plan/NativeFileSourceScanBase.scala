@@ -25,7 +25,6 @@ import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.MapPartitionsRDD
-import org.apache.spark.sql.auron.JniBridge
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeSupports
@@ -44,6 +43,7 @@ import org.apache.spark.sql.types.{DecimalType, NullType, StructField, StructTyp
 import org.apache.spark.util.SerializableConfiguration
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.jni.JniBridge
 
 abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
     extends LeafExecNode
@@ -131,7 +131,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
       resourceId: String,
       broadcastedHadoopConf: Broadcast[SerializableConfiguration]): Unit = {
     val sharedConf = broadcastedHadoopConf.value.value
-    JniBridge.resourcesMap.put(
+    JniBridge.putResource(
       resourceId,
       (location: String) => {
         val getFsTimeMetric = metrics("io_time_getfs")

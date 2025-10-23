@@ -37,7 +37,6 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.auron.JniBridge
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
@@ -52,6 +51,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.hive.auron.HiveClientHelper
 import org.apache.spark.util.SerializableConfiguration
 
+import org.apache.auron.jni.JniBridge
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.ParquetProp
 import org.apache.auron.protobuf.ParquetSinkExecNode
@@ -104,7 +104,7 @@ abstract class NativeParquetSinkBase(
 
         // init hadoop fs
         val resourceId = s"NativeParquetSinkExec:${UUID.randomUUID().toString}"
-        JniBridge.resourcesMap.put(
+        JniBridge.putResource(
           resourceId,
           (location: String) => {
             NativeHelper.currentUser.doAs(new PrivilegedExceptionAction[FileSystem] {

@@ -35,7 +35,7 @@ import org.apache.hadoop.fs.Path;
  */
 @SuppressWarnings("unused")
 public class JniBridge {
-    public static final ConcurrentHashMap<String, Object> resourcesMap = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Object> resourcesMap = new ConcurrentHashMap<>();
 
     private static final List<BufferPoolMXBean> directMXBeans =
             ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class);
@@ -58,6 +58,10 @@ public class JniBridge {
 
     public static Object getResource(String key) {
         return resourcesMap.remove(key);
+    }
+
+    public static void putResource(String key, Object value) {
+        resourcesMap.put(key, value);
     }
 
     public static FSDataInputWrapper openFileAsDataInputWrapper(FileSystem fs, String path) throws Exception {

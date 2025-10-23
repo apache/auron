@@ -22,8 +22,9 @@ import org.apache.spark.{Partition, ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteMetricsReporter}
 import org.apache.spark.shuffle.ShuffleWriter
-import org.apache.spark.sql.auron.{JniBridge, NativeHelper, NativeRDD, Shims}
+import org.apache.spark.sql.auron.{NativeHelper, NativeRDD, Shims}
 
+import org.apache.auron.jni.JniBridge
 import org.apache.auron.protobuf.{PhysicalPlanNode, RssShuffleWriterExecNode}
 import org.apache.auron.sparkver
 
@@ -53,7 +54,7 @@ abstract class AuronRssShuffleWriterBase[K, V](metrics: ShuffleWriteMetricsRepor
 
     try {
       val jniResourceId = s"RssPartitionWriter:${UUID.randomUUID().toString}"
-      JniBridge.resourcesMap.put(jniResourceId, rpw)
+      JniBridge.putResource(jniResourceId, rpw)
       val nativeRssShuffleWriterExec = PhysicalPlanNode
         .newBuilder()
         .setRssShuffleWriter(
