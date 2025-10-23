@@ -109,6 +109,7 @@ import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.storage.FileSegment
 
+import org.apache.auron.jni.JniBridge
 import org.apache.auron.{protobuf => pb, sparkver}
 import org.apache.auron.common.AuronBuildInfo
 import org.apache.auron.metric.SparkMetricNode
@@ -685,7 +686,7 @@ class ShimsImpl extends Shims with Logging {
 
             // store fetch iterator in jni resource before native compute
             val jniResourceId = s"NativeShuffleReadExec:${UUID.randomUUID().toString}"
-            JniBridge.resourcesMap.put(
+            JniBridge.putResource(
               jniResourceId,
               () => {
                 reader.asInstanceOf[AuronBlockStoreShuffleReaderBase[_, _]].readIpc()
@@ -778,7 +779,7 @@ class ShimsImpl extends Shims with Logging {
 
             // store fetch iterator in jni resource before native compute
             val jniResourceId = s"NativeShuffleReadExec:${UUID.randomUUID().toString}"
-            JniBridge.resourcesMap.put(
+            JniBridge.putResource(
               jniResourceId,
               () => {
                 reader.asInstanceOf[AuronBlockStoreShuffleReaderBase[_, _]].readIpc()
@@ -871,7 +872,7 @@ class ShimsImpl extends Shims with Logging {
 
             // store fetch iterator in jni resource before native compute
             val jniResourceId = s"NativeShuffleReadExec:${UUID.randomUUID().toString}"
-            JniBridge.resourcesMap.put(
+            JniBridge.putResource(
               jniResourceId,
               () => {
                 reader.asInstanceOf[AuronBlockStoreShuffleReaderBase[_, _]].readIpc()
