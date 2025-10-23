@@ -21,6 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.auron.spark.ui.AuronEvent
 
 object AuronEventUtils {
+
   def post(sc: SparkContext, event: AuronEvent): Unit = {
     sc.listenerBus.post(event)
   }

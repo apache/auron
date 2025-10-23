@@ -22,10 +22,12 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.ColumnarRule
-import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
+import org.apache.spark.sql.execution.{ColumnarRule, LocalTableScanExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.ui.AuronEventUtils
 import org.apache.spark.sql.internal.SQLConf
+
+import org.apache.auron.spark.ui.AuronPlanFallbackEvent
 
 class AuronSparkSessionExtension extends (SparkSessionExtensions => Unit) with Logging {
   Shims.get.initExtension()
@@ -91,6 +93,35 @@ case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
         // post-transform
         Shims.get.postTransform(sparkPlanTransformed, sparkSession.sparkContext)
         sparkPlanTransformed
+      }
+    }
+  }
+
+  override def postColumnarTransitions: Rule[SparkPlan] = {
+    new Rule[SparkPlan] {
+      override def apply(sparkPlan: SparkPlan): SparkPlan = {
+        if (SparkEnv.get.conf.get(AuronConf.UI_ENABLED.key, "true").equals("true")) {
+          val sc = sparkSession.sparkContext
+          val executionId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+          if (executionId == null) {
+            logDebug(s"Unknown execution id for plan: $sparkPlan")
+            return sparkPlan
+          }
+          val concat = new PlanStringConcat()
+          concat.append("== Physical Plan ==\n")
+
+          val (numAuronNodes, fallbackNodeToReason) =
+            AuronExplainUtils.processPlan(sparkPlan, concat.append)
+
+          val event = AuronPlanFallbackEvent(
+            executionId.toLong,
+            numAuronNodes,
+            fallbackNodeToReason.size,
+            concat.toString(),
+            fallbackNodeToReason)
+          AuronEventUtils.post(sc, event)
+        }
+        sparkPlan
       }
     }
   }

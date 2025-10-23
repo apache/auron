@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.auron
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.ui.AuronSQLAppStatusListener
 
 class BuildinfoInSparkUISuite
@@ -28,6 +29,15 @@ class BuildinfoInSparkUISuite
     assert(listeners.size === 1)
     val listener = listeners(0)
     assert(listener.getAuronBuildInfo() == 1)
+  }
+
+  test("test convert table in spark UI ") {
+    withTable("t1") {
+      sql(
+        "create table t1 using parquet PARTITIONED BY (part) as select 1 as c1, 2 as c2, 'test test' as part")
+      val df = sql("select * from t1")
+      checkAnswer(df, Seq(Row(1, 2, "test test")))
+    }
   }
 
 }
