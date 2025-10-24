@@ -409,7 +409,9 @@ if [[ "$USE_DOCKER" == true ]]; then
         # Clean the host-side directory that is mounted into the Docker container.
         # This avoids "device or resource busy" errors when running `mvn clean` inside the container.
         echo "[INFO] Docker mode: manually cleaning target-docker contents..."
-        rm -rf ./target-docker/* || echo "[WARN] Failed to clean target-docker/*"
+        rm -rf ./target-docker/build ./target-docker/target || echo "[WARN] Failed to clean target-docker/*"
+        mkdir -p ./target-docker/build ./target-docker/target
+
     fi
 
     echo "[INFO] Compiling inside Docker container..."
