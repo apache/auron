@@ -19,6 +19,7 @@ use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
 use datafusion_ext_commons::df_unimplemented_err;
 
 mod brickhouse;
+mod spark_bround;
 mod spark_check_overflow;
 mod spark_dates;
 pub mod spark_get_json_object;
@@ -62,6 +63,7 @@ pub fn create_spark_ext_function(name: &str) -> Result<ScalarFunctionImplementat
         "Day" => Arc::new(spark_dates::spark_day),
         "BrickhouseArrayUnion" => Arc::new(brickhouse::array_union::array_union),
         "Round" => Arc::new(spark_round::spark_round),
+        "BRound" => Arc::new(spark_bround::spark_bround),
         "NormalizeNanAndZero" => {
             Arc::new(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
