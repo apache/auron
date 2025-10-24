@@ -464,7 +464,8 @@ mod bround_tests {
         Ok(())
     }
 
-    // Test: bround on Decimal array when scale is less than or equal to the original scale
+    // Test: bround on Decimal array when scale is less than or equal to the
+    // original scale
     #[test]
     fn test_bround_decimal_array_scale_le_in_scale() -> Result<()> {
         let arr = Arc::new(
@@ -482,7 +483,8 @@ mod bround_tests {
         Ok(())
     }
 
-    // Test: bround with "HALF_EVEN" rounding (banker's rounding) for both ties and signs
+    // Test: bround with "HALF_EVEN" rounding (banker's rounding) for both ties and
+    // signs
     #[test]
     fn test_bround_half_even_ties_and_signs() -> Result<()> {
         let cases = vec![
