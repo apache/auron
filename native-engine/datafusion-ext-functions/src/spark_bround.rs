@@ -254,6 +254,7 @@ mod bround_tests {
 
     use super::*;
 
+    // Test: float64 data type, check "HALF_EVEN" rounding rule (banker's rounding)
     #[test]
     fn test_bround_float64_ties() -> Result<()> {
         let arr = Arc::new(Float64Array::from(vec![
@@ -278,6 +279,7 @@ mod bround_tests {
         Ok(())
     }
 
+    // Test: float64 data type, handle negative scale values
     #[test]
     fn test_bround_negative_scale_float() -> Result<()> {
         let arr = Arc::new(Float64Array::from(vec![
@@ -297,6 +299,7 @@ mod bround_tests {
         Ok(())
     }
 
+    // Test: bround on Decimal array
     #[test]
     fn test_bround_decimal_array() -> Result<()> {
         let arr = Arc::new(
@@ -319,6 +322,7 @@ mod bround_tests {
         -6..=6
     }
 
+    // Test: double data type π value across different scales
     #[test]
     fn test_bround_double_pi_scales() -> Result<()> {
         let double_pi = std::f64::consts::PI;
@@ -344,6 +348,7 @@ mod bround_tests {
         Ok(())
     }
 
+    // Test: float data type π value across different scales
     #[test]
     fn test_bround_float_pi_scales() -> Result<()> {
         let float_pi = 3.1415_f32;
@@ -369,6 +374,7 @@ mod bround_tests {
         Ok(())
     }
 
+    // Test: short data type π value across different scales
     #[test]
     fn test_bround_short_pi_scales() -> Result<()> {
         let short_pi: i16 = 31415;
@@ -395,6 +401,7 @@ mod bround_tests {
         Ok(())
     }
 
+    // Test: int data type π value across different scales
     #[test]
     fn test_bround_int_pi_scales() -> Result<()> {
         let int_pi: i32 = 314_159_265;
@@ -423,6 +430,7 @@ mod bround_tests {
         Ok(())
     }
 
+    // Test: long data type π value across different scales
     #[test]
     fn test_bround_long_pi_scales() -> Result<()> {
         let long_pi: i128 = 31_415_926_535_897_932_i128;
@@ -434,16 +442,16 @@ mod bround_tests {
             31_415_926_535_897_900,
             31_415_926_535_897_930,
         ]
-            .into_iter()
-            .chain(std::iter::repeat(31_415_926_535_897_932_i128).take(7))
-            .collect();
+        .into_iter()
+        .chain(std::iter::repeat(31_415_926_535_897_932_i128).take(7))
+        .collect();
 
         for (i, scale) in scales_range().enumerate() {
             let out = spark_bround(&[
                 ColumnarValue::Scalar(ScalarValue::Decimal128(Some(long_pi), 38, 0)),
                 ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
             ])?
-                .into_array(1)?;
+            .into_array(1)?;
             let arr = as_decimal128_array(&out)?;
             assert_eq!(
                 arr.value(0),
@@ -456,6 +464,7 @@ mod bround_tests {
         Ok(())
     }
 
+    // Test: bround on Decimal array when scale is less than or equal to the original scale
     #[test]
     fn test_bround_decimal_array_scale_le_in_scale() -> Result<()> {
         let arr = Arc::new(
@@ -466,13 +475,14 @@ mod bround_tests {
             ColumnarValue::Array(arr),
             ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
         ])?
-            .into_array(2)?;
+        .into_array(2)?;
         let a = as_decimal128_array(&out)?;
         let vals: Vec<_> = a.iter().collect();
         assert_eq!(vals, vec![Some(12340_i128), Some(67900_i128)]);
         Ok(())
     }
 
+    // Test: bround with "HALF_EVEN" rounding (banker's rounding) for both ties and signs
     #[test]
     fn test_bround_half_even_ties_and_signs() -> Result<()> {
         let cases = vec![
@@ -489,7 +499,7 @@ mod bround_tests {
                 ColumnarValue::Scalar(sv),
                 ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
             ])?
-                .into_array(1)?;
+            .into_array(1)?;
             let a = as_float64_array(&out)?;
             assert!(
                 (a.value(0) - expected).abs() < 1e-12,
