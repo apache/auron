@@ -50,7 +50,8 @@ import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.protobuf.TaskDefinition
 
 /**
- * This class has been deprecated and migrated to {@link org.apache.auron.jni.AuronCallNativeWrapper}.
+ * This class has been deprecated and migrated to
+ * {@link org.apache.auron.jni.AuronCallNativeWrapper}.
  * Will be removed in the future.
  */
 @Deprecated
