@@ -106,6 +106,10 @@ object NativeHelper extends Logging {
       context.map(_.taskAttemptId().toInt).getOrElse(0),
       NativeHelper.nativeMemory)
 
+    context.foreach(
+      _.addTaskCompletionListener[Unit]((_: TaskContext) => auronCallNativeWrapper.close()))
+    context.foreach(_.addTaskFailureListener((_, _) => auronCallNativeWrapper.close()))
+
     val rowIterator = new Iterator[InternalRow] {
       private var arrowSchema: Schema = _
       private var schema: StructType = _
