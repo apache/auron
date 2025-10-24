@@ -49,7 +49,7 @@
     <project.version>7.0.0-SNAPSHOT</project.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <arrowVersion>16.0.0</arrowVersion>
-    <bytebuddyVersion>1.12.10</bytebuddyVersion>
+    <bytebuddyVersion>1.14.11</bytebuddyVersion>
     <hadoopVersion>3.4.2</hadoopVersion>
     <protobufVersion>3.25.5</protobufVersion>
 
