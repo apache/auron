@@ -823,6 +823,14 @@ object NativeConverters extends Logging {
             buildExtScalarFunction("Round", Seq(e.child, Literal(0L)), e.dataType)
         }
 
+      case e: BRound =>
+        e.scale match {
+          case Literal(n: Int, _) =>
+            buildExtScalarFunction("BRound", Seq(e.child, Literal(n.toLong)), e.dataType)
+          case _ =>
+            buildExtScalarFunction("BRound", Seq(e.child, Literal(0L)), e.dataType)
+        }
+
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)
       case e: Abs if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
         buildScalarFunction(pb.ScalarFunction.Abs, e.children, e.dataType)
