@@ -422,4 +422,82 @@ mod bround_tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn test_bround_long_pi_scales() -> Result<()> {
+        let long_pi: i128 = 31_415_926_535_897_932_i128;
+        let expected: Vec<i128> = vec![
+            31_415_926_536_000_000,
+            31_415_926_535_900_000,
+            31_415_926_535_900_000,
+            31_415_926_535_898_000,
+            31_415_926_535_897_900,
+            31_415_926_535_897_930,
+        ]
+            .into_iter()
+            .chain(std::iter::repeat(31_415_926_535_897_932_i128).take(7))
+            .collect();
+
+        for (i, scale) in scales_range().enumerate() {
+            let out = spark_bround(&[
+                ColumnarValue::Scalar(ScalarValue::Decimal128(Some(long_pi), 38, 0)),
+                ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
+            ])?
+                .into_array(1)?;
+            let arr = as_decimal128_array(&out)?;
+            assert_eq!(
+                arr.value(0),
+                expected[i],
+                "scale={scale}: expected {}, got {}",
+                expected[i],
+                arr.value(0)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_bround_decimal_array_scale_le_in_scale() -> Result<()> {
+        let arr = Arc::new(
+            Decimal128Array::from_iter_values([12345_i128, 67895_i128])
+                .with_precision_and_scale(10, 2)?,
+        );
+        let out = spark_bround(&[
+            ColumnarValue::Array(arr),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
+        ])?
+            .into_array(2)?;
+        let a = as_decimal128_array(&out)?;
+        let vals: Vec<_> = a.iter().collect();
+        assert_eq!(vals, vec![Some(12340_i128), Some(67900_i128)]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_bround_half_even_ties_and_signs() -> Result<()> {
+        let cases = vec![
+            (ScalarValue::Float64(Some(2.5)), 0, 2.0),
+            (ScalarValue::Float64(Some(3.5)), 0, 4.0),
+            (ScalarValue::Float64(Some(-2.5)), 0, -2.0),
+            (ScalarValue::Float64(Some(-3.5)), 0, -4.0),
+            (ScalarValue::Float64(Some(-0.35)), 1, -0.4),
+            (ScalarValue::Float64(Some(-35.0)), -1, -40.0),
+        ];
+
+        for (sv, scale, expected) in cases {
+            let out = spark_bround(&[
+                ColumnarValue::Scalar(sv),
+                ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
+            ])?
+                .into_array(1)?;
+            let a = as_float64_array(&out)?;
+            assert!(
+                (a.value(0) - expected).abs() < 1e-12,
+                "scale={scale}: expected {}, got {}",
+                expected,
+                a.value(0)
+            );
+        }
+        Ok(())
+    }
 }
