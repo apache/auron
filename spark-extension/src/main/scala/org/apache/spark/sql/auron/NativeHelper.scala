@@ -97,7 +97,7 @@ object NativeHelper extends Logging {
     if (nativePlan == null) {
       return Iterator.empty
     }
-    val auronCallNativeWrapper = new org.apache.auron.jni.AuronCallNativeWrapper(
+    var auronCallNativeWrapper = new org.apache.auron.jni.AuronCallNativeWrapper(
       ROOT_ALLOCATOR,
       nativePlan,
       metrics,
@@ -105,53 +105,59 @@ object NativeHelper extends Logging {
       context.map(_.stageId()).getOrElse(0),
       context.map(_.taskAttemptId().toInt).getOrElse(0),
       NativeHelper.nativeMemory)
-    while (auronCallNativeWrapper.loadNextBatch(root => {
-        if (arrowSchema == null) {
-          arrowSchema = auronCallNativeWrapper.getArrowSchema
-          schema = ArrowUtils.fromArrowSchema(arrowSchema)
-          toUnsafe = UnsafeProjection.create(schema)
+
+    val rowIterator = new Iterator[InternalRow] {
+      private var arrowSchema: Schema = _
+      private var schema: StructType = _
+      private var toUnsafe: UnsafeProjection = _
+      private val batchRows: ArrayBuffer[InternalRow] = ArrayBuffer()
+      private var batchCurRowIdx = 0
+
+      override def hasNext: Boolean = {
+        // if current batch is not empty, return true
+        if (batchCurRowIdx < batchRows.length) {
+          return true
         }
-        batchRows.append(
-          ColumnarHelper
-            .rootRowsIter(root)
-            .map(row => toUnsafe(row).copy().asInstanceOf[InternalRow])
-            .toSeq: _*)
-      })) {}
+
+        // clear current batch
+        batchRows.clear()
+        batchCurRowIdx = 0
+
+        if (auronCallNativeWrapper.loadNextBatch(root => {
+            if (arrowSchema == null) {
+              arrowSchema = auronCallNativeWrapper.getArrowSchema
+              schema = ArrowUtils.fromArrowSchema(arrowSchema)
+              toUnsafe = UnsafeProjection.create(schema)
+            }
+            batchRows.append(
+              ColumnarHelper
+                .rootRowsIter(root)
+                .map(row => toUnsafe(row).copy().asInstanceOf[InternalRow])
+                .toSeq: _*)
+          })) {
+          return hasNext
+        }
+        // clear current batch
+        arrowSchema = null
+        batchRows.clear()
+        batchCurRowIdx = 0
+        false
+      }
+
+      override def next(): InternalRow = {
+        val batchRow = batchRows(batchCurRowIdx)
+        batchCurRowIdx += 1
+        batchRow
+      }
+    }
+
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       rowIterator,
       () -> {
         synchronized {
-          arrowSchema = null
-          batchRows.clear()
-          batchCurRowIdx = 0
           auronCallNativeWrapper.close()
         }
       })
-  }
-
-  private var arrowSchema: Schema = _
-  private var schema: StructType = _
-  private var toUnsafe: UnsafeProjection = _
-  private val batchRows: ArrayBuffer[InternalRow] = ArrayBuffer()
-  private var batchCurRowIdx = 0
-  private lazy val rowIterator = new Iterator[InternalRow] {
-    override def hasNext: Boolean = {
-      // if current batch is not empty, return true
-      if (batchCurRowIdx < batchRows.length) {
-        return true
-      }
-
-      // clear current batch
-      batchRows.clear()
-      batchCurRowIdx = 0
-      false
-    }
-
-    override def next(): InternalRow = {
-      val batchRow = batchRows(batchCurRowIdx)
-      batchCurRowIdx += 1
-      batchRow
-    }
   }
 
   def getDefaultNativeMetrics(sc: SparkContext): Map[String, SQLMetric] = {
