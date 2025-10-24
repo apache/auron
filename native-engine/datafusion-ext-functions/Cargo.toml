@@ -23,7 +23,6 @@ resolver = "1"
 
 [dependencies]
 arrow = { workspace = true }
-async-trait = "0.1.89"
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }
 datafusion-ext-commons = { workspace = true }

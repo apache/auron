@@ -27,14 +27,12 @@ use auron_jni_bridge::{
     jni_get_string, jni_new_direct_byte_buffer, jni_new_global_ref,
 };
 use datafusion::{common::Result, parquet::file::reader::Length, physical_plan::metrics::Time};
+use datafusion_ext_commons::io::ipc_compression::{IoCompressionReader, IoCompressionWriter};
 use jni::{objects::GlobalRef, sys::jlong};
 use log::warn;
 use once_cell::sync::OnceCell;
 
-use crate::{
-    common::ipc_compression::{IoCompressionReader, IoCompressionWriter},
-    memmgr::metrics::SpillMetrics,
-};
+use crate::metrics::SpillMetrics;
 
 pub type SpillCompressedReader<'a> = IoCompressionReader<BufReader<Box<dyn Read + Send + 'a>>>;
 pub type SpillCompressedWriter<'a> = IoCompressionWriter<BufWriter<Box<dyn Write + Send + 'a>>>;

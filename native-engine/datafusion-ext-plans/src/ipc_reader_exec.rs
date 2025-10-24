@@ -51,13 +51,15 @@ use datafusion_ext_commons::{
         array_size::{ArraySize, BatchSize},
         coalesce::coalesce_arrays_unchecked,
     },
-    batch_size, df_execution_err, suggested_batch_mem_size,
+    batch_size, df_execution_err,
+    io::ipc_compression::IpcCompressionReader,
+    suggested_batch_mem_size,
 };
 use jni::objects::{GlobalRef, JObject};
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
-use crate::common::{execution_context::ExecutionContext, ipc_compression::IpcCompressionReader};
+use crate::common::execution_context::ExecutionContext;
 
 #[derive(Debug, Clone)]
 pub struct IpcReaderExec {

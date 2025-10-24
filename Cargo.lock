@@ -348,8 +348,8 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
+ "auron-memmgr",
  "auron-serde",
- "bytesize",
  "chrono",
  "datafusion",
  "datafusion-ext-commons",
@@ -382,18 +382,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "auron-memmgr"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "auron-jni-bridge",
+ "bytesize",
+ "datafusion",
+ "datafusion-ext-commons",
+ "jni",
+ "log",
+ "once_cell",
+ "parking_lot",
+ "procfs",
+ "tempfile",
+]
+
+[[package]]
 name = "auron-serde"
 version = "0.1.0"
 dependencies = [
  "arrow",
  "base64",
  "datafusion",
- "datafusion-ext-commons",
  "datafusion-ext-exprs",
  "datafusion-ext-functions",
  "datafusion-ext-plans",
  "datafusion-spark",
- "log",
  "object_store",
  "parking_lot",
  "prost 0.14.1",
@@ -1162,26 +1177,24 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "arrow-schema",
- "async-trait",
  "auron-jni-bridge",
  "bigdecimal",
  "byteorder",
- "bytes 1.10.1",
  "chrono",
  "datafusion",
- "futures",
  "itertools 0.14.0",
  "jni",
  "log",
+ "lz4_flex",
  "num",
  "once_cell",
  "paste",
  "rand",
  "smallvec 2.0.0-alpha.11",
- "tempfile",
  "tokio",
  "transpose",
  "unchecked-index",
+ "zstd",
 ]
 
 [[package]]
@@ -1189,14 +1202,12 @@ name = "datafusion-ext-exprs"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "async-trait",
  "auron-jni-bridge",
  "datafusion",
  "datafusion-ext-commons",
  "itertools 0.14.0",
  "jni",
  "log",
- "num",
  "once_cell",
  "parking_lot",
 ]
@@ -1206,7 +1217,6 @@ name = "datafusion-ext-functions"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "async-trait",
  "auron-jni-bridge",
  "datafusion",
  "datafusion-ext-commons",
@@ -1226,6 +1236,7 @@ dependencies = [
  "arrow-schema",
  "async-trait",
  "auron-jni-bridge",
+ "auron-memmgr",
  "base64",
  "bitvec",
  "byteorder",
@@ -1245,7 +1256,6 @@ dependencies = [
  "itertools 0.14.0",
  "jni",
  "log",
- "lz4_flex",
  "num",
  "object_store",
  "once_cell",
@@ -1256,10 +1266,8 @@ dependencies = [
  "procfs",
  "rand",
  "smallvec 2.0.0-alpha.11",
- "tempfile",
  "tokio",
  "unchecked-index",
- "zstd",
 ]
 
 [[package]]

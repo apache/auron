@@ -21,6 +21,10 @@ use std::{
 
 use arrow::{record_batch::RecordBatch, row::Rows};
 use async_trait::async_trait;
+use auron_memmgr::{
+    MemConsumer, MemConsumerInfo, MemManager,
+    spill::{Spill, SpillCompressedReader, SpillCompressedWriter, try_new_spill},
+};
 use bytesize::ByteSize;
 use datafusion::{
     common::{DataFusionError, Result},
@@ -51,10 +55,6 @@ use crate::{
     common::{
         execution_context::{ExecutionContext, WrappedRecordBatchSender},
         timer_helper::TimerHelper,
-    },
-    memmgr::{
-        MemConsumer, MemConsumerInfo, MemManager,
-        spill::{Spill, SpillCompressedReader, SpillCompressedWriter, try_new_spill},
     },
 };
 

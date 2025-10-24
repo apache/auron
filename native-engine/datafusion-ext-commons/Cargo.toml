@@ -29,24 +29,21 @@ arrow = { workspace = true }
 arrow-schema = { workspace = true }
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }
-
-async-trait = { workspace = true }
 bigdecimal = { workspace = true }
 byteorder = { workspace = true }
-bytes = { workspace = true }
 chrono = { workspace = true }
-futures = { workspace = true }
 itertools = { workspace = true }
 jni = { workspace = true }
 log = { workspace = true }
+lz4_flex = { workspace = true }
 num = { workspace = true }
 once_cell = { workspace = true }
 paste = { workspace = true }
 smallvec = { workspace = true }
-tempfile = { workspace = true }
-transpose = { workspace = true }
 tokio = { workspace = true }
+transpose = { workspace = true }
 unchecked-index = { workspace = true }
+zstd = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true }

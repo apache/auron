@@ -19,6 +19,7 @@ use std::{any::Any, fmt::Debug, sync::Arc};
 
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
+use auron_memmgr::MemManager;
 use datafusion::{
     error::Result,
     execution::context::TaskContext,
@@ -36,7 +37,6 @@ use once_cell::sync::OnceCell;
 
 use crate::{
     common::execution_context::ExecutionContext,
-    memmgr::MemManager,
     shuffle::{
         Partitioning, ShuffleRepartitioner, single_repartitioner::SingleShuffleRepartitioner,
         sort_repartitioner::SortShuffleRepartitioner,

@@ -48,9 +48,6 @@ pub mod sort_merge_join_exec;
 pub mod union_exec;
 pub mod window_exec;
 
-// memory management
-pub mod memmgr;
-
 // helper modules
 pub mod common;
 pub mod generate;

@@ -153,6 +153,7 @@ mod test {
         datatypes::{DataType, Field, Schema},
         record_batch::RecordBatch,
     };
+    use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_eq,
         common::{Result, stats::Precision},
@@ -160,7 +161,7 @@ mod test {
         prelude::SessionContext,
     };
 
-    use crate::{limit_exec::LimitExec, memmgr::MemManager};
+    use crate::limit_exec::LimitExec;
 
     fn build_table_i32(
         a: (&str, &Vec<i32>),

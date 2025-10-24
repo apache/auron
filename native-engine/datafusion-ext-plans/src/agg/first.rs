@@ -21,6 +21,7 @@ use std::{
 };
 
 use arrow::{array::*, datatypes::*};
+use auron_memmgr::spill::{SpillCompressedReader, SpillCompressedWriter};
 use datafusion::{
     common::{Result, ScalarValue},
     physical_expr::PhysicalExprRef,
@@ -37,7 +38,6 @@ use crate::{
         agg::IdxSelection,
     },
     idx_for_zipped,
-    memmgr::spill::{SpillCompressedReader, SpillCompressedWriter},
 };
 
 pub struct AggFirst {

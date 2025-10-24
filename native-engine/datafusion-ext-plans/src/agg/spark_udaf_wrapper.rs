@@ -30,6 +30,7 @@ use auron_jni_bridge::{
     jni_bridge::LocalRef, jni_call, jni_get_byte_array_len, jni_get_byte_array_region,
     jni_new_direct_byte_buffer, jni_new_global_ref, jni_new_object, jni_new_prim_array,
 };
+use auron_memmgr::spill::{SpillCompressedReader, SpillCompressedWriter};
 use datafusion::{
     common::{DataFusionError, Result},
     physical_expr::PhysicalExprRef,
@@ -47,7 +48,6 @@ use crate::{
         agg::{Agg, IdxSelection},
     },
     idx_for_zipped,
-    memmgr::spill::{SpillCompressedReader, SpillCompressedWriter},
 };
 
 pub struct SparkUDAFWrapper {

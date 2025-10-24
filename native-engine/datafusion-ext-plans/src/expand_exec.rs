@@ -195,6 +195,7 @@ mod test {
         datatypes::{DataType, Field, Schema},
         record_batch::RecordBatch,
     };
+    use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_eq,
         common::{Result, ScalarValue},
@@ -204,7 +205,7 @@ mod test {
         prelude::SessionContext,
     };
 
-    use crate::{expand_exec::ExpandExec, memmgr::MemManager};
+    use crate::expand_exec::ExpandExec;
 
     // build i32 table
     fn build_table_i32(a: (&str, &Vec<i32>)) -> RecordBatch {

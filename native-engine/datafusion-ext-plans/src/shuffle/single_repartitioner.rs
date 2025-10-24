@@ -22,13 +22,11 @@ use std::{
 use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
 use datafusion::{common::Result, physical_plan::metrics::Time};
+use datafusion_ext_commons::io::ipc_compression::IpcCompressionWriter;
 use tokio::sync::Mutex;
 
 use crate::{
-    common::{
-        ipc_compression::IpcCompressionWriter,
-        timer_helper::{TimedWriter, TimerHelper},
-    },
+    common::timer_helper::{TimedWriter, TimerHelper},
     shuffle::{ShuffleRepartitioner, open_shuffle_file},
 };
 

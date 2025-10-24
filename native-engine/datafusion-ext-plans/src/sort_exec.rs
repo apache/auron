@@ -33,6 +33,10 @@ use arrow::{
     row::{RowConverter, Rows, SortField},
 };
 use async_trait::async_trait;
+use auron_memmgr::{
+    MemConsumer, MemConsumerInfo, MemManager,
+    spill::{Spill, SpillCompressedReader, SpillCompressedWriter, try_new_spill},
+};
 use bytesize::ByteSize;
 use datafusion::{
     common::{DataFusionError, Result, Statistics, utils::proxy::VecAllocExt},
@@ -62,19 +66,13 @@ use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
-use crate::{
-    common::{
-        execution_context::{
-            ExecutionContext, WrappedRecordBatchSender, WrappedRecordBatchWithKeyRowsSender,
-            WrappedSenderTrait,
-        },
-        key_rows_output::{RecordBatchWithKeyRows, SendableRecordBatchWithKeyRowsStream},
-        timer_helper::TimerHelper,
+use crate::common::{
+    execution_context::{
+        ExecutionContext, WrappedRecordBatchSender, WrappedRecordBatchWithKeyRowsSender,
+        WrappedSenderTrait,
     },
-    memmgr::{
-        MemConsumer, MemConsumerInfo, MemManager,
-        spill::{Spill, SpillCompressedReader, SpillCompressedWriter, try_new_spill},
-    },
+    key_rows_output::{RecordBatchWithKeyRows, SendableRecordBatchWithKeyRowsStream},
+    timer_helper::TimerHelper,
 };
 
 // reserve memory for each spill
@@ -1412,6 +1410,7 @@ mod test {
         datatypes::{DataType, Field, Schema},
         record_batch::RecordBatch,
     };
+    use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_eq,
         common::Result,
@@ -1420,7 +1419,7 @@ mod test {
         prelude::SessionContext,
     };
 
-    use crate::{memmgr::MemManager, sort_exec::SortExec};
+    use crate::sort_exec::SortExec;
 
     fn build_table_i32(
         a: (&str, &Vec<i32>),
@@ -1499,6 +1498,7 @@ mod fuzztest {
         compute::{SortOptions, concat_batches},
         record_batch::RecordBatch,
     };
+    use auron_memmgr::MemManager;
     use datafusion::{
         common::{Result, stats::Precision},
         physical_expr::{LexOrdering, PhysicalSortExpr, expressions::Column},
@@ -1506,7 +1506,7 @@ mod fuzztest {
         prelude::{SessionConfig, SessionContext},
     };
 
-    use crate::{memmgr::MemManager, sort_exec::SortExec};
+    use crate::sort_exec::SortExec;
 
     #[tokio::test]
     async fn fuzztest_in_mem_sorting() -> Result<()> {

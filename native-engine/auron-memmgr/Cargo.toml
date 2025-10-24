@@ -16,19 +16,22 @@
 #
 
 [package]
-name = "datafusion-ext-exprs"
+name = "auron-memmgr"
 version = "0.1.0"
 edition = "2024"
-resolver = "1"
 
 [dependencies]
-arrow = { workspace = true }
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }
 datafusion-ext-commons = { workspace = true }
 
-itertools = { workspace = true }
+async-trait = { workspace = true }
+bytesize = { workspace = true }
 jni = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }
+tempfile = { workspace = true }
 parking_lot = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = { workspace = true }

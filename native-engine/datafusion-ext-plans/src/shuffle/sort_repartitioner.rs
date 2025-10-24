@@ -20,6 +20,10 @@ use std::{
 
 use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
+use auron_memmgr::{
+    MemConsumer, MemConsumerInfo, MemManager,
+    spill::{OwnedSpillBufReader, Spill, try_new_spill},
+};
 use bytesize::ByteSize;
 use datafusion::{
     common::{DataFusionError, Result},
@@ -33,10 +37,6 @@ use crate::{
         execution_context::ExecutionContext,
         offsetted::{Offsetted, OffsettedMergeIterator},
         timer_helper::TimerHelper,
-    },
-    memmgr::{
-        MemConsumer, MemConsumerInfo, MemManager,
-        spill::{OwnedSpillBufReader, Spill, try_new_spill},
     },
     shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData, open_shuffle_file},
 };

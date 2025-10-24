@@ -24,6 +24,7 @@ use arrow::{
     datatypes::SchemaRef,
 };
 use auron_jni_bridge::conf::{IntConf, UDAF_FALLBACK_NUM_UDAFS_TRIGGER_SORT_AGG};
+use auron_memmgr::MemManager;
 use datafusion::{
     common::{Result, Statistics},
     error::DataFusionError,
@@ -50,7 +51,6 @@ use crate::{
     },
     common::{execution_context::ExecutionContext, timer_helper::TimerHelper},
     expand_exec::ExpandExec,
-    memmgr::MemManager,
     project_exec::ProjectExec,
     sort_exec::create_default_ascending_sort_exec,
 };
@@ -418,6 +418,7 @@ mod test {
         datatypes::{DataType, Field, Schema},
         record_batch::RecordBatch,
     };
+    use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_sorted_eq,
         common::{Result, ScalarValue},
@@ -435,7 +436,6 @@ mod test {
             agg::create_agg,
         },
         agg_exec::AggExec,
-        memmgr::MemManager,
     };
 
     fn build_table_i32(
@@ -691,6 +691,7 @@ mod fuzztest {
         datatypes::{DataType, Float64Type, Int64Type},
         record_batch::RecordBatch,
     };
+    use auron_memmgr::MemManager;
     use datafusion::{
         common::Result,
         physical_expr::expressions as phys_expr,
@@ -708,7 +709,6 @@ mod fuzztest {
             sum::AggSum,
         },
         agg_exec::AggExec,
-        memmgr::MemManager,
     };
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

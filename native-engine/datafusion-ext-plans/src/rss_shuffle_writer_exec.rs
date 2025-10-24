@@ -19,6 +19,7 @@ use std::{any::Any, fmt::Debug, sync::Arc};
 
 use async_trait::async_trait;
 use auron_jni_bridge::{jni_call_static, jni_new_global_ref, jni_new_string};
+use auron_memmgr::MemManager;
 use datafusion::{
     arrow::datatypes::SchemaRef,
     error::{DataFusionError, Result},
@@ -36,7 +37,6 @@ use once_cell::sync::OnceCell;
 
 use crate::{
     common::execution_context::ExecutionContext,
-    memmgr::MemManager,
     shuffle::{
         Partitioning, ShuffleRepartitioner,
         rss_single_repartitioner::RssSingleShuffleRepartitioner,

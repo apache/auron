@@ -23,6 +23,7 @@ use arrow::{
     array::*,
     datatypes::{DataType, *},
 };
+use auron_memmgr::spill::{SpillCompressedReader, SpillCompressedWriter};
 use bitvec::{bitvec, vec::BitVec};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use datafusion::common::{Result, ScalarValue, utils::proxy::VecAllocExt};
@@ -33,11 +34,7 @@ use datafusion_ext_commons::{
 };
 use smallvec::SmallVec;
 
-use crate::{
-    agg::agg::IdxSelection,
-    idx_for, idx_with_iter,
-    memmgr::spill::{SpillCompressedReader, SpillCompressedWriter},
-};
+use crate::{agg::agg::IdxSelection, idx_for, idx_with_iter};
 
 pub trait AccColumn: Send {
     fn as_any(&self) -> &dyn Any;

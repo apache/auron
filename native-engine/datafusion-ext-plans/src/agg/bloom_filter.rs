@@ -24,6 +24,7 @@ use arrow::{
     array::{ArrayRef, AsArray, BinaryBuilder},
     datatypes::{DataType, Int64Type},
 };
+use auron_memmgr::spill::{SpillCompressedReader, SpillCompressedWriter};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use datafusion::{common::Result, physical_expr::PhysicalExprRef};
 use datafusion_ext_commons::{
@@ -37,7 +38,6 @@ use crate::{
         agg::IdxSelection,
     },
     idx_for, idx_for_zipped,
-    memmgr::spill::{SpillCompressedReader, SpillCompressedWriter},
 };
 
 pub struct AggBloomFilter {

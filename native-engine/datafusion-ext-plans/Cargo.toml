@@ -28,6 +28,7 @@ default = ["tokio/rt-multi-thread"]
 arrow = { workspace = true }
 arrow-schema = { workspace = true }
 auron-jni-bridge = { workspace = true }
+auron-memmgr = { workspace = true }
 datafusion = { workspace = true }
 datafusion-datasource = { workspace = true }
 datafusion-datasource-parquet = { workspace = true }
@@ -50,7 +51,6 @@ hashbrown = { workspace = true }
 itertools = { workspace = true }
 jni = { workspace = true }
 log = { workspace = true }
-lz4_flex = { workspace = true }
 num = { workspace = true }
 object_store = { workspace = true }
 once_cell = { workspace = true }
@@ -58,10 +58,8 @@ panic-message = { workspace = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
 smallvec = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true }
 unchecked-index = { workspace = true }
-zstd = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }

@@ -16,7 +16,6 @@
 pub mod cached_exprs_evaluator;
 pub mod column_pruning;
 pub mod execution_context;
-pub mod ipc_compression;
 pub mod key_rows_output;
 pub mod offsetted;
 pub mod row_null_checker;

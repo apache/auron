@@ -17,15 +17,13 @@ use std::sync::Weak;
 
 use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
+use auron_memmgr::{MemConsumer, MemConsumerInfo, MemManager};
 use datafusion::{common::Result, physical_plan::metrics::Time};
 use datafusion_ext_commons::arrow::array_size::BatchSize;
 use futures::lock::Mutex;
 use jni::objects::GlobalRef;
 
-use crate::{
-    memmgr::{MemConsumer, MemConsumerInfo, MemManager},
-    shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData},
-};
+use crate::shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData};
 
 pub struct RssSortShuffleRepartitioner {
     mem_consumer_info: Option<Weak<MemConsumerInfo>>,

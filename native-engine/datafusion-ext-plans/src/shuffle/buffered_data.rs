@@ -27,6 +27,7 @@ use datafusion_ext_commons::{
         selection::{BatchInterleaver, create_batch_interleaver},
     },
     compute_suggested_batch_size_for_output, df_execution_err,
+    io::ipc_compression::IpcCompressionWriter,
 };
 use itertools::Itertools;
 use jni::objects::GlobalRef;
@@ -35,7 +36,6 @@ use parking_lot::Mutex;
 
 use crate::{
     common::{
-        ipc_compression::IpcCompressionWriter,
         offsetted::{Offsetted, OffsettedMergeIterator},
         timer_helper::TimerHelper,
     },

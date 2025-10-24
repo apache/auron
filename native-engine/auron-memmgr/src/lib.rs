@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![feature(get_mut_unchecked)]
+
 pub mod metrics;
 pub mod spill;
 

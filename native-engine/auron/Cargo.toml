@@ -33,12 +33,12 @@ http-service = []
 [dependencies]
 arrow = { workspace = true }
 auron-jni-bridge = { workspace = true }
+auron-memmgr = { workspace = true }
 auron-serde = { workspace = true }
 datafusion = { workspace = true }
 datafusion-ext-commons = { workspace = true }
 datafusion-ext-plans = { workspace = true }
 
-bytesize = { workspace = true }
 futures = { workspace = true }
 jni = { workspace = true }
 log = { workspace = true }

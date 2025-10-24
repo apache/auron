@@ -21,6 +21,7 @@ use std::{
 };
 
 use arrow::{array::*, datatypes::*};
+use auron_memmgr::spill::{SpillCompressedReader, SpillCompressedWriter};
 use datafusion::{common::Result, physical_expr::PhysicalExprRef};
 use datafusion_ext_commons::{
     downcast_any,
@@ -33,7 +34,6 @@ use crate::{
         agg::{Agg, IdxSelection},
     },
     idx_for, idx_for_zipped, idx_with_iter,
-    memmgr::spill::{SpillCompressedReader, SpillCompressedWriter},
 };
 
 pub struct AggCount {

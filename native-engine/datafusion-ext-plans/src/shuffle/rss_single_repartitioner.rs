@@ -17,14 +17,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use datafusion::{arrow::record_batch::RecordBatch, common::Result, physical_plan::metrics::Time};
-use datafusion_ext_commons::df_execution_err;
+use datafusion_ext_commons::{df_execution_err, io::ipc_compression::IpcCompressionWriter};
 use jni::objects::GlobalRef;
 use parking_lot::Mutex;
 
-use crate::{
-    common::ipc_compression::IpcCompressionWriter,
-    shuffle::{ShuffleRepartitioner, rss::RssWriter},
-};
+use crate::shuffle::{ShuffleRepartitioner, rss::RssWriter};
 
 pub struct RssSingleShuffleRepartitioner {
     rss_partition_writer: Arc<Mutex<IpcCompressionWriter<RssWriter>>>,

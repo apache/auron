@@ -18,6 +18,7 @@ use auron_jni_bridge::{
     jni_bridge::JavaClasses,
     *,
 };
+use auron_memmgr::MemManager;
 use datafusion::{
     common::Result,
     error::DataFusionError,
@@ -28,7 +29,6 @@ use datafusion::{
     },
     prelude::{SessionConfig, SessionContext},
 };
-use datafusion_ext_plans::memmgr::MemManager;
 use jni::{
     JNIEnv,
     objects::{JClass, JObject, JString},

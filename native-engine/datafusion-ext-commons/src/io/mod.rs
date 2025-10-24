@@ -27,6 +27,7 @@ pub use scalar_serde::{read_scalar, write_scalar};
 use crate::{UninitializedInit, arrow::cast::cast};
 
 mod batch_serde;
+pub mod ipc_compression;
 mod scalar_serde;
 
 pub fn write_one_batch(num_rows: usize, cols: &[ArrayRef], mut output: impl Write) -> Result<()> {

@@ -23,6 +23,7 @@ use std::{
 };
 
 use arrow::{array::*, datatypes::*};
+use auron_memmgr::spill::{SpillCompressedReader, SpillCompressedWriter};
 use datafusion::{
     common::{Result, ScalarValue},
     physical_expr::PhysicalExprRef,
@@ -41,7 +42,6 @@ use crate::{
         agg::{Agg, IdxSelection},
     },
     idx_for, idx_for_zipped,
-    memmgr::spill::{SpillCompressedReader, SpillCompressedWriter},
 };
 
 pub type AggCollectSet = AggGenericCollect<AccSetColumn>;
@@ -650,10 +650,10 @@ fn acc_hash(value: impl AsRef<[u8]>) -> u64 {
 #[cfg(test)]
 mod tests {
     use arrow::datatypes::DataType;
+    use auron_memmgr::spill::Spill;
     use datafusion::common::ScalarValue;
 
     use super::*;
-    use crate::memmgr::spill::Spill;
 
     #[test]
     fn test_acc_set_append() {

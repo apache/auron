@@ -25,11 +25,12 @@ use auron_jni_bridge::{
 };
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use datafusion::common::Result;
-use datafusion_ext_commons::{
+use once_cell::sync::OnceCell;
+
+use crate::{
     df_execution_err,
     io::{read_one_batch, write_one_batch},
 };
-use once_cell::sync::OnceCell;
 
 pub struct IpcCompressionWriter<W: Write> {
     output: W,

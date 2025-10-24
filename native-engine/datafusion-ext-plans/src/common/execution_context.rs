@@ -30,6 +30,7 @@ use arrow::{
 };
 use arrow_schema::Schema;
 use auron_jni_bridge::{conf, conf::BooleanConf, is_task_running};
+use auron_memmgr::metrics::SpillMetrics;
 use datafusion::{
     common::{DataFusionError, Result},
     execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext},
@@ -62,7 +63,6 @@ use crate::{
         },
         timer_helper::TimerHelper,
     },
-    memmgr::metrics::SpillMetrics,
     sort_exec::SortExec,
 };
 

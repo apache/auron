@@ -24,6 +24,7 @@ members = [
     "native-engine/auron",
     "native-engine/auron-jni-bridge",
     "native-engine/auron-serde",
+    "native-engine/auron-memmgr",
 ]
 
 [profile.release]
@@ -48,6 +49,7 @@ overflow-checks = false
 auron = { path = "./native-engine/auron" }
 auron-jni-bridge = { path = "./native-engine/auron-jni-bridge" }
 auron-serde = { path = "./native-engine/auron-serde" }
+auron-memmgr = { path = "./native-engine/auron-memmgr" }
 datafusion-ext-commons = { path = "./native-engine/datafusion-ext-commons" }
 datafusion-ext-exprs = { path = "./native-engine/datafusion-ext-exprs" }
 datafusion-ext-functions = { path = "./native-engine/datafusion-ext-functions" }

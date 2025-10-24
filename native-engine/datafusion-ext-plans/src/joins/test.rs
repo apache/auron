@@ -25,6 +25,7 @@ mod tests {
         datatypes::{DataType, Field, Schema, SchemaRef},
         record_batch::RecordBatch,
     };
+    use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_sorted_eq,
         common::JoinSide,
@@ -38,7 +39,6 @@ mod tests {
         broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
         broadcast_join_exec::BroadcastJoinExec,
         joins::join_utils::{JoinType, JoinType::*},
-        memmgr::MemManager,
         sort_merge_join_exec::SortMergeJoinExec,
     };
 

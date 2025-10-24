@@ -32,14 +32,12 @@ use datafusion::{
         stream::RecordBatchStreamAdapter,
     },
 };
+use datafusion_ext_commons::io::ipc_compression::IpcCompressionWriter;
 use futures::{StreamExt, TryStreamExt, stream::once};
 use jni::objects::{GlobalRef, JObject};
 use once_cell::sync::OnceCell;
 
-use crate::common::{
-    execution_context::ExecutionContext, ipc_compression::IpcCompressionWriter,
-    timer_helper::TimerHelper,
-};
+use crate::common::{execution_context::ExecutionContext, timer_helper::TimerHelper};
 
 #[derive(Debug)]
 pub struct IpcWriterExec {
