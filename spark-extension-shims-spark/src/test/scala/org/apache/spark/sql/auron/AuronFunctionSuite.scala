@@ -274,4 +274,52 @@ class AuronFunctionSuite
       }
     }
   }
+
+  test("crc32 function") {
+    withTable("t1") {
+      sql("create table t1 using parquet as select 'spark' as c1, '3.x' as version")
+
+      val functions =
+        """
+          |select
+          |  crc32(concat(c1, version)) as crc32
+          |from t1
+          |""".stripMargin
+
+      val df = sql(functions)
+
+      checkAnswer(
+        df,
+        Seq(
+          Row(
+            1962683784
+          )
+        )
+      )
+    }
+  }
+
+  test("crc32 function with null input") {
+    withTable("t1") {
+      sql("create table t1 using parquet as select CAST(NULL AS STRING) as c1")
+
+      val functions =
+        """
+          |select
+          |  crc32(c1) as crc32
+          |from t1
+          |""".stripMargin
+
+      val df = sql(functions)
+
+      checkAnswer(
+        df,
+        Seq(
+          Row(
+            null
+          )
+        )
+      )
+    }
+  }
 }

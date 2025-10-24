@@ -1218,6 +1218,7 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
+ "crc32fast",
  "datafusion",
  "datafusion-ext-commons",
  "itertools 0.14.0",
