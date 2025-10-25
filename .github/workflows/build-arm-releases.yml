@@ -39,7 +39,7 @@ jobs:
         sparkver: [spark-3.0, spark-3.1, spark-3.2, spark-3.3, spark-3.4, spark-3.5]
         auronver: [7.0.0-SNAPSHOT]
         scalaver: [2.12, 2.13]
-        javaver: [ 8 ]
+        javaver: [ 8, 21 ]
         runner: [ubuntu-22.04-arm, ubuntu-24.04-arm ]
         exclude:
           # Only build on scala-2.13 for spark-3.5
@@ -53,6 +53,16 @@ jobs:
             scalaver: '2.13'
           - sparkver: spark-3.4
             scalaver: '2.13'
+          - sparkver: spark-3.0
+            javaver: '21'
+          - sparkver: spark-3.1
+            javaver: '21'
+          - sparkver: spark-3.2
+            javaver: '21'
+          - sparkver: spark-3.3
+            javaver: '21'
+          - sparkver: spark-3.4
+            javaver: '21'
 
     steps:
       - uses: actions/checkout@v4
