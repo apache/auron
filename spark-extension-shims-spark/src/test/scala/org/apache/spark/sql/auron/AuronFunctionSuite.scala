@@ -298,7 +298,6 @@ class AuronFunctionSuite
     checkAnswer(df, Seq(Row(8.0, 8.0, 2.25)))
   }
 
-
   test("pow: zero base with negative exponent yields +infinity") {
     val df = sql("select pow(0.0, -2.5), power(0.0, -3)")
     // Spark prints Infinity as Double.PositiveInfinity
