@@ -274,4 +274,49 @@ class AuronFunctionSuite
       }
     }
   }
+
+  test("pow and power functions should return identical results") {
+    withTable("t1") {
+      sql("create table t1 using parquet as select 2 as base, 3 as exponent")
+
+      val functions =
+        """
+          |select
+          |  power(base, exponent) as power_result,
+          |  pow(base, exponent) as pow_result
+          |from t1
+            """.stripMargin
+
+      val df = sql(functions)
+
+      checkAnswer(df, Seq(Row(8.0, 8.0)))
+    }
+  }
+
+  test("pow/power should accept mixed numeric types and return double") {
+    val df = sql("select pow(2, 3.0), pow(2.0, 3), power(1.5, 2)")
+    checkAnswer(df, Seq(Row(8.0, 8.0, 2.25)))
+  }
+
+  test("pow: zero base with negative exponent yields +infinity") {
+    val df = sql("select pow(0.0, -2.5), power(0.0, -3)")
+    // Spark prints Infinity as Double.PositiveInfinity
+    checkAnswer(df, Seq(Row(Double.PositiveInfinity, Double.PositiveInfinity)))
+  }
+
+  test("pow: zero to the zero equals one") {
+    val df = sql("select pow(0.0, 0.0)")
+    checkAnswer(df, Seq(Row(1.0)))
+  }
+
+  test("pow: negative base with fractional exponent is NaN") {
+    val df = sql("select pow(-2, 0.5)")
+    assert(df.collect().head.getDouble(0).isNaN)
+  }
+
+  test("pow null propagation") {
+    val df = sql("select pow(null, 2), power(2, null), pow(null, null)")
+    val row = df.collect().head
+    assert(row.isNullAt(0) && row.isNullAt(1) && row.isNullAt(2))
+  }
 }
