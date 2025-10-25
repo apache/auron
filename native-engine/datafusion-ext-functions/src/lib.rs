@@ -20,6 +20,7 @@ use datafusion_ext_commons::df_unimplemented_err;
 
 mod brickhouse;
 mod spark_check_overflow;
+mod spark_crc32;
 mod spark_dates;
 pub mod spark_get_json_object;
 mod spark_hash;
@@ -46,6 +47,7 @@ pub fn create_spark_ext_function(name: &str) -> Result<ScalarFunctionImplementat
         "Sha256" => Arc::new(spark_sha2::spark_sha256),
         "Sha384" => Arc::new(spark_sha2::spark_sha384),
         "Sha512" => Arc::new(spark_sha2::spark_sha512),
+        "Crc32" => Arc::new(spark_crc32::spark_crc32),
         "GetJsonObject" => Arc::new(spark_get_json_object::spark_get_json_object),
         "GetParsedJsonObject" => Arc::new(spark_get_json_object::spark_get_parsed_json_object),
         "ParseJson" => Arc::new(spark_get_json_object::spark_parse_json),
