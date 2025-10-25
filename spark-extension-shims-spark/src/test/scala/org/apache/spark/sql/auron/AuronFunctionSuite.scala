@@ -274,4 +274,23 @@ class AuronFunctionSuite
       }
     }
   }
+
+  test("spark pow function") {
+
+    withTable("t1") {
+      sql("create table t1 using parquet as select 2 as base, 3 as exponent")
+
+      val functions =
+        """
+          |select
+          |  power(base, exponent) as power_result,
+          |  pow(base, exponent) as pow_result
+          |from t1
+            """.stripMargin
+
+      val df = sql(functions)
+
+      checkAnswer(df, Seq(Row(8.0, 8.0)))
+    }
+  }
 }
