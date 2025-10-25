@@ -288,14 +288,7 @@ class AuronFunctionSuite
 
       val df = sql(functions)
 
-      checkAnswer(
-        df,
-        Seq(
-          Row(
-            1962683784
-          )
-        )
-      )
+      checkAnswer(df, Seq(Row(1962683784)))
     }
   }
 
@@ -312,14 +305,7 @@ class AuronFunctionSuite
 
       val df = sql(functions)
 
-      checkAnswer(
-        df,
-        Seq(
-          Row(
-            null
-          )
-        )
-      )
+      checkAnswer(df, Seq(Row(null)))
     }
   }
 }
