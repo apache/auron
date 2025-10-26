@@ -28,7 +28,7 @@ class EmptyNativeRddSuite
     assert(empty.collect().size === 0)
 
     val thrown = intercept[UnsupportedOperationException] {
-      empty.reduce((row1, row2) => {
+      empty.reduce((row1, _) => {
         row1
       })
     }

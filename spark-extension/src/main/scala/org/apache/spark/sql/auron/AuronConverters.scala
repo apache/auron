@@ -463,7 +463,7 @@ object AuronConverters extends Logging {
       case p =>
         throw new NotImplementedError(
           s"Cannot convert FileSourceScanExec tableIdentifier: ${tableIdentifier.getOrElse(
-            "unknown")}, class: ${p.getClass.getName}")
+              "unknown")}, class: ${p.getClass.getName}")
     }
   }
 
@@ -1095,7 +1095,7 @@ object AuronConverters extends Logging {
           rddPartitioner = None,
           rddDependencies = Nil,
           false,
-          (_partition, _taskContext) => {
+          (_, _) => {
             val nativeEmptyExec = EmptyPartitionsExecNode
               .newBuilder()
               .setNumPartitions(outputPartitioning.numPartitions)
