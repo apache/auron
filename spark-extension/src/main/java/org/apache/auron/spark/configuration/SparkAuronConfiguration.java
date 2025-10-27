@@ -263,7 +263,7 @@ public class SparkAuronConfiguration extends AuronConfiguration {
     }
 
     private synchronized <T> T getSparkConf(String key, T defaultValue) {
-        //Use synchronized to avoid issues with multiple threads.
+        // Use synchronized to avoid issues with multiple threads.
         synchronized (ConfigEntry.class) {
             ConfigEntry<T> entry = (ConfigEntry<T>) ConfigEntry.findEntry(key);
             if (entry == null) {
