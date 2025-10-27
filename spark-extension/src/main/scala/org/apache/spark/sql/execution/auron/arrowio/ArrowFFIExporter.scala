@@ -27,7 +27,7 @@ import org.apache.arrow.c.Data
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.dictionary.DictionaryProvider.MapDictionaryProvider
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.auron.{AuronConf, NativeHelper}
+import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.util.Using
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils
@@ -37,11 +37,17 @@ import org.apache.spark.sql.execution.auron.arrowio.util.ArrowWriter
 import org.apache.spark.sql.types.StructType
 
 import org.apache.auron.arrowio.AuronArrowFFIExporter
+import org.apache.auron.configuration.AuronConfiguration
+import org.apache.auron.jni.AuronAdaptor
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
     extends AuronArrowFFIExporter {
-  private val maxBatchNumRows = AuronConf.BATCH_SIZE.intConf()
-  private val maxBatchMemorySize = AuronConf.SUGGESTED_BATCH_MEM_SIZE.intConf()
+  private val sparkAuronConfig: AuronConfiguration =
+    AuronAdaptor.getInstance.getAuronConfiguration
+  private val maxBatchNumRows = sparkAuronConfig.getInteger(AuronConfiguration.BATCH_SIZE)
+  private val maxBatchMemorySize =
+    sparkAuronConfig.getInteger(SparkAuronConfiguration.SUGGESTED_BATCH_MEM_SIZE)
 
   private val arrowSchema = ArrowUtils.toArrowSchema(schema)
   private val emptyDictionaryProvider = new MapDictionaryProvider()

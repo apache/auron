@@ -39,8 +39,10 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
 
+import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.PhysicalPlanNode
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 object NativeHelper extends Logging {
   val currentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
@@ -188,7 +190,8 @@ object NativeHelper extends Logging {
       "shuffle_write_total_time" -> nanoTimingMetric("Native.shuffle_write_total_time"),
       "shuffle_read_total_time" -> nanoTimingMetric("Native.shuffle_read_total_time"))
 
-    if (AuronConf.INPUT_BATCH_STATISTICS_ENABLE.booleanConf()) {
+    if (AuronAdaptor.getInstance.getAuronConfiguration.getBoolean(
+        SparkAuronConfiguration.INPUT_BATCH_STATISTICS_ENABLE)) {
       metrics ++= TreeMap(
         "input_batch_count" -> metric("Native.input_batches"),
         "input_row_count" -> metric("Native.input_rows"),

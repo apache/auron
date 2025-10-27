@@ -55,6 +55,9 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 
+import org.apache.auron.jni.AuronAdaptor
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
+
 case class SparkUDAFWrapperContext[B](serialized: ByteBuffer) extends Logging {
   private val (expr, javaParamsSchema) =
     NativeConverters.deserializeExpression[AggregateFunction, StructType]({
@@ -455,7 +458,8 @@ case class TypedImperativeAggRowsColumn[B](
             evaluator.estimatedRowSize = Some(estimRowSize)
             estimRowSize
           } else {
-            AuronConf.UDAF_FALLBACK_ESTIM_ROW_SIZE.intConf()
+            AuronAdaptor.getInstance.getAuronConfiguration.getInteger(
+              SparkAuronConfiguration.UDAF_FALLBACK_ESTIM_ROW_SIZE)
           }
         rows.length * estimRowSize
     }

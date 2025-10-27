@@ -22,7 +22,6 @@ import scala.collection.immutable.SortedMap
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.auron.AuronConf
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -57,7 +56,9 @@ import org.apache.spark.sql.types.BinaryType
 import org.apache.spark.sql.types.DataType
 
 import org.apache.auron.{protobuf => pb}
+import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.metric.SparkMetricNode
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 abstract class NativeAggBase(
     execMode: AggExecMode,
@@ -154,7 +155,8 @@ abstract class NativeAggBase(
     child.outputPartitioning
 
   private def supportsPartialSkipping = (
-    AuronConf.PARTIAL_AGG_SKIPPING_ENABLE.booleanConf()
+    AuronAdaptor.getInstance.getAuronConfiguration.getBoolean(
+      SparkAuronConfiguration.PARTIAL_AGG_SKIPPING_ENABLE)
       && initialInputBufferOffset == 0
       && aggregateExpressions.forall(_.mode == Partial)
       && requiredChildDistribution.forall(_ == UnspecifiedDistribution)

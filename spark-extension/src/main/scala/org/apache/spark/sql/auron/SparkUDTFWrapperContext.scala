@@ -39,6 +39,10 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
 
+import org.apache.auron.configuration.AuronConfiguration
+import org.apache.auron.jni.AuronAdaptor
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
+
 case class SparkUDTFWrapperContext(serialized: ByteBuffer) extends Logging {
   private val (expr, javaParamsSchema) =
     NativeConverters.deserializeExpression[Generator, StructType]({
@@ -58,8 +62,11 @@ case class SparkUDTFWrapperContext(serialized: ByteBuffer) extends Logging {
   }
 
   private val tc = TaskContext.get()
-  private val batchSize = AuronConf.BATCH_SIZE.intConf()
-  private val maxBatchMemorySize = AuronConf.SUGGESTED_BATCH_MEM_SIZE.intConf()
+  private val sparkAuronConfig: AuronConfiguration =
+    AuronAdaptor.getInstance.getAuronConfiguration
+  private val batchSize = sparkAuronConfig.getInteger(AuronConfiguration.BATCH_SIZE)
+  private val maxBatchMemorySize =
+    sparkAuronConfig.getInteger(SparkAuronConfiguration.SUGGESTED_BATCH_MEM_SIZE)
 
   private val dictionaryProvider: DictionaryProvider = new MapDictionaryProvider()
   private val javaOutputSchema = StructType(

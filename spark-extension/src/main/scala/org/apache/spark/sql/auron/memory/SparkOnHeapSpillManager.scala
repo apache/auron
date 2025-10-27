@@ -28,11 +28,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryConsumer
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.memory.auron.OnHeapSpillManagerHelper
-import org.apache.spark.sql.auron.AuronConf
 import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.Utils
 
+import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.memory.OnHeapSpillManager
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class SparkOnHeapSpillManager(taskContext: TaskContext)
     extends MemoryConsumer(
@@ -90,7 +91,8 @@ class SparkOnHeapSpillManager(taskContext: TaskContext)
         s" ratio=$jvmMemoryUsedRatio")
 
     // we should have at least 10% free memory
-    val maxRatio = AuronConf.ON_HEAP_SPILL_MEM_FRACTION.doubleConf()
+    val maxRatio = AuronAdaptor.getInstance.getAuronConfiguration.getDouble(
+      SparkAuronConfiguration.ON_HEAP_SPILL_MEM_FRACTION)
     memoryUsedRatio < maxRatio && jvmMemoryUsedRatio < maxRatio
   }
 
