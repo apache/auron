@@ -53,3 +53,6 @@ spark-extension/src/generated-sources
 native-engine/_build
 
 /target-docker/
+
+# exclude org.apache.auron.common.AuronBuildInfo
+common/src/main/resources/auron-build-info.properties
