@@ -262,22 +262,25 @@ public class SparkAuronConfiguration extends AuronConfiguration {
         }
     }
 
-    private <T> T getSparkConf(String key, T defaultValue) {
-        ConfigEntry<T> entry = (ConfigEntry<T>) ConfigEntry.findEntry(key);
-        if (entry == null) {
-            entry = new ConfigEntryWithDefault<>(
-                    key,
-                    Option.<String>empty(),
-                    "",
-                    List$.MODULE$.empty(),
-                    defaultValue,
-                    (val) -> valueConverter(val, defaultValue, defaultValue == null),
-                    String::valueOf,
-                    null,
-                    true,
-                    null);
+    private synchronized <T> T getSparkConf(String key, T defaultValue) {
+        //Use synchronized to avoid issues with multiple threads.
+        synchronized (ConfigEntry.class) {
+            ConfigEntry<T> entry = (ConfigEntry<T>) ConfigEntry.findEntry(key);
+            if (entry == null) {
+                entry = new ConfigEntryWithDefault<>(
+                        key,
+                        Option.<String>empty(),
+                        "",
+                        List$.MODULE$.empty(),
+                        defaultValue,
+                        (val) -> valueConverter(val, defaultValue, defaultValue == null),
+                        String::valueOf,
+                        null,
+                        true,
+                        null);
+            }
+            return sparkConf.get(entry);
         }
-        return sparkConf.get(entry);
     }
 
     private <T> T valueConverter(String value, T defaultValue, boolean defaultValueIsNull) {
