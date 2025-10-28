@@ -27,7 +27,6 @@ mod spark_make_array;
 mod spark_make_decimal;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
-mod spark_pow;
 mod spark_round;
 mod spark_sha2;
 mod spark_strings;
@@ -63,7 +62,6 @@ pub fn create_spark_ext_function(name: &str) -> Result<ScalarFunctionImplementat
         "Day" => Arc::new(spark_dates::spark_day),
         "BrickhouseArrayUnion" => Arc::new(brickhouse::array_union::array_union),
         "Round" => Arc::new(spark_round::spark_round),
-        "Power" => Arc::new(spark_pow::spark_pow),
         "NormalizeNanAndZero" => {
             Arc::new(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
