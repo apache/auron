@@ -23,6 +23,7 @@ import org.apache.spark.SparkEnv$;
  * This class has been deprecated and migrated to {@link org.apache.auron.spark.configuration.SparkAuronConfiguration}.
  * Will be removed in the future.
  */
+@Deprecated
 @SuppressWarnings("unused")
 public enum AuronConf {
     // support spark.auron.ui.enabled
