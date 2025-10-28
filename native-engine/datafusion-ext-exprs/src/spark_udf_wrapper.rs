@@ -27,7 +27,7 @@ use arrow::{
     record_batch::{RecordBatch, RecordBatchOptions},
 };
 use auron_jni_bridge::{
-    is_task_running, jni_call, jni_new_direct_byte_buffer, jni_new_global_ref, jni_new_object,
+    is_task_running, jni_call, jni_call_static, jni_new_direct_byte_buffer, jni_new_global_ref,
 };
 use datafusion::{
     error::Result,
@@ -94,7 +94,7 @@ impl SparkUDFWrapperExpr {
             .get_or_try_init(|| {
                 let serialized_buf = jni_new_direct_byte_buffer!(&self.serialized)?;
                 let jcontext_local =
-                    jni_new_object!(SparkAuronUDFWrapperContext(serialized_buf.as_obj()))?;
+                    jni_call_static!(JniBridge.getAuronUDFWrapperContext(serialized_buf.as_obj()) -> JObject)?;
                 jni_new_global_ref!(jcontext_local.as_obj())
             })
             .cloned()

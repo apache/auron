@@ -347,7 +347,11 @@ object AuronConverters extends Logging {
 
     } catch {
       case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
-        logWarning(s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}")
+        if (log.isDebugEnabled()) {
+          logWarning(s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}", e)
+        } else {
+          logWarning(s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}")
+        }
         val neverConvertReason = e match {
           case _: AssertionError =>
             exec match {
