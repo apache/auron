@@ -29,6 +29,7 @@ on:
       - branch-*
     paths:
       - '.github/workflows/build-ce7-releases.yml'
+      - 'auron-build.sh'
 
 jobs:
   build-snapshot:

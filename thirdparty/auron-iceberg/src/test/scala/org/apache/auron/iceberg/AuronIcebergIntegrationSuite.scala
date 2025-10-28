@@ -14,25 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron.iceberg
 
-class EmptyNativeRddSuite
+import org.apache.spark.sql.Row
+
+class AuronIcebergIntegrationSuite
     extends org.apache.spark.sql.QueryTest
-    with BaseAuronSQLSuite
-    with AuronSQLTestHelper {
+    with BaseAuronIcebergSuite {
 
-  test("test empty native rdd") {
-    val sc = spark.sparkContext
-    val empty = new EmptyNativeRDD(sc)
-    assert(empty.count === 0)
-    assert(empty.collect().size === 0)
-
-    val thrown = intercept[UnsupportedOperationException] {
-      empty.reduce((row1, _) => {
-        row1
-      })
+  test("test iceberg integrate ") {
+    withTable("local.db.t1") {
+      sql(
+        "create table local.db.t1 using iceberg PARTITIONED BY (part) as select 1 as c1, 2 as c2, 'test test' as part")
+      val df = sql("select * from local.db.t1")
+      checkAnswer(df, Seq(Row(1, 2, "test test")))
     }
-    assert(thrown.getMessage.contains("empty"))
   }
 
 }

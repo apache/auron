@@ -33,6 +33,11 @@ import org.apache.auron.protobuf.TaskDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * A wrapper class for calling native functions in the Auron project.
+ * It handles initialization, loading data batches, and error handling.
+ * Provides methods to interact with the native execution runtime and process data batches.
+ */
 public class AuronCallNativeWrapper {
 
     private static final Logger LOG = LoggerFactory.getLogger(AuronCallNativeWrapper.class);

@@ -49,6 +49,11 @@ import org.apache.auron.protobuf.PartitionId
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.protobuf.TaskDefinition
 
+/**
+ * This class has been deprecated and migrated to {@link
+ * org.apache.auron.jni.AuronCallNativeWrapper}. Will be removed in the future.
+ */
+@Deprecated
 case class AuronCallNativeWrapper(
     nativePlan: PhysicalPlanNode,
     partition: Partition,
@@ -94,6 +99,7 @@ case class AuronCallNativeWrapper(
       false
     }
 
+    @Deprecated
     override def next(): InternalRow = {
       val batchRow = batchRows(batchCurRowIdx)
       batchCurRowIdx += 1
@@ -104,13 +110,16 @@ case class AuronCallNativeWrapper(
   context.foreach(_.addTaskCompletionListener[Unit]((_: TaskContext) => close()))
   context.foreach(_.addTaskFailureListener((_, _) => close()))
 
+  @Deprecated
   def getRowIterator: Iterator[InternalRow] = {
     CompletionIterator[InternalRow, Iterator[InternalRow]](rowIterator, close())
   }
 
+  @Deprecated
   protected def getMetrics: MetricNode =
     metrics
 
+  @Deprecated
   protected def importSchema(ffiSchemaPtr: Long): Unit = {
     Using.resource(ArrowSchema.wrap(ffiSchemaPtr)) { ffiSchema =>
       arrowSchema = Data.importSchema(ROOT_ALLOCATOR, ffiSchema, dictionaryProvider)
@@ -119,6 +128,7 @@ case class AuronCallNativeWrapper(
     }
   }
 
+  @Deprecated
   protected def importBatch(ffiArrayPtr: Long): Unit = {
     if (nativeRuntimePtr == 0) {
       throw new RuntimeException("Native runtime is finalized")
@@ -137,10 +147,12 @@ case class AuronCallNativeWrapper(
     }
   }
 
+  @Deprecated
   protected def setError(error: Throwable): Unit = {
     this.error.set(error)
   }
 
+  @Deprecated
   protected def checkError(): Unit = {
     val throwable = error.getAndSet(null)
     if (throwable != null) {
@@ -149,6 +161,7 @@ case class AuronCallNativeWrapper(
     }
   }
 
+  @Deprecated
   protected def getRawTaskDefinition: Array[Byte] = {
     val partitionId: PartitionId = PartitionId
       .newBuilder()

@@ -162,7 +162,7 @@ object AuronBlockStoreShuffleReaderBase extends Logging {
 
       case in: InputStreamToByteBuffer =>
         Some(in.toByteBuffer)
-      case in =>
+      case _ =>
         None
     }
   }

@@ -860,7 +860,8 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Murmur3Hash", children, IntegerType)
       case XxHash64(children, 42L) =>
         buildExtScalarFunction("XxHash64", children, LongType)
-
+      case e: Pow =>
+        buildScalarFunction(pb.ScalarFunction.Power, e.children, e.dataType)
       case Year(child) => buildExtScalarFunction("Year", child :: Nil, IntegerType)
       case Month(child) => buildExtScalarFunction("Month", child :: Nil, IntegerType)
       case DayOfMonth(child) => buildExtScalarFunction("Day", child :: Nil, IntegerType)
