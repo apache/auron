@@ -846,6 +846,8 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("NullIf", left :: right :: Nil, e.dataType)
       case Md5(_1) =>
         buildScalarFunction(pb.ScalarFunction.MD5, Seq(unpackBinaryTypeCast(_1)), StringType)
+      case Reverse(_1) =>
+        buildScalarFunction(pb.ScalarFunction.Reverse, Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(224, _)) =>
         buildExtScalarFunction("Sha224", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(0, _)) =>

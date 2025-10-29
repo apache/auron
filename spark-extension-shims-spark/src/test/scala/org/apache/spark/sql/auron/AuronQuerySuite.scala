@@ -304,4 +304,17 @@ class AuronQuerySuite
       checkAnswer(sql(q), Seq(expected))
     }
   }
+
+  test("reverse basic") {
+    Seq(
+      ("select reverse('abc')", Row("cba")),
+      ("select reverse('spark')", Row("kraps")),
+      ("select reverse('hello world')", Row("dlrow olleh")),
+      ("select reverse('12345')", Row("54321")),
+      ("select reverse('a')", Row("a")), // Edge case: single character
+      ("select reverse('')", Row("")), // Edge case: empty string
+      ("select reverse('hello' || ' world')", Row("dlrow olleh"))).foreach { case (q, expected) =>
+      checkAnswer(sql(q), Seq(expected))
+    }
+  }
 }
