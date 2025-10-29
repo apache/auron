@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-version: "3"
-
 services:
   build-release:
     build: ${BUILD_CONTEXT:-./centos7}
