@@ -36,38 +36,55 @@ import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.auron.memory.SparkOnHeapSpillManager$;
 import org.apache.spark.sql.auron.util.TaskContextHelper$;
 
+/**
+ * This class has been deprecated and migrated to {@link org.apache.auron.jni.JniBridge}.
+ * Will be removed in the future.
+ */
+@Deprecated
 @SuppressWarnings("unused")
 public class JniBridge {
+
+    @Deprecated
     public static final ConcurrentHashMap<String, Object> resourcesMap = new ConcurrentHashMap<>();
 
+    @Deprecated
     public static native long callNative(long initNativeMemory, String logLevel, AuronCallNativeWrapper wrapper);
 
+    @Deprecated
     public static native boolean nextBatch(long ptr);
 
+    @Deprecated
     public static native void finalizeNative(long ptr);
 
+    @Deprecated
     public static native void onExit();
 
+    @Deprecated
     public static ClassLoader getContextClassLoader() {
         return Thread.currentThread().getContextClassLoader();
     }
 
+    @Deprecated
     public static void setContextClassLoader(ClassLoader cl) {
         Thread.currentThread().setContextClassLoader(cl);
     }
 
+    @Deprecated
     public static Object getResource(String key) {
         return resourcesMap.remove(key);
     }
 
+    @Deprecated
     public static TaskContext getTaskContext() {
         return TaskContext$.MODULE$.get();
     }
 
+    @Deprecated
     public static OnHeapSpillManager getTaskOnHeapSpillManager() {
         return SparkOnHeapSpillManager$.MODULE$.current();
     }
 
+    @Deprecated
     public static boolean isTaskRunning() {
         TaskContext tc = getTaskContext();
         if (tc == null) { // driver is always running
@@ -76,29 +93,35 @@ public class JniBridge {
         return !tc.isCompleted() && !tc.isInterrupted();
     }
 
+    @Deprecated
     public static FSDataInputWrapper openFileAsDataInputWrapper(FileSystem fs, String path) throws Exception {
         // the path is a URI string, so we need to convert it to a URI object, ref:
         // org.apache.spark.paths.SparkPath.toPath
         return FSDataInputWrapper$.MODULE$.wrap(fs.open(new Path(new URI(path))));
     }
 
+    @Deprecated
     public static FSDataOutputWrapper createFileAsDataOutputWrapper(FileSystem fs, String path) throws Exception {
         return FSDataOutputWrapper$.MODULE$.wrap(fs.create(new Path(new URI(path))));
     }
 
+    @Deprecated
     private static final List<BufferPoolMXBean> directMXBeans =
             ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class);
 
+    @Deprecated
     public static long getTotalMemoryLimited() {
         return NativeHelper$.MODULE$.totalMemory();
     }
 
+    @Deprecated
     public static long getDirectMemoryUsed() {
         return directMXBeans.stream()
                 .mapToLong(BufferPoolMXBean::getTotalCapacity)
                 .sum();
     }
 
+    @Deprecated
     public static String getDirectWriteSpillToDiskFile() {
         return SparkEnv.get()
                 .blockManager()
@@ -108,6 +131,7 @@ public class JniBridge {
                 .getPath();
     }
 
+    @Deprecated
     public static void initNativeThread(ClassLoader cl, TaskContext tc) {
         setContextClassLoader(cl);
         TaskContext$.MODULE$.setTaskContext(tc);
@@ -115,6 +139,7 @@ public class JniBridge {
         TaskContextHelper$.MODULE$.setHDFSCallerContext();
     }
 
+    @Deprecated
     public static AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
         throw new UnsupportedOperationException("This API is designed to support next-generation multi-engine.");
     }

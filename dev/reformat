@@ -44,7 +44,7 @@ function run_maven() {
 sparkver=spark-3.5
 for celebornver in celeborn-0.5 celeborn-0.6
 do
-  run_maven -P"${sparkver}" -Pceleborn,"${celebornver}" -Puniffle,uniffle-0.10 -Ppaimon,paimon-1.2 -Pflink,flink-1.18
+  run_maven -P"${sparkver}" -Pceleborn,"${celebornver}" -Puniffle,uniffle-0.10 -Ppaimon,paimon-1.2 -Pflink,flink-1.18 -Piceberg,iceberg-1.9
 
 done
 

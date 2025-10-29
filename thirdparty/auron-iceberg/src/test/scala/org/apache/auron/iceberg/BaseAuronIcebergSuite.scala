@@ -14,25 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron.iceberg
 
-class EmptyNativeRddSuite
-    extends org.apache.spark.sql.QueryTest
-    with BaseAuronSQLSuite
-    with AuronSQLTestHelper {
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.test.SharedSparkSession
 
-  test("test empty native rdd") {
-    val sc = spark.sparkContext
-    val empty = new EmptyNativeRDD(sc)
-    assert(empty.count === 0)
-    assert(empty.collect().size === 0)
+trait BaseAuronIcebergSuite extends SharedSparkSession {
 
-    val thrown = intercept[UnsupportedOperationException] {
-      empty.reduce((row1, _) => {
-        row1
-      })
-    }
-    assert(thrown.getMessage.contains("empty"))
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(
+        "spark.sql.extensions",
+        "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+      .set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog")
+      .set("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
+      .set("spark.sql.catalog.local.type", "hadoop")
+      .set("spark.sql.catalog.local.warehouse", "iceberg_warehouse")
   }
-
 }

@@ -860,7 +860,8 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Murmur3Hash", children, IntegerType)
       case XxHash64(children, 42L) =>
         buildExtScalarFunction("XxHash64", children, LongType)
-
+      case e: Pow =>
+        buildScalarFunction(pb.ScalarFunction.Power, e.children, e.dataType)
       case Year(child) => buildExtScalarFunction("Year", child :: Nil, IntegerType)
       case Month(child) => buildExtScalarFunction("Month", child :: Nil, IntegerType)
       case DayOfMonth(child) => buildExtScalarFunction("Day", child :: Nil, IntegerType)
@@ -929,6 +930,11 @@ object NativeConverters extends Logging {
       case e: Coalesce =>
         val children = e.children.map(Cast(_, e.dataType))
         buildScalarFunction(pb.ScalarFunction.Coalesce, children, e.dataType)
+
+      case e: StringLPad =>
+        buildScalarFunction(pb.ScalarFunction.Lpad, e.children, StringType)
+      case e: StringRPad =>
+        buildScalarFunction(pb.ScalarFunction.Rpad, e.children, StringType)
 
       case e @ If(predicate, trueValue, falseValue) =>
         val castedTrueValue = trueValue match {

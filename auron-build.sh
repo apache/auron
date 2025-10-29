@@ -37,6 +37,7 @@ SUPPORTED_CELEBORN_VERSIONS=("0.5" "0.6")
 SUPPORTED_UNIFFLE_VERSIONS=("0.10")
 SUPPORTED_PAIMON_VERSIONS=("1.2")
 SUPPORTED_FLINK_VERSIONS=("1.18")
+SUPPORTED_ICEBERG_VERSIONS=("1.9")
 
 # -----------------------------------------------------------------------------
 # Function: print_help
@@ -60,6 +61,8 @@ print_help() {
     IFS=','; echo "  --celeborn <VERSION>     Specify Celeborn version (e.g. ${SUPPORTED_CELEBORN_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --uniffle <VERSION>      Specify Uniffle version (e.g. ${SUPPORTED_UNIFFLE_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --paimon <VERSION>       Specify Paimon version (e.g. ${SUPPORTED_PAIMON_VERSIONS[*]})"; unset IFS
+    IFS=','; echo "  --iceberg <VERSION>      Specify Iceberg version (e.g. ${SUPPORTED_ICEBERG_VERSIONS[*]})"; unset IFS
+
     echo "  -h, --help               Show this help message"
     echo
     echo "Examples:"
@@ -72,7 +75,8 @@ print_help() {
          "--scalaver ${SUPPORTED_SCALA_VERSIONS[*]: -1}" \
          "--celeborn ${SUPPORTED_CELEBORN_VERSIONS[*]: -1}" \
          "--uniffle ${SUPPORTED_UNIFFLE_VERSIONS[*]: -1}" \
-         "--paimon ${SUPPORTED_PAIMON_VERSIONS[*]: -1}"
+         "--paimon ${SUPPORTED_PAIMON_VERSIONS[*]: -1}" \
+         "--iceberg ${SUPPORTED_ICEBERG_VERSIONS[*]: -1}"
     exit 0
 }
 
@@ -126,6 +130,7 @@ SCALA_VER=""
 CELEBORN_VER=""
 UNIFFLE_VER=""
 PAIMON_VER=""
+ICEBERG_VER=""
 
 # -----------------------------------------------------------------------------
 # Section: Argument Parsing
@@ -247,6 +252,27 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --iceberg)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                ICEBERG_VER="$2"
+                if ! check_supported_version "$ICEBERG_VER" "${SUPPORTED_ICEBERG_VERSIONS[@]}"; then
+                  print_invalid_option_error Iceberg "$ICEBERG_VER" "${SUPPORTED_ICEBERG_VERSIONS[@]}"
+                fi
+                if [ -z "$SPARK_VER" ]; then
+                  echo "ERROR: Building iceberg requires spark at the same time, and only Spark versions 3.4 or 3.5 are supported."
+                  exit 1
+                fi
+                if [ "$SPARK_VER" != "3.4" ] && [ "$SPARK_VER" != "3.5" ]; then
+                  echo "ERROR: Building iceberg requires spark versions are 3.4 or 3.5."
+                  exit 1
+                fi
+                shift 2
+            else
+                IFS=','; echo "ERROR: Missing argument for --iceberg," \
+                "specify one of: ${SUPPORTED_ICEBERG_VERSIONS[*]}" >&2; unset IFS
+                exit 1
+            fi
+            ;;
         --flinkver)
             if [[ -n "$2" && "$2" != -* ]]; then
                 FLINK_VER="$2"
@@ -351,6 +377,9 @@ fi
 if [[ -n "$FLINK_VER" ]]; then
     BUILD_ARGS+=("-Pflink-$FLINK_VER")
 fi
+if [[ -n "$ICEBERG_VER" ]]; then
+    BUILD_ARGS+=("-Piceberg-$ICEBERG_VER")
+fi
 
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
 
@@ -376,6 +405,7 @@ RUST_VERSION=$(rustc --version | awk '{print $2}')
   echo "uniffle.version=${UNIFFLE_VER}"
   echo "paimon.version=${PAIMON_VER}"
   echo "flink.version=${FLINK_VER}"
+  echo "iceberg.version=${ICEBERG_VER}"
   echo "build.timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 } > "$BUILD_INFO_FILE"
 

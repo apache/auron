@@ -568,6 +568,7 @@
         <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.0.8</scalaTestVersion>
         <sparkVersion>3.0.3</sparkVersion>
+        <shortSparkVersion>3.0</shortSparkVersion>
       </properties>
     </profile>
 
@@ -578,6 +579,7 @@
         <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.1.3</sparkVersion>
+        <shortSparkVersion>3.1</shortSparkVersion>
       </properties>
     </profile>
 
@@ -588,6 +590,7 @@
         <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.2.4</sparkVersion>
+        <shortSparkVersion>3.2</shortSparkVersion>
       </properties>
     </profile>
 
@@ -598,6 +601,7 @@
         <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.3.4</sparkVersion>
+        <shortSparkVersion>3.3</shortSparkVersion>
       </properties>
     </profile>
 
@@ -608,6 +612,7 @@
         <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.4.4</sparkVersion>
+        <shortSparkVersion>3.4</shortSparkVersion>
       </properties>
     </profile>
 
@@ -618,6 +623,7 @@
         <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.5.7</sparkVersion>
+        <shortSparkVersion>3.5</shortSparkVersion>
       </properties>
     </profile>
 
@@ -790,6 +796,16 @@
       </modules>
       <properties>
         <flink.version>1.18.1</flink.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>iceberg-1.9</id>
+      <modules>
+        <module>thirdparty/auron-iceberg</module>
+      </modules>
+      <properties>
+        <icebergVersion>1.9.2</icebergVersion>
       </properties>
     </profile>
   </profiles>
