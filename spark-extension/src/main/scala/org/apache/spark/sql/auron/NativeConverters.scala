@@ -1202,8 +1202,8 @@ object NativeConverters extends Logging {
               .setInputSchema(NativeConverters.convertSchema(paramsSchema)))
           aggBuilder.addAllChildren(convertedChildren.keys.asJava)
         } else {
-          throw new NotImplementedError(s"unsupported aggregate expression: (${e.getClass})," +
-            s" set ${SparkAuronConfiguration.UDAF_FALLBACK_ENABLE.key} true to enable UDAF fallbacking")
+          throw new NotImplementedError(s"Unsupported aggregate expression: (${e.getClass})," +
+            s" set ${SparkAuronConfiguration.UDAF_FALLBACK_ENABLE.key} to true to enable UDAF fallbacking.")
         }
 
     }
