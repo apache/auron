@@ -930,6 +930,11 @@ object NativeConverters extends Logging {
         val children = e.children.map(Cast(_, e.dataType))
         buildScalarFunction(pb.ScalarFunction.Coalesce, children, e.dataType)
 
+      case e: StringLPad =>
+        buildScalarFunction(pb.ScalarFunction.Lpad, e.children, StringType)
+      case e: StringRPad =>
+        buildScalarFunction(pb.ScalarFunction.Rpad, e.children, StringType)
+
       case e @ If(predicate, trueValue, falseValue) =>
         val castedTrueValue = trueValue match {
           case t if t.dataType != e.dataType => Cast(t, e.dataType)

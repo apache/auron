@@ -286,4 +286,22 @@ class AuronQuerySuite
       }
     }
   }
+
+  test("lpad/rpad basic") {
+    Seq(
+      ("select lpad('abc', 5, '*')", Row("**abc")),
+      ("select rpad('abc', 5, '*')", Row("abc**")),
+      ("select lpad('spark', 2, '0')", Row("sp")),
+      ("select rpad('spark', 2, '0')", Row("sp")),
+      ("select lpad('9', 5, 'ab')", Row("abab9")),
+      ("select rpad('9', 5, 'ab')", Row("9abab")),
+      ("select lpad('hi', 5, '')", Row("hi")),
+      ("select rpad('hi', 5, '')", Row("hi")),
+      ("select lpad('x', 0, 'a')", Row("")),
+      ("select rpad('x', -1, 'a')", Row("")),
+      ("select lpad('Z', 3, '++')", Row("++Z")),
+      ("select rpad('Z', 3, 'AB')", Row("ZAB"))).foreach { case (q, expected) =>
+      checkAnswer(sql(q), Seq(expected))
+    }
+  }
 }
