@@ -412,7 +412,7 @@ class AuronQuerySuite
       }
     }
   }
-      
+
   test("lpad/rpad basic") {
     Seq(
       ("select lpad('abc', 5, '*')", Row("**abc")),
