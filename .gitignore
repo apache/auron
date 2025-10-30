@@ -35,6 +35,8 @@ lib/
 .*.swp
 .*.swo
 *.cache
+.metals/
+.github/
 
 # macOS
 .DS_Store
@@ -45,6 +47,7 @@ docker_cache
 
 # Rust
 target/
+target-docker/
 
 # Protoc generated src
 spark-extension/src/generated-sources
