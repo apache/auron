@@ -97,6 +97,8 @@ object NativeConverters extends Logging {
     AuronConverters.getBooleanConf("spark.auron.udf.brickhouse.enabled", defaultValue = true)
   def decimalArithOpEnabled: Boolean =
     AuronConverters.getBooleanConf("spark.auron.decimal.arithOp.enabled", defaultValue = false)
+  def datetimeExtractEnabled: Boolean =
+    AuronConverters.getBooleanConf("spark.auron.datetime.extract.enabled", defaultValue = false)
 
   def scalarTypeSupported(dataType: DataType): Boolean = {
     dataType match {
@@ -878,6 +880,13 @@ object NativeConverters extends Logging {
       case Month(child) => buildExtScalarFunction("Month", child :: Nil, IntegerType)
       case DayOfMonth(child) => buildExtScalarFunction("Day", child :: Nil, IntegerType)
 
+      case e: Hour if datetimeExtractEnabled =>
+        buildTimePartExt("Hour", e.children.head, isPruningExpr, fallback)
+      case e: Minute if datetimeExtractEnabled =>
+        buildTimePartExt("Minute", e.children.head, isPruningExpr, fallback)
+      case e: Second if datetimeExtractEnabled =>
+        buildTimePartExt("Second", e.children.head, isPruningExpr, fallback)
+
       // startswith is converted to scalar function in pruning-expr mode
       case StartsWith(expr, Literal(prefix, StringType)) if isPruningExpr =>
         buildExprNode(
@@ -1282,6 +1291,20 @@ object NativeConverters extends Logging {
             args.map(expr => convertExprWithFallback(expr, isPruningExpr, fallback)).asJava)
           .setReturnType(convertDataType(dataType)))
     }
+
+  private def buildTimePartExt(
+      name: String,
+      child: Expression,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    val tzArg: Expression = child.dataType match {
+      case TimestampType =>
+        Literal(SQLConf.get.sessionLocalTimeZone, StringType)
+      case _ =>
+        Literal.create(null, StringType)
+    }
+    buildExtScalarFunctionNode(name, Seq(child, tzArg), IntegerType, isPruningExpr, fallback)
+  }
 
   def castIfNecessary(expr: Expression, dataType: DataType): Expression = {
     if (expr.dataType == dataType) {
