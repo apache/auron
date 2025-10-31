@@ -287,6 +287,28 @@ class AuronQuerySuite
     }
   }
 
+  test("test filter with quarter function") {
+    withTable("t1") {
+      sql("""
+          |create table t1 using parquet as
+          |select '2024-02-10' as event_time
+          |union all select '2024-04-11'
+          |union all select '2024-07-20'
+          |union all select '2024-12-18'
+          |""".stripMargin)
+
+      checkAnswer(
+        sql("""
+            |select q, count(*)
+            |from (select event_time, quarter(event_time) as q from t1) t
+            |where q <= 3
+            |group by q
+            |order by q
+            |""".stripMargin),
+        Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+    }
+  }
+
   test("lpad/rpad basic") {
     Seq(
       ("select lpad('abc', 5, '*')", Row("**abc")),

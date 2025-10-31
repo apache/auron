@@ -60,6 +60,7 @@ pub fn create_spark_ext_function(name: &str) -> Result<ScalarFunctionImplementat
         "Year" => Arc::new(spark_dates::spark_year),
         "Month" => Arc::new(spark_dates::spark_month),
         "Day" => Arc::new(spark_dates::spark_day),
+        "Quarter" => Arc::new(spark_dates::spark_quarter),
         "BrickhouseArrayUnion" => Arc::new(brickhouse::array_union::array_union),
         "Round" => Arc::new(spark_round::spark_round),
         "NormalizeNanAndZero" => {
