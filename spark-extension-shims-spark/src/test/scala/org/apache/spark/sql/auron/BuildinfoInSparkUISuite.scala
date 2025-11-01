@@ -16,7 +16,15 @@
  */
 package org.apache.spark.sql.auron
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.ExplainUtils
+import org.apache.spark.sql.execution.auron.plan.NativeParquetScanExec
 import org.apache.spark.sql.execution.ui.AuronSQLAppStatusListener
+
+import org.apache.auron.spark.ui.AuronPlanFallbackEvent
 
 class BuildinfoInSparkUISuite
     extends org.apache.spark.sql.QueryTest
