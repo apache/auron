@@ -324,8 +324,7 @@ class AuronQuerySuite
       ("select overlay('abcdef', 'xyz', 1, 6)", Row("xyz")),
       ("select overlay('abcdef', 'xyz', 10, 2)", Row("abcdefxyz")),
       ("select overlay('abcdef', '123', 2, 0)", Row("a123bcdef")),
-      ("select overlay('abcdef', 'XYZ', 1, 3)", Row("XYZdef"))
-    ).foreach { case (q, expected) =>
+      ("select overlay('abcdef', 'XYZ', 1, 3)", Row("XYZdef"))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
     }
   }
@@ -333,8 +332,7 @@ class AuronQuerySuite
   test("overlay with empty string") {
     Seq(
       ("select overlay('', '123', 1, 3)", Row("123")),
-      ("select overlay('', '', 1, 0)", Row(""))
-    ).foreach { case (q, expected) =>
+      ("select overlay('', '', 1, 0)", Row(""))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
     }
   }
@@ -343,8 +341,7 @@ class AuronQuerySuite
     Seq(
       ("select overlay('abcdef', '123', -3, 2)", Row("123f")),
       ("select overlay('abcdef', '123', 4, -1)", Row("abc123")),
-      ("select overlay('abcdef', '123', -4, -2)", Row("123f"))
-    ).foreach { case (q, expected) =>
+      ("select overlay('abcdef', '123', -4, -2)", Row("123f"))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
     }
   }
@@ -354,8 +351,7 @@ class AuronQuerySuite
       ("select overlay('abcdef', 'XYZ', 1, 6)", Row("XYZ")),
       ("select overlay('abcdef', '12345', 1, 5)", Row("12345f")),
       ("select overlay('abcdef', 'XYZ', 1, 1)", Row("XYZbcdef")),
-      ("select overlay('abcdef', 'XYZ', 6, 1)", Row("abcdeXYZ"))
-    ).foreach { case (q, expected) =>
+      ("select overlay('abcdef', 'XYZ', 6, 1)", Row("abcdeXYZ"))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
     }
   }
