@@ -317,4 +317,31 @@ class AuronQuerySuite
       checkAnswer(sql(q), Seq(expected))
     }
   }
+
+  test("sinh/cosh/tanh scalar basics (rounded to 9)") {
+    checkAnswer(
+      sql("select round(sinh(0.0), 9), round(cosh(0.0), 9), round(tanh(0.0), 9)"),
+      Seq(Row(0.0, 1.0, 0.0))
+    )
+
+    checkAnswer(sql(
+      """
+        |select
+        |  round(sinh(1.0), 9) as s1,
+        |  round(cosh(1.0), 9) as c1,
+        |  round(tanh(1.0), 9) as t1
+        |""".stripMargin),
+      Seq(Row(1.175201194, 1.543080635, 0.761594156))
+    )
+
+    checkAnswer(sql(
+      """
+        |select
+        |  round(sinh(-1.25), 9) = -round(sinh(1.25), 9),
+        |  round(cosh(-1.25), 9) =  round(cosh(1.25), 9),
+        |  round(tanh(-1.25), 9) = -round(tanh(1.25), 9)
+        |""".stripMargin),
+      Seq(Row(true, true, true))
+    )
+  }
 }
