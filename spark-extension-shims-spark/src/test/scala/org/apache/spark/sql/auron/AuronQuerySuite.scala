@@ -317,4 +317,39 @@ class AuronQuerySuite
       checkAnswer(sql(q), Seq(expected))
     }
   }
+
+  test("initcap basic") {
+    Seq(
+      ("select initcap('spark sql')", Row("Spark Sql")),
+      ("select initcap('SPARK')", Row("Spark")),
+      ("select initcap('sPaRk')", Row("Spark")),
+      ("select initcap('')", Row("")),
+      ("select initcap(null)", Row(null))).foreach { case (q, expected) =>
+      checkAnswer(sql(q), Seq(expected))
+    }
+  }
+
+  test("initcap: word boundaries and punctuation") {
+    Seq(
+      ("select initcap('hello world')", Row("Hello World")),
+      ("select initcap('hello_world')", Row("Hello_world")),
+      ("select initcap('über-alles')", Row("Über-alles")),
+      ("select initcap('foo.bar/baz')", Row("Foo.bar/baz")),
+      ("select initcap('v2Ray is COOL')", Row("V2ray Is Cool")),
+      ("select initcap('rock''n''roll')", Row("Rocknroll")),
+      ("select initcap('hi\\tthere')", Row("Hi\tthere")),
+      ("select initcap('hi\\nthere')", Row("Hi\nthere"))).foreach { case (q, expected) =>
+      checkAnswer(sql(q), Seq(expected))
+    }
+  }
+
+  test("initcap: mixed cases and edge cases") {
+    Seq(
+      ("select initcap('a1b2 c3D4')", Row("A1b2 C3d4")),
+      ("select initcap('---abc---')", Row("---abc---")),
+      ("select initcap('  multiple   spaces ')", Row("  Multiple   Spaces "))).foreach {
+      case (q, expected) =>
+        checkAnswer(sql(q), Seq(expected))
+    }
+  }
 }
