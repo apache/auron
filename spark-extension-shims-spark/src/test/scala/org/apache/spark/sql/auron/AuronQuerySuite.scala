@@ -317,4 +317,99 @@ class AuronQuerySuite
       checkAnswer(sql(q), Seq(expected))
     }
   }
+
+  test("radians/degrees scalar constants") {
+    checkAnswer(
+      sql("""
+          |select
+          |  radians(0.0)  as r0,
+          |  degrees(0.0)  as d0,
+          |  radians(180.0) as r180,
+          |  degrees(pi()) as dpi
+          |""".stripMargin),
+      Seq(Row(0.0, 0.0, Math.PI, 180.0)))
+  }
+
+  test("radians on column doubles") {
+    withTable("t_rad") {
+      sql("create table t_rad(c double) using parquet")
+      sql("insert into t_rad values (0.0), (30.0), (45.0), (90.0), (180.0), (-45.0)")
+      val df = sql("select radians(c) from t_rad")
+      checkAnswer(
+        df,
+        Seq(
+          Row(0.0),
+          Row(Math.toRadians(30.0)),
+          Row(Math.toRadians(45.0)),
+          Row(Math.toRadians(90.0)),
+          Row(Math.toRadians(180.0)),
+          Row(Math.toRadians(-45.0))))
+    }
+  }
+
+  test("degrees on literals (with tolerance, no temp table)") {
+    val df = sql(
+      """
+        |SELECT degrees(c) AS deg
+        |FROM VALUES
+        |  (0.0D),
+        |  (PI()/6),
+        |  (PI()/4),
+        |  (PI()/2),
+        |  (PI()),
+        |  (-PI()/4)
+        |AS t(c)
+        |""".stripMargin)
+
+    val actual = df.collect().map(_.getDouble(0)).toSeq
+    val expected = Seq(0.0, 30.0, 45.0, 90.0, 180.0, -45.0)
+    val tol = 1e-12
+
+    assert(actual.size == expected.size)
+    actual.zip(expected).foreach { case (a, e) =>
+      assert(math.abs(a - e) <= tol, s"expected ~$e, got $a")
+    }
+  }
+
+  test("radians/degrees with nulls and empties") {
+    val df = sql("""
+        |select
+        |  radians(c) as r,
+        |  degrees(c) as d
+        |from values
+        |  (cast(null as double)),
+        |  (0.0),
+        |  (cast(null as int)),
+        |  (180.0)
+        |as t(c)
+        |""".stripMargin)
+    checkAnswer(df, Seq(Row(null, null), Row(0.0, 0.0), Row(null, null), Row(Math.PI, 10313.240312354817)))
+  }
+
+  test("radians/degrees with integral and decimal types (implicit cast to double)") {
+    withTable("t_mix") {
+      sql("create table t_mix(ci int, cl long, cf float, cd decimal(10,2)) using parquet")
+      sql("insert into t_mix values (30, 45, 60.0, 90.00)")
+      val df = sql("""
+          |select
+          |  radians(ci), degrees(ci),
+          |  radians(cl), degrees(cl),
+          |  radians(cf), degrees(cf),
+          |  radians(cd), degrees(cd)
+          |from t_mix
+          |""".stripMargin)
+      checkAnswer(
+        df,
+        Seq(
+          Row(
+            Math.toRadians(30.0),
+            30.0,
+            Math.toRadians(45.0),
+            45.0,
+            Math.toRadians(60.0),
+            60.0,
+            Math.toRadians(90.0),
+            90.0)))
+    }
+  }
 }

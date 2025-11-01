@@ -830,6 +830,8 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Hex => spark_fun::math::hex(),
 
             ScalarFunction::Power => f::math::power(),
+            ScalarFunction::Radians => f::math::radians(),
+            ScalarFunction::Degrees => f::math::degrees(),
 
             ScalarFunction::SparkExtFunctions => {
                 unreachable!()

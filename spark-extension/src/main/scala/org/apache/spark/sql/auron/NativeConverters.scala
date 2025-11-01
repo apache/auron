@@ -780,6 +780,8 @@ object NativeConverters extends Logging {
       // builtin scalar functions
       case e: Sqrt => buildScalarFunction(pb.ScalarFunction.Sqrt, e.children, e.dataType)
       case e: Sin => buildScalarFunction(pb.ScalarFunction.Sin, e.children, e.dataType)
+      case e: ToRadians => buildScalarFunction(pb.ScalarFunction.Radians, e.children, e.dataType)
+      case e: ToDegrees => buildScalarFunction(pb.ScalarFunction.Degrees, e.children, e.dataType)
       case e: Cos => buildScalarFunction(pb.ScalarFunction.Cos, e.children, e.dataType)
       case e: Tan => buildScalarFunction(pb.ScalarFunction.Tan, e.children, e.dataType)
       case e: Asin => buildScalarFunction(pb.ScalarFunction.Asin, e.children, e.dataType)
