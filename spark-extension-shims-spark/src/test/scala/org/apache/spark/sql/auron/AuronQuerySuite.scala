@@ -348,8 +348,7 @@ class AuronQuerySuite
   }
 
   test("degrees on literals (with tolerance, no temp table)") {
-    val df = sql(
-      """
+    val df = sql("""
         |SELECT degrees(c) AS deg
         |FROM VALUES
         |  (0.0D),
@@ -383,7 +382,9 @@ class AuronQuerySuite
         |  (180.0)
         |as t(c)
         |""".stripMargin)
-    checkAnswer(df, Seq(Row(null, null), Row(0.0, 0.0), Row(null, null), Row(Math.PI, 10313.240312354817)))
+    checkAnswer(
+      df,
+      Seq(Row(null, null), Row(0.0, 0.0), Row(null, null), Row(Math.PI, 10313.240312354817)))
   }
 
   test("radians/degrees with integral and decimal types (implicit cast to double)") {
