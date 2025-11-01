@@ -319,4 +319,21 @@ class AuronFunctionSuite
     val row = df.collect().head
     assert(row.isNullAt(0) && row.isNullAt(1) && row.isNullAt(2))
   }
+
+  test("nanvl NaN") {
+    withTable("t1") {
+      sql(
+        "create table t1 using parquet as select 'NaN'" +
+          " as base, 3 as exponent")
+      val functions =
+        """
+          |select
+          |  nanvl(base, 123), base, nanvl(exponent, 123)
+          |from t1
+            """.stripMargin
+
+      val df = sql(functions)
+      checkAnswer(df, Seq(Row(123.0, "NaN", 3)))
+    }
+  }
 }

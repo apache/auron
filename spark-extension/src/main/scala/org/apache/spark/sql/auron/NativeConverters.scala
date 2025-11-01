@@ -381,8 +381,10 @@ object NativeConverters extends Logging {
 
     val buildBinaryExprNode: (Expression, Expression, String) => PhysicalExprNode =
       this.buildBinaryExprNode(_, _, _, isPruningExpr, fallback)
-    val buildScalarFunction: (pb.ScalarFunction, Seq[Expression], DataType) => PhysicalExprNode =
+    val buildScalarFunction
+        : (pb.ScalarFunction, Seq[Expression], DataType) => PhysicalExprNode = {
       this.buildScalarFunctionNode(_, _, _, isPruningExpr, fallback)
+    }
     val buildExtScalarFunction: (String, Seq[Expression], DataType) => PhysicalExprNode =
       this.buildExtScalarFunctionNode(_, _, _, isPruningExpr, fallback)
 
@@ -822,7 +824,8 @@ object NativeConverters extends Logging {
       case e: Factorial =>
         buildScalarFunction(pb.ScalarFunction.Factorial, e.children, e.dataType)
       case e: Hex => buildScalarFunction(pb.ScalarFunction.Hex, e.children, e.dataType)
-
+      case e: NaNvl =>
+        buildScalarFunction(pb.ScalarFunction.NaNvl, e.children, e.dataType)
       case e: Round =>
         e.scale match {
           case Literal(n: Int, _) =>
