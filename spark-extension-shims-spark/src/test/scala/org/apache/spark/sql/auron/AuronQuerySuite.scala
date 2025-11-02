@@ -317,4 +317,42 @@ class AuronQuerySuite
       checkAnswer(sql(q), Seq(expected))
     }
   }
+
+  test("acosh/asinh/atanh scalar basics (with tolerance)") {
+    val tol = 1e-12
+
+    checkAnswer(
+      sql(
+        s"select abs(acosh(1.0) - 0.0) < $tol, abs(asinh(0.0) - 0.0) < $tol, abs(atanh(0.0) - 0.0) < $tol"),
+      Seq(Row(true, true, true)))
+
+    checkAnswer(
+      sql(s"""
+           |select
+           |  abs(asinh(1.0) - 0.881373587019543) < $tol,
+           |  abs(acosh(2.0) - 1.3169578969248166) < $tol,
+           |  abs(atanh(0.5) - 0.5493061443340549) < $tol
+           |""".stripMargin),
+      Seq(Row(true, true, true)))
+
+    checkAnswer(
+      sql(s"""
+           |select
+           |  abs(asinh(-1.25) + asinh(1.25)) < $tol as asinh_odd,
+           |  abs(atanh(-0.8)  + atanh(0.8))  < $tol as atanh_odd
+           |""".stripMargin),
+      Seq(Row(true, true)))
+  }
+
+  test("acosh/asinh/atanh implicit cast from integers / decimals (rounded + tolerance)") {
+    val tol = 1e-12
+    checkAnswer(
+      sql(s"""
+           |select
+           |  abs(round(asinh(2), 12) - 1.443635475179) < $tol              as asinh_int_ok,
+           |  abs(round(atanh(0.5D), 12) - 0.549306144334) < $tol           as atanh_double_ok,
+           |  abs(round(acosh(cast(2 as decimal(10,0))), 12) - 1.316957896925) < $tol as acosh_decimal_ok
+           |""".stripMargin),
+      Seq(Row(true, true, true)))
+  }
 }

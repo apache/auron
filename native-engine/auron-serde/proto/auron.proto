@@ -267,6 +267,9 @@ enum ScalarFunction {
   Factorial=65;
   Hex=66;
   Power=67;
+  Acosh=74;
+  Asinh=75;
+  Atanh=76;
   SparkExtFunctions=10000;
 }
 
