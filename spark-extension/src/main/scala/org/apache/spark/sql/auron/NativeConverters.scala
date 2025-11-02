@@ -788,6 +788,8 @@ object NativeConverters extends Logging {
       case e: Exp => buildScalarFunction(pb.ScalarFunction.Exp, e.children, e.dataType)
       case e: Log =>
         buildScalarFunction(pb.ScalarFunction.Ln, e.children.map(nullIfNegative), e.dataType)
+      case e: Logarithm =>
+        buildScalarFunction(pb.ScalarFunction.Log, e.children.map(nullIfNegative), e.dataType)
       case e: Log2 =>
         buildScalarFunction(pb.ScalarFunction.Log2, e.children.map(nullIfNegative), e.dataType)
       case e: Log10 =>

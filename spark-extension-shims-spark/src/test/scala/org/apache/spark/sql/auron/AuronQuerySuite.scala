@@ -317,4 +317,25 @@ class AuronQuerySuite
       checkAnswer(sql(q), Seq(expected))
     }
   }
+
+  test("cbrt: literals and basic identities") {
+    Seq(
+      ("select cbrt(27.0D)", Row(3.0)),
+      ("select cbrt(0.0D)", Row(0.0)),
+      ("select cbrt(-8.0D)", Row(-2.0)),
+      ("select round(cbrt(79.0D), 6)", Row(4.29084))).foreach { case (q, expected) =>
+      checkAnswer(sql(q), Seq(expected))
+    }
+  }
+
+  test("cbrt: wide range sanity") {
+    val q =
+      """
+        |select
+        |  round(cbrt(1e9D), 6),      -- 1000
+        |  round(cbrt(1e-9D), 12)     -- 0.001
+        |""".stripMargin
+    checkAnswer(sql(q), Seq(Row(1000.000000, 0.001)))
+  }
+
 }
