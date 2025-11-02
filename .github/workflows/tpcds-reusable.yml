@@ -309,7 +309,7 @@ jobs:
         run: |
           mkdir -p /tmp/rss/data && mkdir -p /tmp/rss/logs && \
           cd celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }} && \
-          bash -c "echo -e 'CELEBORN_MASTER_MEMORY=4g\nCELEBORN_WORKER_MEMORY=4g\nCELEBORN_WORKER_OFFHEAP_MEMORY=8g\nCELEBORN_LOG_DIR=/tmp/rss/logs' > ./conf/celeborn-env.sh" && \
+          bash -c "echo -e 'CELEBORN_MASTER_MEMORY=4g\nCELEBORN_WORKER_MEMORY=4g\nCELEBORN_WORKER_OFFHEAP_MEMORY=8g\nCELEBORN_LOG_DIR=/tmp/rss/logs\nCELEBORN_MASTER_JAVA_OPTS=\"-Xmx2g -Xms1g\"\nCELEBORN_WORKER_JAVA_OPTS=\"-Xmx2g -Xms1g\"' > ./conf/celeborn-env.sh" && \
           bash -c "echo -e 'celeborn.worker.storage.dirs /tmp/rss\nceleborn.worker.storage.workingDir data\nceleborn.worker.commitFiles.threads 128\nceleborn.worker.sortPartition.threads 64' > ./conf/celeborn-defaults.conf" && \
           bash ./sbin/start-master.sh && \
           bash ./sbin/start-worker.sh
