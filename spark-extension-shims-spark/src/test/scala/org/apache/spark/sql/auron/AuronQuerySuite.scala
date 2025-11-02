@@ -341,4 +341,12 @@ class AuronQuerySuite
         |""".stripMargin),
       Seq(Row(true, true, true)))
   }
+
+  test("sinh/cosh/tanh null propagation") {
+    withTable("t_null") {
+      sql("create table t_null(c double) using parquet")
+      sql("insert into t_null values (null)")
+      checkAnswer(sql("select sinh(c), cosh(c), tanh(c) from t_null"), Seq(Row(null, null, null)))
+    }
+  }
 }
