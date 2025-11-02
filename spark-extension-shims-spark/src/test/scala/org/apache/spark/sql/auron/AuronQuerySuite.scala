@@ -338,4 +338,32 @@ class AuronQuerySuite
     checkAnswer(sql(q), Seq(Row(1000.000000, 0.001)))
   }
 
+  test("log: column (from VALUES) incl. zero, negative, null") {
+    val q =
+      """
+        |select log(x)
+        |from values
+        |  (1.0D),              -- 0.0
+        |  (0.0D),              -- -Infinity
+        |  (-1.0D),             -- NaN
+        |  (NULL)               -- NULL
+        |as t(x)
+        |""".stripMargin
+    val rows = sql(q).collect().toSeq
+
+    assert(rows.length == 4)
+    assert(rows(0).getDouble(0) == 0.0)
+    assert(rows(1).get(0) == null)
+    assert(rows(2).get(0) == null)
+    assert(rows(3).get(0) == null)
+  }
+
+  test("log: rounding tolerance on typical set") {
+    val q =
+      """
+        |select round(log(v), 6)
+        |from values (2.0D), (3.0D), (10.0D) as t(v)
+        |""".stripMargin
+    checkAnswer(sql(q), Seq(Row(0.693147), Row(1.098612), Row(2.302585)))
+  }
 }
