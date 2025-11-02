@@ -766,6 +766,8 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Asin => f::math::asin(),
             ScalarFunction::Acos => f::math::acos(),
             ScalarFunction::Atan => f::math::atan(),
+            ScalarFunction::Atan2 => f::math::atan2(),
+            ScalarFunction::Cot => f::math::cot(),
             ScalarFunction::Exp => f::math::exp(),
             ScalarFunction::Log => f::math::log(),
             ScalarFunction::Ln => f::math::ln(),
