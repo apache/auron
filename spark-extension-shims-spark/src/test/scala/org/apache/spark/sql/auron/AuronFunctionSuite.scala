@@ -323,12 +323,13 @@ class AuronFunctionSuite
   test("cot basic values & nulls") {
     val pi = math.Pi
     Seq(
-      ("select round(cot(PI() / 4), 6)", Row(1.0)),                       // cot(π/4) = 1
-      ("select round(cot(PI() / 3), 6)", Row(1.0 / math.tan(pi / 3))),    // ≈ 0.577350
-      ("select round(cot(-PI() / 4), 6)", Row(-1.0)),                      // cot(-π/4) = -1
-      ("select round(cot(PI() / 6), 6)", Row(1.0 / math.tan(pi / 6)))     // ≈ 1.732051
+      ("select round(cot(PI() / 4), 6)", Row(1.0)), // cot(π/4) = 1
+      ("select round(cot(PI() / 3), 6)", Row(1.0 / math.tan(pi / 3))), // ≈ 0.577350
+      ("select round(cot(-PI() / 4), 6)", Row(-1.0)), // cot(-π/4) = -1
+      ("select round(cot(PI() / 6), 6)", Row(1.0 / math.tan(pi / 6))) // ≈ 1.732051
     ).foreach { case (q, Row(expected: Double)) =>
-      val expectedRounded = BigDecimal(expected).setScale(6, BigDecimal.RoundingMode.HALF_UP).toDouble
+      val expectedRounded =
+        BigDecimal(expected).setScale(6, BigDecimal.RoundingMode.HALF_UP).toDouble
       checkAnswer(sql(q), Seq(Row(expectedRounded)))
     }
     checkAnswer(sql("select cot(NULL)"), Seq(Row(null)))
@@ -343,8 +344,7 @@ class AuronFunctionSuite
       // x=0, y>0 →  π/2
       ("select round(atan2(1.0, 0.0), 6)", Row(1.570796)),
       // x=0, y<0 → -π/2
-      ("select round(atan2(-1.0, 0.0), 6)", Row(-1.570796))
-    ).foreach { case (q, expected) =>
+      ("select round(atan2(-1.0, 0.0), 6)", Row(-1.570796))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
     }
 
@@ -356,17 +356,13 @@ class AuronFunctionSuite
       // Q3: (y=-1, x=-1) → -3π/4
       ("select round(atan2(-1.0, -1.0), 6)", Row(-2.356194)),
       // Q4: (y=-1, x=+1) → -π/4
-      ("select round(atan2(-1.0, 1.0), 6)", Row(-0.785398))
-    ).foreach { case (q, expected) =>
+      ("select round(atan2(-1.0, 1.0), 6)", Row(-0.785398))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
     }
 
-    Seq(
-      "select atan2(NULL, 1.0)",
-      "select atan2(1.0, NULL)",
-      "select atan2(NULL, NULL)"
-    ).foreach { q =>
-      checkAnswer(sql(q), Seq(Row(null)))
-    }
+    Seq("select atan2(NULL, 1.0)", "select atan2(1.0, NULL)", "select atan2(NULL, NULL)")
+      .foreach { q =>
+        checkAnswer(sql(q), Seq(Row(null)))
+      }
   }
 }
