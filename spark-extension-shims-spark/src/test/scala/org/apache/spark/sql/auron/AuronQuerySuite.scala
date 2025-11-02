@@ -344,8 +344,8 @@ class AuronQuerySuite
         |select log(x)
         |from values
         |  (1.0D),              -- 0.0
-        |  (0.0D),              -- -Infinity
-        |  (-1.0D),             -- NaN
+        |  (0.0D),              -- NULL
+        |  (-1.0D),             -- NULL
         |  (NULL)               -- NULL
         |as t(x)
         |""".stripMargin
