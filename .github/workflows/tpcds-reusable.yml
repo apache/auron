@@ -175,7 +175,7 @@ jobs:
             UNIFFLE_NUMBER="${UNIFFLE_NUMBER#uniffle-}"
           fi
           
-          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }}"
+          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }} --skiptests false"
           if [ -n "${{ inputs.celebornver }}" ]; then
             CMD="$CMD --celeborn $CELEBORN_NUMBER"
           fi
