@@ -87,7 +87,7 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 object NativeConverters extends Logging {
 
-  private val sparkAuronConfig: AuronConfiguration =
+  private def sparkAuronConfig: AuronConfiguration =
     AuronAdaptor.getInstance.getAuronConfiguration
   def udfEnabled: Boolean =
     AuronConverters.getBooleanConf("spark.auron.udf.enabled", defaultValue = true)
