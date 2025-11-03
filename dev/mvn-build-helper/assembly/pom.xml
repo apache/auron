@@ -117,7 +117,6 @@
                     <exclude>org.apache.arrow.c.**</exclude>
                   </excludes>
                 </relocation>
-                <!-- Shade Netty to avoid conflicts with runtime shaded Spark -->
                 <relocation>
                   <pattern>io.netty</pattern>
                   <shadedPattern>${auron.shade.packageName}.io.netty</shadedPattern>
