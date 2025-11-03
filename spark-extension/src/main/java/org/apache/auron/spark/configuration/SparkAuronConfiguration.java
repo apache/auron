@@ -35,6 +35,8 @@ import scala.collection.immutable.List$;
  */
 public class SparkAuronConfiguration extends AuronConfiguration {
 
+    // When using getOptional, the prefix will be automatically completed. If you only need to print the Option key,
+    // please manually add the prefix.
     public static final String SPARK_PREFIX = "spark.";
 
     public static final ConfigOption<Boolean> UI_ENABLED = ConfigOptions.key("auron.ui.enabled")
