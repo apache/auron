@@ -191,11 +191,8 @@ object AuronConverters extends Logging {
 
   def convertSparkPlan(exec: SparkPlan): SparkPlan = {
     exec match {
-      case e: ShuffleExchangeExec => tryConvert(e, convertShuffleExchangeExec)
-      case e: BroadcastExchangeExec if enableBroadcastExchange =>
-        tryConvert(e, convertBroadcastExchangeExec)
       case e: ShuffleExchangeExec if enableExchange => tryConvert(e, convertShuffleExchangeExec)
-      case e: BroadcastExchangeExec =>
+      case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
         tryConvert(e, convertFileSourceScanExec)
@@ -474,7 +471,7 @@ object AuronConverters extends Logging {
       case p =>
         throw new NotImplementedError(
           s"Cannot convert FileSourceScanExec tableIdentifier: ${tableIdentifier.getOrElse(
-            "unknown")}, class: ${p.getClass.getName}")
+              "unknown")}, class: ${p.getClass.getName}")
     }
   }
 
