@@ -35,6 +35,7 @@ lib/
 .*.swp
 .*.swo
 *.cache
+.metals/
 
 # macOS
 .DS_Store

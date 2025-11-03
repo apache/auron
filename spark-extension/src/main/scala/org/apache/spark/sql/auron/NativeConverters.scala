@@ -859,6 +859,8 @@ object NativeConverters extends Logging {
         buildScalarFunction(pb.ScalarFunction.MD5, Seq(unpackBinaryTypeCast(_1)), StringType)
       case Reverse(_1) =>
         buildScalarFunction(pb.ScalarFunction.Reverse, Seq(unpackBinaryTypeCast(_1)), StringType)
+      case InitCap(_1) =>
+        buildScalarFunction(pb.ScalarFunction.InitCap, Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(224, _)) =>
         buildExtScalarFunction("Sha224", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(0, _)) =>
@@ -878,6 +880,10 @@ object NativeConverters extends Logging {
       case Year(child) => buildExtScalarFunction("Year", child :: Nil, IntegerType)
       case Month(child) => buildExtScalarFunction("Month", child :: Nil, IntegerType)
       case DayOfMonth(child) => buildExtScalarFunction("Day", child :: Nil, IntegerType)
+      case Quarter(child) => buildExtScalarFunction("Quarter", child :: Nil, IntegerType)
+
+      case e: Levenshtein =>
+        buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)
 
       // startswith is converted to scalar function in pruning-expr mode
       case StartsWith(expr, Literal(prefix, StringType)) if isPruningExpr =>

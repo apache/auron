@@ -287,6 +287,28 @@ class AuronQuerySuite
     }
   }
 
+  test("test filter with quarter function") {
+    withTable("t1") {
+      sql("""
+          |create table t1 using parquet as
+          |select '2024-02-10' as event_time
+          |union all select '2024-04-11'
+          |union all select '2024-07-20'
+          |union all select '2024-12-18'
+          |""".stripMargin)
+
+      checkAnswer(
+        sql("""
+            |select q, count(*)
+            |from (select event_time, quarter(event_time) as q from t1) t
+            |where q <= 3
+            |group by q
+            |order by q
+            |""".stripMargin),
+        Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+    }
+  }
+
   test("lpad/rpad basic") {
     Seq(
       ("select lpad('abc', 5, '*')", Row("**abc")),
@@ -325,6 +347,13 @@ class AuronQuerySuite
       ("select overlay('abcdef', 'xyz', 10, 2)", Row("abcdefxyz")),
       ("select overlay('abcdef', '123', 2, 0)", Row("a123bcdef")),
       ("select overlay('abcdef', 'XYZ', 1, 3)", Row("XYZdef"))).foreach { case (q, expected) =>
+  test("initcap basic") {
+    Seq(
+      ("select initcap('spark sql')", Row("Spark Sql")),
+      ("select initcap('SPARK')", Row("Spark")),
+      ("select initcap('sPaRk')", Row("Spark")),
+      ("select initcap('')", Row("")),
+      ("select initcap(null)", Row(null))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
     }
   }
@@ -333,6 +362,16 @@ class AuronQuerySuite
     Seq(
       ("select overlay('', '123', 1, 3)", Row("123")),
       ("select overlay('', '', 1, 0)", Row(""))).foreach { case (q, expected) =>
+  test("initcap: word boundaries and punctuation") {
+    Seq(
+      ("select initcap('hello world')", Row("Hello World")),
+      ("select initcap('hello_world')", Row("Hello_world")),
+      ("select initcap('über-alles')", Row("Über-alles")),
+      ("select initcap('foo.bar/baz')", Row("Foo.bar/baz")),
+      ("select initcap('v2Ray is COOL')", Row("V2ray Is Cool")),
+      ("select initcap('rock''n''roll')", Row("Rocknroll")),
+      ("select initcap('hi\\tthere')", Row("Hi\tthere")),
+      ("select initcap('hi\\nthere')", Row("Hi\nthere"))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
     }
   }
@@ -353,6 +392,13 @@ class AuronQuerySuite
       ("select overlay('abcdef', 'XYZ', 1, 1)", Row("XYZbcdef")),
       ("select overlay('abcdef', 'XYZ', 6, 1)", Row("abcdeXYZ"))).foreach { case (q, expected) =>
       checkAnswer(sql(q), Seq(expected))
+  test("initcap: mixed cases and edge cases") {
+    Seq(
+      ("select initcap('a1b2 c3D4')", Row("A1b2 C3d4")),
+      ("select initcap('---abc---')", Row("---abc---")),
+      ("select initcap('  multiple   spaces ')", Row("  Multiple   Spaces "))).foreach {
+      case (q, expected) =>
+        checkAnswer(sql(q), Seq(expected))
     }
   }
 }

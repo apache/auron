@@ -29,7 +29,7 @@
 # Description:
 #   Define constants for supported component versions
 # -----------------------------------------------------------------------------
-SUPPORTED_OS_IMAGES=("centos7" "ubuntu24" "rockylinux8" "debian11")
+SUPPORTED_OS_IMAGES=("centos7" "ubuntu24" "rockylinux8" "debian11" "azurelinux3")
 SUPPORTED_SPARK_VERSIONS=("3.0" "3.1" "3.2" "3.3" "3.4" "3.5")
 SUPPORTED_SCALA_VERSIONS=("2.12" "2.13")
 SUPPORTED_CELEBORN_VERSIONS=("0.5" "0.6")
