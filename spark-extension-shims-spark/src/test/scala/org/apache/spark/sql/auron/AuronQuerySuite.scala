@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.auron
 
+import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
@@ -448,7 +449,7 @@ class AuronQuerySuite
 
   test("radians/degrees with integral and decimal types - string compare via format_number") {
     withTable("t_mix") {
-      sql("CREATE TABLE t_mix(ci INT, cl LONG, cf FLOAT, cd DECIMAL(10,2)) USING parquet")
+      sql("CREATE TABLE t_mix(ci INT, cl BIGINT, cf FLOAT, cd DECIMAL(10,2)) USING parquet")
       sql("INSERT INTO t_mix VALUES (30, 45, 60.0, 90.00)")
 
       val df = sql("""
@@ -464,7 +465,9 @@ class AuronQuerySuite
           |FROM t_mix
           |""".stripMargin)
 
-      def f(x: Double): String = String.format(Locale.US, "%,.12f", x)
+      val dfs =
+        new DecimalFormat("#,##0.000000000000", DecimalFormatSymbols.getInstance(Locale.US))
+      def f(x: Double): String = dfs.format(x)
 
       checkAnswer(
         df,
