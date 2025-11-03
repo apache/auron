@@ -267,6 +267,17 @@ enum ScalarFunction {
   Factorial=65;
   Hex=66;
   Power=67;
+  Radians=68;
+  Degrees=69;
+  Sinh=71;
+  Cosh=72;
+  Tanh=73;
+  Acosh=74;
+  Asinh=75;
+  Atanh=76;
+  Atan2=77;
+  Cot=78;
+  Cbrt=79;
   Levenshtein=80;
   SparkExtFunctions=10000;
 }

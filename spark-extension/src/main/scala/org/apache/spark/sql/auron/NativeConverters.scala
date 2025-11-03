@@ -780,14 +780,26 @@ object NativeConverters extends Logging {
       // builtin scalar functions
       case e: Sqrt => buildScalarFunction(pb.ScalarFunction.Sqrt, e.children, e.dataType)
       case e: Sin => buildScalarFunction(pb.ScalarFunction.Sin, e.children, e.dataType)
+      case e: ToRadians => buildScalarFunction(pb.ScalarFunction.Radians, e.children, e.dataType)
+      case e: ToDegrees => buildScalarFunction(pb.ScalarFunction.Degrees, e.children, e.dataType)
       case e: Cos => buildScalarFunction(pb.ScalarFunction.Cos, e.children, e.dataType)
       case e: Tan => buildScalarFunction(pb.ScalarFunction.Tan, e.children, e.dataType)
+      case e: Cot => buildScalarFunction(pb.ScalarFunction.Cot, e.children, e.dataType)
       case e: Asin => buildScalarFunction(pb.ScalarFunction.Asin, e.children, e.dataType)
       case e: Acos => buildScalarFunction(pb.ScalarFunction.Acos, e.children, e.dataType)
       case e: Atan => buildScalarFunction(pb.ScalarFunction.Atan, e.children, e.dataType)
+      case e: Sinh => buildScalarFunction(pb.ScalarFunction.Sinh, e.children, e.dataType)
+      case e: Cosh => buildScalarFunction(pb.ScalarFunction.Cosh, e.children, e.dataType)
+      case e: Tanh => buildScalarFunction(pb.ScalarFunction.Tanh, e.children, e.dataType)
+      case e: Acosh => buildScalarFunction(pb.ScalarFunction.Acosh, e.children, e.dataType)
+      case e: Asinh => buildScalarFunction(pb.ScalarFunction.Asinh, e.children, e.dataType)
+      case e: Atanh => buildScalarFunction(pb.ScalarFunction.Atanh, e.children, e.dataType)
+      case e: Atan2 => buildScalarFunction(pb.ScalarFunction.Atan2, e.children, e.dataType)
       case e: Exp => buildScalarFunction(pb.ScalarFunction.Exp, e.children, e.dataType)
       case e: Log =>
         buildScalarFunction(pb.ScalarFunction.Ln, e.children.map(nullIfNegative), e.dataType)
+      case e: Logarithm =>
+        buildScalarFunction(pb.ScalarFunction.Log, e.children.map(nullIfNegative), e.dataType)
       case e: Log2 =>
         buildScalarFunction(pb.ScalarFunction.Log2, e.children.map(nullIfNegative), e.dataType)
       case e: Log10 =>

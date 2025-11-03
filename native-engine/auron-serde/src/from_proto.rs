@@ -763,9 +763,19 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Sin => f::math::sin(),
             ScalarFunction::Cos => f::math::cos(),
             ScalarFunction::Tan => f::math::tan(),
+            ScalarFunction::Cot => f::math::cot(),
             ScalarFunction::Asin => f::math::asin(),
             ScalarFunction::Acos => f::math::acos(),
             ScalarFunction::Atan => f::math::atan(),
+            ScalarFunction::Sinh => f::math::sinh(),
+            ScalarFunction::Cosh => f::math::cosh(),
+            ScalarFunction::Tanh => f::math::tanh(),
+            ScalarFunction::Asinh => f::math::asinh(),
+            ScalarFunction::Acosh => f::math::acosh(),
+            ScalarFunction::Atanh => f::math::atanh(),
+            ScalarFunction::Atan2 => f::math::atan2(),
+            ScalarFunction::Radians => f::math::radians(),
+            ScalarFunction::Degrees => f::math::degrees(),
             ScalarFunction::Exp => f::math::exp(),
             ScalarFunction::Log => f::math::log(),
             ScalarFunction::Ln => f::math::ln(),
@@ -832,6 +842,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Hex => spark_fun::math::hex(),
 
             ScalarFunction::Power => f::math::power(),
+            ScalarFunction::Cbrt => f::math::cbrt(),
 
             ScalarFunction::SparkExtFunctions => {
                 unreachable!()

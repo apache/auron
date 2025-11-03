@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.auron
 
+import java.util.Locale
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.Row
@@ -373,5 +375,274 @@ class AuronQuerySuite
       case (q, expected) =>
         checkAnswer(sql(q), Seq(expected))
     }
+  }
+
+  test("radians/degrees scalar constants") {
+    checkAnswer(
+      sql("""
+          |select
+          |  radians(0.0)  as r0,
+          |  degrees(0.0)  as d0,
+          |  radians(180.0) as r180,
+          |  degrees(pi()) as dpi
+          |""".stripMargin),
+      Seq(Row(0.0, 0.0, Math.PI, 180.0)))
+  }
+
+  test("radians on column doubles") {
+    withTable("t_rad") {
+      sql("create table t_rad(c double) using parquet")
+      sql("insert into t_rad values (0.0), (30.0), (45.0), (90.0), (180.0), (-45.0)")
+      val df = sql("select radians(c) from t_rad")
+      checkAnswer(
+        df,
+        Seq(
+          Row(0.0),
+          Row(Math.toRadians(30.0)),
+          Row(Math.toRadians(45.0)),
+          Row(Math.toRadians(90.0)),
+          Row(Math.toRadians(180.0)),
+          Row(Math.toRadians(-45.0))))
+    }
+  }
+
+  test("degrees on literals (with tolerance, no temp table)") {
+    val df = sql("""
+        |SELECT degrees(c) AS deg
+        |FROM VALUES
+        |  (0.0D),
+        |  (PI()/6),
+        |  (PI()/4),
+        |  (PI()/2),
+        |  (PI()),
+        |  (-PI()/4)
+        |AS t(c)
+        |""".stripMargin)
+
+    val actual = df.collect().map(_.getDouble(0)).toSeq
+    val expected = Seq(0.0, 30.0, 45.0, 90.0, 180.0, -45.0)
+    val tol = 1e-12
+
+    assert(actual.size == expected.size)
+    actual.zip(expected).foreach { case (a, e) =>
+      assert(math.abs(a - e) <= tol, s"expected ~$e, got $a")
+    }
+  }
+
+  test("radians/degrees with nulls and empties") {
+    val df = sql("""
+        |select
+        |  radians(c) as r,
+        |  degrees(c) as d
+        |from values
+        |  (cast(null as double)),
+        |  (0.0),
+        |  (cast(null as int)),
+        |  (180.0)
+        |as t(c)
+        |""".stripMargin)
+    checkAnswer(
+      df,
+      Seq(Row(null, null), Row(0.0, 0.0), Row(null, null), Row(Math.PI, 10313.240312354817)))
+  }
+
+  test("radians/degrees with integral and decimal types - string compare via format_number") {
+    withTable("t_mix") {
+      sql("CREATE TABLE t_mix(ci INT, cl LONG, cf FLOAT, cd DECIMAL(10,2)) USING parquet")
+      sql("INSERT INTO t_mix VALUES (30, 45, 60.0, 90.00)")
+
+      val df = sql("""
+          |SELECT
+          |  format_number(radians(ci), 12)  AS r_ci,
+          |  format_number(degrees(ci), 12)  AS d_ci,
+          |  format_number(radians(cl), 12)  AS r_cl,
+          |  format_number(degrees(cl), 12)  AS d_cl,
+          |  format_number(radians(cf), 12)  AS r_cf,
+          |  format_number(degrees(cf), 12)  AS d_cf,
+          |  format_number(radians(cd), 12)  AS r_cd,
+          |  format_number(degrees(cd), 12)  AS d_cd
+          |FROM t_mix
+          |""".stripMargin)
+
+      def f(x: Double): String = String.format(Locale.US, "%,.12f", x)
+
+      checkAnswer(
+        df,
+        Seq(
+          Row(
+            f(Math.toRadians(30.0)),
+            f(Math.toDegrees(30.0)),
+            f(Math.toRadians(45.0)),
+            f(Math.toDegrees(45.0)),
+            f(Math.toRadians(60.0)),
+            f(Math.toDegrees(60.0)),
+            f(Math.toRadians(90.0)),
+            f(Math.toDegrees(90.0)))))
+    }
+  }
+
+  test("sinh/cosh/tanh scalar basics") {
+    checkAnswer(
+      sql("select round(sinh(0.0), 9), round(cosh(0.0), 9), round(tanh(0.0), 9)"),
+      Seq(Row(0.0, 1.0, 0.0)))
+
+    checkAnswer(
+      sql("""
+        |select
+        |  round(sinh(1.0), 9) as s1,
+        |  round(cosh(1.0), 9) as c1,
+        |  round(tanh(1.0), 9) as t1
+        |""".stripMargin),
+      Seq(Row(1.175201194, 1.543080635, 0.761594156)))
+
+    checkAnswer(
+      sql("""
+        |select
+        |  round(sinh(-1.25), 9) = -round(sinh(1.25), 9),
+        |  round(cosh(-1.25), 9) =  round(cosh(1.25), 9),
+        |  round(tanh(-1.25), 9) = -round(tanh(1.25), 9)
+        |""".stripMargin),
+      Seq(Row(true, true, true)))
+  }
+
+  test("sinh/cosh/tanh null propagation") {
+    withTable("t_null") {
+      sql("create table t_null(c double) using parquet")
+      sql("insert into t_null values (null)")
+      checkAnswer(sql("select sinh(c), cosh(c), tanh(c) from t_null"), Seq(Row(null, null, null)))
+    }
+  }
+
+  test("acosh/asinh/atanh scalar basics (with tolerance)") {
+    val tol = 1e-12
+
+    checkAnswer(
+      sql(
+        s"select abs(acosh(1.0) - 0.0) < $tol, abs(asinh(0.0) - 0.0) < $tol, abs(atanh(0.0) - 0.0) < $tol"),
+      Seq(Row(true, true, true)))
+
+    checkAnswer(
+      sql(s"""
+           |select
+           |  abs(asinh(1.0) - 0.881373587019543) < $tol,
+           |  abs(acosh(2.0) - 1.3169578969248166) < $tol,
+           |  abs(atanh(0.5) - 0.5493061443340549) < $tol
+           |""".stripMargin),
+      Seq(Row(true, true, true)))
+
+    checkAnswer(
+      sql(s"""
+           |select
+           |  abs(asinh(-1.25) + asinh(1.25)) < $tol as asinh_odd,
+           |  abs(atanh(-0.8)  + atanh(0.8))  < $tol as atanh_odd
+           |""".stripMargin),
+      Seq(Row(true, true)))
+  }
+
+  test("acosh/asinh/atanh implicit cast from integers / decimals (rounded + tolerance)") {
+    val tol = 1e-12
+    checkAnswer(
+      sql(s"""
+           |select
+           |  abs(round(asinh(2), 12) - 1.443635475179) < $tol              as asinh_int_ok,
+           |  abs(round(atanh(0.5D), 12) - 0.549306144334) < $tol           as atanh_double_ok,
+           |  abs(round(acosh(cast(2 as decimal(10,0))), 12) - 1.316957896925) < $tol as acosh_decimal_ok
+           |""".stripMargin),
+      Seq(Row(true, true, true)))
+  }
+
+  test("cot basic values & nulls") {
+    val pi = math.Pi
+    Seq(
+      ("select round(cot(PI() / 4), 6)", Row(1.0)), // cot(π/4) = 1
+      ("select round(cot(PI() / 3), 6)", Row(1.0 / math.tan(pi / 3))), // ≈ 0.577350
+      ("select round(cot(-PI() / 4), 6)", Row(-1.0)), // cot(-π/4) = -1
+      ("select round(cot(PI() / 6), 6)", Row(1.0 / math.tan(pi / 6))) // ≈ 1.732051
+    ).foreach { case (q, Row(expected: Double)) =>
+      val expectedRounded =
+        BigDecimal(expected).setScale(6, BigDecimal.RoundingMode.HALF_UP).toDouble
+      checkAnswer(sql(q), Seq(Row(expectedRounded)))
+    }
+    checkAnswer(sql("select cot(NULL)"), Seq(Row(null)))
+  }
+
+  test("atan2: axes, quadrants, and null semantics") {
+    Seq(
+      // x>0, y=0 → 0
+      ("select round(atan2(0.0, 1.0), 6)", Row(0.000000)),
+      // x<0, y=0 → π
+      ("select round(atan2(0.0, -1.0), 6)", Row(3.141593)),
+      // x=0, y>0 →  π/2
+      ("select round(atan2(1.0, 0.0), 6)", Row(1.570796)),
+      // x=0, y<0 → -π/2
+      ("select round(atan2(-1.0, 0.0), 6)", Row(-1.570796))).foreach { case (q, expected) =>
+      checkAnswer(sql(q), Seq(expected))
+    }
+
+    Seq(
+      // Q1: (y=+1, x=+1) →  π/4
+      ("select round(atan2(1.0, 1.0), 6)", Row(0.785398)),
+      // Q2: (y=+1, x=-1) → 3π/4
+      ("select round(atan2(1.0, -1.0), 6)", Row(2.356194)),
+      // Q3: (y=-1, x=-1) → -3π/4
+      ("select round(atan2(-1.0, -1.0), 6)", Row(-2.356194)),
+      // Q4: (y=-1, x=+1) → -π/4
+      ("select round(atan2(-1.0, 1.0), 6)", Row(-0.785398))).foreach { case (q, expected) =>
+      checkAnswer(sql(q), Seq(expected))
+    }
+
+    Seq("select atan2(NULL, 1.0)", "select atan2(1.0, NULL)", "select atan2(NULL, NULL)")
+      .foreach { q =>
+        checkAnswer(sql(q), Seq(Row(null)))
+      }
+  }
+
+  test("cbrt: literals and basic identities") {
+    Seq(
+      ("select cbrt(27.0D)", Row(3.0)),
+      ("select cbrt(0.0D)", Row(0.0)),
+      ("select cbrt(-8.0D)", Row(-2.0)),
+      ("select round(cbrt(79.0D), 6)", Row(4.29084))).foreach { case (q, expected) =>
+      checkAnswer(sql(q), Seq(expected))
+    }
+  }
+
+  test("cbrt: wide range sanity") {
+    val q =
+      """
+        |select
+        |  round(cbrt(1e9D), 6),      -- 1000
+        |  round(cbrt(1e-9D), 12)     -- 0.001
+        |""".stripMargin
+    checkAnswer(sql(q), Seq(Row(1000.000000, 0.001)))
+  }
+
+  test("log: column (from VALUES) incl. zero, negative, null") {
+    val q =
+      """
+        |select log(x)
+        |from values
+        |  (1.0D),              -- 0.0
+        |  (0.0D),              -- NULL
+        |  (-1.0D),             -- NULL
+        |  (NULL)               -- NULL
+        |as t(x)
+        |""".stripMargin
+    val rows = sql(q).collect().toSeq
+
+    assert(rows.length == 4)
+    assert(rows(0).getDouble(0) == 0.0)
+    assert(rows(1).get(0) == null)
+    assert(rows(2).get(0) == null)
+    assert(rows(3).get(0) == null)
+  }
+
+  test("log: rounding tolerance on typical set") {
+    val q =
+      """
+        |select round(log(v), 6)
+        |from values (2.0D), (3.0D), (10.0D) as t(v)
+        |""".stripMargin
+    checkAnswer(sql(q), Seq(Row(0.693147), Row(1.098612), Row(2.302585)))
   }
 }
