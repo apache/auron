@@ -20,8 +20,11 @@ use arrow::{
     datatypes::{DataType, Field},
 };
 use datafusion::{
-    common::{Result, ScalarValue, cast::as_binary_array},
-    functions::crypto::{sha224, sha256, sha384, sha512},
+    common::{Result, ScalarValue, cast::as_binary_array, utils::take_function_args},
+    functions::crypto::{
+        basic::{DigestAlgorithm, digest_process},
+        sha224, sha256, sha384, sha512,
+    },
     logical_expr::{ScalarFunctionArgs, ScalarUDF},
     physical_plan::ColumnarValue,
 };
@@ -30,39 +33,46 @@ use datafusion_ext_commons::df_execution_err;
 /// `sha224` function that simulates Spark's `sha2` expression with bit width
 /// 224
 pub fn spark_sha224(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    wrap_digest_result_as_hex_string(args, sha224())
+    digest_and_wrap_as_hex(args, sha224())
 }
 
 /// `sha256` function that simulates Spark's `sha2` expression with bit width 0
 /// or 256
 pub fn spark_sha256(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    wrap_digest_result_as_hex_string(args, sha256())
+    digest_and_wrap_as_hex(args, sha256())
 }
 
 /// `sha384` function that simulates Spark's `sha2` expression with bit width
 /// 384
 pub fn spark_sha384(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    wrap_digest_result_as_hex_string(args, sha384())
+    digest_and_wrap_as_hex(args, sha384())
 }
 
 /// `sha512` function that simulates Spark's `sha2` expression with bit width
 /// 512
 pub fn spark_sha512(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    wrap_digest_result_as_hex_string(args, sha512())
+    digest_and_wrap_as_hex(args, sha512())
 }
 
-/// Spark requires hex string as the result of sha2 functions, we have to wrap
-/// the result of digest functions as hex string
-fn wrap_digest_result_as_hex_string(
-    args: &[ColumnarValue],
-    digest: Arc<ScalarUDF>,
-) -> Result<ColumnarValue> {
+pub fn spark_md5(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let [data] = take_function_args("md5", args)?;
+    let value = digest_process(data, DigestAlgorithm::Md5)?;
+    to_hex_string(value)
+}
+
+/// Spark requires hex string as the result of sha2 and md5 functions, we have
+/// to wrap the result of digest functions as hex string
+fn digest_and_wrap_as_hex(args: &[ColumnarValue], digest: Arc<ScalarUDF>) -> Result<ColumnarValue> {
     let value = digest.inner().invoke_with_args(ScalarFunctionArgs {
         args: args.to_vec(),
         arg_fields: vec![Arc::new(Field::new("arg", DataType::Binary, true))],
         number_rows: 0,
         return_field: Arc::new(Field::new("result", DataType::Utf8, true)),
     })?;
+    to_hex_string(value)
+}
+
+fn to_hex_string(value: ColumnarValue) -> Result<ColumnarValue> {
     Ok(match value {
         ColumnarValue::Array(array) => {
             let binary_array = as_binary_array(&array)?;
@@ -102,7 +112,7 @@ mod tests {
         common::ScalarValue, error::Result as DataFusionResult, physical_plan::ColumnarValue,
     };
 
-    use crate::spark_sha2::{spark_sha224, spark_sha256, spark_sha384, spark_sha512};
+    use crate::spark_crypto::{spark_md5, spark_sha224, spark_sha256, spark_sha384, spark_sha512};
 
     /// Helper function to run a test for a given hash function and scalar
     /// input.
@@ -180,5 +190,19 @@ mod tests {
         let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
         let expected = "178d767c364244ede054ebb3cc4af0ac2b307a86fba6a32706ce4f692642674d2ab8f51ee738ecb09bc296918aa85db48abe28fcaef7aa2da81a618cc6d891c3";
         run_scalar_test(spark_sha512, input, expected)
+    }
+
+    #[test]
+    fn test_md5_scalar_utf8() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
+        let expected = "902fbdd2b1df0c4f70b4a5d23525e932";
+        run_scalar_test(spark_md5, input, expected)
+    }
+
+    #[test]
+    fn test_md5_scalar_binary() -> Result<(), Box<dyn Error>> {
+        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
+        let expected = "6ac1e56bc78f031059be7be854522c4c";
+        run_scalar_test(spark_md5, input, expected)
     }
 }

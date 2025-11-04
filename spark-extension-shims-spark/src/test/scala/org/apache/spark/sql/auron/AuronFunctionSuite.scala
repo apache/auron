@@ -64,6 +64,23 @@ class AuronFunctionSuite
     }
   }
 
+  test("md5 function") {
+    withTable("t1") {
+      sql("create table t1 using parquet as select 'spark' as c1, '3.x' as version")
+      val functions =
+        """
+          |select b.md5
+          |from (
+          |  select c1, version from t1
+          |) a join (
+          |  select md5(concat(c1, version)) as md5 from t1
+          |) b on md5(concat(a.c1, a.version)) = b.md5
+          |""".stripMargin
+      val df = sql(functions)
+      checkAnswer(df, Seq(Row("9ff36a3857e29335d03cf6bef2147119")))
+    }
+  }
+
   test("spark hash function") {
     withTable("t1") {
       sql("create table t1 using parquet as select array(1, 2) as arr")

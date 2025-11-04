@@ -864,7 +864,7 @@ object NativeConverters extends Logging {
       case e @ NullIf(left, right, _) =>
         buildExtScalarFunction("Spark_NullIf", left :: right :: Nil, e.dataType)
       case Md5(_1) =>
-        buildScalarFunction(pb.ScalarFunction.MD5, Seq(unpackBinaryTypeCast(_1)), StringType)
+        buildExtScalarFunction("MD5", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Reverse(_1) =>
         buildScalarFunction(pb.ScalarFunction.Reverse, Seq(unpackBinaryTypeCast(_1)), StringType)
       case InitCap(_1) =>

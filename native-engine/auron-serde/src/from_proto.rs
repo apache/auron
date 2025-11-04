@@ -788,7 +788,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Nvl => f::core::nvl(),
             ScalarFunction::DatePart => f::datetime::date_part(),
             ScalarFunction::DateTrunc => f::datetime::date_trunc(),
-            ScalarFunction::Md5 => f::crypto::md5(),
+            // ScalarFunction::Md5 => f::crypto::md5(),
             // ScalarFunction::Sha224 => f::crypto::sha224(),
             // ScalarFunction::Sha256 => f::crypto::sha256(),
             // ScalarFunction::Sha384 => f::crypto::sha384(),
