@@ -52,7 +52,7 @@
     <bytebuddyVersion>1.14.11</bytebuddyVersion>
     <hadoopVersion>3.4.2</hadoopVersion>
     <protobufVersion>3.25.5</protobufVersion>
-    <nettyVersion>4.1.118.Final</nettyVersion>
+    <nettyVersion>4.2.7.Final</nettyVersion>
     <javaVersion>8</javaVersion>
     <scalaVersion>2.12</scalaVersion>
     <scalaLongVersion>2.12.18</scalaLongVersion>
@@ -590,6 +590,7 @@
         <scalaTestVersion>3.0.8</scalaTestVersion>
         <sparkVersion>3.0.3</sparkVersion>
         <shortSparkVersion>3.0</shortSparkVersion>
+        <nettyVersion>4.1.47.Final</nettyVersion>
       </properties>
     </profile>
 
@@ -601,6 +602,7 @@
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.1.3</sparkVersion>
         <shortSparkVersion>3.1</shortSparkVersion>
+        <nettyVersion>4.1.51.Final</nettyVersion>
       </properties>
     </profile>
 
@@ -612,6 +614,7 @@
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.2.4</sparkVersion>
         <shortSparkVersion>3.2</shortSparkVersion>
+        <nettyVersion>4.1.68.Final</nettyVersion>
       </properties>
     </profile>
 
@@ -623,6 +626,7 @@
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.3.4</sparkVersion>
         <shortSparkVersion>3.3</shortSparkVersion>
+        <nettyVersion>4.1.74.Final</nettyVersion>
       </properties>
     </profile>
 
@@ -634,6 +638,7 @@
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.4.4</sparkVersion>
         <shortSparkVersion>3.4</shortSparkVersion>
+        <nettyVersion>4.1.87.Final</nettyVersion>
       </properties>
     </profile>
 
@@ -645,6 +650,7 @@
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.5.7</sparkVersion>
         <shortSparkVersion>3.5</shortSparkVersion>
+        <nettyVersion>4.1.96.Final</nettyVersion>
       </properties>
     </profile>
 
