@@ -44,3 +44,15 @@ RUN /rustup-init -y --default-toolchain nightly-2025-05-09-x86_64-unknown-linux-
 # install java
 RUN yum install -y java-1.8.0-openjdk java-1.8.0-openjdk-devel
 RUN echo 'export JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"' >> ~/.bashrc
+
+# install maven
+ENV MAVEN_VERSION=3.9.11
+ENV MAVEN_HOME=/usr/lib/maven
+RUN MAVEN_TGZ="/tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz" && \
+    curl -fsSL "https://www.apache.org/dyn/closer.lua/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz?action=download" \
+         -o ${MAVEN_TGZ} && \
+    tar -xvf ${MAVEN_TGZ} && \
+    mv apache-maven-${MAVEN_VERSION} ${MAVEN_HOME} && \
+    rm -rf ${MAVEN_TGZ}
+RUN echo "export MAVEN_HOME=${MAVEN_HOME}" >> ~/.bashrc && \
+    echo "export PATH=\${MAVEN_HOME}/bin:\${PATH}" >> ~/.bashrc
