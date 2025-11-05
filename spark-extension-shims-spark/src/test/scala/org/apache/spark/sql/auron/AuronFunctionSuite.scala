@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.auron
 
+import java.text.SimpleDateFormat
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
@@ -318,6 +320,221 @@ class AuronFunctionSuite
     val df = sql("select pow(null, 2), power(2, null), pow(null, null)")
     val row = df.collect().head
     assert(row.isNullAt(0) && row.isNullAt(1) && row.isNullAt(2))
+  }
+
+  test("test function least") {
+    withTable("t1") {
+      sql(
+        "create table test_least using parquet as select 1 as c1, 2 as c2, 'a' as c3, 'b' as c4, 'c' as c5")
+
+      val maxValue = Long.MaxValue
+      val minValue = Long.MinValue
+
+      val dateStringMin = "2015-01-01 08:00:00"
+      val dateStringMax = "2015-01-01 11:00:00"
+      var format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      val dateTimeStampMin = format.parse(dateStringMin).getTime
+      val dateTimeStampMax = format.parse(dateStringMax).getTime
+      format = new SimpleDateFormat("yyyy-MM-dd")
+      val dateString = "2015-01-01"
+      val date = format.parse(dateString)
+
+      val functions =
+        s"""
+          |select
+          |    least(c4, c3, c5),
+          |    least(c1, c2, 1),
+          |    least(c1, c2, -1),
+          |    least(c4, c5, c3, c3, 'a'),
+          |    least(null, null),
+          |    least(c4, c3, c5, null),
+          |    least(-1.0, 2.5),
+          |    least(-1.0, 2),
+          |    least(-1.0f, 2.5f),
+          |    least(cast(1 as byte), cast(2 as byte)),
+          |    least('abc', 'aaaa'),
+          |    least(true, false),
+          |    least(cast("2015-01-01" as date), cast("2015-07-01" as date)),
+          |    least(${dateTimeStampMin}, ${dateTimeStampMax}),
+          |    least(${minValue}, ${maxValue})
+          |from
+          |    test_least
+        """.stripMargin
+
+      val df = sql(functions)
+
+      checkAnswer(
+        df,
+        Seq(
+          Row(
+            "a",
+            1,
+            -1,
+            "a",
+            null,
+            "a",
+            -1.0,
+            -1.0,
+            -1.0f,
+            1,
+            "aaaa",
+            false,
+            date,
+            dateTimeStampMin,
+            minValue)))
+    }
+  }
+
+  test("test function greatest") {
+    withTable("t1") {
+      sql(
+        "create table t1 using parquet as select 1 as c1, 2 as c2, 'a' as c3, 'b' as c4, 'c' as c5")
+
+      val longMax = Long.MaxValue
+      val longMin = Long.MinValue
+      val dateStringMin = "2015-01-01 08:00:00"
+      val dateStringMax = "2015-01-01 11:00:00"
+      var format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      val dateTimeStampMin = format.parse(dateStringMin).getTime
+      val dateTimeStampMax = format.parse(dateStringMax).getTime
+      format = new SimpleDateFormat("yyyy-MM-dd")
+      val dateString = "2015-07-01"
+      val date = format.parse(dateString)
+
+      val functions =
+        s"""
+          |select
+          |    greatest(c3, c4, c5),
+          |    greatest(c2, c1),
+          |    greatest(c1, c2, 2),
+          |    greatest(c4, c5, c3, 'ccc'),
+          |    greatest(null, null),
+          |    greatest(c3, c4, c5, null),
+          |    greatest(-1.0, 2.5),
+          |    greatest(-1, 2),
+          |    greatest(-1.0f, 2.5f),
+          |    greatest(${longMax}, ${longMin}),
+          |    greatest(cast(1 as byte), cast(2 as byte)),
+          |    greatest(cast(1 as short), cast(2 as short)),
+          |    greatest("abc", "aaaa"),
+          |    greatest(true, false),
+          |    greatest(
+          |        cast("2015-01-01" as date),
+          |        cast("2015-07-01" as date)
+          |    ),
+          |    greatest(
+          |        ${dateTimeStampMin},
+          |        ${dateTimeStampMax}
+          |    )
+          |from
+          |    t1
+        """.stripMargin
+
+      val df = sql(functions)
+      checkAnswer(
+        df,
+        Seq(
+          Row(
+            "c",
+            2,
+            2,
+            "ccc",
+            null,
+            "c",
+            2.5,
+            2,
+            2.5f,
+            longMax,
+            2,
+            2,
+            "abc",
+            true,
+            date,
+            dateTimeStampMax)))
+
+    }
+  }
+
+  test("test function FindInSet") {
+    withTable("t1") {
+      sql(
+        "create table t1_find_in_set using parquet as select 'ab' as a, 'b' as b, '' as c, 'def' as d")
+
+      val functions =
+        """
+          |select
+          |   find_in_set(a, 'ab'),
+          |   find_in_set(b, 'a,b'),
+          |   find_in_set(a, 'abc,b,ab,c,def'),
+          |   find_in_set(a, 'ab,abc,b,ab,c,def'),
+          |   find_in_set(a, ',,,ab,abc,b,ab,c,def'),
+          |   find_in_set(c, ',ab,abc,b,ab,c,def'),
+          |   find_in_set(a, '数据砖头,abc,b,ab,c,def'),
+          |   find_in_set(d, '数据砖头,abc,b,ab,c,def'),
+          |   find_in_set(d, null)
+          |from t1_find_in_set
+        """.stripMargin
+
+      val df = sql(functions)
+      df.show()
+      checkAnswer(df, Seq(Row(1, 2, 3, 1, 4, 1, 4, 6, null)))
+    }
+  }
+
+  test("test function IsNaN") {
+    withTable("t1") {
+      sql(
+        "create table test_is_nan using parquet as select cast('NaN' as double) as c1, cast('NaN' as float) as c2, log(-3) as c3, cast(null as double) as c4, 5.5f as c5")
+      val functions =
+        """
+          |select
+          |    isnan(c1),
+          |    isnan(c2),
+          |    isnan(c3),
+          |    isnan(c4),
+          |    isnan(c5)
+          |from
+          |    test_is_nan
+        """.stripMargin
+
+      val df = sql(functions)
+      df.show()
+      checkAnswer(df, Seq(Row(true, true, false, false, false)))
+    }
+  }
+
+  test("test function nvl2") {
+    withTable("t1") {
+      sql(
+        "create table t1 using parquet as select 'base'" +
+          " as base, 3 as exponent")
+      val functions =
+        """
+          |select
+          |  nvl2(null, base, exponent), nvl2(4, base, exponent)
+          |from t1
+                      """.stripMargin
+
+      val df = sql(functions)
+      checkAnswer(df, Seq(Row("base", 3)))
+    }
+  }
+
+  test("test function nvl") {
+    withTable("t1") {
+      sql(
+        "create table t1 using parquet as select 'base'" +
+          " as base, 3 as exponent")
+      val functions =
+        """
+          |select
+          |  nvl(null, base), base, nvl(4, exponent)
+          |from t1
+                    """.stripMargin
+
+      val df = sql(functions)
+      checkAnswer(df, Seq(Row("base", "base", 4)))
+    }
   }
 
   test("test function Levenshtein") {

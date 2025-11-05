@@ -267,7 +267,13 @@ enum ScalarFunction {
   Factorial=65;
   Hex=66;
   Power=67;
+  IsNaN=69;
   Levenshtein=80;
+  FindInSet=81;
+  Nvl=82;
+  Nvl2=83;
+  Least=84;
+  Greatest=85;
   SparkExtFunctions=10000;
 }
 

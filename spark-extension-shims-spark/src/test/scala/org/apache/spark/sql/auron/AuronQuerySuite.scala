@@ -374,4 +374,130 @@ class AuronQuerySuite
         checkAnswer(sql(q), Seq(expected))
     }
   }
+
+  test("test filter with hour function") {
+    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+      withTable("t_hour") {
+        sql("""
+            |create table t_hour using parquet as
+            |select to_timestamp('2024-12-18 01:23:45') as event_time union all
+            |select to_timestamp('2024-12-18 08:00:00') union all
+            |select to_timestamp('2024-12-18 08:59:59')
+            |""".stripMargin)
+
+        // Keep rows where HOUR >= 8, then group by hour
+        checkAnswer(
+          sql("""
+              |select h, count(*)
+              |from (select hour(event_time) as h from t_hour) t
+              |where h >= 8
+              |group by h
+              |order by h
+              |""".stripMargin),
+          Seq(Row(8, 2)))
+      }
+    }
+  }
+
+  test("test filter with minute function") {
+    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+      withTable("t_minute") {
+        sql("""
+            |create table t_minute using parquet as
+            |select to_timestamp('2024-12-18 00:00:00') as event_time union all
+            |select to_timestamp('2024-12-18 00:30:00') union all
+            |select to_timestamp('2024-12-18 12:30:59')
+            |""".stripMargin)
+
+        // Keep rows where MINUTE = 30, then group by minute
+        checkAnswer(
+          sql("""
+              |select m, count(*)
+              |from (select minute(event_time) as m from t_minute) t
+              |where m = 30
+              |group by m
+              |""".stripMargin),
+          Seq(Row(30, 2)))
+      }
+    }
+  }
+
+  test("test filter with second function") {
+    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+      withTable("t_second") {
+        sql("""
+            |create table t_second using parquet as
+            |select to_timestamp('2024-12-18 00:00:00') as event_time union all
+            |select to_timestamp('2024-12-18 01:23:00') union all
+            |select to_timestamp('2024-12-18 23:59:45')
+            |""".stripMargin)
+
+        // Keep rows where SECOND = 0, then group by second
+        checkAnswer(
+          sql("""
+              |select s, count(*)
+              |from (select second(event_time) as s from t_second) t
+              |where s = 0
+              |group by s
+              |""".stripMargin),
+          Seq(Row(0, 2)))
+      }
+    }
+  }
+
+  // For Date input: hour/minute/second should all be 0
+  test("timeparts on Date input return zeros") {
+    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+      withTable("t_date_parts") {
+        sql(
+          "create table t_date_parts using parquet as select date'2024-12-18' as d union all select date'2024-12-19'")
+        checkAnswer(
+          sql("""
+              |select
+              |  hour(d)   as h,
+              |  minute(d) as m,
+              |  second(d) as s
+              |from t_date_parts
+              |order by d
+              |""".stripMargin),
+          Seq(Row(0, 0, 0), Row(0, 0, 0)))
+      }
+    }
+  }
+
+  test("hour/minute/second respect timezone via from_utc_timestamp") {
+    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+      withTable("t_tz") {
+        // Construct: UTC 1970-01-01 00:00:00 → Asia/Shanghai => local 08:00:00
+        sql("""
+            |create table t_tz using parquet as
+            |select from_utc_timestamp(to_timestamp('1970-01-01 00:00:00'), 'Asia/Shanghai') as ts
+            |""".stripMargin)
+
+        checkAnswer(
+          sql("""
+              |select hour(ts), minute(ts), second(ts)
+              |from t_tz
+              |""".stripMargin),
+          Seq(Row(8, 0, 0)))
+      }
+    }
+  }
+
+  test("minute/second with non-whole-hour offsets") {
+    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+      withTable("t_tz2") {
+        sql("""
+            |create table t_tz2 using parquet as
+            |select from_utc_timestamp(to_timestamp('2000-01-01 00:00:00'), 'Asia/Kolkata')   as ts1,  -- +05:30
+            |       from_utc_timestamp(to_timestamp('2000-01-01 00:00:00'), 'Asia/Kathmandu') as ts2   -- +05:45
+            |""".stripMargin)
+
+        // Kolkata -> 05:30:00; Kathmandu -> 05:45:00
+        checkAnswer(
+          sql("select minute(ts1), second(ts1), minute(ts2), second(ts2) from t_tz2"),
+          Seq(Row(30, 0, 45, 0)))
+      }
+    }
+  }
 }

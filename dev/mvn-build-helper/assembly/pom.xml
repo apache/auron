@@ -44,6 +44,16 @@
       <artifactId>${shimPkg}_${scalaVersion}</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-buffer</artifactId>
+      <version>${nettyVersion}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-common</artifactId>
+      <version>${nettyVersion}</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -106,6 +116,10 @@
                   <excludes>
                     <exclude>org.apache.arrow.c.**</exclude>
                   </excludes>
+                </relocation>
+                <relocation>
+                  <pattern>io.netty</pattern>
+                  <shadedPattern>${auron.shade.packageName}.io.netty</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>javax.annotation</pattern>

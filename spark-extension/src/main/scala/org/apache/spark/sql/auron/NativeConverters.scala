@@ -97,6 +97,8 @@ object NativeConverters extends Logging {
     AuronConverters.getBooleanConf("spark.auron.udf.brickhouse.enabled", defaultValue = true)
   def decimalArithOpEnabled: Boolean =
     AuronConverters.getBooleanConf("spark.auron.decimal.arithOp.enabled", defaultValue = false)
+  def datetimeExtractEnabled: Boolean =
+    AuronConverters.getBooleanConf("spark.auron.datetime.extract.enabled", defaultValue = false)
 
   def scalarTypeSupported(dataType: DataType): Boolean = {
     dataType match {
@@ -792,6 +794,8 @@ object NativeConverters extends Logging {
         buildScalarFunction(pb.ScalarFunction.Log2, e.children.map(nullIfNegative), e.dataType)
       case e: Log10 =>
         buildScalarFunction(pb.ScalarFunction.Log10, e.children.map(nullIfNegative), e.dataType)
+      case e: Nvl2 =>
+        buildScalarFunction(pb.ScalarFunction.Nvl2, e.children, e.dataType)
       case e: Floor if !e.dataType.isInstanceOf[DecimalType] =>
         if (e.child.dataType.isInstanceOf[LongType]) {
           convertExprWithFallback(e.child, isPruningExpr, fallback)
@@ -819,10 +823,12 @@ object NativeConverters extends Logging {
           }
         }
       case e: Expm1 => buildScalarFunction(pb.ScalarFunction.Expm1, e.children, e.dataType)
+      case e: Least => buildScalarFunction(pb.ScalarFunction.Least, e.children, e.dataType)
       case e: Factorial =>
         buildScalarFunction(pb.ScalarFunction.Factorial, e.children, e.dataType)
       case e: Hex => buildScalarFunction(pb.ScalarFunction.Hex, e.children, e.dataType)
-
+      case e: IsNaN =>
+        buildScalarFunction(pb.ScalarFunction.IsNaN, e.children, e.dataType)
       case e: Round =>
         e.scale match {
           case Literal(n: Int, _) =>
@@ -832,6 +838,8 @@ object NativeConverters extends Logging {
         }
 
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)
+      case e: FindInSet =>
+        buildScalarFunction(pb.ScalarFunction.FindInSet, e.children, e.dataType)
       case e: Abs if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
         buildScalarFunction(pb.ScalarFunction.Abs, e.children, e.dataType)
       case e: OctetLength =>
@@ -874,8 +882,13 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Murmur3Hash", children, IntegerType)
       case XxHash64(children, 42L) =>
         buildExtScalarFunction("XxHash64", children, LongType)
+      case e: Greatest =>
+        buildScalarFunction(pb.ScalarFunction.Greatest, e.children, e.dataType)
       case e: Pow =>
         buildScalarFunction(pb.ScalarFunction.Power, e.children, e.dataType)
+      case e: Nvl =>
+        buildScalarFunction(pb.ScalarFunction.Nvl, e.children, e.dataType)
+
       case Year(child) => buildExtScalarFunction("Year", child :: Nil, IntegerType)
       case Month(child) => buildExtScalarFunction("Month", child :: Nil, IntegerType)
       case DayOfMonth(child) => buildExtScalarFunction("Day", child :: Nil, IntegerType)
@@ -883,6 +896,13 @@ object NativeConverters extends Logging {
 
       case e: Levenshtein =>
         buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)
+
+      case e: Hour if datetimeExtractEnabled =>
+        buildTimePartExt("Hour", e.children.head, isPruningExpr, fallback)
+      case e: Minute if datetimeExtractEnabled =>
+        buildTimePartExt("Minute", e.children.head, isPruningExpr, fallback)
+      case e: Second if datetimeExtractEnabled =>
+        buildTimePartExt("Second", e.children.head, isPruningExpr, fallback)
 
       // startswith is converted to scalar function in pruning-expr mode
       case StartsWith(expr, Literal(prefix, StringType)) if isPruningExpr =>
@@ -1217,7 +1237,8 @@ object NativeConverters extends Logging {
           aggBuilder.addAllChildren(convertedChildren.keys.asJava)
         } else {
           throw new NotImplementedError(s"Unsupported aggregate expression: (${e.getClass})," +
-            s" set ${SparkAuronConfiguration.UDAF_FALLBACK_ENABLE.key} to true to enable UDAF fallbacking.")
+            s" set ${SparkAuronConfiguration.SPARK_PREFIX}${SparkAuronConfiguration.UDAF_FALLBACK_ENABLE.key}" +
+            s" to true to enable UDAF fallbacking.")
         }
 
     }
@@ -1288,6 +1309,20 @@ object NativeConverters extends Logging {
             args.map(expr => convertExprWithFallback(expr, isPruningExpr, fallback)).asJava)
           .setReturnType(convertDataType(dataType)))
     }
+
+  private def buildTimePartExt(
+      name: String,
+      child: Expression,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    val tzArg: Expression = child.dataType match {
+      case TimestampType =>
+        Literal(SQLConf.get.sessionLocalTimeZone, StringType)
+      case _ =>
+        Literal.create(null, StringType)
+    }
+    buildExtScalarFunctionNode(name, Seq(child, tzArg), IntegerType, isPruningExpr, fallback)
+  }
 
   def castIfNecessary(expr: Expression, dataType: DataType): Expression = {
     if (expr.dataType == dataType) {
