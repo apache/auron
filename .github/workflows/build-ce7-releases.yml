@@ -39,6 +39,7 @@ jobs:
       matrix:
         sparkver: [spark-3.0, spark-3.1, spark-3.2, spark-3.3, spark-3.4, spark-3.5]
         scalaver: [ 2.12, 2.13 ]
+        javaver: [ 8, 21 ]
         auronver: [7.0.0-SNAPSHOT]
         runner: [ce7]
         exclude:
@@ -53,6 +54,16 @@ jobs:
             scalaver: '2.13'
           - sparkver: spark-3.4
             scalaver: '2.13'
+          - sparkver: spark-3.0
+            javaver: '21'
+          - sparkver: spark-3.1
+            javaver: '21'
+          - sparkver: spark-3.2
+            javaver: '21'
+          - sparkver: spark-3.3
+            javaver: '21'
+          - sparkver: spark-3.4
+            javaver: '21'
 
     steps:
       - uses: actions/checkout@v4
@@ -97,6 +108,6 @@ jobs:
       - name: Upload auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
         uses: actions/upload-artifact@v4
         with:
-          name: auron-${{matrix.sparkver}}_${{matrix.scalaver}}-release-${{ env.osclassfier }}-${{ matrix.auronver }}-${{ matrix.runner }}-${{ steps.commit.outputs.short }}.jar
+          name: auron-${{matrix.sparkver}}_${{matrix.scalaver}}-${{ matrix.javaver }}-release-${{ env.osclassfier }}-${{ matrix.auronver }}-${{ matrix.runner }}-${{ steps.commit.outputs.short }}.jar
           path: target-docker/auron-${{matrix.sparkver}}_${{matrix.scalaver}}-release-${{ env.osclassfier }}-${{ matrix.auronver }}.jar
           overwrite: true
