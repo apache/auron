@@ -36,6 +36,7 @@ class AuronCheckConvertShuffleExchangeSuite
         .appName("checkConvertToNativeShuffleManger")
         .config("spark.sql.shuffle.partitions", "4")
         .config("spark.sql.autoBroadcastJoinThreshold", -1)
+        .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
         .config(
           "spark.shuffle.manager",
@@ -50,12 +51,11 @@ class AuronCheckConvertShuffleExchangeSuite
       val executePlan =
         spark.sql("select c1, count(1) from test_shuffle group by c1")
 
-      val shuffleExchangeExec =
-        executePlan.queryExecution.executedPlan
-          .collectFirst { case shuffleExchangeExec: ShuffleExchangeExec =>
-            shuffleExchangeExec
-          }
-      val afterConvertPlan = AuronConverters.convertSparkPlan(shuffleExchangeExec.get)
+      val shuffleExchangeExec = collect(executePlan.queryExecution.executedPlan) {
+        case shuffleExchangeExec: ShuffleExchangeExec => shuffleExchangeExec
+      }
+      assert(shuffleExchangeExec.nonEmpty, "ShuffleExchangeExec not found in plan")
+      val afterConvertPlan = AuronConverters.convertSparkPlan(shuffleExchangeExec.head)
       assert(afterConvertPlan.isInstanceOf[NativeShuffleExchangeExec])
       checkAnswer(executePlan, Seq(Row(1, 1)))
     }
@@ -70,6 +70,7 @@ class AuronCheckConvertShuffleExchangeSuite
         .appName("checkConvertToNativeShuffleManger")
         .config("spark.sql.shuffle.partitions", "4")
         .config("spark.sql.autoBroadcastJoinThreshold", -1)
+        .config("spark.sql.adaptive.enabled", "true")
         .config("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
         .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
         .config("spark.memory.offHeap.enabled", "false")
@@ -81,12 +82,11 @@ class AuronCheckConvertShuffleExchangeSuite
       val executePlan =
         spark.sql("select c1, count(1) from test_shuffle group by c1")
 
-      val shuffleExchangeExec =
-        executePlan.queryExecution.executedPlan
-          .collectFirst { case shuffleExchangeExec: ShuffleExchangeExec =>
-            shuffleExchangeExec
-          }
-      val afterConvertPlan = AuronConverters.convertSparkPlan(shuffleExchangeExec.get)
+      val shuffleExchangeExec = collect(executePlan.queryExecution.executedPlan) {
+        case shuffleExchangeExec: ShuffleExchangeExec => shuffleExchangeExec
+      }
+      assert(shuffleExchangeExec.nonEmpty, "ShuffleExchangeExec not found in plan")
+      val afterConvertPlan = AuronConverters.convertSparkPlan(shuffleExchangeExec.head)
       assert(afterConvertPlan.isInstanceOf[ShuffleExchangeExec])
       checkAnswer(executePlan, Seq(Row(1, 1)))
 

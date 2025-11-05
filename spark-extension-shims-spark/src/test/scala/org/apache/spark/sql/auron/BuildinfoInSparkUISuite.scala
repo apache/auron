@@ -25,8 +25,8 @@ class BuildinfoInSparkUISuite
     with AuronSQLTestHelper {
 
   override protected def beforeAll(): Unit = {
-    super.beforeAll()
     val eventLogDir = Utils.createTempDir("/tmp/spark-events")
+    super.beforeAll()
   }
 
   test("test build info in spark UI ") {
