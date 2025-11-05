@@ -31,6 +31,10 @@ on:
       - '.github/workflows/build-ce7-releases.yml'
       - 'auron-build.sh'
 
+concurrency:
+  group: centos7-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-snapshot:
     name: Build Snapshot
