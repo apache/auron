@@ -16,11 +16,11 @@
  */
 package org.apache.spark.sql.auron
 
+import java.io.File
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.ui.AuronSQLAppStatusListener
 import org.apache.spark.util.Utils
-
-import java.io.File
 
 class BuildinfoInSparkUISuite
     extends org.apache.spark.sql.QueryTest
@@ -34,7 +34,7 @@ class BuildinfoInSparkUISuite
   }
 
   override protected def beforeAll(): Unit = {
-    testDir =  Utils.createTempDir(namePrefix = "spark-events")
+    testDir = Utils.createTempDir(namePrefix = "spark-events")
     super.beforeAll()
   }
 
