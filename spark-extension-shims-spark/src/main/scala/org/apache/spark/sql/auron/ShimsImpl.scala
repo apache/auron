@@ -528,8 +528,8 @@ class ShimsImpl extends Shims with Logging {
             .setScalarFunction(
               pb.PhysicalScalarFunctionNode
                 .newBuilder()
-                .setFun(pb.ScalarFunction.SparkExtFunctions)
-                .setName("StringSplit")
+                .setFun(pb.ScalarFunction.AuronExtFunctions)
+                .setName("Spark_StringSplit")
                 .addArgs(NativeConverters.convertExprWithFallback(str, isPruningExpr, fallback))
                 .addArgs(NativeConverters
                   .convertExprWithFallback(Literal(nativePat), isPruningExpr, fallback))

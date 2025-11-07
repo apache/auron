@@ -274,7 +274,7 @@ enum ScalarFunction {
   Nvl2=83;
   Least=84;
   Greatest=85;
-  SparkExtFunctions=10000;
+  AuronExtFunctions=10000;
 }
 
 message PhysicalScalarFunctionNode {

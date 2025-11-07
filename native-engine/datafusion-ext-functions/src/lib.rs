@@ -32,43 +32,48 @@ mod spark_sha2;
 mod spark_strings;
 mod spark_unscaled_value;
 
-pub fn create_spark_ext_function(name: &str) -> Result<ScalarFunctionImplementation> {
+pub fn create_auron_ext_function(name: &str) -> Result<ScalarFunctionImplementation> {
+    // auron ext functions, if used for spark should be start with 'Spark_',
+    // if used for flink should be start with 'Flink_',
+    // same to other engines.
     Ok(match name {
         "Placeholder" => Arc::new(|_| panic!("placeholder() should never be called")),
-        "NullIf" => Arc::new(spark_null_if::spark_null_if),
-        "NullIfZero" => Arc::new(spark_null_if::spark_null_if_zero),
-        "UnscaledValue" => Arc::new(spark_unscaled_value::spark_unscaled_value),
-        "MakeDecimal" => Arc::new(spark_make_decimal::spark_make_decimal),
-        "CheckOverflow" => Arc::new(spark_check_overflow::spark_check_overflow),
-        "Murmur3Hash" => Arc::new(spark_hash::spark_murmur3_hash),
-        "XxHash64" => Arc::new(spark_hash::spark_xxhash64),
-        "Sha224" => Arc::new(spark_sha2::spark_sha224),
-        "Sha256" => Arc::new(spark_sha2::spark_sha256),
-        "Sha384" => Arc::new(spark_sha2::spark_sha384),
-        "Sha512" => Arc::new(spark_sha2::spark_sha512),
-        "GetJsonObject" => Arc::new(spark_get_json_object::spark_get_json_object),
-        "GetParsedJsonObject" => Arc::new(spark_get_json_object::spark_get_parsed_json_object),
-        "ParseJson" => Arc::new(spark_get_json_object::spark_parse_json),
-        "MakeArray" => Arc::new(spark_make_array::array),
-        "StringSpace" => Arc::new(spark_strings::string_space),
-        "StringRepeat" => Arc::new(spark_strings::string_repeat),
-        "StringSplit" => Arc::new(spark_strings::string_split),
-        "StringConcat" => Arc::new(spark_strings::string_concat),
-        "StringConcatWs" => Arc::new(spark_strings::string_concat_ws),
-        "StringLower" => Arc::new(spark_strings::string_lower),
-        "StringUpper" => Arc::new(spark_strings::string_upper),
-        "Year" => Arc::new(spark_dates::spark_year),
-        "Month" => Arc::new(spark_dates::spark_month),
-        "Day" => Arc::new(spark_dates::spark_day),
-        "Quarter" => Arc::new(spark_dates::spark_quarter),
-        "Hour" => Arc::new(spark_dates::spark_hour),
-        "Minute" => Arc::new(spark_dates::spark_minute),
-        "Second" => Arc::new(spark_dates::spark_second),
-        "BrickhouseArrayUnion" => Arc::new(brickhouse::array_union::array_union),
-        "Round" => Arc::new(spark_round::spark_round),
-        "NormalizeNanAndZero" => {
+        "Spark_NullIf" => Arc::new(spark_null_if::spark_null_if),
+        "Spark_NullIfZero" => Arc::new(spark_null_if::spark_null_if_zero),
+        "Spark_UnscaledValue" => Arc::new(spark_unscaled_value::spark_unscaled_value),
+        "Spark_MakeDecimal" => Arc::new(spark_make_decimal::spark_make_decimal),
+        "Spark_CheckOverflow" => Arc::new(spark_check_overflow::spark_check_overflow),
+        "Spark_Murmur3Hash" => Arc::new(spark_hash::spark_murmur3_hash),
+        "Spark_XxHash64" => Arc::new(spark_hash::spark_xxhash64),
+        "Spark_Sha224" => Arc::new(spark_sha2::spark_sha224),
+        "Spark_Sha256" => Arc::new(spark_sha2::spark_sha256),
+        "Spark_Sha384" => Arc::new(spark_sha2::spark_sha384),
+        "Spark_Sha512" => Arc::new(spark_sha2::spark_sha512),
+        "Spark_GetJsonObject" => Arc::new(spark_get_json_object::spark_get_json_object),
+        "Spark_GetParsedJsonObject" => {
+            Arc::new(spark_get_json_object::spark_get_parsed_json_object)
+        }
+        "Spark_ParseJson" => Arc::new(spark_get_json_object::spark_parse_json),
+        "Spark_MakeArray" => Arc::new(spark_make_array::array),
+        "Spark_StringSpace" => Arc::new(spark_strings::string_space),
+        "Spark_StringRepeat" => Arc::new(spark_strings::string_repeat),
+        "Spark_StringSplit" => Arc::new(spark_strings::string_split),
+        "Spark_StringConcat" => Arc::new(spark_strings::string_concat),
+        "Spark_StringConcatWs" => Arc::new(spark_strings::string_concat_ws),
+        "Spark_StringLower" => Arc::new(spark_strings::string_lower),
+        "Spark_StringUpper" => Arc::new(spark_strings::string_upper),
+        "Spark_Year" => Arc::new(spark_dates::spark_year),
+        "Spark_Month" => Arc::new(spark_dates::spark_month),
+        "Spark_Day" => Arc::new(spark_dates::spark_day),
+        "Spark_Quarter" => Arc::new(spark_dates::spark_quarter),
+        "Spark_Hour" => Arc::new(spark_dates::spark_hour),
+        "Spark_Minute" => Arc::new(spark_dates::spark_minute),
+        "Spark_Second" => Arc::new(spark_dates::spark_second),
+        "Spark_BrickhouseArrayUnion" => Arc::new(brickhouse::array_union::array_union),
+        "Spark_Round" => Arc::new(spark_round::spark_round),
+        "Spark_NormalizeNanAndZero" => {
             Arc::new(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
-        _ => df_unimplemented_err!("spark ext function not implemented: {name}")?,
+        _ => df_unimplemented_err!("auron ext function not implemented: {name}")?,
     })
 }

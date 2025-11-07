@@ -26,7 +26,7 @@ class BuildinfoInSparkUISuite
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    val eventLogDir = Utils.createTempDir("/tmp/spark-events")
+    Utils.createTempDir("/tmp/spark-events")
   }
 
   test("test build info in spark UI ") {

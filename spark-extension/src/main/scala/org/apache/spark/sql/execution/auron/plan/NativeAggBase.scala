@@ -275,7 +275,7 @@ object NativeAggBase extends Logging {
           .setScalarFunction(
             pb.PhysicalScalarFunctionNode
               .newBuilder()
-              .setFun(pb.ScalarFunction.SparkExtFunctions)
+              .setFun(pb.ScalarFunction.AuronExtFunctions)
               .setName("Placeholder")
               .setReturnType(NativeConverters.convertDataType(e.dataType)))
           .build()

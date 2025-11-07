@@ -698,7 +698,7 @@ object NativeConverters extends Logging {
                   pb.PhysicalBinaryExprNode
                     .newBuilder()
                     .setL(convertExprWithFallback(Cast(lhs, resultType), isPruningExpr, fallback))
-                    .setR(buildExtScalarFunction("NullIfZero", rhs :: Nil, rhs.dataType))
+                    .setR(buildExtScalarFunction("Spark_NullIfZero", rhs :: Nil, rhs.dataType))
                     .setOp("Divide"))
               }))
           }
@@ -711,7 +711,7 @@ object NativeConverters extends Logging {
               pb.PhysicalBinaryExprNode
                 .newBuilder()
                 .setL(convertExprWithFallback(lhsCasted, isPruningExpr, fallback))
-                .setR(buildExtScalarFunction("NullIfZero", rhsCasted :: Nil, rhs.dataType))
+                .setR(buildExtScalarFunction("Spark_NullIfZero", rhsCasted :: Nil, rhs.dataType))
                 .setOp("Divide"))
           }
         }
@@ -733,7 +733,8 @@ object NativeConverters extends Logging {
                 pb.PhysicalBinaryExprNode
                   .newBuilder()
                   .setL(convertExprWithFallback(lhsCasted, isPruningExpr, fallback))
-                  .setR(buildExtScalarFunction("NullIfZero", rhsCasted :: Nil, rhs.dataType))
+                  .setR(
+                    buildExtScalarFunction("Spark_NullIfZero", rhsCasted :: Nil, rhs.dataType))
                   .setOp("Modulo"))
             }
         }
@@ -832,9 +833,9 @@ object NativeConverters extends Logging {
       case e: Round =>
         e.scale match {
           case Literal(n: Int, _) =>
-            buildExtScalarFunction("Round", Seq(e.child, Literal(n.toLong)), e.dataType)
+            buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(n.toLong)), e.dataType)
           case _ =>
-            buildExtScalarFunction("Round", Seq(e.child, Literal(0L)), e.dataType)
+            buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(0L)), e.dataType)
         }
 
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)
@@ -849,10 +850,10 @@ object NativeConverters extends Logging {
 
       case e: Lower
           if sparkAuronConfig.getBoolean(SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE) =>
-        buildExtScalarFunction("StringLower", e.children, e.dataType)
+        buildExtScalarFunction("Spark_StringLower", e.children, e.dataType)
       case e: Upper
           if sparkAuronConfig.getBoolean(SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE) =>
-        buildExtScalarFunction("StringUpper", e.children, e.dataType)
+        buildExtScalarFunction("Spark_StringLower", e.children, e.dataType)
 
       case e: StringTrim =>
         buildScalarFunction(pb.ScalarFunction.Trim, e.srcStr +: e.trimStr.toSeq, e.dataType)
@@ -861,7 +862,7 @@ object NativeConverters extends Logging {
       case e: StringTrimRight =>
         buildScalarFunction(pb.ScalarFunction.Rtrim, e.srcStr +: e.trimStr.toSeq, e.dataType)
       case e @ NullIf(left, right, _) =>
-        buildExtScalarFunction("NullIf", left :: right :: Nil, e.dataType)
+        buildExtScalarFunction("Spark_NullIf", left :: right :: Nil, e.dataType)
       case Md5(_1) =>
         buildScalarFunction(pb.ScalarFunction.MD5, Seq(unpackBinaryTypeCast(_1)), StringType)
       case Reverse(_1) =>
@@ -869,19 +870,19 @@ object NativeConverters extends Logging {
       case InitCap(_1) =>
         buildScalarFunction(pb.ScalarFunction.InitCap, Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(224, _)) =>
-        buildExtScalarFunction("Sha224", Seq(unpackBinaryTypeCast(_1)), StringType)
+        buildExtScalarFunction("Spark_Sha224", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(0, _)) =>
-        buildExtScalarFunction("Sha256", Seq(unpackBinaryTypeCast(_1)), StringType)
+        buildExtScalarFunction("Spark_Sha256", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(256, _)) =>
-        buildExtScalarFunction("Sha256", Seq(unpackBinaryTypeCast(_1)), StringType)
+        buildExtScalarFunction("Spark_Sha256", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(384, _)) =>
-        buildExtScalarFunction("Sha384", Seq(unpackBinaryTypeCast(_1)), StringType)
+        buildExtScalarFunction("Spark_Sha384", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(512, _)) =>
-        buildExtScalarFunction("Sha512", Seq(unpackBinaryTypeCast(_1)), StringType)
+        buildExtScalarFunction("Spark_Sha512", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Murmur3Hash(children, 42) =>
-        buildExtScalarFunction("Murmur3Hash", children, IntegerType)
+        buildExtScalarFunction("Spark_Murmur3Hash", children, IntegerType)
       case XxHash64(children, 42L) =>
-        buildExtScalarFunction("XxHash64", children, LongType)
+        buildExtScalarFunction("Spark_XxHash64", children, LongType)
       case e: Greatest =>
         buildScalarFunction(pb.ScalarFunction.Greatest, e.children, e.dataType)
       case e: Pow =>
@@ -889,20 +890,20 @@ object NativeConverters extends Logging {
       case e: Nvl =>
         buildScalarFunction(pb.ScalarFunction.Nvl, e.children, e.dataType)
 
-      case Year(child) => buildExtScalarFunction("Year", child :: Nil, IntegerType)
-      case Month(child) => buildExtScalarFunction("Month", child :: Nil, IntegerType)
-      case DayOfMonth(child) => buildExtScalarFunction("Day", child :: Nil, IntegerType)
-      case Quarter(child) => buildExtScalarFunction("Quarter", child :: Nil, IntegerType)
+      case Year(child) => buildExtScalarFunction("Spark_Year", child :: Nil, IntegerType)
+      case Month(child) => buildExtScalarFunction("Spark_Month", child :: Nil, IntegerType)
+      case DayOfMonth(child) => buildExtScalarFunction("Spark_Day", child :: Nil, IntegerType)
+      case Quarter(child) => buildExtScalarFunction("Spark_Quarter", child :: Nil, IntegerType)
 
       case e: Levenshtein =>
         buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)
 
       case e: Hour if datetimeExtractEnabled =>
-        buildTimePartExt("Hour", e.children.head, isPruningExpr, fallback)
+        buildTimePartExt("Spark_Hour", e.children.head, isPruningExpr, fallback)
       case e: Minute if datetimeExtractEnabled =>
-        buildTimePartExt("Minute", e.children.head, isPruningExpr, fallback)
+        buildTimePartExt("Spark_Minute", e.children.head, isPruningExpr, fallback)
       case e: Second if datetimeExtractEnabled =>
-        buildTimePartExt("Second", e.children.head, isPruningExpr, fallback)
+        buildTimePartExt("Spark_Second", e.children.head, isPruningExpr, fallback)
 
       // startswith is converted to scalar function in pruning-expr mode
       case StartsWith(expr, Literal(prefix, StringType)) if isPruningExpr =>
@@ -949,20 +950,20 @@ object NativeConverters extends Logging {
           StringType)
 
       case StringSpace(n) =>
-        buildExtScalarFunction("StringSpace", n :: Nil, StringType)
+        buildExtScalarFunction("Spark_StringSpace", n :: Nil, StringType)
 
       case StringRepeat(str, n @ Literal(_, IntegerType)) =>
-        buildExtScalarFunction("StringRepeat", str :: n :: Nil, StringType)
+        buildExtScalarFunction("Spark_StringRepeat", str :: n :: Nil, StringType)
 
       case e: Concat if e.children.forall(_.dataType == StringType) =>
-        buildExtScalarFunction("StringConcat", e.children, e.dataType)
+        buildExtScalarFunction("Spark_StringConcat", e.children, e.dataType)
 
       case e: ConcatWs
           if e.children.nonEmpty
             && e.children.head.isInstanceOf[Literal]
             && e.children.forall(c =>
               c.dataType == StringType || c.dataType == ArrayType(StringType)) =>
-        buildExtScalarFunction("StringConcatWs", e.children, e.dataType)
+        buildExtScalarFunction("Spark_StringConcatWs", e.children, e.dataType)
 
       case e: Coalesce =>
         val children = e.children.map(Cast(_, e.dataType))
@@ -1011,7 +1012,7 @@ object NativeConverters extends Logging {
       // expressions for DecimalPrecision rule
       case UnscaledValue(_1) if decimalArithOpEnabled =>
         val args = _1 :: Nil
-        buildExtScalarFunction("UnscaledValue", args, LongType)
+        buildExtScalarFunction("Spark_UnscaledValue", args, LongType)
 
       case e: MakeDecimal if decimalArithOpEnabled =>
         val precision = e.precision
@@ -1019,7 +1020,7 @@ object NativeConverters extends Logging {
         val args =
           e.child :: Literal
             .apply(precision, IntegerType) :: Literal.apply(scale, IntegerType) :: Nil
-        buildExtScalarFunction("MakeDecimal", args, DecimalType(precision, scale))
+        buildExtScalarFunction("Spark_MakeDecimal", args, DecimalType(precision, scale))
 
       case e: CheckOverflow if decimalArithOpEnabled =>
         val precision = e.dataType.precision
@@ -1027,13 +1028,13 @@ object NativeConverters extends Logging {
         val args =
           e.child :: Literal
             .apply(precision, IntegerType) :: Literal.apply(scale, IntegerType) :: Nil
-        buildExtScalarFunction("CheckOverflow", args, DecimalType(precision, scale))
+        buildExtScalarFunction("Spark_CheckOverflow", args, DecimalType(precision, scale))
 
       case e: NormalizeNaNAndZero
           if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
-        buildExtScalarFunction("NormalizeNanAndZero", e.children, e.dataType)
+        buildExtScalarFunction("Spark_NormalizeNanAndZero", e.children, e.dataType)
 
-      case e: CreateArray => buildExtScalarFunction("MakeArray", e.children, e.dataType)
+      case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
 
       case e: CreateNamedStruct =>
         buildExprNode {
@@ -1100,16 +1101,19 @@ object NativeConverters extends Logging {
         // The benefit of this approach is that if there are multiple calls,
         // the JSON object can be reused, which can significantly improve performance.
         val parsed = Shims.get.createNativeExprWrapper(
-          buildExtScalarFunction("ParseJson", e.children(0) :: Nil, BinaryType),
+          buildExtScalarFunction("Spark_ParseJson", e.children(0) :: Nil, BinaryType),
           BinaryType,
           nullable = false)
-        buildExtScalarFunction("GetParsedJsonObject", parsed :: e.children(1) :: Nil, StringType)
+        buildExtScalarFunction(
+          "Spark_GetParsedJsonObject",
+          parsed :: e.children(1) :: Nil,
+          StringType)
 
       // hive UDF brickhouse.array_union
       case e
           if getFunctionClassName(e).contains("brickhouse.udf.collect.ArrayUnionUDF")
             && udfBrickHouseEnabled =>
-        buildExtScalarFunction("BrickhouseArrayUnion", e.children, e.dataType)
+        buildExtScalarFunction("Spark_BrickhouseArrayUnion", e.children, e.dataType)
 
       case e =>
         Shims.get.convertMoreExprWithFallback(e, isPruningExpr, fallback) match {
@@ -1304,7 +1308,7 @@ object NativeConverters extends Logging {
         pb.PhysicalScalarFunctionNode
           .newBuilder()
           .setName(name)
-          .setFun(pb.ScalarFunction.SparkExtFunctions)
+          .setFun(pb.ScalarFunction.AuronExtFunctions)
           .addAllArgs(
             args.map(expr => convertExprWithFallback(expr, isPruningExpr, fallback)).asJava)
           .setReturnType(convertDataType(dataType)))

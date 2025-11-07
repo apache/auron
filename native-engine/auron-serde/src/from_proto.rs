@@ -839,7 +839,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Power => f::math::power(),
             ScalarFunction::IsNaN => f::math::isnan(),
 
-            ScalarFunction::SparkExtFunctions => {
+            ScalarFunction::AuronExtFunctions => {
                 unreachable!()
             }
         }
@@ -945,9 +945,9 @@ fn try_parse_physical_expr(
                     .map(|x| try_parse_physical_expr(x, input_schema))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let scalar_udf = if scalar_function == protobuf::ScalarFunction::SparkExtFunctions {
+                let scalar_udf = if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
                     let fun_name = &e.name;
-                    let fun = datafusion_ext_functions::create_spark_ext_function(fun_name)?;
+                    let fun = datafusion_ext_functions::create_auron_ext_function(fun_name)?;
                     Arc::new(create_udf(
                         &format!("spark_ext_function_{}", fun_name),
                         args.iter()
