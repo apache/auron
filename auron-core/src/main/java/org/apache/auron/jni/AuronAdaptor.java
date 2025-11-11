@@ -18,6 +18,7 @@ package org.apache.auron.jni;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ServiceLoader;
 import org.apache.auron.configuration.AuronConfiguration;
 import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.memory.OnHeapSpillManager;
@@ -31,18 +32,7 @@ public abstract class AuronAdaptor {
     /**
      * The static instance of the AuronAdaptor.
      */
-    private static AuronAdaptor INSTANCE = null;
-
-    /**
-     * Initializes a static instance of the AuronAdaptor.
-     *
-     * @param auronAdaptor The implementation of AuronAdaptor to be set as the static instance.
-     */
-    public static synchronized void initInstance(AuronAdaptor auronAdaptor) {
-        if (INSTANCE == null) {
-            INSTANCE = auronAdaptor;
-        }
-    }
+    private static volatile AuronAdaptor INSTANCE = null;
 
     /**
      * Retrieves the static instance of the AuronAdaptor.
@@ -50,6 +40,20 @@ public abstract class AuronAdaptor {
      * @return The current AuronAdaptor instance, or null if none has been set.
      */
     public static AuronAdaptor getInstance() {
+        if (INSTANCE == null) {
+            synchronized (AuronAdaptor.class) {
+                if (INSTANCE == null) {
+                    ServiceLoader<AuronAdaptorProvider> loader = ServiceLoader.load(AuronAdaptorProvider.class);
+                    for (AuronAdaptorProvider p : loader) {
+                        INSTANCE = p.create();
+                        break;
+                    }
+                    if (INSTANCE == null) {
+                        throw new IllegalStateException("No AuronAdaptorProvider found");
+                    }
+                }
+            }
+        }
         return INSTANCE;
     }
 
