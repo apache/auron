@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.auron
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.sql.internal.SQLConf
 
 trait AuronSQLTestHelper {
