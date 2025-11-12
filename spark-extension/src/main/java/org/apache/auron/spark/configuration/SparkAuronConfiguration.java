@@ -113,7 +113,8 @@ public class SparkAuronConfiguration extends AuronConfiguration {
                     "auron.partialAggSkipping.minRows")
             .description("minimum number of rows to trigger partial aggregate skipping.")
             .intType()
-            .dynamicDefaultValue(config -> config.getOptional(AuronConfiguration.BATCH_SIZE).get() * 5);
+            .dynamicDefaultValue(
+                    config -> config.getOptional(AuronConfiguration.BATCH_SIZE).get() * 5);
 
     public static final ConfigOption<Boolean> PARTIAL_AGG_SKIPPING_SKIP_SPILL = ConfigOptions.key(
                     "auron.partialAggSkipping.skipSpill")
