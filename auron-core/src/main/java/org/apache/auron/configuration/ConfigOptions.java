@@ -18,6 +18,8 @@ package org.apache.auron.configuration;
 
 import static org.apache.auron.util.Preconditions.checkNotNull;
 
+import java.util.function.Function;
+
 /**
  * Refer to the design of the Flink engine.
  * {@code ConfigOptions} are used to build a {@link ConfigOption}. The option is typically built in
@@ -148,7 +150,7 @@ public class ConfigOptions {
          * @return The config option with the default value.
          */
         public ConfigOption<T> defaultValue(T value) {
-            return new ConfigOption<>(key, clazz, value, description);
+            return new ConfigOption<>(key, clazz, value, description, null);
         }
 
         /**
@@ -157,7 +159,11 @@ public class ConfigOptions {
          * @return The config option without a default value.
          */
         public ConfigOption<T> noDefaultValue() {
-            return new ConfigOption<>(key, clazz, null, description);
+            return new ConfigOption<>(key, clazz, null, description, null);
+        }
+
+        public ConfigOption<T> dynamicDefaultValue(Function<AuronConfiguration, T> dynamicDefaultValueFunction) {
+            return new ConfigOption<>(key, clazz, null, description, dynamicDefaultValueFunction);
         }
     }
 

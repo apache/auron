@@ -43,6 +43,11 @@ public class MockAuronConfiguration extends AuronConfiguration {
     public static final ConfigOption<Float> FLOAT_CONFIG_OPTION =
             ConfigOptions.key("float").floatType().defaultValue(1.0f);
 
+    public static final ConfigOption<Integer> INT_WITH_DYNAMIC_DEFAULT_CONFIG_OPTION = ConfigOptions.key(
+                    "int_with_dynamic_default")
+            .intType()
+            .dynamicDefaultValue(config -> config.getInteger(INT_CONFIG_OPTION) * 5);
+
     private Map<String, Object> configMap = new HashMap<>();
 
     public MockAuronConfiguration() {}
@@ -53,7 +58,7 @@ public class MockAuronConfiguration extends AuronConfiguration {
 
     @Override
     public <T> Optional<T> getOptional(ConfigOption<T> option) {
-        return Optional.ofNullable((T) configMap.get(option.key()));
+        return Optional.ofNullable((T) configMap.getOrDefault(option.key(), getOptionDefaultValue(option)));
     }
 
     @Override
