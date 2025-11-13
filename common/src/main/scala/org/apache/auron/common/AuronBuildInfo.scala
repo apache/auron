@@ -30,7 +30,7 @@ object AuronBuildInfo {
     throw new Exception(s"Can not load the core build file: $buildFile")
   }
 
-  private val unknown = "NULL"
+  private val unknown = ""
 
   private val props = new Properties()
 

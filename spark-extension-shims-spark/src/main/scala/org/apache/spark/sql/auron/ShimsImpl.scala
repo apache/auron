@@ -192,6 +192,7 @@ class ShimsImpl extends Shims with Logging {
     auronBuildInfo.put(AuronBuildInfo.PAIMON_VERSION_STRING, AuronBuildInfo.PAIMON_VERSION)
     auronBuildInfo.put(AuronBuildInfo.FLINK_VERSION_STRING, AuronBuildInfo.FLINK_VERSION)
     auronBuildInfo.put(AuronBuildInfo.BUILD_DATE_STRING, AuronBuildInfo.BUILD_DATE)
+    auronBuildInfo.retain { case (_, v) => v != null && v.nonEmpty }
     val event = AuronBuildInfoEvent(auronBuildInfo)
     AuronEventUtils.post(sparkContext, event)
   }
