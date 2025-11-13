@@ -17,6 +17,7 @@
 package org.apache.auron.jni;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import org.apache.auron.configuration.AuronConfiguration;
@@ -30,12 +31,16 @@ public class AuronAdaptorTest {
     @Test
     public void testRetrieveConfigWithAuronAdaptor() {
         MockAuronAdaptor auronAdaptor = new MockAuronAdaptor();
-        AuronAdaptor.initInstance(auronAdaptor);
-        AuronAdaptor.getInstance().loadAuronLib();
-        assertNotNull(AuronAdaptor.getInstance().getAuronConfiguration());
-        AuronConfiguration auronConfig = AuronAdaptor.getInstance().getAuronConfiguration();
+        assertNotNull(auronAdaptor.getAuronConfiguration());
+        AuronConfiguration auronConfig = auronAdaptor.getAuronConfiguration();
         assertEquals(auronConfig.getInteger(AuronConfiguration.BATCH_SIZE), 10000);
         assertEquals(auronConfig.getDouble(AuronConfiguration.MEMORY_FRACTION), 0.6, 0.0);
         assertEquals(auronConfig.getString(AuronConfiguration.NATIVE_LOG_LEVEL), "info");
+    }
+
+    @Test
+    public void testLoadAuronAdaptorInstanceViaSPI() {
+        AuronAdaptor adaptor = AuronAdaptor.getInstance();
+        assertInstanceOf(MockAuronAdaptor.class, adaptor, "SPI should discover and instantiate MockAuronAdaptor");
     }
 }

@@ -55,7 +55,6 @@ import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.storage.FileSegment
 
 import org.apache.auron.{protobuf => pb}
-import org.apache.auron.jni.{AuronAdaptor, SparkAuronAdaptor}
 
 abstract class Shims {
 
@@ -263,7 +262,6 @@ abstract class Shims {
 
 object Shims {
   lazy val get: Shims = {
-    AuronAdaptor.initInstance(new SparkAuronAdaptor)
     classOf[Shims].getClassLoader
       .loadClass("org.apache.spark.sql.auron.ShimsImpl")
       .newInstance()
