@@ -1291,11 +1291,7 @@ impl TryInto<FileScanConfig> for &protobuf::FileScanExecConf {
             .iter()
             .map(|i| *i as usize)
             .collect::<Vec<_>>();
-        let projection = if projection.is_empty() {
-            None
-        } else {
-            Some(projection)
-        };
+        let projection = Some(projection);
         let partition_schema: SchemaRef = Arc::new(convert_required!(self.partition_schema)?);
         let mut statistics: Statistics = convert_required!(self.statistics)?;
         if statistics.column_statistics.is_empty() {
