@@ -14,147 +14,105 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.auron
+package org.apache.spark.sql.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row, SparkSession}
-import org.apache.spark.sql.auron.AuronConverters
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeExec
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
-import org.apache.spark.sql.test.SharedSparkSession
 
-class AuronCheckConvertBroadcastExchangeSuite
-    extends AuronQueryTest
-    with SharedSparkSession
-    with AuronSQLTestHelper {
+import org.apache.auron.BaseAuronSQLSuite
+
+class AuronCheckConvertBroadcastExchangeSuite extends AuronQueryTest with BaseAuronSQLSuite {
   import testImplicits._
 
   test(
-    "test bhj broadcastExchange to native where spark.auron.enable.broadcastexchange is true") {
-    val spark = SparkSession
-      .builder()
-      .master("local[2]")
-      .appName("checkConvertToBroadcast")
-      .config("spark.sql.shuffle.partitions", "4")
-      .config("spark.sql.autoBroadcastJoinThreshold", -1)
-      .config("spark.sql.adaptive.enabled", "true")
-      .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
-      .config(
-        "spark.shuffle.manager",
-        "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
-      .config("spark.memory.offHeap.enabled", "false")
-      .config("spark.auron.enable", "true")
-      .getOrCreate()
+    "test bhj broadcastExchange to native where spark.auron.enable.broadcastExchange is true") {
+    withSQLConf("spark.auron.enable.broadcastExchange" -> "true") {
+      Seq((1, 2, "test test"))
+        .toDF("c1", "c2", "part")
+        .createOrReplaceTempView("broad_cast_table1")
+      Seq((1, 2, "test test"))
+        .toDF("c1", "c2", "part")
+        .createOrReplaceTempView("broad_cast_table2")
+      val df =
+        spark.sql(
+          "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b on a.c1 = b.c1")
 
-    Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("broad_cast_table1")
-    Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("broad_cast_table2")
-    val executePlan =
-      spark.sql(
-        "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b on a.c1 = b.c1")
-
-    val broadcastExchangeExec = collect(executePlan.queryExecution.executedPlan) {
-      case broadcastExchangeExec: BroadcastExchangeExec => broadcastExchangeExec
+      checkAnswer(df, Seq(Row(1, 2)))
+      assert(collectFirst(df.queryExecution.executedPlan) {
+        case broadcastExchangeExec: NativeBroadcastExchangeExec =>
+          broadcastExchangeExec
+      }.isDefined)
     }
-    assert(broadcastExchangeExec.nonEmpty, "BroadcastExchangeExec not found in plan")
-    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.head)
-    assert(afterConvertPlan.isInstanceOf[NativeBroadcastExchangeExec])
-    checkAnswer(executePlan, Seq(Row(1, 2)))
   }
 
   test(
-    "test bnlj broadcastExchange to native where spark.auron.enable.broadcastexchange is true") {
-    val spark = SparkSession
-      .builder()
-      .master("local[2]")
-      .appName("checkConvertToBroadcast")
-      .config("spark.sql.shuffle.partitions", "4")
-      .config("spark.sql.autoBroadcastJoinThreshold", -1)
-      .config("spark.sql.adaptive.enabled", "true")
-      .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
-      .config(
-        "spark.shuffle.manager",
-        "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
-      .config("spark.memory.offHeap.enabled", "false")
-      .config("spark.auron.enable", "true")
-      .getOrCreate()
+    "test bnlj broadcastExchange to native where spark.auron.enable.broadcastExchange is true") {
+    withSQLConf("spark.auron.enable.broadcastExchange" -> "true") {
+      Seq((1, 2, "test test"))
+        .toDF("c1", "c2", "part")
+        .createOrReplaceTempView("broad_cast_table1")
+      Seq((1, 2, "test test"))
+        .toDF("c1", "c2", "part")
+        .createOrReplaceTempView("broad_cast_table2")
+      val df =
+        spark.sql(
+          "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b ")
 
-    Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("broad_cast_table1")
-    Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("broad_cast_table2")
-    val executePlan =
-      spark.sql(
-        "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b ")
-
-    val broadcastExchangeExec = collect(executePlan.queryExecution.executedPlan) {
-      case broadcastExchangeExec: BroadcastExchangeExec => broadcastExchangeExec
+      checkAnswer(df, Seq(Row(1, 2)))
+      assert(collectFirst(df.queryExecution.executedPlan) {
+        case broadcastExchangeExec: NativeBroadcastExchangeExec =>
+          broadcastExchangeExec
+      }.isDefined)
     }
-    assert(broadcastExchangeExec.nonEmpty, "BroadcastExchangeExec not found in plan")
-    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.head)
-    assert(afterConvertPlan.isInstanceOf[NativeBroadcastExchangeExec])
-    checkAnswer(executePlan, Seq(Row(1, 2)))
   }
 
   test(
-    "test do not convert broadcastExchange to native when set spark.auron.enable.broadcastexchange is false") {
-    val spark = SparkSession
-      .builder()
-      .master("local[2]")
-      .appName("checkConvertToBroadcast")
-      .config("spark.sql.shuffle.partitions", "4")
-      .config("spark.sql.autoBroadcastJoinThreshold", -1)
-      .config("spark.sql.adaptive.enabled", "true")
-      .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
-      .config(
-        "spark.shuffle.manager",
-        "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
-      .config("spark.memory.offHeap.enabled", "false")
-      .config("spark.auron.enable.broadcastExchange", "false")
-      .config("spark.auron.enable", "true")
-      .getOrCreate()
+    "test do not convert broadcastExchange to native when set spark.auron.enable.broadcastExchange is false") {
+    withSQLConf("spark.auron.enable.broadcastExchange" -> "false") {
+      Seq((1, 2, "test test"))
+        .toDF("c1", "c2", "part")
+        .createOrReplaceTempView("broad_cast_table1")
+      Seq((1, 2, "test test"))
+        .toDF("c1", "c2", "part")
+        .createOrReplaceTempView("broad_cast_table2")
+      val df =
+        spark.sql(
+          "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b on a.c1 = b.c1")
 
-    Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("broad_cast_table1")
-    Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("broad_cast_table2")
-    val executePlan =
-      spark.sql(
-        "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b on a.c1 = b.c1")
-
-    val broadcastExchangeExec = collect(executePlan.queryExecution.executedPlan) {
-      case broadcastExchangeExec: BroadcastExchangeExec => broadcastExchangeExec
+      checkAnswer(df, Seq(Row(1, 2)))
+      val plan = df.queryExecution.executedPlan
+      assert(collectFirst(plan) { case broadcastExchangeExec: NativeBroadcastExchangeExec =>
+        broadcastExchangeExec
+      }.isEmpty)
+      assert(collectFirst(plan) { case broadcastExchangeExec: BroadcastExchangeExec =>
+        broadcastExchangeExec
+      }.isDefined)
     }
-    assert(broadcastExchangeExec.nonEmpty, "BroadcastExchangeExec not found in plan")
-    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.head)
-    assert(afterConvertPlan.isInstanceOf[BroadcastExchangeExec])
-    checkAnswer(executePlan, Seq(Row(1, 2)))
   }
 
   test(
-    "test bnlj broadcastExchange to native where spark.auron.enable.broadcastexchange is false") {
-    val spark = SparkSession
-      .builder()
-      .master("local[2]")
-      .appName("checkConvertToBroadcast")
-      .config("spark.sql.shuffle.partitions", "4")
-      .config("spark.sql.autoBroadcastJoinThreshold", -1)
-      .config("spark.sql.adaptive.enabled", "true")
-      .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
-      .config(
-        "spark.shuffle.manager",
-        "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
-      .config("spark.memory.offHeap.enabled", "false")
-      .config("spark.auron.enable.broadcastExchange", "false")
-      .config("spark.auron.enable", "true")
-      .getOrCreate()
+    "test bnlj broadcastExchange to native where spark.auron.enable.broadcastExchange is false") {
+    withSQLConf("spark.auron.enable.broadcastExchange" -> "false") {
+      Seq((1, 2, "test test"))
+        .toDF("c1", "c2", "part")
+        .createOrReplaceTempView("broad_cast_table1")
+      Seq((1, 2, "test test"))
+        .toDF("c1", "c2", "part")
+        .createOrReplaceTempView("broad_cast_table2")
+      val df =
+        spark.sql(
+          "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b ")
 
-    Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("broad_cast_table1")
-    Seq((1, 2, "test test")).toDF("c1", "c2", "part").createOrReplaceTempView("broad_cast_table2")
-    val executePlan =
-      spark.sql(
-        "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b ")
-
-    val broadcastExchangeExec = collect(executePlan.queryExecution.executedPlan) {
-      case broadcastExchangeExec: BroadcastExchangeExec => broadcastExchangeExec
+      checkAnswer(df, Seq(Row(1, 2)))
+      val plan = df.queryExecution.executedPlan
+      assert(collectFirst(plan) { case broadcastExchangeExec: NativeBroadcastExchangeExec =>
+        broadcastExchangeExec
+      }.isEmpty)
+      assert(collectFirst(plan) { case broadcastExchangeExec: BroadcastExchangeExec =>
+        broadcastExchangeExec
+      }.isDefined)
     }
-    assert(broadcastExchangeExec.nonEmpty, "BroadcastExchangeExec not found in plan")
-    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.head)
-    assert(afterConvertPlan.isInstanceOf[BroadcastExchangeExec])
-    checkAnswer(executePlan, Seq(Row(1, 2)))
   }
 }

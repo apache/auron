@@ -28,7 +28,7 @@ import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
-import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, roundRobinTypeSupported, scalarTypeSupported, StubExpr}
+import org.apache.spark.sql.auron.NativeConverters.{roundRobinTypeSupported, scalarTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -135,12 +135,8 @@ object AuronConverters extends Logging {
     getBooleanConf("spark.auron.enable.data.writing", defaultValue = false)
   def enableScanParquet: Boolean =
     getBooleanConf("spark.auron.enable.scan.parquet", defaultValue = true)
-  def enableScanParquetTimestamp: Boolean =
-    getBooleanConf("spark.auron.enable.scan.parquet.timestamp", defaultValue = true)
   def enableScanOrc: Boolean =
     getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
-  def enableScanOrcTimestamp: Boolean =
-    getBooleanConf("spark.auron.enable.scan.orc.timestamp", defaultValue = true)
   def enableBroadcastExchange: Boolean =
     getBooleanConf("spark.auron.enable.broadcastExchange", defaultValue = true)
   def enableShuffleExechange: Boolean =
@@ -195,9 +191,10 @@ object AuronConverters extends Logging {
 
   def convertSparkPlan(exec: SparkPlan): SparkPlan = {
     exec match {
-      case e: ShuffleExchangeExec if enableExchange => tryConvert(e, convertShuffleExchangeExec)
+      case e: ShuffleExchangeExec => tryConvert(e, convertShuffleExchangeExec)
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
+      case e: ShuffleExchangeExec if enableExchange => tryConvert(e, convertShuffleExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
         tryConvert(e, convertFileSourceScanExec)
       case e: ProjectExec if enableProject => // project
@@ -468,25 +465,9 @@ object AuronConverters extends Logging {
     relation.fileFormat match {
       case p if p.getClass.getName.endsWith("ParquetFileFormat") =>
         assert(enableScanParquet)
-        if (!enableScanParquetTimestamp) {
-          assert(
-            !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
-            s"Parquet scan with timestamp type is not supported for table: ${tableIdentifier
-              .getOrElse("unknown")}. " +
-              "Set spark.auron.enable.scan.parquet.timestamp=true to enable timestamp support " +
-              "or remove timestamp columns from the query.")
-        }
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
       case p if p.getClass.getName.endsWith("OrcFileFormat") =>
         assert(enableScanOrc)
-        if (!enableScanOrcTimestamp) {
-          assert(
-            !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
-            s"ORC scan with timestamp type is not supported for tableIdentifier: ${tableIdentifier
-              .getOrElse("unknown")}. " +
-              "Set spark.auron.enable.scan.orc.timestamp=true to enable timestamp support " +
-              "or remove timestamp columns from the query.")
-        }
         addRenameColumnsExec(Shims.get.createNativeOrcScanExec(exec))
       case p =>
         throw new NotImplementedError(
