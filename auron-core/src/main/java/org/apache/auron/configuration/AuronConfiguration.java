@@ -44,7 +44,7 @@ public abstract class AuronConfiguration {
     public abstract <T> Optional<T> getOptional(String key);
 
     public <T> T get(ConfigOption<T> option) {
-        return getOptional(option).orElseGet(option::defaultValue);
+        return getOptional(option).orElseGet(() -> getOptionDefaultValue(option));
     }
 
     /**
@@ -54,7 +54,7 @@ public abstract class AuronConfiguration {
      * @return the (default) value associated with the given config option
      */
     public String getString(ConfigOption<String> configOption) {
-        return getOptional(configOption).orElseGet(configOption::defaultValue);
+        return getOptional(configOption).orElseGet(() -> getOptionDefaultValue(configOption));
     }
 
     /**
@@ -76,7 +76,7 @@ public abstract class AuronConfiguration {
      * @return the (default) value associated with the given config option
      */
     public int getInteger(ConfigOption<Integer> configOption) {
-        return getOptional(configOption).orElseGet(configOption::defaultValue);
+        return getOptional(configOption).orElseGet(() -> getOptionDefaultValue(configOption));
     }
 
     /**
@@ -99,7 +99,7 @@ public abstract class AuronConfiguration {
      * @return the (default) value associated with the given config option
      */
     public long getLong(ConfigOption<Long> configOption) {
-        return getOptional(configOption).orElseGet(configOption::defaultValue);
+        return getOptional(configOption).orElseGet(() -> getOptionDefaultValue(configOption));
     }
 
     /**
@@ -122,7 +122,7 @@ public abstract class AuronConfiguration {
      * @return the (default) value associated with the given config option
      */
     public boolean getBoolean(ConfigOption<Boolean> configOption) {
-        return getOptional(configOption).orElseGet(configOption::defaultValue);
+        return getOptional(configOption).orElseGet(() -> getOptionDefaultValue(configOption));
     }
 
     /**
@@ -145,7 +145,7 @@ public abstract class AuronConfiguration {
      * @return the (default) value associated with the given config option
      */
     public float getFloat(ConfigOption<Float> configOption) {
-        return getOptional(configOption).orElseGet(configOption::defaultValue);
+        return getOptional(configOption).orElseGet(() -> getOptionDefaultValue(configOption));
     }
 
     /**
@@ -168,7 +168,7 @@ public abstract class AuronConfiguration {
      * @return the (default) value associated with the given config option
      */
     public double getDouble(ConfigOption<Double> configOption) {
-        return getOptional(configOption).orElseGet(configOption::defaultValue);
+        return getOptional(configOption).orElseGet(() -> getOptionDefaultValue(configOption));
     }
 
     /**
@@ -182,5 +182,19 @@ public abstract class AuronConfiguration {
      */
     public double getDouble(ConfigOption<Double> configOption, double overrideDefault) {
         return getOptional(configOption).orElse(overrideDefault);
+    }
+
+    /**
+     * Returns the value associated with the given config option as a {@code double}.
+     *
+     * @param configOption The configuration option
+     * @return the (default) value associated with the given config option
+     */
+    protected <T> T getOptionDefaultValue(ConfigOption<T> configOption) {
+        if (configOption.hasDynamicDefaultValue()) {
+            return configOption.dynamicDefaultValueFunction().apply(this);
+        } else {
+            return configOption.defaultValue();
+        }
     }
 }

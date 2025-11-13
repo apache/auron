@@ -18,6 +18,8 @@ package org.apache.auron.configuration;
 
 import static org.apache.auron.util.Preconditions.checkNotNull;
 
+import java.util.function.Function;
+
 /**
  * A {@code ConfigOption} describes a configuration parameter. It encapsulates the configuration
  * key, and an optional default value for the configuration parameter.
@@ -41,6 +43,9 @@ public class ConfigOption<T> {
     /** The description for this option. */
     private final String description;
 
+    /** The function to compute the default value. */
+    private final Function<AuronConfiguration, T> dynamicDefaultValueFunction;
+
     /**
      * Type of the value that this ConfigOption describes.
      *
@@ -60,11 +65,17 @@ public class ConfigOption<T> {
      * @param description Description for that option
      * @param defaultValue The default value for this option
      */
-    ConfigOption(String key, Class<?> clazz, T defaultValue, String description) {
+    ConfigOption(
+            String key,
+            Class<?> clazz,
+            T defaultValue,
+            String description,
+            Function<AuronConfiguration, T> dynamicDefaultValueFunction) {
         this.key = checkNotNull(key);
         this.description = description;
         this.defaultValue = defaultValue;
         this.clazz = checkNotNull(clazz);
+        this.dynamicDefaultValueFunction = dynamicDefaultValueFunction;
     }
 
     /**
@@ -101,5 +112,23 @@ public class ConfigOption<T> {
      */
     public T defaultValue() {
         return defaultValue;
+    }
+
+    /**
+     * Checks if this option has a dynamic default value.
+     *
+     * @return True if it has a dynamic default value, false if not.
+     */
+    public boolean hasDynamicDefaultValue() {
+        return dynamicDefaultValueFunction != null;
+    }
+
+    /**
+     * Returns the dynamic default value function, or null, if there is no dynamic default value.
+     *
+     * @return The dynamic default value function, or null.
+     */
+    public Function<AuronConfiguration, T> dynamicDefaultValueFunction() {
+        return dynamicDefaultValueFunction;
     }
 }

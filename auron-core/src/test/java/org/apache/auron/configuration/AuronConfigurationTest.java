@@ -48,5 +48,7 @@ public class AuronConfigurationTest {
         assertEquals(99.9, config.get(MockAuronConfiguration.DOUBLE_CONFIG_OPTION), 0.0000000001);
         assertEquals(10000000000L, config.getLong(MockAuronConfiguration.LONG_CONFIG_OPTION));
         assertEquals(1.2f, config.get(MockAuronConfiguration.FLOAT_CONFIG_OPTION), 0.0000000001);
+        // test dynamic default value
+        assertEquals(500, config.getInteger(MockAuronConfiguration.INT_WITH_DYNAMIC_DEFAULT_CONFIG_OPTION));
     }
 }
