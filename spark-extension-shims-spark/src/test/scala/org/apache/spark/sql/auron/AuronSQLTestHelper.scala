@@ -16,31 +16,27 @@
  */
 package org.apache.spark.sql.auron
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.sql.internal.SQLConf
 
 trait AuronSQLTestHelper {
   def withEnvConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val env = SparkEnv.get
-    if (env == null) {
-      throw new IllegalStateException("SparkEnv is not initialized")
-    }
-    val conf = env.conf
+    val conf = SQLConf.get
     val (keys, values) = pairs.unzip
     val currentValues = keys.map { key =>
       if (conf.contains(key)) {
-        Some(conf.get(key))
+        Some(conf.getConfString(key))
       } else {
         None
       }
     }
     (keys, values).zipped.foreach { (k, v) =>
-      conf.set(k, v)
+      conf.setConfString(k, v)
     }
     try f
     finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.set(key, value)
-        case (key, None) => conf.remove(key)
+        case (key, Some(value)) => conf.setConfString(key, value)
+        case (key, None) => conf.unsetConf(key)
       }
     }
   }
