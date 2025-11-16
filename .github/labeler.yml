@@ -43,7 +43,7 @@ common:
 
 spark:
   - "spark-extension/**"
-  - "spark-extension-shims-spark3/**"
+  - "spark-extension-shims-spark/**"
   - "spark-version-annotation-macros/**"
 
 native:
