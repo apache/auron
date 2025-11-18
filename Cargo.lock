@@ -211,7 +211,7 @@ dependencies = [
  "arrow-data",
  "arrow-schema",
  "flatbuffers",
- "lz4_flex",
+ "lz4_flex 0.11.5",
  "zstd",
 ]
 
@@ -1185,7 +1185,7 @@ dependencies = [
  "itertools 0.14.0",
  "jni",
  "log",
- "lz4_flex",
+ "lz4_flex 0.12.0",
  "num",
  "once_cell",
  "paste",
@@ -2510,6 +2510,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lz4_flex"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab6473172471198271ff72e9379150e9dfd70d8e533e0752a27e515b48dd375e"
+dependencies = [
+ "twox-hash",
+]
+
+[[package]]
 name = "lzma-sys"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2798,7 +2807,7 @@ dependencies = [
  "futures",
  "futures-util",
  "iana-time-zone",
- "lz4_flex",
+ "lz4_flex 0.11.5",
  "lzokay-native",
  "num",
  "prost 0.13.5",
@@ -2867,7 +2876,7 @@ dependencies = [
  "futures",
  "half",
  "hashbrown 0.15.5",
- "lz4_flex",
+ "lz4_flex 0.11.5",
  "num",
  "num-bigint",
  "object_store",
