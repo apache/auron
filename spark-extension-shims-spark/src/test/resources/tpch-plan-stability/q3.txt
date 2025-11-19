@@ -1,0 +1,359 @@
+== Physical Plan ==
+AdaptiveSparkPlan (64)
++- == Final Plan ==
+   NativeTakeOrdered (40)
+   +- NativeProject (39)
+      +- NativeHashAggregate (38)
+         +- NativeHashAggregate (37)
+            +- NativeProject (36)
+               +- NativeProject (35)
+                  +- NativeSortMergeJoin Inner (34)
+                     :- NativeSort (24)
+                     :  +- InputAdapter (23)
+                     :     +- AQEShuffleRead (22)
+                     :        +- ShuffleQueryStage (21), Statistics(sizeInBytes=28.6 KiB, rowCount=1.80E+3)
+                     :           +- NativeShuffleExchange (20)
+                     :              +- NativeProject (19)
+                     :                 +- NativeSortMergeJoin Inner (18)
+                     :                    :- NativeSort (9)
+                     :                    :  +- InputAdapter (8)
+                     :                    :     +- AQEShuffleRead (7)
+                     :                    :        +- ShuffleQueryStage (6), Statistics(sizeInBytes=2.8 KiB, rowCount=337)
+                     :                    :           +- NativeShuffleExchange (5)
+                     :                    :              +- NativeProject (4)
+                     :                    :                 +- NativeFilter (3)
+                     :                    :                    +- InputAdapter (2)
+                     :                    :                       +- NativeParquetScan  (1)
+                     :                    +- NativeSort (17)
+                     :                       +- InputAdapter (16)
+                     :                          +- AQEShuffleRead (15)
+                     :                             +- ShuffleQueryStage (14), Statistics(sizeInBytes=172.3 KiB, rowCount=7.29E+3)
+                     :                                +- NativeShuffleExchange (13)
+                     :                                   +- NativeFilter (12)
+                     :                                      +- InputAdapter (11)
+                     :                                         +- NativeParquetScan  (10)
+                     +- NativeSort (33)
+                        +- InputAdapter (32)
+                           +- AQEShuffleRead (31)
+                              +- ShuffleQueryStage (30), Statistics(sizeInBytes=1264.1 KiB, rowCount=3.23E+4)
+                                 +- NativeShuffleExchange (29)
+                                    +- NativeProject (28)
+                                       +- NativeFilter (27)
+                                          +- InputAdapter (26)
+                                             +- NativeParquetScan  (25)
++- == Initial Plan ==
+   TakeOrderedAndProject (63)
+   +- HashAggregate (62)
+      +- HashAggregate (61)
+         +- Project (60)
+            +- SortMergeJoin Inner (59)
+               :- Sort (53)
+               :  +- Exchange (52)
+               :     +- Project (51)
+               :        +- SortMergeJoin Inner (50)
+               :           :- Sort (45)
+               :           :  +- Exchange (44)
+               :           :     +- Project (43)
+               :           :        +- Filter (42)
+               :           :           +- Scan parquet  (41)
+               :           +- Sort (49)
+               :              +- Exchange (48)
+               :                 +- Filter (47)
+               :                    +- Scan parquet  (46)
+               +- Sort (58)
+                  +- Exchange (57)
+                     +- Project (56)
+                        +- Filter (55)
+                           +- Scan parquet  (54)
+
+
+(41) Scan parquet 
+Output [2]: [c_custkey#1, c_mktsegment#2]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(c_mktsegment), EqualTo(c_mktsegment,BUILDING), IsNotNull(c_custkey)]
+ReadSchema: struct<c_custkey:bigint,c_mktsegment:string>
+
+(2) InputAdapter
+Input [2]: [c_custkey#1, c_mktsegment#2]
+Arguments: [#3, #2]
+
+(3) NativeFilter
+Input [2]: [#3#1, #2#2]
+Condition : ((isnotnull(c_mktsegment#2) AND (c_mktsegment#2 = BUILDING)) AND isnotnull(c_custkey#1))
+
+(4) NativeProject
+Output [1]: [c_custkey#1]
+Input [2]: [#3#1, #2#2]
+
+(5) NativeShuffleExchange
+Input [1]: [c_custkey#1]
+Arguments: hashpartitioning(c_custkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(6) ShuffleQueryStage
+Output [1]: [c_custkey#1]
+Arguments: X
+
+(7) AQEShuffleRead
+Input [1]: [c_custkey#1]
+Arguments: coalesced
+
+(8) InputAdapter
+Input [1]: [c_custkey#1]
+
+(9) NativeSort
+Input [1]: [c_custkey#1]
+Arguments: [c_custkey#1 ASC NULLS FIRST], false
+
+(46) Scan parquet 
+Output [4]: [o_orderkey#4, o_custkey#5, o_orderdate#6, o_shippriority#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(o_orderdate), LessThan(o_orderdate,1995-03-15), IsNotNull(o_custkey), IsNotNull(o_orderkey)]
+ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_orderdate:date,o_shippriority:int>
+
+(11) InputAdapter
+Input [4]: [o_orderkey#4, o_custkey#5, o_orderdate#6, o_shippriority#7]
+Arguments: [#8, #9, #6, #7]
+
+(12) NativeFilter
+Input [4]: [#8#4, #9#5, #6#6, #7#7]
+Condition : (((isnotnull(o_orderdate#6) AND (o_orderdate#6 < 1995-03-15)) AND isnotnull(o_custkey#5)) AND isnotnull(o_orderkey#4))
+
+(13) NativeShuffleExchange
+Input [4]: [#8#4, #9#5, #6#6, #7#7]
+Arguments: hashpartitioning(o_custkey#5, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(14) ShuffleQueryStage
+Output [4]: [#8#4, #9#5, #6#6, #7#7]
+Arguments: X
+
+(15) AQEShuffleRead
+Input [4]: [#8#4, #9#5, #6#6, #7#7]
+Arguments: coalesced
+
+(16) InputAdapter
+Input [4]: [#8#4, #9#5, #6#6, #7#7]
+
+(17) NativeSort
+Input [4]: [#8#4, #9#5, #6#6, #7#7]
+Arguments: [o_custkey#5 ASC NULLS FIRST], false
+
+(18) NativeSortMergeJoin
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#5]
+Join type: Inner
+Join condition: None
+
+(19) NativeProject
+Output [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+Input [5]: [c_custkey#1, #8#4, #9#5, #6#6, #7#7]
+
+(20) NativeShuffleExchange
+Input [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+Arguments: hashpartitioning(o_orderkey#4, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(21) ShuffleQueryStage
+Output [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+Arguments: X
+
+(22) AQEShuffleRead
+Input [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+Arguments: coalesced
+
+(23) InputAdapter
+Input [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+
+(24) NativeSort
+Input [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+Arguments: [o_orderkey#4 ASC NULLS FIRST], false
+
+(54) Scan parquet 
+Output [4]: [l_orderkey#10, l_extendedprice#11, l_discount#12, l_shipdate#13]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(l_shipdate), GreaterThan(l_shipdate,1995-03-15), IsNotNull(l_orderkey)]
+ReadSchema: struct<l_orderkey:bigint,l_extendedprice:decimal(12,2),l_discount:decimal(12,2),l_shipdate:date>
+
+(26) InputAdapter
+Input [4]: [l_orderkey#10, l_extendedprice#11, l_discount#12, l_shipdate#13]
+Arguments: [#14, #11, #12, #13]
+
+(27) NativeFilter
+Input [4]: [#14#10, #11#11, #12#12, #13#13]
+Condition : ((isnotnull(l_shipdate#13) AND (l_shipdate#13 > 1995-03-15)) AND isnotnull(l_orderkey#10))
+
+(28) NativeProject
+Output [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+Input [4]: [#14#10, #11#11, #12#12, #13#13]
+
+(29) NativeShuffleExchange
+Input [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+Arguments: hashpartitioning(l_orderkey#10, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(30) ShuffleQueryStage
+Output [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+Arguments: X
+
+(31) AQEShuffleRead
+Input [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+Arguments: coalesced
+
+(32) InputAdapter
+Input [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+
+(33) NativeSort
+Input [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+Arguments: [l_orderkey#10 ASC NULLS FIRST], false
+
+(34) NativeSortMergeJoin
+Left keys [1]: [o_orderkey#4]
+Right keys [1]: [l_orderkey#10]
+Join type: Inner
+Join condition: None
+
+(35) NativeProject
+Output [5]: [o_orderdate#6, o_shippriority#7, l_orderkey#10, l_extendedprice#11, l_discount#12]
+Input [6]: [o_orderkey#4, o_orderdate#6, o_shippriority#7, l_orderkey#10, l_extendedprice#11, l_discount#12]
+
+(36) NativeProject
+Output [4]: [l_orderkey#10 AS l_orderkey#10, o_orderdate#6 AS o_orderdate#6, o_shippriority#7 AS o_shippriority#7, (l_extendedprice#11 * (1 - l_discount#12)) AS _c3#15]
+Input [5]: [o_orderdate#6, o_shippriority#7, l_orderkey#10, l_extendedprice#11, l_discount#12]
+
+(37) NativeHashAggregate
+Input [4]: [l_orderkey#10, o_orderdate#6, o_shippriority#7, _c3#15]
+Keys [3]: [l_orderkey#10, o_orderdate#6, o_shippriority#7]
+Functions [1]: [partial_sum(_c3#15)]
+Aggregate Attributes [2]: [sum#16, isEmpty#17]
+Results [4]: [l_orderkey#10, o_orderdate#6, o_shippriority#7, #18#18]
+
+(38) NativeHashAggregate
+Input [4]: [l_orderkey#10, o_orderdate#6, o_shippriority#7, #18#18]
+Keys [3]: [l_orderkey#10, o_orderdate#6, o_shippriority#7]
+Functions [1]: [sum((l_extendedprice#11 * (1 - l_discount#12)))]
+Aggregate Attributes [1]: [sum((l_extendedprice#11 * (1 - l_discount#12)))#19]
+Results [4]: [l_orderkey#10, o_orderdate#6, o_shippriority#7, sum((l_extendedprice#11 * (1 - l_discount#12)))#19]
+
+(39) NativeProject
+Output [4]: [l_orderkey#10, sum((l_extendedprice#11 * (1 - l_discount#12)))#19 AS revenue#20, o_orderdate#6, o_shippriority#7]
+Input [4]: [l_orderkey#10, o_orderdate#6, o_shippriority#7, sum((l_extendedprice#11 * (1 - l_discount#12)))#19]
+
+(40) NativeTakeOrdered
+Input [4]: [l_orderkey#10, revenue#20, o_orderdate#6, o_shippriority#7]
+Arguments: X, [revenue#20 DESC NULLS LAST, o_orderdate#6 ASC NULLS FIRST]
+
+(41) Scan parquet 
+Output [2]: [c_custkey#1, c_mktsegment#2]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(c_mktsegment), EqualTo(c_mktsegment,BUILDING), IsNotNull(c_custkey)]
+ReadSchema: struct<c_custkey:bigint,c_mktsegment:string>
+
+(42) Filter
+Input [2]: [c_custkey#1, c_mktsegment#2]
+Condition : ((isnotnull(c_mktsegment#2) AND (c_mktsegment#2 = BUILDING)) AND isnotnull(c_custkey#1))
+
+(43) Project
+Output [1]: [c_custkey#1]
+Input [2]: [c_custkey#1, c_mktsegment#2]
+
+(44) Exchange
+Input [1]: [c_custkey#1]
+Arguments: hashpartitioning(c_custkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(45) Sort
+Input [1]: [c_custkey#1]
+Arguments: [c_custkey#1 ASC NULLS FIRST], false, 0
+
+(46) Scan parquet 
+Output [4]: [o_orderkey#4, o_custkey#5, o_orderdate#6, o_shippriority#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(o_orderdate), LessThan(o_orderdate,1995-03-15), IsNotNull(o_custkey), IsNotNull(o_orderkey)]
+ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_orderdate:date,o_shippriority:int>
+
+(47) Filter
+Input [4]: [o_orderkey#4, o_custkey#5, o_orderdate#6, o_shippriority#7]
+Condition : (((isnotnull(o_orderdate#6) AND (o_orderdate#6 < 1995-03-15)) AND isnotnull(o_custkey#5)) AND isnotnull(o_orderkey#4))
+
+(48) Exchange
+Input [4]: [o_orderkey#4, o_custkey#5, o_orderdate#6, o_shippriority#7]
+Arguments: hashpartitioning(o_custkey#5, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(49) Sort
+Input [4]: [o_orderkey#4, o_custkey#5, o_orderdate#6, o_shippriority#7]
+Arguments: [o_custkey#5 ASC NULLS FIRST], false, 0
+
+(50) SortMergeJoin
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#5]
+Join type: Inner
+Join condition: None
+
+(51) Project
+Output [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+Input [5]: [c_custkey#1, o_orderkey#4, o_custkey#5, o_orderdate#6, o_shippriority#7]
+
+(52) Exchange
+Input [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+Arguments: hashpartitioning(o_orderkey#4, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(53) Sort
+Input [3]: [o_orderkey#4, o_orderdate#6, o_shippriority#7]
+Arguments: [o_orderkey#4 ASC NULLS FIRST], false, 0
+
+(54) Scan parquet 
+Output [4]: [l_orderkey#10, l_extendedprice#11, l_discount#12, l_shipdate#13]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(l_shipdate), GreaterThan(l_shipdate,1995-03-15), IsNotNull(l_orderkey)]
+ReadSchema: struct<l_orderkey:bigint,l_extendedprice:decimal(12,2),l_discount:decimal(12,2),l_shipdate:date>
+
+(55) Filter
+Input [4]: [l_orderkey#10, l_extendedprice#11, l_discount#12, l_shipdate#13]
+Condition : ((isnotnull(l_shipdate#13) AND (l_shipdate#13 > 1995-03-15)) AND isnotnull(l_orderkey#10))
+
+(56) Project
+Output [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+Input [4]: [l_orderkey#10, l_extendedprice#11, l_discount#12, l_shipdate#13]
+
+(57) Exchange
+Input [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+Arguments: hashpartitioning(l_orderkey#10, 5), ENSURE_REQUIREMENTS, [plan_id=8]
+
+(58) Sort
+Input [3]: [l_orderkey#10, l_extendedprice#11, l_discount#12]
+Arguments: [l_orderkey#10 ASC NULLS FIRST], false, 0
+
+(59) SortMergeJoin
+Left keys [1]: [o_orderkey#4]
+Right keys [1]: [l_orderkey#10]
+Join type: Inner
+Join condition: None
+
+(60) Project
+Output [5]: [o_orderdate#6, o_shippriority#7, l_orderkey#10, l_extendedprice#11, l_discount#12]
+Input [6]: [o_orderkey#4, o_orderdate#6, o_shippriority#7, l_orderkey#10, l_extendedprice#11, l_discount#12]
+
+(61) HashAggregate
+Input [5]: [o_orderdate#6, o_shippriority#7, l_orderkey#10, l_extendedprice#11, l_discount#12]
+Keys [3]: [l_orderkey#10, o_orderdate#6, o_shippriority#7]
+Functions [1]: [partial_sum((l_extendedprice#11 * (1 - l_discount#12)))]
+Aggregate Attributes [2]: [sum#16, isEmpty#17]
+Results [5]: [l_orderkey#10, o_orderdate#6, o_shippriority#7, sum#21, isEmpty#22]
+
+(62) HashAggregate
+Input [5]: [l_orderkey#10, o_orderdate#6, o_shippriority#7, sum#21, isEmpty#22]
+Keys [3]: [l_orderkey#10, o_orderdate#6, o_shippriority#7]
+Functions [1]: [sum((l_extendedprice#11 * (1 - l_discount#12)))]
+Aggregate Attributes [1]: [sum((l_extendedprice#11 * (1 - l_discount#12)))#19]
+Results [4]: [l_orderkey#10, sum((l_extendedprice#11 * (1 - l_discount#12)))#19 AS revenue#20, o_orderdate#6, o_shippriority#7]
+
+(63) TakeOrderedAndProject
+Input [4]: [l_orderkey#10, revenue#20, o_orderdate#6, o_shippriority#7]
+Arguments: X, [revenue#20 DESC NULLS LAST, o_orderdate#6 ASC NULLS FIRST], [l_orderkey#10, revenue#20, o_orderdate#6, o_shippriority#7]
+
+(64) AdaptiveSparkPlan
+Output [4]: [l_orderkey#10, revenue#20, o_orderdate#6, o_shippriority#7]
+Arguments: isFinalPlan=true
+

@@ -32,3 +32,8 @@
 NOTICE*
 docs/**
 build/apache-maven-*/**
+**/tpch-data-parquet/**
+**/tpch-plan-stability/**
+**/tpch-queries/**
+**/tpch-query-results/**
+
