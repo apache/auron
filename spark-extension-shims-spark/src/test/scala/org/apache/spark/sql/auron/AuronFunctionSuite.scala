@@ -18,6 +18,8 @@ package org.apache.spark.sql.auron
 
 import java.text.SimpleDateFormat
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
@@ -522,18 +524,23 @@ class AuronFunctionSuite
 
   test("test function nvl2") {
     withTable("t1") {
-      sql(
-        "create table t1 using parquet as select 'base'" +
-          " as base, 3 as exponent")
-      val functions =
-        """
-          |select
-          |  nvl2(null, base, exponent), nvl2(4, base, exponent)
-          |from t1
-                      """.stripMargin
+      sql(s"""CREATE TABLE t1 USING PARQUET AS SELECT
+             |'X'                      AS str_val,
+             |100                      AS int_val,
+             |array(1,2,3)             AS arr_val,
+             |CAST(NULL AS STRING)     AS null_str,
+             |CAST(NULL AS INT)        AS null_int
+             |""".stripMargin)
 
-      val df = sql(functions)
-      checkAnswer(df, Seq(Row("base", 3)))
+      val df = sql(s"""SELECT
+                      |nvl2(null_int, int_val, 999)          AS int_only,
+                      |nvl2(1,  str_val, int_val)            AS has_str,
+                      |nvl2(null_int, int_val, str_val)      AS str_in_false,
+                      |nvl2(1,  arr_val, array(888))         AS has_array,
+                      |nvl2(null_int, null_str,  null_str)   AS all_null
+                      |FROM  t1""".stripMargin)
+
+      checkAnswer(df, Row(999, "X", "X", ArrayBuffer(1, 2, 3), null))
     }
   }
 
