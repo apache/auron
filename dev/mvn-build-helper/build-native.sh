@@ -45,8 +45,9 @@ else
 fi
 
 cache_dir="native-engine/_build/$profile"
-cache_libpath="$build_dir/$libname.$libsuffix"
-build_libpath="target/$profile/$libname.$libsuffix"
+cache_libpath="$cache_dir/$libname.$libsuffix"
+cache_checksum_file="./.build-checksum.$profile.$libname.$libsuffix.cache"
+cargo_libpath="target/$profile/$libname.$libsuffix"
 
 checksum() {
     # Determine whether to use md5sum or md5
@@ -67,9 +68,8 @@ checksum() {
         $hash_cmd | awk '{print $1}'
 }
 
-checksum_cache_file="./.build-checksum_$profile-"$libsuffix".cache"
 if [ -f "$cache_libpath" ]; then
-  old_checksum="$(cat "$checksum_cache_file" 2>&1 || true)"
+  old_checksum="$(cat "$cache_checksum_file" 2>&1 || true)"
   new_checksum="$(checksum)"
 
   echo -e "old build-checksum: \n$old_checksum\n========"
@@ -88,11 +88,11 @@ if [ ! -f "$cache_libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
     cargo build --profile="$profile" $features_arg --verbose --locked --frozen 2>&1
 
     mkdir -p "$cache_dir"
-    cp -f "$build_libpath" "$cache_libpath"
+    cp -f "$cargo_libpath" "$cache_libpath"
 
     new_checksum="$(checksum)"
     echo "build-checksum updated: $new_checksum"
-    echo "$new_checksum" >"$checksum_cache_file"
+    echo "$new_checksum" >"$cache_checksum_file"
 else
     echo "native-engine source code and built libraries not modified, no need to rebuild"
 fi
