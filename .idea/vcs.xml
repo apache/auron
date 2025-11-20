@@ -4,8 +4,24 @@
     <option name="links">
       <list>
         <IssueNavigationLink>
+          <option name="issueRegexp" value="[A-Z]+\-\d+" />
+          <option name="linkRegexp" value="https://go/jira $0" />
+        </IssueNavigationLink>
+        <IssueNavigationLink>
+          <option name="issueRegexp" value="RB[\-=](\d+)" />
+          <option name="linkRegexp" value="https://go/rb $1" />
+        </IssueNavigationLink>
+        <IssueNavigationLink>
           <option name="issueRegexp" value="#(\d+)" />
           <option name="linkRegexp" value="https://github.com/apache/auron/pull/$1" />
+        </IssueNavigationLink>
+        <IssueNavigationLink>
+          <option name="issueRegexp" value="\(#(\d+)\)" />
+          <option name="linkRegexp" value="https://github.com/linkedin-grid/auron/issues/$1" />
+        </IssueNavigationLink>
+        <IssueNavigationLink>
+          <option name="issueRegexp" value="\(#(\d+)\)" />
+          <option name="linkRegexp" value="https://github.com/ShreyeshArangath/auron/issues/$1" />
         </IssueNavigationLink>
       </list>
     </option>

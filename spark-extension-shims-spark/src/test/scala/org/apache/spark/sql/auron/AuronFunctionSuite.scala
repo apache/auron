@@ -501,7 +501,7 @@ class AuronFunctionSuite
   test("test function IsNaN") {
     withTable("t1") {
       sql(
-        "create table test_is_nan using parquet as select cast('NaN' as double) as c1, cast('NaN' as float) as c2, log(-3) as c3, cast(null as double) as c4, 5.5f as c5")
+        "create table test_is_nan using parquet as select cast('NaN' as double) as c1, cast('NaN' as float) as c2, cast(null as double) as c3, cast(null as double) as c4, 5.5f as c5, cast(null as float) as c6")
       val functions =
         """
           |select
@@ -509,14 +509,15 @@ class AuronFunctionSuite
           |    isnan(c2),
           |    isnan(c3),
           |    isnan(c4),
-          |    isnan(c5)
+          |    isnan(c5),
+          |    isnan(c6)
           |from
           |    test_is_nan
         """.stripMargin
 
       val df = sql(functions)
       df.show()
-      checkAnswer(df, Seq(Row(true, true, false, false, false)))
+      checkAnswer(df, Seq(Row(true, true, false, false, false, false)))
     }
   }
 
