@@ -829,7 +829,7 @@ object NativeConverters extends Logging {
         buildScalarFunction(pb.ScalarFunction.Factorial, e.children, e.dataType)
       case e: Hex => buildScalarFunction(pb.ScalarFunction.Hex, e.children, e.dataType)
       case e: IsNaN =>
-        buildExtScalarFunction("IsNaN", e.children, e.dataType)
+        buildExtScalarFunction("Spark_IsNaN", e.children, e.dataType)
       case e: Round =>
         e.scale match {
           case Literal(n: Int, _) =>
