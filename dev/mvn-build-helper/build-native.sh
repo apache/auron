@@ -44,9 +44,9 @@ else
     exit 1
 fi
 
-build_dir="native-engine/_build/$profile"
+cache_dir="native-engine/_build/$profile"
 cache_libpath="$build_dir/$libname.$libsuffix"
-cargo_libpath="target/$profile/$libname.$libsuffix"
+build_libpath="target/$profile/$libname.$libsuffix"
 
 checksum() {
     # Determine whether to use md5sum or md5
@@ -87,8 +87,8 @@ if [ ! -f "$cache_libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
     echo "Building native with [$profile] profile..."
     cargo build --profile="$profile" $features_arg --verbose --locked --frozen 2>&1
 
-    mkdir -p "$build_dir"
-    cp -f "$cargo_libpath" "$cache_libpath"
+    mkdir -p "$cache_dir"
+    cp -f "$build_libpath" "$cache_libpath"
 
     new_checksum="$(checksum)"
     echo "build-checksum updated: $new_checksum"
