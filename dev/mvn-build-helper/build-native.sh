@@ -44,7 +44,7 @@ else
     exit 1
 fi
 
-libpath="native-engine/_build/$libname.$libsuffix"
+libpath="native-engine/_build/$profile/$libname.$libsuffix"
 
 checksum() {
     # Determine whether to use md5sum or md5
