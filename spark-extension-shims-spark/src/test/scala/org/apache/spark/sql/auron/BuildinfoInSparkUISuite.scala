@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.auron
 
+import java.io.File
+
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.ui.AuronSQLAppStatusListener
 import org.apache.spark.util.Utils
 
@@ -24,9 +27,19 @@ class BuildinfoInSparkUISuite
     with BuildInfoAuronSQLSuite
     with AuronSQLTestHelper {
 
+  var testDir: File = _
+
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set("spark.eventLog.dir", testDir.toString)
+  }
+
   override protected def beforeAll(): Unit = {
-    val eventLogDir = Utils.createTempDir("/tmp/spark-events")
+    testDir = Utils.createTempDir(namePrefix = "spark-events")
     super.beforeAll()
+  }
+
+  override protected def afterAll(): Unit = {
+    Utils.deleteRecursively(testDir)
   }
 
   test("test build info in spark UI ") {

@@ -788,7 +788,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Nvl => f::core::nvl(),
             ScalarFunction::DatePart => f::datetime::date_part(),
             ScalarFunction::DateTrunc => f::datetime::date_trunc(),
-            ScalarFunction::Md5 => f::crypto::md5(),
+            // ScalarFunction::Md5 => f::crypto::md5(),
             // ScalarFunction::Sha224 => f::crypto::sha224(),
             // ScalarFunction::Sha256 => f::crypto::sha256(),
             // ScalarFunction::Sha384 => f::crypto::sha384(),
@@ -839,7 +839,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Power => f::math::power(),
             ScalarFunction::IsNaN => f::math::isnan(),
 
-            ScalarFunction::SparkExtFunctions => {
+            ScalarFunction::AuronExtFunctions => {
                 unreachable!()
             }
         }
@@ -945,9 +945,9 @@ fn try_parse_physical_expr(
                     .map(|x| try_parse_physical_expr(x, input_schema))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let scalar_udf = if scalar_function == protobuf::ScalarFunction::SparkExtFunctions {
+                let scalar_udf = if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
                     let fun_name = &e.name;
-                    let fun = datafusion_ext_functions::create_spark_ext_function(fun_name)?;
+                    let fun = datafusion_ext_functions::create_auron_ext_function(fun_name)?;
                     Arc::new(create_udf(
                         &format!("spark_ext_function_{}", fun_name),
                         args.iter()

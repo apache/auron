@@ -234,7 +234,7 @@ enum ScalarFunction {
   Lpad=32;
   Lower=33;
   Ltrim=34;
-  MD5=35;
+  // MD5=35;
   // NullIf=36;
   OctetLength=37;
   Random=38;
@@ -274,7 +274,7 @@ enum ScalarFunction {
   Nvl2=83;
   Least=84;
   Greatest=85;
-  SparkExtFunctions=10000;
+  AuronExtFunctions=10000;
 }
 
 message PhysicalScalarFunctionNode {
