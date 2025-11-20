@@ -32,15 +32,13 @@ import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{ExplainUtils, FileSourceScanExec, LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{DecimalType, NullType, StructField, StructType}
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.jni.JniBridge
@@ -154,4 +152,22 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
   }
 
   override protected def doCanonicalize(): SparkPlan = basedFileScan.canonicalized
+
+  override def verboseStringWithOperatorId(): String = {
+    val metadataStr = basedFileScan.metadata.toSeq.sorted
+      .filterNot {
+        case (_, value) if (value.isEmpty || value.equals("[]")) => true
+        case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
+        case (_, _) => false
+      }
+      .map { case (key, value) =>
+        s"$key: ${Utils.redact(conf.stringRedactionPattern, value)}"
+      }
+
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
+       |${metadataStr.mkString("\n")}
+       |""".stripMargin
+  }
 }
