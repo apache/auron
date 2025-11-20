@@ -853,7 +853,7 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_StringLower", e.children, e.dataType)
       case e: Upper
           if sparkAuronConfig.getBoolean(SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE) =>
-        buildExtScalarFunction("Spark_StringUpper", e.children, e.dataType)
+        buildExtScalarFunction("Spark_StringLower", e.children, e.dataType)
 
       case e: StringTrim =>
         buildScalarFunction(pb.ScalarFunction.Trim, e.srcStr +: e.trimStr.toSeq, e.dataType)

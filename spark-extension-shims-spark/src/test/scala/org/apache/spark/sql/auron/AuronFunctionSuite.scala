@@ -340,7 +340,7 @@ class AuronFunctionSuite
   }
 
   test("test function least") {
-    withTable("test_least") {
+    withTable("t1") {
       sql(
         "create table test_least using parquet as select 1 as c1, 2 as c2, 'a' as c3, 'b' as c4, 'c' as c5")
 
