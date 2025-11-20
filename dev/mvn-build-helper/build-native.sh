@@ -44,7 +44,9 @@ else
     exit 1
 fi
 
-libpath="native-engine/_build/$profile/$libname.$libsuffix"
+build_dir="native-engine/_build/$profile"
+cache_libpath="$build_dir/$libname.$libsuffix"
+cargo_libpath="target/$profile/$libname.$libsuffix"
 
 checksum() {
     # Determine whether to use md5sum or md5
@@ -59,14 +61,14 @@ checksum() {
 
     echo "$features_arg" | $hash_cmd | awk '{print $1}'
 
-    find Cargo.toml Cargo.lock native-engine "$libpath" | \
+    find Cargo.toml Cargo.lock native-engine "$cache_libpath" | \
         xargs $hash_cmd 2>&1 | \
         sort -k1 | \
         $hash_cmd | awk '{print $1}'
 }
 
 checksum_cache_file="./.build-checksum_$profile-"$libsuffix".cache"
-if [ -f "$libpath" ]; then
+if [ -f "$cache_libpath" ]; then
   old_checksum="$(cat "$checksum_cache_file" 2>&1 || true)"
   new_checksum="$(checksum)"
 
@@ -74,7 +76,7 @@ if [ -f "$libpath" ]; then
   echo -e "new build-checksum: \n$new_checksum\n========"
 fi
 
-if [ ! -f "$libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
+if [ ! -f "$cache_libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
     export RUSTFLAGS=${RUSTFLAGS:-"-C target-cpu=native"}
     echo "Running cargo fix..."
     cargo fix --all --allow-dirty --allow-staged --allow-no-vcs  2>&1
@@ -84,6 +86,9 @@ if [ ! -f "$libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
 
     echo "Building native with [$profile] profile..."
     cargo build --profile="$profile" $features_arg --verbose --locked --frozen 2>&1
+
+    mkdir -p "$build_dir"
+    cp -f "$cargo_libpath" "$cache_libpath"
 
     new_checksum="$(checksum)"
     echo "build-checksum updated: $new_checksum"
