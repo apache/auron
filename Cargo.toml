@@ -29,6 +29,8 @@ members = [
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
 
 [profile.release]
 opt-level = 3

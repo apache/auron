@@ -155,7 +155,7 @@ jobs:
 
       - name: Cargo clippy
         run: |
-          cargo clippy --workspace--all-features -- -D warnings
+          cargo clippy --all-targets --workspace -- -D warnings
 
       - name: Cargo test
         run: |

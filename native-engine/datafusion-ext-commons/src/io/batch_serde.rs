@@ -48,7 +48,7 @@ impl TransposeOpt {
             DataType::Null => 0,
             DataType::Boolean => 0,
             dt if dt.primitive_width() == Some(1) => 0,
-            dt if dt.primitive_width() >= Some(2) => dt.primitive_width().unwrap(),
+            dt if dt.primitive_width() >= Some(2) => dt.primitive_width().expect("width"),
             DataType::Utf8 | DataType::Binary => 4,
             DataType::List(f) | DataType::Map(f, _) => {
                 Self::data_type_bytes_width(f.data_type()).max(4)
@@ -390,7 +390,7 @@ fn read_list_array<R: Read>(
     };
 
     let offsets = read_offsets(input, num_rows, transpose_opt)?;
-    let values_len = offsets.last().cloned().unwrap() as usize;
+    let values_len = offsets.last().cloned().expect("offsets is non-empty") as usize;
     let offsets_buffer: Buffer = Buffer::from_vec(offsets);
     let values = read_array(
         input,
@@ -431,8 +431,8 @@ fn write_map_array<W: Write>(
     let value_offsets = array.value_offsets();
     write_offsets(output, value_offsets, transpose_opt)?;
 
-    let first_offset = value_offsets.first().cloned().unwrap() as usize;
-    let entries_len = value_offsets.last().cloned().unwrap() as usize - first_offset;
+    let first_offset = value_offsets.first().cloned().expect("value_offsets is non-empty") as usize;
+    let entries_len = value_offsets.last().cloned().expect("value_offsets is non-empty") as usize - first_offset;
     let keys = array.keys().slice(first_offset, entries_len);
     let values = array.values().slice(first_offset, entries_len);
 
@@ -458,7 +458,7 @@ fn read_map_array<R: Read>(
     };
 
     let offsets = read_offsets(input, num_rows, transpose_opt)?;
-    let entries_len = offsets.last().cloned().unwrap() as usize;
+    let entries_len = offsets.last().cloned().expect("offsets is non-empty") as usize;
     let offsets_buffer = Buffer::from_vec(offsets);
 
     // build inner struct
@@ -612,8 +612,8 @@ fn write_bytes_array<T: ByteArrayType<Offset = i32>, W: Write>(
     let value_offsets = array.value_offsets();
     write_offsets(output, value_offsets, transpose_opt)?;
 
-    let first_offset = value_offsets.first().cloned().unwrap() as usize;
-    let last_offset = value_offsets.last().cloned().unwrap() as usize;
+    let first_offset = value_offsets.first().cloned().expect("value_offsets is non-empty")as usize;
+    let last_offset = value_offsets.last().cloned().expect("value_offsets is non-empty") as usize;
     output.write_all(&array.value_data()[first_offset..last_offset])?;
     Ok(())
 }
@@ -632,7 +632,7 @@ fn read_bytes_array<R: Read>(
     };
 
     let offsets = read_offsets(input, num_rows, transpose_opt)?;
-    let values_len = offsets.last().cloned().unwrap() as usize;
+    let values_len = offsets.last().cloned().expect("offsets is non-empty") as usize;
     let offsets_buffer = Buffer::from_vec(offsets);
 
     let data_buffer = Buffer::from_vec(read_bytes_slice(input, values_len)?.into());

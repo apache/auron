@@ -121,7 +121,8 @@ fn hash_array<T: num::PrimInt>(
     match array.data_type() {
         DataType::Null => {}
         DataType::Boolean => {
-            let array = array.as_any().downcast_ref::<BooleanArray>().unwrap();
+            let array = array.as_any().downcast_ref::<BooleanArray>()
+                .expect("Expected a BooleanArray");
             if array.null_count() == 0 {
                 for (i, hash) in hashes_buffer.iter_mut().enumerate() {
                     *hash = h(
@@ -217,7 +218,8 @@ fn create_hashes_dictionary<K: ArrowDictionaryKeyType, T: num::PrimInt>(
     hashes_buffer: &mut [T],
     h: impl Fn(&[u8], T) -> T + Copy,
 ) {
-    let dict_array = array.as_any().downcast_ref::<DictionaryArray<K>>().unwrap();
+    let dict_array = array.as_any().downcast_ref::<DictionaryArray<K>>()
+        .expect("Expected a DictionaryArray");
 
     // Hash each dictionary value once, and then use that computed
     // hash for each key value to avoid a potentially expensive
@@ -264,7 +266,8 @@ fn hash_one<T: num::PrimInt>(
         match col.data_type() {
             DataType::Null => {}
             DataType::Boolean => {
-                let array = col.as_any().downcast_ref::<BooleanArray>().unwrap();
+                let array = col.as_any().downcast_ref::<BooleanArray>()
+                    .expect("Expected a BooleanArray");
                 *hash = h(
                     (if array.value(idx) { 1u32 } else { 0u32 })
                         .to_le_bytes()
@@ -324,14 +327,16 @@ fn hash_one<T: num::PrimInt>(
                 hash_one_decimal!(Decimal128Array, col, hash, idx, h);
             }
             DataType::List(..) => {
-                let list_array = col.as_any().downcast_ref::<ListArray>().unwrap();
+                let list_array = col.as_any().downcast_ref::<ListArray>()
+                    .expect("Expected a ListArray");
                 let value_array = list_array.value(idx);
                 for i in 0..value_array.len() {
                     hash_one(&value_array, i, hash, h);
                 }
             }
             DataType::Map(..) => {
-                let map_array = col.as_any().downcast_ref::<MapArray>().unwrap();
+                let map_array = col.as_any().downcast_ref::<MapArray>()
+                    .expect("Expected a MapArray");
                 let kv_array = map_array.value(idx);
                 let key_array = kv_array.column(0);
                 let value_array = kv_array.column(1);
@@ -341,7 +346,8 @@ fn hash_one<T: num::PrimInt>(
                 }
             }
             DataType::Struct(_) => {
-                let struct_array = col.as_any().downcast_ref::<StructArray>().unwrap();
+                let struct_array = col.as_any().downcast_ref::<StructArray>()
+                    .expect("Expected a StructArray");
                 for col in struct_array.columns() {
                     hash_one(col, idx, hash, h);
                 }
