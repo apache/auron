@@ -48,7 +48,7 @@ impl TransposeOpt {
             DataType::Null => 0,
             DataType::Boolean => 0,
             dt if dt.primitive_width() == Some(1) => 0,
-            dt if dt.primitive_width() >= Some(2) => dt.primitive_width().expect("width"),
+            dt if dt.primitive_width() >= Some(2) => dt.primitive_width().expect("width checked"),
             DataType::Utf8 | DataType::Binary => 4,
             DataType::List(f) | DataType::Map(f, _) => {
                 Self::data_type_bytes_width(f.data_type()).max(4)

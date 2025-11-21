@@ -334,7 +334,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
             return None;
         }
 
-        result = result * radix - T::from_u8(digit).expect("from_u8(digit)");
+        result = result * radix - T::from_u8(digit).expect("digit 0..=9");
         // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE /
         // radix), we can just use `result > 0` to check overflow. If result
         // overflows, we should stop.
