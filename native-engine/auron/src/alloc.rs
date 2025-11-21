@@ -57,7 +57,7 @@ impl<T: GlobalAlloc> DebugAlloc<T> {
     }
 
     fn update(&self) {
-        let _lock = self.mutex.lock().unwrap();
+        let _lock = self.mutex.lock().expect("lock");
         let current = self.current.load(SeqCst);
         let last_updated = self.last_updated.load(SeqCst);
         let delta = (current as isize - last_updated as isize).abs();

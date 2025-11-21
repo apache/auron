@@ -151,7 +151,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 Ok(Arc::new(FilterExec::try_new(predicates, input)?))
             }
             PhysicalPlanType::ParquetScan(scan) => {
-                let conf: FileScanConfig = scan.base_conf.as_ref().unwrap().try_into()?;
+                let conf: FileScanConfig = scan.base_conf.as_ref().expect("base_conf").try_into()?;
                 let predicate = scan
                     .pruning_predicates
                     .iter()
@@ -168,7 +168,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )))
             }
             PhysicalPlanType::OrcScan(scan) => {
-                let conf: FileScanConfig = scan.base_conf.as_ref().unwrap().try_into()?;
+                let conf: FileScanConfig = scan.base_conf.as_ref().expect("base_conf").try_into()?;
                 let predicate = scan
                     .pruning_predicates
                     .iter()
@@ -193,9 +193,9 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .iter()
                     .map(|col| {
                         let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
+                            try_parse_physical_expr(&col.left.as_ref().expect("left"), &left.schema())?;
                         let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().unwrap(), &right.schema())?;
+                            try_parse_physical_expr(&col.right.as_ref().expect("right"), &right.schema())?;
                         Ok((left_key, right_key))
                     })
                     .collect::<Result<_, Self::Error>>()?;
@@ -230,9 +230,9 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .iter()
                     .map(|col| {
                         let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
+                            try_parse_physical_expr(&col.left.as_ref().expect("left"), &left.schema())?;
                         let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().unwrap(), &right.schema())?;
+                            try_parse_physical_expr(&col.right.as_ref().expect("right"), &right.schema())?;
                         Ok((left_key, right_key))
                     })
                     .collect::<Result<_, Self::Error>>()?;
@@ -270,7 +270,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
 
                 Ok(Arc::new(ShuffleWriterExec::try_new(
                     input,
-                    output_partitioning.unwrap(),
+                    output_partitioning.expect("partitioning"),
                     shuffle_writer.output_data_file.clone(),
                     shuffle_writer.output_index_file.clone(),
                 )?))
@@ -285,7 +285,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )?;
                 Ok(Arc::new(RssShuffleWriterExec::try_new(
                     input,
-                    output_partitioning.unwrap(),
+                    output_partitioning.expect("partitioning"),
                     rss_shuffle_writer.rss_partition_writer_resource_id.clone(),
                 )?))
             }
@@ -340,9 +340,9 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .iter()
                     .map(|col| {
                         let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
+                            try_parse_physical_expr(&col.left.as_ref().expect("left"), &left.schema())?;
                         let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().unwrap(), &right.schema())?;
+                            try_parse_physical_expr(&col.right.as_ref().expect("right"), &right.schema())?;
                         Ok((left_key, right_key))
                     })
                     .collect::<Result<_, Self::Error>>()?;
@@ -471,7 +471,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
 
                         let agg = match AggFunction::from(agg_function) {
                             AggFunction::Udaf => {
-                                let udaf = agg_node.udaf.as_ref().unwrap();
+                                let udaf = agg_node.udaf.as_ref().expect("udaf");
                                 let serialized = udaf.serialized.clone();
                                 create_udaf_agg(serialized, return_type, agg_children_exprs)?
                             }
@@ -696,7 +696,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                         children,
                     )?,
                     GenerateFunction::Udtf => {
-                        let udtf = pb_generator.udtf.as_ref().unwrap();
+                        let udtf = pb_generator.udtf.as_ref().expect("udtf");
                         let serialized = udtf.serialized.clone();
                         let return_schema = Arc::new(convert_required!(udtf.return_schema)?);
                         create_udtf_generator(serialized, return_schema, children)?
@@ -1136,13 +1136,13 @@ pub fn parse_protobuf_partitioning(
                     .collect::<Result<Vec<PhysicalExprRef>, _>>()?;
                 Ok(Some(Partitioning::HashPartitioning(
                     expr,
-                    hash_part.partition_count.try_into().unwrap(),
+                    hash_part.partition_count.try_into().expect("partition_count"),
                 )))
             }
 
             RepartitionType::RoundRobinRepartition(round_robin_part) => {
                 Ok(Some(Partitioning::RoundRobinPartitioning(
-                    round_robin_part.partition_count.try_into().unwrap(),
+                    round_robin_part.partition_count.try_into().expect("partition_count"),
                 )))
             }
 
@@ -1150,7 +1150,7 @@ pub fn parse_protobuf_partitioning(
                 if range_part.partition_count == 1 {
                     Ok(Some(Partitioning::SinglePartitioning()))
                 } else {
-                    let sort = range_part.sort_expr.clone().unwrap();
+                    let sort = range_part.sort_expr.clone().expect("sort_expr");
                     let exprs = try_parse_physical_sort_expr(&input, &sort).unwrap_or_else(|e| {
                         panic!("Failed to parse physical sort expressions: {}", e);
                     });
@@ -1187,7 +1187,7 @@ pub fn parse_protobuf_partitioning(
                     let bound_rows = sort_row_converter.lock().convert_columns(&bound_cols)?;
                     Ok(Some(Partitioning::RangePartitioning(
                         exprs,
-                        range_part.partition_count.try_into().unwrap(),
+                        range_part.partition_count.try_into().expect("partition_count"),
                         Arc::new(bound_rows),
                     )))
                 }
@@ -1250,12 +1250,12 @@ impl From<&protobuf::ColumnStats> for ColumnStatistics {
             max_value: cs
                 .max_value
                 .as_ref()
-                .map(|m| Precision::Exact(m.try_into().unwrap()))
+                .map(|m| Precision::Exact(m.try_into().expect("max_value")))
                 .unwrap_or(Precision::Absent),
             min_value: cs
                 .min_value
                 .as_ref()
-                .map(|m| Precision::Exact(m.try_into().unwrap()))
+                .map(|m| Precision::Exact(m.try_into().expect("min_value")))
                 .unwrap_or(Precision::Absent),
             sum_value: Precision::Absent,
             distinct_count: Precision::Exact(cs.distinct_count as usize),

@@ -156,6 +156,11 @@ jobs:
           components:
             cargo
             rustfmt
+            clippy
+
+      - name: Cargo clippy
+        run: |
+          cargo clippy --all-targets --workspace -- -A warnings  -A clippy::all  -D clippy::unwrap_used
 
       - name: Cargo test
         run: |

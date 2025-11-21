@@ -167,32 +167,32 @@ mod test {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> RecordBatch {
+    ) -> Result<RecordBatch> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Int32, false),
             Field::new(b.0, DataType::Int32, false),
             Field::new(c.0, DataType::Int32, false),
         ]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![
                 Arc::new(Int32Array::from(a.1.clone())),
                 Arc::new(Int32Array::from(b.1.clone())),
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
     fn build_table(
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_i32(a, b, c);
+    ) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_i32(a, b, c)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
     }
 
     #[tokio::test]
@@ -206,7 +206,7 @@ mod test {
         let limit_exec = LimitExec::new(input, 2_u64);
         let session_ctx = SessionContext::new();
         let task_ctx = session_ctx.task_ctx();
-        let output = limit_exec.execute(0, task_ctx).unwrap();
+        let output = limit_exec.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
         let row_count = limit_exec.statistics()?.num_rows;
 

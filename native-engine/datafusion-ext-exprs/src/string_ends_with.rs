@@ -83,7 +83,7 @@ impl PhysicalExpr for StringEndsWithExpr {
 
         match expr {
             ColumnarValue::Array(array) => {
-                let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+                let string_array = array.as_any().downcast_ref::<StringArray>().expect("Expected a StringArray");
                 let ret_array = Arc::new(BooleanArray::from_iter(string_array.iter().map(
                     |maybe_string| maybe_string.map(|string| string.ends_with(&self.suffix)),
                 )));

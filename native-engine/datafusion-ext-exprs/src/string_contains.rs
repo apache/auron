@@ -25,6 +25,7 @@ use arrow::{
     datatypes::{DataType, Schema},
     record_batch::RecordBatch,
 };
+use arrow::array::DictionaryArray;
 use datafusion::{
     common::{Result, ScalarValue},
     logical_expr::ColumnarValue,
@@ -83,7 +84,7 @@ impl PhysicalExpr for StringContainsExpr {
 
         match expr {
             ColumnarValue::Array(array) => {
-                let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+                let string_array = array.as_any().downcast_ref::<StringArray>().expect("Expected a StringArray");
                 let ret_array =
                     Arc::new(BooleanArray::from_iter(string_array.iter().map(
                         |maybe_string| maybe_string.map(|string| string.contains(&self.infix)),

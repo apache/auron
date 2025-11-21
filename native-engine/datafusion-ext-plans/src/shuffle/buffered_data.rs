@@ -311,7 +311,7 @@ fn sort_batches_by_partition_id(
                     part_ids
                 }
                 Partitioning::RangePartitioning(sort_expr, _, bounds) => {
-                    evaluate_range_partition_ids(&batch, sort_expr, bounds).unwrap()
+                    evaluate_range_partition_ids(&batch, sort_expr, bounds).expect("eval_part_ids")
                 }
                 _ => unreachable!("unsupported partitioning: {:?}", partitioning),
             };
@@ -449,7 +449,7 @@ mod test {
                 .collect::<Result<Vec<SortField>>>()?,
         )?));
 
-        let rows: Rows = sort_row_converter.lock().convert_columns(&bounds).unwrap();
+        let rows: Rows = sort_row_converter.lock().convert_columns(&bounds)?;
         let partition_num = rows.num_rows() + 1;
 
         let range_repartitioning =
@@ -511,7 +511,7 @@ mod test {
                 .collect::<Result<Vec<SortField>>>()?,
         )?));
 
-        let rows: Rows = sort_row_converter.lock().convert_columns(&bounds).unwrap();
+        let rows: Rows = sort_row_converter.lock().convert_columns(&bounds)?;
         let partition_num = rows.num_rows() + 1;
 
         let range_repartitioning =

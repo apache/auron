@@ -66,7 +66,7 @@ impl HTTPServer for DefaultHTTPServer {
     fn start(&self) {
         if let Some(port) = find_available_port() {
             let mut app = Route::new();
-            let handlers = self.handlers.lock().unwrap();
+            let handlers = self.handlers.lock().expect("lock");
             for handler in handlers.iter() {
                 app = app.at(handler.get_route_path(), handler.get_route_method());
             }
@@ -83,7 +83,7 @@ impl HTTPServer for DefaultHTTPServer {
     }
 
     fn register_handler(&self, handler: Box<dyn Handler + Send + Sync>) {
-        let mut handlers = self.handlers.lock().unwrap();
+        let mut handlers = self.handlers.lock().expect("lock");
         handlers.push(handler);
     }
 }

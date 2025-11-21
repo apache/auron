@@ -127,7 +127,7 @@ impl Agg for AggBloomFilter {
                         self.num_bits,
                     ));
                 }
-                bf.as_mut().unwrap()
+                bf.as_mut().expect("bf")
             }
             _ => return df_unimplemented_err!("AggBloomFilter only supports one bloom filter"),
         };

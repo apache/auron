@@ -29,12 +29,11 @@ mod tests {
     use datafusion::{
         assert_batches_sorted_eq,
         common::JoinSide,
-        error::Result,
         physical_expr::expressions::Column,
         physical_plan::{ExecutionPlan, common, joins::utils::*, test::TestMemoryExec},
         prelude::SessionContext,
     };
-
+    use datafusion::common::DataFusionError;
     use crate::{
         broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
         broadcast_join_exec::BroadcastJoinExec,
@@ -59,44 +58,45 @@ mod tests {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> RecordBatch {
+    ) -> Result<RecordBatch> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Int32, false),
             Field::new(b.0, DataType::Int32, false),
             Field::new(c.0, DataType::Int32, false),
         ]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![
                 Arc::new(Int32Array::from(a.1.clone())),
                 Arc::new(Int32Array::from(b.1.clone())),
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
     fn build_table(
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_i32(a, b, c);
+    ) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_i32(a, b, c)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
     }
 
-    fn build_table_from_batches(batches: Vec<RecordBatch>) -> Arc<dyn ExecutionPlan> {
-        let schema = batches.first().unwrap().schema();
-        Arc::new(TestMemoryExec::try_new(&[batches], schema, None).unwrap())
+    fn build_table_from_batches(batches: Vec<RecordBatch>) -> Result<Arc<dyn ExecutionPlan>> {
+        let first = batches.into_iter().next().ok_or_else(|| DataFusionError::Internal("empty batches".into()))?;
+        let schema = first.schema();
+        Ok(Arc::new(TestMemoryExec::try_new(&[batches], schema, None)?))
     }
 
     fn build_date_table(
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Arc<dyn ExecutionPlan> {
+    ) -> Result<Arc<dyn ExecutionPlan>> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Date32, false),
             Field::new(b.0, DataType::Date32, false),
@@ -110,18 +110,17 @@ mod tests {
                 Arc::new(Date32Array::from(b.1.clone())),
                 Arc::new(Date32Array::from(c.1.clone())),
             ],
-        )
-        .unwrap();
+        )?;
 
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
     }
 
     fn build_date64_table(
         a: (&str, &Vec<i64>),
         b: (&str, &Vec<i64>),
         c: (&str, &Vec<i64>),
-    ) -> Arc<dyn ExecutionPlan> {
+    ) -> Result<Arc<dyn ExecutionPlan>> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Date64, false),
             Field::new(b.0, DataType::Date64, false),
@@ -135,11 +134,10 @@ mod tests {
                 Arc::new(Date64Array::from(b.1.clone())),
                 Arc::new(Date64Array::from(c.1.clone())),
             ],
-        )
-        .unwrap();
+        )?;
 
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
     }
 
     /// returns a table with 3 columns of i32 in memory
@@ -147,7 +145,7 @@ mod tests {
         a: (&str, &Vec<Option<i32>>),
         b: (&str, &Vec<Option<i32>>),
         c: (&str, &Vec<Option<i32>>),
-    ) -> Arc<dyn ExecutionPlan> {
+    ) -> Result<Arc<dyn ExecutionPlan>> {
         let schema = Arc::new(Schema::new(vec![
             Field::new(a.0, DataType::Int32, true),
             Field::new(b.0, DataType::Int32, true),
@@ -160,9 +158,8 @@ mod tests {
                 Arc::new(Int32Array::from(b.1.clone())),
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
-        )
-        .unwrap();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        )?;
+        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?));
     }
 
     fn build_join_schema_for_test(

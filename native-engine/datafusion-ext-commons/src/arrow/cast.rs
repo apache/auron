@@ -166,7 +166,7 @@ pub fn cast_impl(
                             col = struct_.column_by_name(adjust.as_str());
                         }
                         if col.is_some() {
-                            cast_impl(col.unwrap(), field.data_type(), match_struct_fields)
+                            cast_impl(col.expect("missing column"), field.data_type(), match_struct_fields)
                         } else {
                             null_column_name.push(field.name().clone());
                             Ok(new_null_array(field.data_type(), struct_.len()))
@@ -322,7 +322,8 @@ pub fn cast_impl(
 }
 
 fn to_plain_string_array(array: &dyn Array) -> ArrayRef {
-    let array = array.as_any().downcast_ref::<StringArray>().unwrap();
+    let array = array.as_any().downcast_ref::<StringArray>()
+        .expect("Expected a StringArray");
     let mut converted_values: Vec<Option<String>> = Vec::with_capacity(array.len());
     for v in array.iter() {
         match v {
@@ -400,7 +401,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
     }
 
     let separator = b'.';
-    let radix = T::from_usize(10).unwrap();
+    let radix = T::from_usize(10).expect("from_usize(10)");
     let stop_value = T::min_value() / radix;
     let mut result = T::zero();
 
@@ -428,7 +429,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
             return None;
         }
 
-        result = result * radix - T::from_u8(digit).unwrap();
+        result = result * radix - T::from_u8(digit).expect("digit 0..=9");
         // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE /
         // radix), we can just use `result > 0` to check overflow. If result
         // overflows, we should stop.
