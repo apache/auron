@@ -42,7 +42,7 @@ pub fn spark_get_json_object(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_strings = json_string_array
         .as_any()
         .downcast_ref::<StringArray>()
-        .unwrap();
+        .expect("Expected a StringArray");;
     let path_string = match &args[1] {
         ColumnarValue::Scalar(ScalarValue::Utf8(str)) => match str {
             Some(path) => path,
@@ -87,7 +87,7 @@ pub fn spark_parse_json(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_strings = json_string_array
         .as_any()
         .downcast_ref::<StringArray>()
-        .unwrap();
+        .expect("Expected a StringArray");;
     let fallback_enabled = conf::PARSE_JSON_ERROR_FALLBACK.value().unwrap_or(false);
 
     let json_values: Vec<Option<Arc<dyn Any + Send + Sync + 'static>>> = json_strings
@@ -121,7 +121,7 @@ pub fn spark_parse_json(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
 pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_array = match &args[0] {
-        ColumnarValue::Array(array) => array.as_any().downcast_ref::<UserDefinedArray>().unwrap(),
+        ColumnarValue::Array(array) => array.as_any().downcast_ref::<UserDefinedArray>().expect("Expected a UserDefinedArray"),
         ColumnarValue::Scalar(_) => unreachable!(),
     };
 
@@ -153,7 +153,7 @@ pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarVa
 
     let output = StringArray::from_iter(json_array.iter().map(|value| {
         value.as_ref().and_then(|value| -> Option<Cow<str>> {
-            let json_value = value.downcast_ref::<ParsedJsonValue>().unwrap();
+            let json_value = value.downcast_ref::<ParsedJsonValue>().expect("Expected a ParsedJsonValue");
             match json_value {
                 ParsedJsonValue::SerdeJson(v) => evaluator
                     .evaluate_with_value_serde_json(v)
@@ -166,7 +166,7 @@ pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarVa
                     .unwrap_or(None)
                     .map(Cow::from),
                 ParsedJsonValue::Fallback(_) => {
-                    fallback_results_iter.next().unwrap().map(Cow::from)
+                    fallback_results_iter.next().expect("next").map(Cow::from)
                 }
             }
         })
@@ -186,7 +186,7 @@ pub fn spark_get_parsed_json_simple_field(
 
     let output = StringArray::from_iter(json_array.iter().map(|value| {
         value.as_ref().and_then(|value| {
-            let json_value = value.downcast_ref::<ParsedJsonValue>().unwrap();
+            let json_value = value.downcast_ref::<ParsedJsonValue>().expect("Expected a ParsedJsonValue");
             match json_value {
                 ParsedJsonValue::SerdeJson(v) => v
                     .as_object()
@@ -199,7 +199,7 @@ pub fn spark_get_parsed_json_simple_field(
                     .and_then(|v| sonic_value_to_string(v).unwrap_or_default())
                     .map(Cow::from),
                 ParsedJsonValue::Fallback(_) => {
-                    fallback_results_iter.next().unwrap().map(Cow::from)
+                    fallback_results_iter.next().expect("next").map(Cow::from)
                 }
             }
         })
@@ -214,7 +214,7 @@ fn parse_fallback(json_path: &str, json_array: &UserDefinedArray) -> Result<Stri
         let mut fallback_jsons_array = StringBuilder::new();
         for json in json_array.iter().flat_map(|value| {
             value.as_ref().and_then(|value| -> Option<&str> {
-                let json_value = value.downcast_ref::<ParsedJsonValue>().unwrap();
+                let json_value = value.downcast_ref::<ParsedJsonValue>().expect("Expected a ParsedJsonValue");
                 if let ParsedJsonValue::Fallback(json) = json_value {
                     return Some(json.as_ref());
                 }
@@ -544,7 +544,7 @@ impl HiveGetJsonObjectMatcher {
                         .flat_map(|r| {
                             // keep consistent with hive UDFJson
                             let iter: Box<dyn Iterator<Item = sonic_rs::Value>> = match r {
-                                v if v.is_array() => Box::new(v.into_array().unwrap().into_iter()),
+                                v if v.is_array() => Box::new(v.into_array().expect("array").into_iter()),
                                 other => Box::new(std::iter::once(other)),
                             };
                             iter

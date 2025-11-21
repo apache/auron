@@ -76,7 +76,7 @@ impl RowNullChecker {
             },
             DataType::Boolean => FieldConfig::new_boolean(sort_options),
             dt if dt.is_primitive() => {
-                FieldConfig::new_primitive(sort_options, 1 + dt.primitive_width().unwrap())
+                FieldConfig::new_primitive(sort_options, 1 + dt.primitive_width().expect("primitive_width"))
             }
             // DataType::Int8 => FieldConfig::new_primitive(sort_options, 2), // 1 byte null flag +
             // // 1 byte value
@@ -445,6 +445,7 @@ impl FieldConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::sync::Arc;
 
     use arrow::{
@@ -539,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn test_roundtrip_with_record_batch() {
+    fn test_roundtrip_with_record_batch() -> Result<(), Box<dyn Error>> {
         // Create a schema with multiple data types
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
@@ -570,8 +571,7 @@ mod tests {
                 Arc::new(name_array),
                 Arc::new(active_array),
             ],
-        )
-        .unwrap();
+        )?;
 
         // Create RowNullChecker
         let checker = RowNullChecker::new(
@@ -618,6 +618,7 @@ mod tests {
         // Verify that row count matches RecordBatch
         assert_eq!(record_batch.num_rows(), 4);
         assert_eq!(record_batch.num_columns(), 3);
+        Ok(())
     }
 
     #[test]

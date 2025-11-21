@@ -62,7 +62,7 @@ pub extern "system" fn Java_org_apache_auron_jni_JniBridge_callNative(
         INIT.get_or_try_init(|| {
             // logging is not initialized at this moment
             eprintln!("------ initializing auron native environment ------");
-            let log_level = env.get_string(log_level).map(|s| String::from(s)).unwrap();
+            let log_level = env.get_string(log_level).map(|s| String::from(s)).expect("log_level");
             eprintln!("initializing logging with level: {}", log_level);
             init_logging(log_level.as_str());
 
@@ -103,7 +103,7 @@ pub extern "system" fn Java_org_apache_auron_jni_JniBridge_callNative(
         // create execution runtime
         let runtime = Box::new(NativeExecutionRuntime::start(
             native_wrapper,
-            SESSION.get().unwrap().task_ctx(),
+            SESSION.get().expect("session").task_ctx(),
         )?);
 
         // returns runtime raw pointer

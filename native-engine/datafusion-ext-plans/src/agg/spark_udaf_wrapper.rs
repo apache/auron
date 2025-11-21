@@ -227,13 +227,13 @@ impl Agg for SparkUDAFWrapper {
     }
 
     fn create_acc_column(&self, num_rows: usize) -> AccColumnRef {
-        let jcontext = self.jcontext().unwrap();
+        let jcontext = self.jcontext().expect("jcontext");
         let rows = jni_call!(SparkUDAFWrapperContext(jcontext.as_obj()).initialize(
             num_rows as i32,
         )-> JObject)
         .unwrap();
 
-        let jcontext = self.jcontext().unwrap();
+        let jcontext = self.jcontext().expect("jcontext");
         let obj = jni_new_global_ref!(rows.as_obj()).unwrap();
         Box::new(AccUDAFBufferRowsColumn { obj, jcontext })
     }

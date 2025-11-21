@@ -137,7 +137,7 @@ impl WindowContext {
         Ok(self
             .partition_row_converter
             .lock()
-            .unwrap()
+            .expect("lock")
             .convert_columns(
                 &self
                     .partition_spec
@@ -151,7 +151,7 @@ impl WindowContext {
     }
 
     pub fn get_order_rows(&self, batch: &RecordBatch) -> Result<Rows> {
-        Ok(self.order_row_converter.lock().unwrap().convert_columns(
+        Ok(self.order_row_converter.lock().expect("lock").convert_columns(
             &self
                 .order_spec
                 .iter()
