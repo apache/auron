@@ -23,51 +23,38 @@ use datafusion::{
     common::{Result, ScalarValue},
     logical_expr::ColumnarValue,
 };
-use datafusion_ext_commons::df_execution_err;
+use datafusion_ext_commons::arrow::boolean::nulls_to_false;
 
-/// Spark-compatible isnan function that returns false for null values
-/// instead of propagating nulls like DataFusion's default implementation
 pub fn spark_isnan(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    fn set_nulls_to_false(is_nan: BooleanArray) -> ColumnarValue {
-        match is_nan.nulls() {
-            Some(nulls) => {
-                let is_not_null = nulls.inner();
-                ColumnarValue::Array(Arc::new(BooleanArray::new(
-                    is_nan.values() & is_not_null,
-                    None,
-                )))
-            }
-            None => ColumnarValue::Array(Arc::new(is_nan)),
-        }
-    }
-
     let value = &args[0];
     match value {
         ColumnarValue::Array(array) => match array.data_type() {
             DataType::Float64 => {
                 let array = array.as_any().downcast_ref::<Float64Array>().unwrap();
                 let is_nan = BooleanArray::from_unary(array, |x| x.is_nan());
-                Ok(set_nulls_to_false(is_nan))
+                let cleaned = nulls_to_false(&is_nan);
+                Ok(ColumnarValue::Array(Arc::new(cleaned)))
             }
             DataType::Float32 => {
                 let array = array.as_any().downcast_ref::<Float32Array>().unwrap();
                 let is_nan = BooleanArray::from_unary(array, |x| x.is_nan());
-                Ok(set_nulls_to_false(is_nan))
+                let cleaned = nulls_to_false(&is_nan);
+                Ok(ColumnarValue::Array(Arc::new(cleaned)))
             }
-            other => df_execution_err!("Unsupported data type {other:?} for function isnan"),
+            _other => {
+                // For non-float arrays, Spark's isnan is effectively false.
+                let len = array.len();
+                let out = ScalarValue::Boolean(Some(false)).to_array_of_size(len)?;
+                Ok(ColumnarValue::Array(out))
+            }
         },
-        ColumnarValue::Scalar(a) => match a {
-            ScalarValue::Float64(a) => Ok(ColumnarValue::Scalar(ScalarValue::Boolean(Some(
-                a.map(|x| x.is_nan()).unwrap_or(false),
-            )))),
-            ScalarValue::Float32(a) => Ok(ColumnarValue::Scalar(ScalarValue::Boolean(Some(
-                a.map(|x| x.is_nan()).unwrap_or(false),
-            )))),
-            _ => df_execution_err!(
-                "Unsupported data type {:?} for function isnan",
-                value.data_type()
-            ),
-        },
+        ColumnarValue::Scalar(sv) => Ok(ColumnarValue::Scalar(ScalarValue::Boolean(Some(
+            match sv {
+                ScalarValue::Float64(a) => a.map(|x| x.is_nan()).unwrap_or(false),
+                ScalarValue::Float32(a) => a.map(|x| x.is_nan()).unwrap_or(false),
+                _ => false,
+            },
+        )))),
     }
 }
 
