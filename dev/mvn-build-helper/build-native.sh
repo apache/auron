@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-set -e
+set -ex
 
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
@@ -44,7 +44,10 @@ else
     exit 1
 fi
 
-libpath="target/$profile/$libname.$libsuffix"
+cache_dir="native-engine/_build/$profile"
+cache_libpath="$cache_dir/$libname.$libsuffix"
+cache_checksum_file="./.build-checksum.$profile.$libname.$libsuffix.cache"
+cargo_libpath="target/$profile/$libname.$libsuffix"
 
 checksum() {
     # Determine whether to use md5sum or md5
@@ -59,22 +62,21 @@ checksum() {
 
     echo "$features_arg" | $hash_cmd | awk '{print $1}'
 
-    find Cargo.toml Cargo.lock native-engine "$libpath" | \
+    find Cargo.toml Cargo.lock native-engine "$cache_libpath" | \
         xargs $hash_cmd 2>&1 | \
         sort -k1 | \
-        $hash_cmd
+        $hash_cmd | awk '{print $1}'
 }
 
-checksum_cache_file="./.build-checksum_$profile-"$libsuffix".cache"
-if [ -f "$libpath" ]; then
-  old_checksum="$(cat "$checksum_cache_file" 2>&1 || true)"
+if [ -f "$cache_libpath" ]; then
+  old_checksum="$(cat "$cache_checksum_file" 2>&1 || true)"
   new_checksum="$(checksum)"
 
   echo -e "old build-checksum: \n$old_checksum\n========"
   echo -e "new build-checksum: \n$new_checksum\n========"
 fi
 
-if [ ! -f "$libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
+if [ ! -f "$cache_libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
     export RUSTFLAGS=${RUSTFLAGS:-"-C target-cpu=native"}
     echo "Running cargo fix..."
     cargo fix --all --allow-dirty --allow-staged --allow-no-vcs  2>&1
@@ -84,18 +86,17 @@ if [ ! -f "$libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
 
     echo "Building native with [$profile] profile..."
     cargo build --profile="$profile" $features_arg --verbose --locked --frozen 2>&1
+
+    mkdir -p "$cache_dir"
+    cp -f "$cargo_libpath" "$cache_libpath"
+
+    new_checksum="$(checksum)"
+    echo "build-checksum updated: $new_checksum"
+    echo "$new_checksum" >"$cache_checksum_file"
 else
     echo "native-engine source code and built libraries not modified, no need to rebuild"
 fi
 
-mkdir -p native-engine/_build/$profile
-rm -rf native-engine/_build/$profile/*
-cp "$libpath" native-engine/_build/$profile
-
-new_checksum="$(checksum)"
-echo "build-checksum updated: $new_checksum"
-echo "$new_checksum" >"$checksum_cache_file"
-
-echo "Finished native building"
+echo "Native build completed successfully"
 
 cd "${_CALLING_DIR}"
