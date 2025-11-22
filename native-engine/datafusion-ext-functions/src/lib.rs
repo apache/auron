@@ -24,6 +24,7 @@ mod spark_crypto;
 mod spark_dates;
 pub mod spark_get_json_object;
 mod spark_hash;
+mod spark_isnan;
 mod spark_make_array;
 mod spark_make_decimal;
 mod spark_normalize_nan_and_zero;
@@ -75,6 +76,7 @@ pub fn create_auron_ext_function(name: &str) -> Result<ScalarFunctionImplementat
         "Spark_NormalizeNanAndZero" => {
             Arc::new(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
-        _ => df_unimplemented_err!("auron ext function not implemented: {name}")?,
+        "Spark_IsNaN" => Arc::new(spark_isnan::spark_isnan),
+        _ => df_unimplemented_err!("spark ext function not implemented: {name}")?,
     })
 }

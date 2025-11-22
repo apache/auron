@@ -13,9 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod array_size;
-pub mod boolean;
-pub mod cast;
-pub mod coalesce;
-pub mod eq_comparator;
-pub mod selection;
+use arrow::array::{Array, BooleanArray};
+
+/// Returns a BooleanArray where nulls are converted to `false` and the result
+/// has no null bitmap (all values are valid).
+#[inline]
+pub fn nulls_to_false(is_boolean: &BooleanArray) -> BooleanArray {
+    match is_boolean.nulls() {
+        Some(nulls) => {
+            let is_not_null = nulls.inner();
+            BooleanArray::new(is_boolean.values() & is_not_null, None)
+        }
+        None => is_boolean.clone(),
+    }
+}
