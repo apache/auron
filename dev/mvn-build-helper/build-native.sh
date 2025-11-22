@@ -82,6 +82,9 @@ if [ ! -f "$libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
     echo "Running cargo fmt..."
     cargo fmt --all -q -- 2>&1
 
+    echo "Running cargo clippy..."
+    cargo clippy --all-targets --workspace -- -D warnings 2>&1
+
     echo "Building native with [$profile] profile..."
     cargo build --profile="$profile" $features_arg --verbose --locked --frozen 2>&1
 else
