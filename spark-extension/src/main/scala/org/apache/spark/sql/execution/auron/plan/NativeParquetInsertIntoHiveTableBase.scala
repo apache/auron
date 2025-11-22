@@ -69,7 +69,8 @@ abstract class NativeParquetInsertIntoHiveTableBase(
         .filterKeys(Set("stage_id", "output_rows", "elapsed_compute"))
         .toSeq
         :+ ("io_time", SQLMetrics.createNanoTimingMetric(sparkContext, "Native.io_time"))
-        :+ ("bytes_written", SQLMetrics
+        :+ ("bytes_written",
+        SQLMetrics
           .createSizeMetric(sparkContext, "Native.bytes_written")): _*)
 
   def check(): Unit = {
