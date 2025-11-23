@@ -204,7 +204,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               .write
               .orc(path)
             val correctAnswer = Seq(Row(1, 2), Row(3, 4), Row(5, 6), Row(null, null))
-            checkAnswer(spark.read.orc(path), correctAnswer)
+            checkSparkAnswerAndOperator(() => spark.read.orc(path))
 
             withTable("t") {
               sql(s"CREATE EXTERNAL TABLE t(c3 INT, c2 INT) USING ORC LOCATION '$path'")
@@ -215,7 +215,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                 Seq(Row(null, 2), Row(null, 4), Row(null, 6), Row(null, null))
               }
 
-              checkAnswer(spark.table("t"), expected)
+              checkSparkAnswerAndOperator(() => spark.table("t"))
             }
           }
         }
@@ -236,7 +236,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               .partitionBy("p")
               .orc(path)
             val correctAnswer = Seq(Row(1, 2, 1), Row(3, 4, 2), Row(5, 6, 3), Row(null, null, 4))
-            checkAnswer(spark.read.orc(path), correctAnswer)
+            checkSparkAnswerAndOperator(() => spark.read.orc(path))
 
             withTable("t") {
               sql(s"""
@@ -252,7 +252,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                 Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3), Row(null, null, 4))
               }
 
-              checkAnswer(spark.table("t"), expected)
+              checkSparkAnswerAndOperator(() => spark.table("t"))
             }
           }
         }
@@ -294,7 +294,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       ("select rpad('x', -1, 'a')", Row("")),
       ("select lpad('Z', 3, '++')", Row("++Z")),
       ("select rpad('Z', 3, 'AB')", Row("ZAB"))).foreach { case (q, expected) =>
-      checkSparkAnswerAndOperator(q)
+      checkAnswer(sql(q), Seq(expected))
     }
   }
 
@@ -307,7 +307,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       ("select reverse('a')", Row("a")), // Edge case: single character
       ("select reverse('')", Row("")), // Edge case: empty string
       ("select reverse('hello' || ' world')", Row("dlrow olleh"))).foreach { case (q, expected) =>
-      checkSparkAnswerAndOperator(q)
+      checkAnswer(sql(q), Seq(expected))
     }
   }
 
@@ -318,7 +318,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       ("select initcap('sPaRk')", Row("Spark")),
       ("select initcap('')", Row("")),
       ("select initcap(null)", Row(null))).foreach { case (q, expected) =>
-      checkSparkAnswerAndOperator(q)
+      checkAnswer(sql(q), Seq(expected))
     }
   }
 
@@ -332,7 +332,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       ("select initcap('rock''n''roll')", Row("Rocknroll")),
       ("select initcap('hi\\tthere')", Row("Hi\tthere")),
       ("select initcap('hi\\nthere')", Row("Hi\nthere"))).foreach { case (q, expected) =>
-      checkSparkAnswerAndOperator(q)
+      checkAnswer(sql(q), Seq(expected))
     }
   }
 
@@ -342,7 +342,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       ("select initcap('---abc---')", Row("---abc---")),
       ("select initcap('  multiple   spaces ')", Row("  Multiple   Spaces "))).foreach {
       case (q, expected) =>
-        checkSparkAnswerAndOperator(q)
+        checkAnswer(sql(q), Seq(expected))
     }
   }
 
@@ -357,13 +357,15 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
             |""".stripMargin)
 
         // Keep rows where HOUR >= 8, then group by hour
-        checkSparkAnswerAndOperator("""
-              |select h, count(*)
-              |from (select hour(event_time) as h from t_hour) t
-              |where h >= 8
-              |group by h
-              |order by h
-              |""".stripMargin)
+        checkAnswer(
+          sql("""
+            |select h, count(*)
+            |from (select hour(event_time) as h from t_hour) t
+            |where h >= 8
+            |group by h
+            |order by h
+            |""".stripMargin),
+          Seq(Row(8, 2)))
       }
     }
   }
@@ -379,12 +381,14 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
             |""".stripMargin)
 
         // Keep rows where MINUTE = 30, then group by minute
-        checkSparkAnswerAndOperator("""
-              |select m, count(*)
-              |from (select minute(event_time) as m from t_minute) t
-              |where m = 30
-              |group by m
-              |""".stripMargin)
+        checkAnswer(
+          sql("""
+            |select m, count(*)
+            |from (select minute(event_time) as m from t_minute) t
+            |where m = 30
+            |group by m
+            |""".stripMargin),
+          Seq(Row(30, 2)))
       }
     }
   }
@@ -400,12 +404,14 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
             |""".stripMargin)
 
         // Keep rows where SECOND = 0, then group by second
-        checkSparkAnswerAndOperator("""
-              |select s, count(*)
-              |from (select second(event_time) as s from t_second) t
-              |where s = 0
-              |group by s
-              |""".stripMargin)
+        checkAnswer(
+          sql("""
+            |select s, count(*)
+            |from (select second(event_time) as s from t_second) t
+            |where s = 0
+            |group by s
+            |""".stripMargin),
+          Seq(Row(0, 2)))
       }
     }
   }
@@ -416,14 +422,16 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       withTable("t_date_parts") {
         sql(
           "create table t_date_parts using parquet as select date'2024-12-18' as d union all select date'2024-12-19'")
-        checkSparkAnswerAndOperator("""
-              |select
-              |  hour(d)   as h,
-              |  minute(d) as m,
-              |  second(d) as s
+        checkAnswer(
+          sql("""
+            |select
+            |  hour(d)   as h,
+            |  minute(d) as m,
+            |  second(d) as s
               |from t_date_parts
               |order by d
-              |""".stripMargin)
+              |""".stripMargin),
+          Seq(Row(0, 0, 0), Row(0, 0, 0)))
       }
     }
   }
@@ -437,10 +445,12 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
             |select from_utc_timestamp(to_timestamp('1970-01-01 00:00:00'), 'Asia/Shanghai') as ts
             |""".stripMargin)
 
-        checkSparkAnswerAndOperator("""
-              |select hour(ts), minute(ts), second(ts)
-              |from t_tz
-              |""".stripMargin)
+        checkAnswer(
+          sql("""
+            |select hour(ts), minute(ts), second(ts)
+            |from t_tz
+            |""".stripMargin),
+          Seq(Row(8, 0, 0)))
       }
     }
   }
@@ -455,8 +465,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
             |""".stripMargin)
 
         // Kolkata -> 05:30:00; Kathmandu -> 05:45:00
-        checkSparkAnswerAndOperator(
-          "select minute(ts1), second(ts1), minute(ts2), second(ts2) from t_tz2")
+        checkAnswer(
+          sql("select minute(ts1), second(ts1), minute(ts2), second(ts2) from t_tz2"),
+          Seq(Row(30, 0, 45, 0)))
       }
     }
   }
