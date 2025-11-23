@@ -84,7 +84,7 @@ import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.execution.auron.plan.NativeHiveTableScanBase
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{LongType, TimestampType}
 
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.jni.AuronAdaptor
@@ -135,8 +135,12 @@ object AuronConverters extends Logging {
     getBooleanConf("spark.auron.enable.data.writing", defaultValue = false)
   def enableScanParquet: Boolean =
     getBooleanConf("spark.auron.enable.scan.parquet", defaultValue = true)
+  def enableScanParquetTimestamp: Boolean =
+    getBooleanConf("spark.auron.enable.scan.parquet.timestamp", defaultValue = true)
   def enableScanOrc: Boolean =
     getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
+  def enableScanOrcTimestamp: Boolean =
+    getBooleanConf("spark.auron.enable.scan.orc.timestamp", defaultValue = true)
   def enableBroadcastExchange: Boolean =
     getBooleanConf("spark.auron.enable.broadcastExchange", defaultValue = true)
   def enableShuffleExechange: Boolean =
@@ -467,9 +471,19 @@ object AuronConverters extends Logging {
     relation.fileFormat match {
       case p if p.getClass.getName.endsWith("ParquetFileFormat") =>
         assert(enableScanParquet)
+        if (!enableScanParquetTimestamp) {
+          assert(
+            !exec.schema.exists(_.dataType.isInstanceOf[TimestampType]),
+            "Parquet scan with timestamp type is not supported")
+        }
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
       case p if p.getClass.getName.endsWith("OrcFileFormat") =>
         assert(enableScanOrc)
+        if (!enableScanOrcTimestamp) {
+          assert(
+            !exec.schema.exists(_.dataType.isInstanceOf[TimestampType]),
+            "ORC scan with timestamp type is not supported")
+        }
         addRenameColumnsExec(Shims.get.createNativeOrcScanExec(exec))
       case p =>
         throw new NotImplementedError(
