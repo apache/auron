@@ -14,16 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron
 
 import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.sql.Row
-
+import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.auron.util.AuronTestUtils
+import org.apache.spark.sql.auron.AuronConf
 
 class AuronQuerySuite
-    extends org.apache.spark.sql.QueryTest
+    extends AuronQueryTest
     with BaseAuronSQLSuite
     with AuronSQLTestHelper {
   import testImplicits._
@@ -84,7 +83,7 @@ class AuronQuerySuite
           "insert into test_with_complex_type select 1 as id, map('zero', '0', 'one', '1') as m, array('test','auron') as l, 'auron' as s")
         checkAnswer(
           sql("select id,l,m from test_with_complex_type"),
-          Seq(Row(1, ArrayBuffer("test", "auron"), Map("one" -> "1", "zero" -> "0"))))
+          Seq(Row(1, ArrayBuffer("test", "org.apache.auron"), Map("one" -> "1", "zero" -> "0"))))
       })
   }
 

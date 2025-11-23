@@ -14,18 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.spark.sql.execution
 
-import java.io.File
-
+import org.apache.auron.BaseAuronSQLSuite
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.execution.ui.AuronSQLAppStatusListener
 import org.apache.spark.util.Utils
 
-class BuildinfoInSparkUISuite
-    extends org.apache.spark.sql.QueryTest
-    with BuildInfoAuronSQLSuite
-    with AuronSQLTestHelper {
+import java.io.File
+
+class BuildInfoInSparkUISuite
+    extends AuronQueryTest
+    with BaseAuronSQLSuite {
 
   var testDir: File = _
 

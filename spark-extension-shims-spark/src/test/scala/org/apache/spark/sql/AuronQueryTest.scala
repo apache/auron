@@ -14,25 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.spark.sql
 
-class EmptyNativeRddSuite
-    extends org.apache.spark.sql.QueryTest
-    with BaseAuronSQLSuite
-    with AuronSQLTestHelper {
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.test.SQLTestUtils
+import org.scalatest.BeforeAndAfterEach
 
-  test("test empty native rdd") {
-    val sc = spark.sparkContext
-    val empty = new EmptyNativeRDD(sc)
-    assert(empty.count === 0)
-    assert(empty.collect().size === 0)
-
-    val thrown = intercept[UnsupportedOperationException] {
-      empty.reduce((row1, _) => {
-        row1
-      })
-    }
-    assert(thrown.getMessage.contains("empty"))
-  }
+/**
+ * Base test class under org.apache.spark.sql to use package-private [[SQLTestUtils]];
+ * extends [[QueryTest]] for comparisons and checks.
+ */
+abstract class AuronQueryTest
+  extends QueryTest
+  with SQLTestUtils
+  with BeforeAndAfterEach
+  with AdaptiveSparkPlanHelper {
+  import testImplicits._
 
 }

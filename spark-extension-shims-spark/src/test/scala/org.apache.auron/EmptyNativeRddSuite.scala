@@ -14,25 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.auron.EmptyNativeRDD
 
-trait BuildInfoAuronSQLSuite extends SharedSparkSession {
+class EmptyNativeRddSuite
+    extends AuronQueryTest
+    with BaseAuronSQLSuite {
 
-  override protected def sparkConf: SparkConf = {
-    super.sparkConf
-      .set("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
-      .set(
-        "spark.shuffle.manager",
-        "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
-      .set("spark.memory.offHeap.enabled", "false")
-      .set("spark.eventLog.enabled", "true")
-      .set("spark.ui.enabled", "true")
-      .set("spark.auron.ui.enabled", "true")
-      .set("spark.ui.port", "4040")
-      .set("spark.auron.enable", "true")
+  test("test empty native rdd") {
+    val sc = spark.sparkContext
+    val empty = new EmptyNativeRDD(sc)
+    assert(empty.count === 0)
+    assert(empty.collect().size === 0)
+
+    val thrown = intercept[UnsupportedOperationException] {
+      empty.reduce((row1, _) => {
+        row1
+      })
+    }
+    assert(thrown.getMessage.contains("empty"))
   }
 
 }
