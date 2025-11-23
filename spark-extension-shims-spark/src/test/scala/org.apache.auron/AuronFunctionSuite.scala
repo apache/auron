@@ -152,7 +152,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     withTable("t1") {
       sql("CREATE TABLE t1 (c1 FLOAT) USING parquet")
 
-      val floatPi: Float = 3.1415f
+      val floatPi: Float = math.Pi.toFloat
       sql(s"INSERT INTO t1 VALUES($floatPi)")
 
       val scales = -6 to 6
