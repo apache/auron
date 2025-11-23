@@ -30,8 +30,7 @@ class AuronFunctionSuite
     if (AuronTestUtils.isSparkV31OrGreater) {
       withTable("t1") {
         sql("create table t1 using parquet as select 1.0f as c1")
-        val df = sql("select sum(c1) from t1")
-        checkAnswer(df, Seq(Row(1.0)))
+        checkSparkAnswerAndOperator("select sum(c1) from t1")
       }
     }
   }
@@ -49,16 +48,7 @@ class AuronFunctionSuite
           |  sha2(concat(c1, version), 512) as sha512
           |from t1
           |""".stripMargin
-      val df = sql(functions)
-      checkAnswer(
-        df,
-        Seq(
-          Row(
-            "562d20689257f3f3a04ee9afb86d0ece2af106cf6c6e5e7d266043088ce5fbc0",
-            "562d20689257f3f3a04ee9afb86d0ece2af106cf6c6e5e7d266043088ce5fbc0",
-            "d0c8e9ccd5c7b3fdbacd2cfd6b4d65ca8489983b5e8c7c64cd77b634",
-            "77c1199808053619c29e9af2656e1ad2614772f6ea605d5757894d6aec2dfaf34ff6fd662def3b79e429e9ae5ecbfed1",
-            "c4e27d35517ca62243c1f322d7922dac175830be4668e8a1cf3befdcd287bb5b6f8c5f041c9d89e4609c8cfa242008c7c7133af1685f57bac9052c1212f1d089")))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
@@ -74,8 +64,7 @@ class AuronFunctionSuite
           |  select md5(concat(c1, version)) as md5 from t1
           |) b on md5(concat(a.c1, a.version)) = b.md5
           |""".stripMargin
-      val df = sql(functions)
-      checkAnswer(df, Seq(Row("9ff36a3857e29335d03cf6bef2147119")))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
@@ -86,8 +75,7 @@ class AuronFunctionSuite
         """
           |select hash(arr) from t1
           |""".stripMargin
-      val df = sql(functions)
-      checkAnswer(df, Seq(Row(-222940379)))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
@@ -95,8 +83,7 @@ class AuronFunctionSuite
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")
       sql("insert into t1 values(0.0), (1.1), (2.2)")
-      val df = sql("select expm1(c1) from t1")
-      checkAnswer(df, Seq(Row(0.0), Row(2.0041660239464334), Row(8.025013499434122)))
+      checkSparkAnswerAndOperator("select expm1(c1) from t1")
     }
   }
 
@@ -104,8 +91,7 @@ class AuronFunctionSuite
     withTable("t1") {
       sql("create table t1(c1 int) using parquet")
       sql("insert into t1 values(5)")
-      val df = sql("select factorial(c1) from t1")
-      checkAnswer(df, Seq(Row(120)))
+      checkSparkAnswerAndOperator("select factorial(c1) from t1")
     }
   }
 
@@ -113,8 +99,7 @@ class AuronFunctionSuite
     withTable("t1") {
       sql("create table t1(c1 int, c2 string) using parquet")
       sql("insert into t1 values(17, 'Spark SQL')")
-      val df = sql("select hex(c1), hex(c2) from t1")
-      checkAnswer(df, Seq(Row("11", "537061726B2053514C")))
+      checkSparkAnswerAndOperator("select hex(c1), hex(c2) from t1")
     }
   }
 
@@ -123,8 +108,7 @@ class AuronFunctionSuite
       withTable("t1") {
         sql("create table t1(c1 double) using parquet")
         sql("insert into t1 values(10.0), (20.0), (30.0), (31.0), (null)")
-        val df = sql("select stddev_samp(c1) from t1")
-        checkAnswer(df, Seq(Row(9.844626283748239)))
+        checkSparkAnswerAndOperator("select stddev_samp(c1) from t1")
       }
     }
   }
@@ -133,8 +117,7 @@ class AuronFunctionSuite
     withTable("t1") {
       sql("create table t1(c1 string) using parquet")
       sql("insert into t1 values('Auron Spark SQL')")
-      val df = sql("select regexp_extract(c1, '^A(.*)L$', 1) from t1")
-      checkAnswer(df, Seq(Row("uron Spark SQ")))
+      checkSparkAnswerAndOperator("select regexp_extract(c1, '^A(.*)L$', 1) from t1")
     }
   }
 
@@ -146,25 +129,9 @@ class AuronFunctionSuite
       sql(s"INSERT INTO t2 VALUES($intPi)")
 
       val scales = -6 to 6
-      val expectedResults = Map(
-        -6 -> 314000000,
-        -5 -> 314200000,
-        -4 -> 314160000,
-        -3 -> 314159000,
-        -2 -> 314159300,
-        -1 -> 314159270,
-        0 -> 314159265,
-        1 -> 314159265,
-        2 -> 314159265,
-        3 -> 314159265,
-        4 -> 314159265,
-        5 -> 314159265,
-        6 -> 314159265)
 
       scales.foreach { scale =>
-        val df = sql(s"SELECT round(c1, $scale) AS xx FROM t2")
-        val expected = expectedResults(scale)
-        checkAnswer(df, Seq(Row(expected)))
+        checkSparkAnswerAndOperator(s"SELECT round(c1, $scale) AS xx FROM t2")
       }
     }
   }
@@ -176,25 +143,9 @@ class AuronFunctionSuite
       val doublePi: Double = math.Pi
       sql(s"insert into t1 values($doublePi)")
       val scales = -6 to 6
-      val expectedResults = Map(
-        -6 -> 0.0,
-        -5 -> 0.0,
-        -4 -> 0.0,
-        -3 -> 0.0,
-        -2 -> 0.0,
-        -1 -> 0.0,
-        0 -> 3.0,
-        1 -> 3.1,
-        2 -> 3.14,
-        3 -> 3.142,
-        4 -> 3.1416,
-        5 -> 3.14159,
-        6 -> 3.141593)
 
       scales.foreach { scale =>
-        val df = sql(s"select round(c1, $scale) from t1")
-        val expected = expectedResults(scale)
-        checkAnswer(df, Seq(Row(expected)))
+        checkSparkAnswerAndOperator(s"select round(c1, $scale) from t1")
       }
     }
   }
@@ -207,25 +158,9 @@ class AuronFunctionSuite
       sql(s"INSERT INTO t1 VALUES($floatPi)")
 
       val scales = -6 to 6
-      val expectedResults = Map(
-        -6 -> 0.0f,
-        -5 -> 0.0f,
-        -4 -> 0.0f,
-        -3 -> 0.0f,
-        -2 -> 0.0f,
-        -1 -> 0.0f,
-        0 -> 3.0f,
-        1 -> 3.1f,
-        2 -> 3.14f,
-        3 -> 3.142f,
-        4 -> 3.1415f,
-        5 -> 3.1415f,
-        6 -> 3.1415f)
 
       scales.foreach { scale =>
-        val df = sql(s"select round(c1, $scale) from t1")
-        val expected = expectedResults(scale)
-        checkAnswer(df, Seq(Row(expected)))
+        checkSparkAnswerAndOperator(s"select round(c1, $scale) from t1")
       }
     }
   }
@@ -238,25 +173,9 @@ class AuronFunctionSuite
       sql(s"INSERT INTO t1 VALUES($shortPi)")
 
       val scales = -6 to 6
-      val expectedResults = Map(
-        -6 -> 0.toShort,
-        -5 -> 0.toShort,
-        -4 -> 30000.toShort,
-        -3 -> 31000.toShort,
-        -2 -> 31400.toShort,
-        -1 -> 31420.toShort,
-        0 -> 31415.toShort,
-        1 -> 31415.toShort,
-        2 -> 31415.toShort,
-        3 -> 31415.toShort,
-        4 -> 31415.toShort,
-        5 -> 31415.toShort,
-        6 -> 31415.toShort)
 
       scales.foreach { scale =>
-        val df = sql(s"SELECT round(c1, $scale) FROM t1")
-        val expected = expectedResults(scale)
-        checkAnswer(df, Seq(Row(expected)))
+        checkSparkAnswerAndOperator(s"SELECT round(c1, $scale) FROM t1")
       }
     }
   }
@@ -269,25 +188,8 @@ class AuronFunctionSuite
       sql(s"INSERT INTO t1 VALUES($longPi)")
 
       val scales = -6 to 6
-      val expectedResults = Map(
-        -6 -> 31415926536000000L,
-        -5 -> 31415926535900000L,
-        -4 -> 31415926535900000L,
-        -3 -> 31415926535898000L,
-        -2 -> 31415926535897900L,
-        -1 -> 31415926535897930L,
-        0 -> 31415926535897932L,
-        1 -> 31415926535897932L,
-        2 -> 31415926535897932L,
-        3 -> 31415926535897932L,
-        4 -> 31415926535897932L,
-        5 -> 31415926535897932L,
-        6 -> 31415926535897932L)
-
       scales.foreach { scale =>
-        val df = sql(s"SELECT round(c1, $scale) FROM t1")
-        val expected = expectedResults(scale)
-        checkAnswer(df, Seq(Row(expected)))
+        checkSparkAnswerAndOperator(s"SELECT round(c1, $scale) FROM t1")
       }
     }
   }
@@ -304,37 +206,29 @@ class AuronFunctionSuite
           |from t1
             """.stripMargin
 
-      val df = sql(functions)
 
-      checkAnswer(df, Seq(Row(8.0, 8.0)))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
   test("pow/power should accept mixed numeric types and return double") {
-    val df = sql("select pow(2, 3.0), pow(2.0, 3), power(1.5, 2)")
-    checkAnswer(df, Seq(Row(8.0, 8.0, 2.25)))
+    checkSparkAnswerAndOperator("select pow(2, 3.0), pow(2.0, 3), power(1.5, 2)")
   }
 
   test("pow: zero base with negative exponent yields +infinity") {
-    val df = sql("select pow(0.0, -2.5), power(0.0, -3)")
-    // Spark prints Infinity as Double.PositiveInfinity
-    checkAnswer(df, Seq(Row(Double.PositiveInfinity, Double.PositiveInfinity)))
+    checkSparkAnswerAndOperator("select pow(0.0, -2.5), power(0.0, -3)")
   }
 
   test("pow: zero to the zero equals one") {
-    val df = sql("select pow(0.0, 0.0)")
-    checkAnswer(df, Seq(Row(1.0)))
+    checkSparkAnswerAndOperator("select pow(0.0, 0.0)")
   }
 
   test("pow: negative base with fractional exponent is NaN") {
-    val df = sql("select pow(-2, 0.5)")
-    assert(df.collect().head.getDouble(0).isNaN)
+    checkSparkAnswerAndOperator("select pow(-2, 0.5)")
   }
 
   test("pow null propagation") {
-    val df = sql("select pow(null, 2), power(2, null), pow(null, null)")
-    val row = df.collect().head
-    assert(row.isNullAt(0) && row.isNullAt(1) && row.isNullAt(2))
+    checkSparkAnswerAndOperator("select pow(null, 2), power(2, null), pow(null, null)")
   }
 
   test("test function least") {
@@ -376,27 +270,7 @@ class AuronFunctionSuite
           |    test_least
         """.stripMargin
 
-      val df = sql(functions)
-
-      checkAnswer(
-        df,
-        Seq(
-          Row(
-            "a",
-            1,
-            -1,
-            "a",
-            null,
-            "a",
-            -1.0,
-            -1.0,
-            -1.0f,
-            1,
-            "aaaa",
-            false,
-            date,
-            dateTimeStampMin,
-            minValue)))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
@@ -445,28 +319,7 @@ class AuronFunctionSuite
           |    t1
         """.stripMargin
 
-      val df = sql(functions)
-      checkAnswer(
-        df,
-        Seq(
-          Row(
-            "c",
-            2,
-            2,
-            "ccc",
-            null,
-            "c",
-            2.5,
-            2,
-            2.5f,
-            longMax,
-            2,
-            2,
-            "abc",
-            true,
-            date,
-            dateTimeStampMax)))
-
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
@@ -490,9 +343,7 @@ class AuronFunctionSuite
           |from t1_find_in_set
         """.stripMargin
 
-      val df = sql(functions)
-      df.show()
-      checkAnswer(df, Seq(Row(1, 2, 3, 1, 4, 1, 4, 6, null)))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
@@ -512,9 +363,7 @@ class AuronFunctionSuite
           |    test_is_nan
         """.stripMargin
 
-      val df = sql(functions)
-      df.show()
-      checkAnswer(df, Seq(Row(true, true, false, false, false)))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
@@ -528,15 +377,15 @@ class AuronFunctionSuite
              |CAST(NULL AS INT)        AS null_int
              |""".stripMargin)
 
-      val df = sql(s"""SELECT
+      val sqlStr = s"""SELECT
                       |nvl2(null_int, int_val, 999)          AS int_only,
                       |nvl2(1,  str_val, int_val)            AS has_str,
                       |nvl2(null_int, int_val, str_val)      AS str_in_false,
                       |nvl2(1,  arr_val, array(888))         AS has_array,
                       |nvl2(null_int, null_str,  null_str)   AS all_null
-                      |FROM  t1""".stripMargin)
+                      |FROM  t1""".stripMargin
 
-      checkAnswer(df, Row(999, "X", "X", ArrayBuffer(1, 2, 3), null))
+      checkSparkAnswerAndOperator(sqlStr)
     }
   }
 
@@ -552,8 +401,7 @@ class AuronFunctionSuite
           |from t1
                     """.stripMargin
 
-      val df = sql(functions)
-      checkAnswer(df, Seq(Row("base", "base", 4)))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
@@ -575,9 +423,7 @@ class AuronFunctionSuite
           |from test_levenshtein
         """.stripMargin
 
-      val df = sql(functions)
-      df.show()
-      checkAnswer(df, Seq(Row(null, null, 0, 0, 3, 1, 3, 4)))
+      checkSparkAnswerAndOperator(functions)
     }
   }
 }

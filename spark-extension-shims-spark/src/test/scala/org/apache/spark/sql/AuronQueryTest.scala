@@ -16,7 +16,11 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.auron.{AuronConf, NativeSupports}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, AdaptiveSparkPlanHelper, BroadcastQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.auron.plan.{NativeAggBase, NativeBroadcastJoinBase, NativeFilterBase, NativeFilterExec, NativeProjectBase, NativeRenameColumnsBase, NativeShuffleExchangeBase, NativeSortBase}
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.test.SQLTestUtils
 import org.scalatest.BeforeAndAfterEach
 
@@ -31,4 +35,45 @@ abstract class AuronQueryTest
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
+  /**
+   * Assert results match vanilla Spark, skip operator checks.
+   */
+  protected def checkSparkAnswer(sqlStr: String): Unit = {
+    checkSparkAnswerAndOperator(sqlStr, requireNative = false)
+  }
+
+  /**
+   * Assert results match vanilla Spark, fail if any operator is not native.
+   */
+  protected def checkSparkAnswerAndOperator(sqlStr: String, requireNative: Boolean = true): Unit = {
+
+    var expected: Seq[Row] = null
+    var sparkPlan = null.asInstanceOf[SparkPlan]
+    withSQLConf("spark.auron.enable" -> "false") {
+      val dfSpark = spark.sql(sqlStr)
+      expected = dfSpark.collect()
+    }
+
+    val dfAuron = spark.sql(sqlStr)
+    checkAnswer(dfAuron, expected)
+
+    if(requireNative) {
+      val plan = stripAQEPlan(dfAuron.queryExecution.executedPlan)
+      plan.collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op: SparkPlan =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan: ${plan}""".stripMargin)
+        }
+    }
+  }
+
+  protected def isNativeOrPassThrough(op: SparkPlan): Boolean = op match {
+    case _: NativeSupports => true
+    case _: WholeStageCodegenExec => true
+    case _: BroadcastQueryStageExec => true
+    case _: AQEShuffleReadExec => true
+    case _: ShuffleQueryStageExec => true
+    case _ => false
+  }
 }
