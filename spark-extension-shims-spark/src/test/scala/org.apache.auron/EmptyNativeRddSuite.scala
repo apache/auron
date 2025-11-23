@@ -19,9 +19,7 @@ package org.apache.auron
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.EmptyNativeRDD
 
-class EmptyNativeRddSuite
-    extends AuronQueryTest
-    with BaseAuronSQLSuite {
+class EmptyNativeRddSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   test("test empty native rdd") {
     val sc = spark.sparkContext

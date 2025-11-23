@@ -16,23 +16,20 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.auron.{BaseAuronSQLSuite, sparkverEnableMembers}
-import org.apache.spark.sql.AuronQueryTest
-
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
-import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, AdaptiveSparkPlanExec}
+import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestData.TestData
 
-@sparkverEnableMembers("3.5")
-class AuronAdaptiveQueryExecSuite
-    extends AuronQueryTest
-    with BaseAuronSQLSuite {
-  import testImplicits._
+import org.apache.auron.{sparkverEnableMembers, BaseAuronSQLSuite}
 
+@sparkverEnableMembers("3.5")
+class AuronAdaptiveQueryExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
+  import testImplicits._
 
   test("SPARK-35725: Support optimize skewed partitions in RebalancePartitions") {
     withTempView("v") {

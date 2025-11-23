@@ -17,14 +17,12 @@
 package org.apache.auron
 
 import java.text.SimpleDateFormat
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.sql.{AuronQueryTest, Row}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+
+import org.apache.spark.sql.AuronQueryTest
+
 import org.apache.auron.util.AuronTestUtils
 
-class AuronFunctionSuite
-    extends AuronQueryTest
-    with BaseAuronSQLSuite {
+class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   test("sum function with float input") {
     if (AuronTestUtils.isSparkV31OrGreater) {
@@ -205,7 +203,6 @@ class AuronFunctionSuite
           |  pow(base, exponent) as pow_result
           |from t1
             """.stripMargin
-
 
       checkSparkAnswerAndOperator(functions)
     }

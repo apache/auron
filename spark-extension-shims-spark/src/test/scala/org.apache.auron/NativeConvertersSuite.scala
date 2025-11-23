@@ -17,13 +17,17 @@
 package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.auron.{AuronConf, NativeConverters}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
-import org.apache.auron.protobuf.ScalarFunction
-import org.apache.spark.sql.auron.{AuronConf, NativeConverters}
 
-class NativeConvertersSuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
+import org.apache.auron.protobuf.ScalarFunction
+
+class NativeConvertersSuite
+    extends AuronQueryTest
+    with BaseAuronSQLSuite
+    with AuronSQLTestHelper {
 
   private def assertTrimmedCast(rawValue: String, targetType: DataType): Unit = {
     val expr = Cast(Literal.create(rawValue, StringType), targetType)

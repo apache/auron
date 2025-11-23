@@ -17,14 +17,13 @@
 package org.apache.auron
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.{AuronQueryTest, Row}
-import org.apache.auron.util.AuronTestUtils
 import org.apache.spark.sql.auron.AuronConf
 
-class AuronQuerySuite
-    extends AuronQueryTest
-    with BaseAuronSQLSuite
-    with AuronSQLTestHelper {
+import org.apache.auron.util.AuronTestUtils
+
+class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
   import testImplicits._
 
   test("test partition path has url encoded character") {
@@ -46,14 +45,12 @@ class AuronQuerySuite
   test("test filter with year function") {
     withTable("t1") {
       sql("create table t1 using parquet as select '2024-12-18' as event_time")
-      checkSparkAnswerAndOperator(
-        s"""
+      checkSparkAnswerAndOperator(s"""
             |select year, count(*)
             |from (select event_time, year(event_time) as year from t1) t
             |where year <= 2024
             |group by year
-            |""".stripMargin
-      )
+            |""".stripMargin)
     }
   }
 
@@ -135,7 +132,8 @@ class AuronQuerySuite
           |  'item2', named_struct('count', 7, 'score', 9.1d)
           |) as map_struct_value
           |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ map_struct_value FROM t_map_struct_value")
+      checkSparkAnswerAndOperator(
+        "SELECT /*+ repartition(10) */ map_struct_value FROM t_map_struct_value")
     }
   }
 
@@ -161,7 +159,8 @@ class AuronQuerySuite
           |  named_struct('name', 'user2', 'features', map('f3', 3.5d))
           |) as user_feature_array
           |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ user_feature_array FROM t_array_struct_map")
+      checkSparkAnswerAndOperator(
+        "SELECT /*+ repartition(10) */ user_feature_array FROM t_array_struct_map")
     }
   }
 
@@ -191,7 +190,6 @@ class AuronQuerySuite
            | test_hive_orc_impl
            | VALUES(9, '12', 2020)
                """.stripMargin)
-
       checkSparkAnswerAndOperator("SELECT _col2 FROM test_hive_orc_impl")
     }
   }
@@ -274,14 +272,13 @@ class AuronQuerySuite
           |union all select '2024-12-18'
           |""".stripMargin)
 
-      checkSparkAnswerAndOperator(
-        """
+      checkSparkAnswerAndOperator("""
             |select q, count(*)
             |from (select event_time, quarter(event_time) as q from t1) t
             |where q <= 3
             |group by q
             |order by q
-            |""".stripMargin )
+            |""".stripMargin)
     }
   }
 
@@ -362,8 +359,7 @@ class AuronQuerySuite
             |""".stripMargin)
 
         // Keep rows where HOUR >= 8, then group by hour
-        checkSparkAnswerAndOperator(
-          """
+        checkSparkAnswerAndOperator("""
               |select h, count(*)
               |from (select hour(event_time) as h from t_hour) t
               |where h >= 8
@@ -385,8 +381,7 @@ class AuronQuerySuite
             |""".stripMargin)
 
         // Keep rows where MINUTE = 30, then group by minute
-        checkSparkAnswerAndOperator(
-          """
+        checkSparkAnswerAndOperator("""
               |select m, count(*)
               |from (select minute(event_time) as m from t_minute) t
               |where m = 30
@@ -407,8 +402,7 @@ class AuronQuerySuite
             |""".stripMargin)
 
         // Keep rows where SECOND = 0, then group by second
-        checkSparkAnswerAndOperator(
-          """
+        checkSparkAnswerAndOperator("""
               |select s, count(*)
               |from (select second(event_time) as s from t_second) t
               |where s = 0
@@ -424,8 +418,7 @@ class AuronQuerySuite
       withTable("t_date_parts") {
         sql(
           "create table t_date_parts using parquet as select date'2024-12-18' as d union all select date'2024-12-19'")
-        checkSparkAnswerAndOperator(
-          """
+        checkSparkAnswerAndOperator("""
               |select
               |  hour(d)   as h,
               |  minute(d) as m,
@@ -464,7 +457,8 @@ class AuronQuerySuite
             |""".stripMargin)
 
         // Kolkata -> 05:30:00; Kathmandu -> 05:45:00
-        checkSparkAnswerAndOperator("select minute(ts1), second(ts1), minute(ts2), second(ts2) from t_tz2")
+        checkSparkAnswerAndOperator(
+          "select minute(ts1), second(ts1), minute(ts2), second(ts2) from t_tz2")
       }
     }
   }

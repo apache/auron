@@ -18,54 +18,68 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.auron.{AuronConf, NativeSupports}
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, AdaptiveSparkPlanHelper, BroadcastQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, BroadcastQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.auron.plan.{NativeAggBase, NativeBroadcastJoinBase, NativeFilterBase, NativeFilterExec, NativeProjectBase, NativeRenameColumnsBase, NativeShuffleExchangeBase, NativeSortBase}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.test.SQLTestUtils
 import org.scalatest.BeforeAndAfterEach
 
 /**
- * Base test class under org.apache.spark.sql to use package-private [[SQLTestUtils]];
- * extends [[QueryTest]] for comparisons and checks.
+ * Base test class under org.apache.spark.sql to use package-private [[SQLTestUtils]]; extends
+ * [[QueryTest]] for comparisons and checks.
  */
 abstract class AuronQueryTest
-  extends QueryTest
-  with SQLTestUtils
-  with BeforeAndAfterEach
-  with AdaptiveSparkPlanHelper {
+    extends QueryTest
+    with SQLTestUtils
+    with BeforeAndAfterEach
+    with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   /**
    * Assert results match vanilla Spark, skip operator checks.
    */
-  protected def checkSparkAnswer(sqlStr: String): Unit = {
+  protected def checkSparkAnswer(sqlStr: String): DataFrame = {
     checkSparkAnswerAndOperator(sqlStr, requireNative = false)
   }
 
   /**
    * Assert results match vanilla Spark, fail if any operator is not native.
    */
-  protected def checkSparkAnswerAndOperator(sqlStr: String, requireNative: Boolean = true): Unit = {
+  protected def checkSparkAnswerAndOperator(
+      sqlStr: String,
+      requireNative: Boolean = true): DataFrame = {
+    checkSparkAnswerAndOperator(() => sql(sqlStr), requireNative)
+  }
+
+  /**
+   * Assert results match vanilla Spark, fail if any operator is not native.
+   */
+  protected def checkSparkAnswerAndOperator(
+      dataframe: () => DataFrame,
+      requireNative: Boolean = true): DataFrame = {
 
     var expected: Seq[Row] = null
     var sparkPlan = null.asInstanceOf[SparkPlan]
     withSQLConf("spark.auron.enable" -> "false") {
-      val dfSpark = spark.sql(sqlStr)
+      val dfSpark = dataframe()
       expected = dfSpark.collect()
     }
 
-    val dfAuron = spark.sql(sqlStr)
+    val dfAuron = dataframe()
     checkAnswer(dfAuron, expected)
 
-    if(requireNative) {
+    if (requireNative) {
       val plan = stripAQEPlan(dfAuron.queryExecution.executedPlan)
-      plan.collectFirst { case op if !isNativeOrPassThrough(op) => op }
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
         .foreach { op: SparkPlan =>
           fail(s"""
                |Found non-native operator: ${op.nodeName}
                |plan: ${plan}""".stripMargin)
         }
     }
+
+    dfAuron
   }
 
   protected def isNativeOrPassThrough(op: SparkPlan): Boolean = op match {

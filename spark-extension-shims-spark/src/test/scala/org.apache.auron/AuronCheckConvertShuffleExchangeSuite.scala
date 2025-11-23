@@ -16,8 +16,8 @@
  */
 package org.apache.auron
 
+import org.apache.spark.sql.{AuronQueryTest, Row, SparkSession}
 import org.apache.spark.sql.auron.AuronConverters
-import org.apache.spark.sql.{AuronQueryTest, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.test.SharedSparkSession

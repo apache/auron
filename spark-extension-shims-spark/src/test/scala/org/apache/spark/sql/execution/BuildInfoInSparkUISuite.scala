@@ -16,17 +16,16 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.auron.BaseAuronSQLSuite
+import java.io.File
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.execution.ui.AuronSQLAppStatusListener
 import org.apache.spark.util.Utils
 
-import java.io.File
+import org.apache.auron.BaseAuronSQLSuite
 
-class BuildInfoInSparkUISuite
-    extends AuronQueryTest
-    with BaseAuronSQLSuite {
+class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   var testDir: File = _
 
