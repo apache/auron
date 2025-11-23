@@ -17,8 +17,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.auron.NativeSupports
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, BroadcastQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SQLTestUtils
 import org.scalatest.BeforeAndAfterEach
 
