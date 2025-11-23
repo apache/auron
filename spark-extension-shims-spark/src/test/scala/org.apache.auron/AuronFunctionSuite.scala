@@ -209,23 +209,43 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("pow/power should accept mixed numeric types and return double") {
-    checkSparkAnswerAndOperator("select pow(2, 3.0), pow(2.0, 3), power(1.5, 2)")
+    withTable("t1") {
+      sql("create table t1(c1 double, c2 double) using parquet")
+      sql("insert into t1 values(2, 3.0), (2.0, 3), (1.5, 2)")
+      checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+    }
   }
 
   test("pow: zero base with negative exponent yields +infinity") {
-    checkSparkAnswerAndOperator("select pow(0.0, -2.5), power(0.0, -3)")
+    withTable("t1") {
+      sql("create table t1(c1 double, c2 double) using parquet")
+      sql("insert into t1 values(0.0, -2.5), (0.0, -3)")
+      checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+    }
   }
 
   test("pow: zero to the zero equals one") {
-    checkSparkAnswerAndOperator("select pow(0.0, 0.0)")
+    withTable("t1") {
+      sql("create table t1(c1 double, c2 double) using parquet")
+      sql("insert into t1 values(0.0, 0.0)")
+      checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+    }
   }
 
   test("pow: negative base with fractional exponent is NaN") {
-    checkSparkAnswerAndOperator("select pow(-2, 0.5)")
+    withTable("t1") {
+      sql("create table t1(c1 double, c2 double) using parquet")
+      sql("insert into t1 values(-2, 0.5)")
+      checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+    }
   }
 
   test("pow null propagation") {
-    checkSparkAnswerAndOperator("select pow(null, 2), power(2, null), pow(null, null)")
+    withTable("t1") {
+      sql("create table t1(c1 double, c2 double) using parquet")
+      sql("insert into t1 values(null, 2),(2, null),(null, null)")
+      checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+    }
   }
 
   test("test function least") {

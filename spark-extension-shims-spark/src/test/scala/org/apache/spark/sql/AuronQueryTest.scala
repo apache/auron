@@ -17,7 +17,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.auron.NativeSupports
-import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, BroadcastQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.scalatest.BeforeAndAfterEach
@@ -54,7 +54,6 @@ abstract class AuronQueryTest
       requireNative: Boolean = true): DataFrame = {
 
     var expected: Seq[Row] = null
-    var sparkPlan = null.asInstanceOf[SparkPlan]
     withSQLConf("spark.auron.enable" -> "false") {
       val dfSpark = dataframe()
       expected = dfSpark.collect()
@@ -79,10 +78,13 @@ abstract class AuronQueryTest
 
   protected def isNativeOrPassThrough(op: SparkPlan): Boolean = op match {
     case _: NativeSupports => true
-    case _: WholeStageCodegenExec => true
-    case _: BroadcastQueryStageExec => true
-    case _: AQEShuffleReadExec => true
-    case _: ShuffleQueryStageExec => true
+    case e: UnaryExecNode
+        if Seq("QueryStage", "InputAdapter", "CustomShuffleRead", "AQEShuffleRead")
+          .exists(e.nodeName.contains) || e.nodeName.startsWith("WholeStageCodegen") =>
+      true
+    case e: LeafExecNode
+        if Seq("ShuffleQueryStage", "BroadcastQueryStage").exists(e.nodeName.contains) =>
+      true
     case _ => false
   }
 }
