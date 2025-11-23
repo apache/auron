@@ -16,7 +16,6 @@
  */
 package org.apache.auron
 
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.AuronConf

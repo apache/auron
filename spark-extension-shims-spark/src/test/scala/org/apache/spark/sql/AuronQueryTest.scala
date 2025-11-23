@@ -16,11 +16,9 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.sql.auron.{AuronConf, NativeSupports}
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.auron.NativeSupports
+import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, BroadcastQueryStageExec, ShuffleQueryStageExec}
-import org.apache.spark.sql.execution.auron.plan.{NativeAggBase, NativeBroadcastJoinBase, NativeFilterBase, NativeFilterExec, NativeProjectBase, NativeRenameColumnsBase, NativeShuffleExchangeBase, NativeSortBase}
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.test.SQLTestUtils
 import org.scalatest.BeforeAndAfterEach
 
@@ -33,22 +31,19 @@ abstract class AuronQueryTest
     with SQLTestUtils
     with BeforeAndAfterEach
     with AdaptiveSparkPlanHelper {
-  import testImplicits._
 
   /**
    * Assert results match vanilla Spark, skip operator checks.
    */
   protected def checkSparkAnswer(sqlStr: String): DataFrame = {
-    checkSparkAnswerAndOperator(sqlStr, requireNative = false)
+    checkSparkAnswerAndOperator(() => sql(sqlStr), requireNative = false)
   }
 
   /**
    * Assert results match vanilla Spark, fail if any operator is not native.
    */
-  protected def checkSparkAnswerAndOperator(
-      sqlStr: String,
-      requireNative: Boolean = true): DataFrame = {
-    checkSparkAnswerAndOperator(() => sql(sqlStr), requireNative)
+  protected def checkSparkAnswerAndOperator(sqlStr: String): DataFrame = {
+    checkSparkAnswerAndOperator(() => sql(sqlStr), requireNative = true)
   }
 
   /**
