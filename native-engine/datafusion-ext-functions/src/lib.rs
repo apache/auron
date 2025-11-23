@@ -45,11 +45,11 @@ pub fn create_auron_ext_function(name: &str) -> Result<ScalarFunctionImplementat
         "Spark_CheckOverflow" => Arc::new(spark_check_overflow::spark_check_overflow),
         "Spark_Murmur3Hash" => Arc::new(spark_hash::spark_murmur3_hash),
         "Spark_XxHash64" => Arc::new(spark_hash::spark_xxhash64),
-        "Sha224" => Arc::new(spark_crypto::spark_sha224),
-        "Sha256" => Arc::new(spark_crypto::spark_sha256),
-        "Sha384" => Arc::new(spark_crypto::spark_sha384),
-        "Sha512" => Arc::new(spark_crypto::spark_sha512),
-        "MD5" => Arc::new(spark_crypto::spark_md5),
+        "Spark_Sha224" => Arc::new(spark_crypto::spark_sha224),
+        "Spark_Sha256" => Arc::new(spark_crypto::spark_sha256),
+        "Spark_Sha384" => Arc::new(spark_crypto::spark_sha384),
+        "Spark_Sha512" => Arc::new(spark_crypto::spark_sha512),
+        "Spark_MD5" => Arc::new(spark_crypto::spark_md5),
         "Spark_GetJsonObject" => Arc::new(spark_get_json_object::spark_get_json_object),
         "Spark_GetParsedJsonObject" => {
             Arc::new(spark_get_json_object::spark_get_parsed_json_object)
