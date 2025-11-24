@@ -62,7 +62,7 @@ datafusion-datasource-parquet = { version = "49.0.0" }
 datafusion-spark = { version = "49.0.0" }
 
 # orc
-orc-rust = { version = "0.6.0" }
+orc-rust = { version = "0.7.0" }
 
 # arrow
 arrow = { version = "55.2.0", features = ["ffi"]}
@@ -121,7 +121,7 @@ datafusion-execution = { git = "https://github.com/auron-project/datafusion.git"
 datafusion-optimizer = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
 datafusion-physical-expr = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
 datafusion-spark = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-orc-rust = { git = "https://github.com/auron-project/datafusion-orc.git", rev = "d7a4b8c"}
+orc-rust = { git = "https://github.com/auron-project/datafusion-orc.git", rev = "8785b99"}
 
 # arrow: branch=v55.2.0-blaze
 arrow = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}

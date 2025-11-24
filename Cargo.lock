@@ -2099,9 +2099,9 @@ dependencies = [
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.63"
+version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0c919e5debc312ad217002b8048a17b7d83f80703865bbfcfebb0458b0b27d8"
+checksum = "33e57f83510bb73707521ebaffa789ec8caf86f9657cad665b092b581d40e9fb"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",
@@ -2793,8 +2793,8 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "orc-rust"
-version = "0.6.0"
-source = "git+https://github.com/auron-project/datafusion-orc.git?rev=d7a4b8c#d7a4b8cacdaeeeb079a02f3a94720fa65b678fd8"
+version = "0.7.0"
+source = "git+https://github.com/auron-project/datafusion-orc.git?rev=8785b99#8785b99323a0269e37d7078818badf0f96a69416"
 dependencies = [
  "arrow",
  "async-trait",
