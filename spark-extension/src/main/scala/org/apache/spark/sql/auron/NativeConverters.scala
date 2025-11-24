@@ -126,7 +126,7 @@ object NativeConverters extends Logging {
       case m: MapType =>
         existTimestampType(m.keyType) && existTimestampType(m.valueType)
       case s: StructType =>
-        s.fields.forall(e => existTimestampType(e.dataType))
+        s.fields.exists(e => existTimestampType(e.dataType))
       case _ => false
     }
   }
