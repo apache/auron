@@ -41,7 +41,7 @@ jobs:
         auronver: [7.0.0-SNAPSHOT]
         scalaver: [2.12, 2.13]
         javaver: [ 8, 21 ]
-        runner: [ubuntu-22.04-arm, ubuntu-24.04-arm ]
+        runner: [ ubuntu-24.04-arm ]
         exclude:
           # Only build on scala-2.13 for spark-3.5
           - sparkver: spark-3.0
