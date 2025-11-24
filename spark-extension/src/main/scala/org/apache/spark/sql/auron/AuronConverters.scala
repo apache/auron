@@ -473,7 +473,7 @@ object AuronConverters extends Logging {
         assert(enableScanParquet)
         if (!enableScanParquetTimestamp) {
           assert(
-            !exec.schema.exists(e => existTimestampType(e.dataType)),
+            !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
             "Parquet scan with timestamp type is not supported")
         }
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
@@ -481,7 +481,7 @@ object AuronConverters extends Logging {
         assert(enableScanOrc)
         if (!enableScanOrcTimestamp) {
           assert(
-            !exec.schema.exists(e => existTimestampType(e.dataType)),
+            !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
             "ORC scan with timestamp type is not supported")
         }
         addRenameColumnsExec(Shims.get.createNativeOrcScanExec(exec))
