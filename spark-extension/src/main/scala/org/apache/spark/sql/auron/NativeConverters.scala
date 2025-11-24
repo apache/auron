@@ -118,6 +118,19 @@ object NativeConverters extends Logging {
     }
   }
 
+  def existTimestampType(dataType: DataType): Boolean = {
+    dataType match {
+      case TimestampType =>
+        true
+      case at: ArrayType => existTimestampType(at.elementType)
+      case m: MapType =>
+        existTimestampType(m.keyType) && existTimestampType(m.valueType)
+      case s: StructType =>
+        s.fields.forall(e => existTimestampType(e.dataType))
+      case _ => false
+    }
+  }
+
   def roundRobinTypeSupported(dataType: DataType): Boolean = dataType match {
     case MapType(_, _, _) => false
     case ArrayType(elementType, _) => roundRobinTypeSupported(elementType)

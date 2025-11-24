@@ -28,7 +28,7 @@ import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
-import org.apache.spark.sql.auron.NativeConverters.{roundRobinTypeSupported, scalarTypeSupported, StubExpr}
+import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, roundRobinTypeSupported, scalarTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -84,7 +84,7 @@ import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.execution.auron.plan.NativeHiveTableScanBase
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{LongType, TimestampType}
+import org.apache.spark.sql.types.LongType
 
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.jni.AuronAdaptor
@@ -473,7 +473,7 @@ object AuronConverters extends Logging {
         assert(enableScanParquet)
         if (!enableScanParquetTimestamp) {
           assert(
-            !exec.schema.exists(_.dataType.isInstanceOf[TimestampType]),
+            !exec.schema.exists(e => existTimestampType(e.dataType)),
             "Parquet scan with timestamp type is not supported")
         }
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
@@ -481,7 +481,7 @@ object AuronConverters extends Logging {
         assert(enableScanOrc)
         if (!enableScanOrcTimestamp) {
           assert(
-            !exec.schema.exists(_.dataType.isInstanceOf[TimestampType]),
+            !exec.schema.exists(e => existTimestampType(e.dataType)),
             "ORC scan with timestamp type is not supported")
         }
         addRenameColumnsExec(Shims.get.createNativeOrcScanExec(exec))
