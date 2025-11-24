@@ -124,7 +124,7 @@ object NativeConverters extends Logging {
         true
       case at: ArrayType => existTimestampType(at.elementType)
       case m: MapType =>
-        existTimestampType(m.keyType) && existTimestampType(m.valueType)
+        existTimestampType(m.keyType) || existTimestampType(m.valueType)
       case s: StructType =>
         s.fields.exists(e => existTimestampType(e.dataType))
       case _ => false
