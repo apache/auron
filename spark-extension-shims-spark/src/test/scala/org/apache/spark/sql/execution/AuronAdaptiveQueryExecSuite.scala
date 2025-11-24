@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.AuronQueryTest
+
 import org.apache.auron.{sparkverEnableMembers, BaseAuronSQLSuite}
 
 @sparkverEnableMembers("3.5")
