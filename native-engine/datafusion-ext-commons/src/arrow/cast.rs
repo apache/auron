@@ -167,7 +167,7 @@ pub fn cast_impl(
                         }
                         if col.is_some() {
                             cast_impl(
-                                col.expect("missing column"),
+                                col.expect("col"),
                                 field.data_type(),
                                 match_struct_fields,
                             )

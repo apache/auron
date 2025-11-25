@@ -280,7 +280,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
 
                 Ok(Arc::new(ShuffleWriterExec::try_new(
                     input,
-                    output_partitioning.expect("partitioning"),
+                    output_partitioning.expect("output_partitioning"),
                     shuffle_writer.output_data_file.clone(),
                     shuffle_writer.output_index_file.clone(),
                 )?))
@@ -295,7 +295,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )?;
                 Ok(Arc::new(RssShuffleWriterExec::try_new(
                     input,
-                    output_partitioning.expect("partitioning"),
+                    output_partitioning.expect("output_partitioning"),
                     rss_shuffle_writer.rss_partition_writer_resource_id.clone(),
                 )?))
             }
