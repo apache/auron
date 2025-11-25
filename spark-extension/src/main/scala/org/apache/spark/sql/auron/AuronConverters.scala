@@ -1090,8 +1090,12 @@ object AuronConverters extends Logging {
         extends LeafExecNode
         with NativeSupports {
 
+      private def nativeSchema = Util.getNativeSchema(output)
+
+      // check whether native converting is supported
+      nativeSchema
+
       override protected def doExecuteNative(): NativeRDD = {
-        val nativeSchema = Util.getNativeSchema(output)
         val partitions = Range(0, outputPartitioning.numPartitions)
           .map(i =>
             new Partition {
