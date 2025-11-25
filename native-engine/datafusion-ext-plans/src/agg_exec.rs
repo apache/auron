@@ -418,7 +418,6 @@ mod test {
         datatypes::{DataType, Field, Schema},
         record_batch::RecordBatch,
     };
-
     use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_sorted_eq,

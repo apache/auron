@@ -277,7 +277,8 @@ impl AggContext {
             let mut merging_acc_table = self.create_acc_table(0);
 
             if self.need_partial_merge {
-                let partial_merged_array = as_binary_array(batch.columns().last().expect("last column"))?;
+                let partial_merged_array =
+                    as_binary_array(batch.columns().last().expect("last column"))?;
                 let array = partial_merged_array
                     .iter()
                     .skip(batch_start_idx)

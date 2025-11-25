@@ -166,7 +166,11 @@ pub fn cast_impl(
                             col = struct_.column_by_name(adjust.as_str());
                         }
                         if col.is_some() {
-                            cast_impl(col.expect("missing column"), field.data_type(), match_struct_fields)
+                            cast_impl(
+                                col.expect("missing column"),
+                                field.data_type(),
+                                match_struct_fields,
+                            )
                         } else {
                             null_column_name.push(field.name().clone());
                             Ok(new_null_array(field.data_type(), struct_.len()))
@@ -227,7 +231,9 @@ pub fn cast_impl(
 }
 
 fn to_plain_string_array(array: &dyn Array) -> ArrayRef {
-    let array = array.as_any().downcast_ref::<StringArray>()
+    let array = array
+        .as_any()
+        .downcast_ref::<StringArray>()
         .expect("Expected a StringArray");
     let mut converted_values: Vec<Option<String>> = Vec::with_capacity(array.len());
     for v in array.iter() {
@@ -253,7 +259,10 @@ fn try_cast_string_array_to_integer(array: &dyn Array, cast_type: &DataType) -> 
     macro_rules! cast {
         ($target_type:ident) => {{
             type B = paste::paste! {[<$target_type Builder>]};
-            let array = array.as_any().downcast_ref::<StringArray>().expect("Excepted a StringArray");
+            let array = array
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("Excepted a StringArray");
             let mut builder = B::new();
 
             for v in array.iter() {
@@ -426,14 +435,14 @@ fn to_date(s: &str) -> Option<i32> {
 
 #[cfg(test)]
 mod test {
+    use std::{error::Error, result::Result};
+
     use datafusion::common::cast::{as_decimal128_array, as_float64_array, as_int32_array};
 
     use super::*;
-    use std::result::Result;
-    use std::error::Error;
 
     #[test]
-    fn test_boolean_to_string() -> Result<(), Box<dyn Error>>  {
+    fn test_boolean_to_string() -> Result<(), Box<dyn Error>> {
         let bool_array: ArrayRef =
             Arc::new(BooleanArray::from_iter(vec![None, Some(true), Some(false)]));
         let casted = cast(&bool_array, &DataType::Utf8)?;
@@ -515,8 +524,7 @@ mod test {
                 Some(i32::MAX as i128 * 1000000000000000000),
                 Some(i32::MIN as i128 * 1000000000000000000),
             ])
-            .with_precision_and_scale(38, 18)
-            ?
+            .with_precision_and_scale(38, 18)?
         );
         Ok(())
     }
@@ -548,8 +556,7 @@ mod test {
                 Some(123456789012345678901234567890000i128),
                 Some(-123456789012345678901234567890000i128),
             ])
-            .with_precision_and_scale(38, 18)
-            ?
+            .with_precision_and_scale(38, 18)?
         );
         Ok(())
     }
@@ -565,12 +572,14 @@ mod test {
                 Some(i32::MAX as i128 * 1000000000000000000),
                 Some(i32::MIN as i128 * 1000000000000000000),
             ])
-            .with_precision_and_scale(38, 18)
-            ?,
+            .with_precision_and_scale(38, 18)?,
         );
         let casted = cast(&decimal_array, &DataType::Utf8)?;
         assert_eq!(
-            casted.as_any().downcast_ref::<StringArray>().ok_or("StringArray")?,
+            casted
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or("StringArray")?,
             &StringArray::from_iter(vec![
                 None,
                 Some("123.000000000000000000"),
@@ -596,7 +605,10 @@ mod test {
         ]));
         let casted = cast(&string_array, &DataType::Int64)?;
         assert_eq!(
-            casted.as_any().downcast_ref::<Int64Array>().ok_or("Int64Array")?,
+            casted
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .ok_or("Int64Array")?,
             &Int64Array::from_iter(vec![
                 None,
                 Some(123),
@@ -626,9 +638,7 @@ mod test {
         ]));
         let casted = cast(&string_array, &DataType::Date32)?;
         assert_eq!(
-            arrow::compute::cast(&casted, &DataType::Utf8)
-                ?
-                .as_string(),
+            arrow::compute::cast(&casted, &DataType::Utf8)?.as_string(),
             &StringArray::from_iter(vec![
                 None,
                 Some("2001-02-03"),

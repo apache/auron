@@ -33,7 +33,7 @@ mod tests {
         physical_plan::{ExecutionPlan, common, joins::utils::*, test::TestMemoryExec},
         prelude::SessionContext,
     };
-    use datafusion::common::DataFusionError;
+
     use crate::{
         broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
         broadcast_join_exec::BroadcastJoinExec,
@@ -80,23 +80,26 @@ mod tests {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Result<Arc<dyn ExecutionPlan>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<dyn ExecutionPlan>> {
         let batch = build_table_i32(a, b, c)?;
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
-    fn build_table_from_batches(batches: Vec<RecordBatch>) -> Result<Arc<dyn ExecutionPlan>, Box<dyn std::error::Error>> {
-        let first = batches.into_iter().next().ok_or_else(|| DataFusionError::Internal("empty batches".into()))?;
-        let schema = first.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[batches], schema, None)?))
+    fn build_table_from_batches(batches: Vec<RecordBatch>) -> Arc<dyn ExecutionPlan> {
+        let schema = batches.first().expect("first").schema();
+        Arc::new(TestMemoryExec::try_new(&[batches], schema, None).expect("memory_exec"))
     }
 
     fn build_date_table(
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Result<Arc<dyn ExecutionPlan>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<dyn ExecutionPlan>> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Date32, false),
             Field::new(b.0, DataType::Date32, false),
@@ -113,14 +116,18 @@ mod tests {
         )?;
 
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     fn build_date64_table(
         a: (&str, &Vec<i64>),
         b: (&str, &Vec<i64>),
         c: (&str, &Vec<i64>),
-    ) -> Result<Arc<dyn ExecutionPlan>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<dyn ExecutionPlan>> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Date64, false),
             Field::new(b.0, DataType::Date64, false),
@@ -137,7 +144,11 @@ mod tests {
         )?;
 
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     /// returns a table with 3 columns of i32 in memory
@@ -159,7 +170,11 @@ mod tests {
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
         )?;
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?));
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     fn build_join_schema_for_test(
@@ -276,12 +291,12 @@ mod tests {
                 ("a1", &vec![1, 2, 3]),
                 ("b1", &vec![4, 5, 5]), // this has a repetition
                 ("c1", &vec![7, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![10, 20, 30]),
                 ("b1", &vec![4, 5, 6]),
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
 
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
@@ -311,12 +326,12 @@ mod tests {
                 ("a1", &vec![1, 2, 2]),
                 ("b2", &vec![1, 2, 2]),
                 ("c1", &vec![7, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a1", &vec![1, 2, 3]),
                 ("b2", &vec![1, 2, 2]),
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![
                 (
                     Arc::new(Column::new_with_schema("a1", &left.schema())?),
@@ -351,12 +366,12 @@ mod tests {
                 ("a1", &vec![1, 1, 2]),
                 ("b2", &vec![1, 1, 2]),
                 ("c1", &vec![7, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a1", &vec![1, 1, 3]),
                 ("b2", &vec![1, 1, 2]),
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![
                 (
                     Arc::new(Column::new_with_schema("a1", &left.schema())?),
@@ -392,12 +407,12 @@ mod tests {
                 ("a1", &vec![Some(1), Some(1), Some(2), Some(2)]),
                 ("b2", &vec![None, Some(1), Some(2), Some(2)]), // null in key field
                 ("c1", &vec![Some(1), None, Some(8), Some(9)]), // null in non-key field
-            );
+            )?;
             let right = build_table_i32_nullable(
                 ("a1", &vec![Some(1), Some(1), Some(2), Some(3)]),
                 ("b2", &vec![None, Some(1), Some(2), Some(2)]),
                 ("c2", &vec![Some(10), Some(70), Some(80), Some(90)]),
-            );
+            )?;
             let on: JoinOn = vec![
                 (
                     Arc::new(Column::new_with_schema("a1", &left.schema())?),
@@ -432,12 +447,12 @@ mod tests {
                 ("a1", &vec![1, 2, 3]),
                 ("b1", &vec![4, 5, 7]), // 7 does not exist on the right
                 ("c1", &vec![7, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![10, 20, 30]),
                 ("b1", &vec![4, 5, 6]),
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
                 Arc::new(Column::new_with_schema("b1", &right.schema())?),
@@ -466,12 +481,12 @@ mod tests {
                 ("a1", &vec![1, 2, 3]),
                 ("b1", &vec![4, 5, 7]),
                 ("c1", &vec![7, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![10, 20, 30]),
                 ("b1", &vec![4, 5, 6]), // 6 does not exist on the left
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
                 Arc::new(Column::new_with_schema("b1", &right.schema())?),
@@ -500,12 +515,12 @@ mod tests {
                 ("a1", &vec![1, 2, 2, 3]),
                 ("b1", &vec![4, 5, 5, 7]), // 7 does not exist on the right
                 ("c1", &vec![7, 8, 80, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![10, 20, 20, 30]),
                 ("b2", &vec![4, 5, 5, 6]),
                 ("c2", &vec![70, 80, 800, 90]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
                 Arc::new(Column::new_with_schema("b2", &right.schema())?),
@@ -537,12 +552,12 @@ mod tests {
                 ("a1", &vec![1, 2, 2, 3, 5]),
                 ("b1", &vec![4, 5, 5, 7, 7]), // 7 does not exist on the right
                 ("c1", &vec![7, 8, 8, 9, 11]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![10, 20, 30]),
                 ("b1", &vec![4, 5, 6]),
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
                 Arc::new(Column::new_with_schema("b1", &right.schema())?),
@@ -570,12 +585,12 @@ mod tests {
                 ("a1", &vec![1, 2, 2, 3]),
                 ("b1", &vec![4, 5, 5, 7]), // 7 does not exist on the right
                 ("c1", &vec![7, 8, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![10, 20, 30]),
                 ("b1", &vec![4, 5, 6]), // 5 is double on the right
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
                 Arc::new(Column::new_with_schema("b1", &right.schema())?),
@@ -604,12 +619,12 @@ mod tests {
                 ("a", &vec![1, 2, 3]),
                 ("b", &vec![4, 5, 7]),
                 ("c", &vec![7, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a", &vec![10, 20, 30]),
                 ("b", &vec![1, 2, 7]),
                 ("c", &vec![70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 // join on a=b so there are duplicate column names on unjoined columns
                 Arc::new(Column::new_with_schema("a", &left.schema())?),
@@ -638,12 +653,12 @@ mod tests {
                 ("a1", &vec![1, 2, 3]),
                 ("b1", &vec![19107, 19108, 19108]), // this has a repetition
                 ("c1", &vec![7, 8, 9]),
-            );
+            )?;
             let right = build_date_table(
                 ("a2", &vec![10, 20, 30]),
                 ("b1", &vec![19107, 19108, 19109]),
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
 
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
@@ -675,12 +690,12 @@ mod tests {
                 ("b1", &vec![1650703441000, 1650903441000, 1650903441000]), /* this has a
                                                                              * repetition */
                 ("c1", &vec![7, 8, 9]),
-            );
+            )?;
             let right = build_date64_table(
                 ("a2", &vec![10, 20, 30]),
                 ("b1", &vec![1650703441000, 1650503441000, 1650903441000]),
                 ("c2", &vec![70, 80, 90]),
-            );
+            )?;
 
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
@@ -711,12 +726,12 @@ mod tests {
                 ("a1", &vec![0, 1, 2, 3, 4, 5]),
                 ("b1", &vec![3, 4, 5, 6, 6, 7]),
                 ("c1", &vec![4, 5, 6, 7, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![0, 10, 20, 30, 40]),
                 ("b2", &vec![2, 4, 6, 6, 8]),
                 ("c2", &vec![50, 60, 70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
                 Arc::new(Column::new_with_schema("b2", &right.schema())?),
@@ -749,12 +764,12 @@ mod tests {
                 ("a1", &vec![0, 1, 2, 3]),
                 ("b1", &vec![3, 4, 5, 7]),
                 ("c1", &vec![6, 7, 8, 9]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![0, 10, 20, 30]),
                 ("b2", &vec![2, 4, 5, 6]),
                 ("c2", &vec![60, 70, 80, 90]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("b1", &left.schema())?),
                 Arc::new(Column::new_with_schema("b2", &right.schema())?),
@@ -783,22 +798,22 @@ mod tests {
                 ("a1", &vec![0, 1, 2]),
                 ("b1", &vec![3, 4, 5]),
                 ("c1", &vec![4, 5, 6]),
-            );
+            )?;
             let left_batch_2 = build_table_i32(
                 ("a1", &vec![3, 4, 5, 6]),
                 ("b1", &vec![6, 6, 7, 9]),
                 ("c1", &vec![7, 8, 9, 9]),
-            );
+            )?;
             let right_batch_1 = build_table_i32(
                 ("a2", &vec![0, 10, 20]),
                 ("b2", &vec![2, 4, 6]),
                 ("c2", &vec![50, 60, 70]),
-            );
+            )?;
             let right_batch_2 = build_table_i32(
                 ("a2", &vec![30, 40]),
                 ("b2", &vec![6, 8]),
                 ("c2", &vec![80, 90]),
-            );
+            )?;
             let left = build_table_from_batches(vec![left_batch_1, left_batch_2]);
             let right = build_table_from_batches(vec![right_batch_1, right_batch_2]);
             let on: JoinOn = vec![(
@@ -834,22 +849,22 @@ mod tests {
                 ("a2", &vec![0, 1, 2]),
                 ("b2", &vec![3, 4, 5]),
                 ("c2", &vec![4, 5, 6]),
-            );
+            )?;
             let right_batch_2 = build_table_i32(
                 ("a2", &vec![3, 4, 5, 6]),
                 ("b2", &vec![6, 6, 7, 9]),
                 ("c2", &vec![7, 8, 9, 9]),
-            );
+            )?;
             let left_batch_1 = build_table_i32(
                 ("a1", &vec![0, 10, 20]),
                 ("b1", &vec![2, 4, 6]),
                 ("c1", &vec![50, 60, 70]),
-            );
+            )?;
             let left_batch_2 = build_table_i32(
                 ("a1", &vec![30, 40]),
                 ("b1", &vec![6, 8]),
                 ("c1", &vec![80, 90]),
-            );
+            )?;
             let left = build_table_from_batches(vec![left_batch_1, left_batch_2]);
             let right = build_table_from_batches(vec![right_batch_1, right_batch_2]);
             let on: JoinOn = vec![(
@@ -885,22 +900,22 @@ mod tests {
                 ("a1", &vec![0, 1, 2]),
                 ("b1", &vec![3, 4, 5]),
                 ("c1", &vec![4, 5, 6]),
-            );
+            )?;
             let left_batch_2 = build_table_i32(
                 ("a1", &vec![3, 4, 5, 6]),
                 ("b1", &vec![6, 6, 7, 9]),
                 ("c1", &vec![7, 8, 9, 9]),
-            );
+            )?;
             let right_batch_1 = build_table_i32(
                 ("a2", &vec![0, 10, 20]),
                 ("b2", &vec![2, 4, 6]),
                 ("c2", &vec![50, 60, 70]),
-            );
+            )?;
             let right_batch_2 = build_table_i32(
                 ("a2", &vec![30, 40]),
                 ("b2", &vec![6, 8]),
                 ("c2", &vec![80, 90]),
-            );
+            )?;
             let left = build_table_from_batches(vec![left_batch_1, left_batch_2]);
             let right = build_table_from_batches(vec![right_batch_1, right_batch_2]);
             let on: JoinOn = vec![(
@@ -938,22 +953,22 @@ mod tests {
                 ("a1", &vec![0, 1, 2]),
                 ("b1", &vec![3, 4, 5]),
                 ("c1", &vec![4, 5, 6]),
-            );
+            )?;
             let left_batch_2 = build_table_i32(
                 ("a1", &vec![3, 4, 5, 6]),
                 ("b1", &vec![6, 6, 7, 9]),
                 ("c1", &vec![7, 8, 9, 9]),
-            );
+            )?;
             let right_batch_1 = build_table_i32(
                 ("a2", &vec![0, 10, 20]),
                 ("b2", &vec![2, 4, 6]),
                 ("c2", &vec![50, 60, 70]),
-            );
+            )?;
             let right_batch_2 = build_table_i32(
                 ("a2", &vec![30, 40]),
                 ("b2", &vec![6, 8]),
                 ("c2", &vec![80, 90]),
-            );
+            )?;
             let left = build_table_from_batches(vec![left_batch_1, left_batch_2]);
             let right = build_table_from_batches(vec![right_batch_1, right_batch_2]);
             let on: JoinOn = vec![(

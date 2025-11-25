@@ -651,7 +651,7 @@ fn acc_hash(value: impl AsRef<[u8]>) -> u64 {
 mod tests {
     use arrow::datatypes::DataType;
     use auron_memmgr::spill::Spill;
-    use datafusion::common::{DataFusionError, ScalarValue};
+    use datafusion::common::ScalarValue;
 
     use super::*;
 
@@ -730,8 +730,7 @@ mod tests {
         spill_writer.finish()?;
 
         let mut acc_col_unspill = AccSetColumn::empty(DataType::Int32);
-        acc_col_unspill
-            .unspill(3, &mut spill.get_compressed_reader())?;
+        acc_col_unspill.unspill(3, &mut spill.get_compressed_reader())?;
 
         assert_eq!(acc_col.take_values(0), acc_col_unspill.take_values(0));
         assert_eq!(acc_col.take_values(1), acc_col_unspill.take_values(1));

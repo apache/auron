@@ -83,7 +83,10 @@ impl PhysicalExpr for StringStartsWithExpr {
 
         match expr {
             ColumnarValue::Array(array) => {
-                let string_array = array.as_any().downcast_ref::<StringArray>().expect("Expected a StringArray");
+                let string_array = array
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .expect("Expected a StringArray");
                 let ret_array = Arc::new(BooleanArray::from_iter(string_array.iter().map(
                     |maybe_string| maybe_string.map(|string| string.starts_with(&self.prefix)),
                 )));
@@ -118,7 +121,7 @@ impl PhysicalExpr for StringStartsWithExpr {
 
 #[cfg(test)]
 mod test {
-    
+
     use std::sync::Arc;
 
     use arrow::{
@@ -152,8 +155,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            ?;
+            .into_array(batch.num_rows())?;
 
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
             None,
@@ -186,8 +188,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            ?;
+            .into_array(batch.num_rows())?;
 
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
             Some(true),
