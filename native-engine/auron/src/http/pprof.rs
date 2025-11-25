@@ -34,7 +34,7 @@ impl Default for PProfRequest {
     fn default() -> Self {
         PProfRequest {
             seconds: 5,
-            frequency: NonZeroI32::new(100)?,
+            frequency: NonZeroI32::new(100).expect("nonzero"),
         }
     }
 }

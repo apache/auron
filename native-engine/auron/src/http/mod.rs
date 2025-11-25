@@ -49,7 +49,8 @@ impl DefaultHTTPServer {
             runtime: tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(1)
                 .enable_io()
-                .build()?,
+                .build()
+                .expect("runtime"),
             handlers: Mutex::new(vec![]),
         }
     }
