@@ -66,7 +66,10 @@ fn hash_array<T: num::PrimInt>(
 
     macro_rules! hash_array {
         ($array_type:ident, $column:ident, $hashes:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
+            let array = $column
+                .as_any()
+                .downcast_ref::<$array_type>()
+                .expect("downcast");
             if array.null_count() == 0 {
                 for (i, hash) in $hashes.iter_mut().enumerate() {
                     *hash = $h(&array.value(i).as_ref(), *hash);
@@ -83,7 +86,10 @@ fn hash_array<T: num::PrimInt>(
 
     macro_rules! hash_array_primitive {
         ($array_type:ident, $column:ident, $ty:ident, $hashes:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
+            let array = $column
+                .as_any()
+                .downcast_ref::<$array_type>()
+                .expect("downcast");
             let values = array.values();
 
             if array.null_count() == 0 {

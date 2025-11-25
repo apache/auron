@@ -702,9 +702,8 @@ mod test {
         let mut buf = vec![];
         write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
-        let (decoded_num_rows, decoded_cols) = read_batch(&mut cursor, &batch.schema())
-            ?
-            .expect("non-empty");
+        let (decoded_num_rows, decoded_cols) =
+            read_batch(&mut cursor, &batch.schema())?.expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
@@ -715,9 +714,8 @@ mod test {
         let mut buf = vec![];
         write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
-        let (decoded_num_rows, decoded_cols) = read_batch(&mut cursor, &batch.schema())
-            ?
-            .expect("non-empty");
+        let (decoded_num_rows, decoded_cols) =
+            read_batch(&mut cursor, &batch.schema())?.expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             sliced
@@ -758,9 +756,8 @@ mod test {
         let mut buf = vec![];
         write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
-        let (decoded_num_rows, decoded_cols) = read_batch(&mut cursor, &batch.schema())
-            ?
-            .expect("non-empty");
+        let (decoded_num_rows, decoded_cols) =
+            read_batch(&mut cursor, &batch.schema())?.expect("non-empty");
         assert_batches_eq!(
             vec![
                 "+-----------+-----------+",
@@ -784,9 +781,8 @@ mod test {
         let mut buf = vec![];
         write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
-        let (decoded_num_rows, decoded_cols) = read_batch(&mut cursor, &batch.schema())
-            ?
-            .expect("non-empty");
+        let (decoded_num_rows, decoded_cols) =
+            read_batch(&mut cursor, &batch.schema())?.expect("non-empty");
         assert_batches_eq!(
             vec![
                 "+----------+----------+",
@@ -831,9 +827,8 @@ mod test {
         let mut buf = vec![];
         write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
-        let (decoded_num_rows, decoded_cols) = read_batch(&mut cursor, &batch.schema())
-            ?
-            .expect("non-empty");
+        let (decoded_num_rows, decoded_cols) =
+            read_batch(&mut cursor, &batch.schema())?.expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
@@ -844,9 +839,8 @@ mod test {
         let mut buf = vec![];
         write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
-        let (decoded_num_rows, decoded_cols) = read_batch(&mut cursor, &batch.schema())
-            ?
-            .expect("non-empty");
+        let (decoded_num_rows, decoded_cols) =
+            read_batch(&mut cursor, &batch.schema())?.expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, sliced.schema())?,
             sliced
@@ -877,9 +871,8 @@ mod test {
         let mut buf = vec![];
         write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
-        let (decoded_num_rows, decoded_cols) = read_batch(&mut cursor, &batch.schema())
-            ?
-            .expect("non-empty");
+        let (decoded_num_rows, decoded_cols) =
+            read_batch(&mut cursor, &batch.schema())?.expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
@@ -890,9 +883,8 @@ mod test {
         let mut buf = vec![];
         write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
-        let (decoded_num_rows, decoded_cols) = read_batch(&mut cursor, &batch.schema())
-            ?
-            .expect("non-empty");
+        let (decoded_num_rows, decoded_cols) =
+            read_batch(&mut cursor, &batch.schema())?.expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             sliced
