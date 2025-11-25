@@ -19,6 +19,7 @@ package org.apache.auron
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.AuronQueryTest
+
 import org.apache.auron.util.AuronTestUtils
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
@@ -382,14 +383,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
             |    test_is_nan
         """.stripMargin
 
-<<<<<<< HEAD:spark-extension-shims-spark/src/test/scala/org/apache/spark/sql/auron/AuronFunctionSuite.scala
-        val df = sql(functions)
-        df.show()
-        checkAnswer(df, Seq(Row(true, true, false, false, false)))
+        checkSparkAnswerAndOperator(functions)
       }
-=======
-      checkSparkAnswerAndOperator(functions)
->>>>>>> apache-master:spark-extension-shims-spark/src/test/scala/org.apache.auron/AuronFunctionSuite.scala
     }
   }
 
