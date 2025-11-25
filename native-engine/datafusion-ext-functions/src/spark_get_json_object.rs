@@ -42,7 +42,7 @@ pub fn spark_get_json_object(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_strings = json_string_array
         .as_any()
         .downcast_ref::<StringArray>()
-        .expect("Expected a StringArray");;
+        .expect("Expected a StringArray");
     let path_string = match &args[1] {
         ColumnarValue::Scalar(ScalarValue::Utf8(str)) => match str {
             Some(path) => path,
@@ -87,7 +87,7 @@ pub fn spark_parse_json(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_strings = json_string_array
         .as_any()
         .downcast_ref::<StringArray>()
-        .expect("Expected a StringArray");;
+        .expect("Expected a StringArray");
     let fallback_enabled = conf::PARSE_JSON_ERROR_FALLBACK.value().unwrap_or(false);
 
     let json_values: Vec<Option<Arc<dyn Any + Send + Sync + 'static>>> = json_strings
@@ -265,6 +265,17 @@ enum HiveGetJsonObjectError {
     InvalidJsonPath,
     InvalidInput,
 }
+
+impl std::fmt::Display for HiveGetJsonObjectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            HiveGetJsonObjectError::InvalidJsonPath => "InvalidJsonPath",
+            HiveGetJsonObjectError::InvalidInput => "InvalidInput",
+        })
+    }
+}
+
+impl std::error::Error for HiveGetJsonObjectError {}
 
 struct HiveGetJsonObjectEvaluator {
     matchers: Vec<HiveGetJsonObjectMatcher>,
@@ -752,32 +763,32 @@ mod test {
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.county"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next()?;
+        let v = r.as_string::<i32>().iter().next().expect("v");
         assert_eq!(v, Some(r#"["浦东","西直门"]"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.NOT_EXISTED"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next()?;
+        let v = r.as_string::<i32>().iter().next().expect("v");
         assert_eq!(v, None);
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.name"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next()?;
-        assert!(v?.contains("Asher"));
+        let v = r.as_string::<i32>().iter().next().expect("v").ok_or("v")?;
+        assert!(v.contains("Asher"));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.city"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next()?;
+        let v = r.as_string::<i32>().iter().next().expect("v");
         assert_eq!(v, Some(r#"["1.234",1.234]"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location[0]"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next()?;
+        let v = r.as_string::<i32>().iter().next().expect("v");
         assert_eq!(v, Some(r#"{"city":"1.234","county":"浦东"}"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location[].county"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next()?;
+        let v = r.as_string::<i32>().iter().next().expect("v");
         assert_eq!(v, Some(r#"["浦东","西直门"]"#));
         Ok(())
     }
@@ -814,7 +825,7 @@ mod test {
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.i1.j2"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next()?;
+        let v = r.as_string::<i32>().iter().next().expect("v");
 
         // NOTE:
         // standard jsonpath should output [[200,300],[400, 500],null,"other"]

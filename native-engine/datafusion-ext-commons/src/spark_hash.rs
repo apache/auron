@@ -488,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn test_list_array() -> Result<()> {
+    fn test_list_array() -> Result<(), Box<dyn std::error::Error>> {
         // Create inner array data: [1, 2, 3, 4, 5, 6]
         let value_data = ArrayData::builder(DataType::Int32)
             .len(6)
@@ -517,7 +517,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_array() {
+    fn test_map_array() -> Result<(), Box<dyn std::error::Error>> {
         // Construct key and values
         let key_data = ArrayData::builder(DataType::Int32)
             .len(8)
@@ -586,7 +586,7 @@ mod tests {
             unsafe { map_array.value_unchecked(0) }
                 .as_any()
                 .downcast_ref::<StructArray>()
-                ?
+                .expect("Expected a StructArray")
         );
         for i in 0..3 {
             assert!(map_array.is_valid(i));
@@ -620,14 +620,15 @@ mod tests {
                 .value(0)
                 .as_any()
                 .downcast_ref::<StructArray>()
-                ?
+                .expect("Expected a StructArray")
         );
         assert_eq!(
             &struct_array,
             unsafe { map_array.value_unchecked(0) }
                 .as_any()
                 .downcast_ref::<StructArray>()
-                ?
+                .expect("Expected a StructArray")
         );
+        Ok(())
     }
 }

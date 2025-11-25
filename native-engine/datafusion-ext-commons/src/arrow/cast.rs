@@ -524,9 +524,11 @@ mod test {
     use datafusion::common::cast::{as_decimal128_array, as_float64_array, as_int32_array};
 
     use super::*;
+    use std::result::Result;
+    use std::error::Error;
 
     #[test]
-    fn test_boolean_to_string() {
+    fn test_boolean_to_string() -> Result<(), Box<dyn Error>>  {
         let bool_array: ArrayRef =
             Arc::new(BooleanArray::from_iter(vec![None, Some(true), Some(false)]));
         let casted = cast(&bool_array, &DataType::Utf8)?;
@@ -534,10 +536,11 @@ mod test {
             as_string_array(&casted),
             &StringArray::from_iter(vec![None, Some("true"), Some("false")])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_float_to_int() {
+    fn test_float_to_int() -> Result<(), Box<dyn Error>> {
         let f64_array: ArrayRef = Arc::new(Float64Array::from_iter(vec![
             None,
             Some(123.456),
@@ -562,10 +565,11 @@ mod test {
                 Some(0),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_int_to_float() {
+    fn test_int_to_float() -> Result<(), Box<dyn Error>> {
         let i32_array: ArrayRef = Arc::new(Int32Array::from_iter(vec![
             None,
             Some(123),
@@ -584,10 +588,11 @@ mod test {
                 Some(i32::MIN as f64),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_int_to_decimal() {
+    fn test_int_to_decimal() -> Result<(), Box<dyn Error>> {
         let i32_array: ArrayRef = Arc::new(Int32Array::from_iter(vec![
             None,
             Some(123),
@@ -608,10 +613,11 @@ mod test {
             .with_precision_and_scale(38, 18)
             ?
         );
+        Ok(())
     }
 
     #[test]
-    fn test_string_to_decimal() {
+    fn test_string_to_decimal() -> Result<(), Box<dyn Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("1e-8"),
@@ -640,10 +646,11 @@ mod test {
             .with_precision_and_scale(38, 18)
             ?
         );
+        Ok(())
     }
 
     #[test]
-    fn test_decimal_to_string() {
+    fn test_decimal_to_string() -> Result<(), Box<dyn Error>> {
         let decimal_array: ArrayRef = Arc::new(
             Decimal128Array::from_iter(vec![
                 None,
@@ -658,7 +665,7 @@ mod test {
         );
         let casted = cast(&decimal_array, &DataType::Utf8)?;
         assert_eq!(
-            casted.as_any().downcast_ref::<StringArray>()?,
+            casted.as_any().downcast_ref::<StringArray>().ok_or("StringArray")?,
             &StringArray::from_iter(vec![
                 None,
                 Some("123.000000000000000000"),
@@ -668,10 +675,11 @@ mod test {
                 Some("-2147483648.000000000000000000"),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_string_to_bigint() {
+    fn test_string_to_bigint() -> Result<(), Box<dyn Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("123"),
@@ -683,7 +691,7 @@ mod test {
         ]));
         let casted = cast(&string_array, &DataType::Int64)?;
         assert_eq!(
-            casted.as_any().downcast_ref::<Int64Array>()?,
+            casted.as_any().downcast_ref::<Int64Array>().ok_or("Int64Array")?,
             &Int64Array::from_iter(vec![
                 None,
                 Some(123),
@@ -694,10 +702,11 @@ mod test {
                 None,
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_string_to_date() {
+    fn test_string_to_date() -> Result<(), Box<dyn Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("2001-02-03"),
@@ -728,6 +737,7 @@ mod test {
                 None,
             ])
         );
+        Ok(())
     }
 
     #[test]

@@ -102,7 +102,7 @@ impl PhysicalExpr for TryCastExpr {
 
 #[cfg(test)]
 mod test {
-    use std::error::Error;
+    
     use std::sync::Arc;
 
     use arrow::{
