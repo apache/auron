@@ -166,11 +166,7 @@ pub fn cast_impl(
                             col = struct_.column_by_name(adjust.as_str());
                         }
                         if col.is_some() {
-                            cast_impl(
-                                col.expect("col"),
-                                field.data_type(),
-                                match_struct_fields,
-                            )
+                            cast_impl(col.expect("col"), field.data_type(), match_struct_fields)
                         } else {
                             null_column_name.push(field.name().clone());
                             Ok(new_null_array(field.data_type(), struct_.len()))
