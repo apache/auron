@@ -302,7 +302,7 @@ mod test {
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
         )
-        .unwrap()
+        ?
     }
 
     fn build_table(
@@ -312,7 +312,7 @@ mod test {
     ) -> Arc<dyn ExecutionPlan> {
         let batch = build_table_i32(a, b, c);
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?)
     }
 
     #[tokio::test]

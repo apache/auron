@@ -102,6 +102,7 @@ impl PhysicalExpr for TryCastExpr {
 
 #[cfg(test)]
 mod test {
+    use std::error::Error;
     use std::sync::Arc;
 
     use arrow::{
@@ -114,7 +115,7 @@ mod test {
     use crate::cast::TryCastExpr;
 
     #[test]
-    fn test_ok_1() {
+    fn test_ok_1() -> Result<(), Box<dyn std::error::Error>>  {
         // input: Array
         // cast Float32 into Int32
         let float_arr: ArrayRef = Arc::new(Float32Array::from(vec![
@@ -138,7 +139,7 @@ mod test {
         let cast_type = DataType::Int32;
 
         let expr = Arc::new(TryCastExpr::new(
-            phys_expr::col("col", &batch.schema()).unwrap(),
+            phys_expr::col("col", &batch.schema())?,
             cast_type,
         ));
 
@@ -146,7 +147,7 @@ mod test {
             .evaluate(&batch)
             .expect("Error evaluating expr")
             .into_array(batch.num_rows())
-            .unwrap();
+            ?;
 
         let expected: ArrayRef = Arc::new(Int32Array::from(vec![
             Some(7),
@@ -157,10 +158,11 @@ mod test {
             None,
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 
     #[test]
-    fn test_ok_2() {
+    fn test_ok_2()  -> Result<(), Box<dyn std::error::Error>>  {
         // input: Array
         // cast Utf8 into Float32
         let string_arr: ArrayRef = Arc::new(StringArray::from(vec![
@@ -179,7 +181,7 @@ mod test {
         let cast_type = DataType::Float32;
 
         let expr = Arc::new(TryCastExpr::new(
-            phys_expr::col("col", &batch.schema()).unwrap(),
+            phys_expr::col("col", &batch.schema())?,
             cast_type,
         ));
 
@@ -187,7 +189,7 @@ mod test {
             .evaluate(&batch)
             .expect("Error evaluating expr")
             .into_array(batch.num_rows())
-            .unwrap();
+            ?;
 
         let expected: ArrayRef = Arc::new(Float32Array::from(vec![
             Some(123.0),
@@ -197,10 +199,11 @@ mod test {
             None,
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 
     #[test]
-    fn test_ok_3() {
+    fn test_ok_3() -> Result<(), Box<dyn std::error::Error>>  {
         // input: Scalar
         // cast Utf8 into Float32
         let string_arr: ArrayRef = Arc::new(StringArray::from(vec![
@@ -224,7 +227,7 @@ mod test {
             .evaluate(&batch)
             .expect("Error evaluating expr")
             .into_array(batch.num_rows())
-            .unwrap();
+            ?;
 
         let expected: ArrayRef = Arc::new(Float32Array::from(vec![
             Some(123.4),
@@ -234,5 +237,6 @@ mod test {
             Some(123.4),
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 }

@@ -161,7 +161,7 @@ mod test {
 
         let expected = Decimal128Array::from(vec![Some(1230427389124691)])
             .with_precision_and_scale(20, 2)
-            .unwrap();
+            ?;
         let expected: ArrayRef = Arc::new(expected);
 
         assert_eq!(&result, &expected);

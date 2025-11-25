@@ -181,7 +181,7 @@ mod test {
                 &[0, 1, 2, 3, 4, 5, 6, 7].to_byte_slice(),
             ))
             .build()
-            .unwrap();
+            ?;
         let value_data = ArrayData::builder(DataType::UInt32)
             .len(8)
             .add_buffer(Buffer::from_slice_ref(
@@ -189,7 +189,7 @@ mod test {
             ))
             .null_bit_buffer(Some(Buffer::from_slice_ref(&[0b11010110])))
             .build()
-            .unwrap();
+            ?;
 
         let entry_offsets = Buffer::from_slice_ref(&[0, 3, 6, 8].to_byte_slice());
 
@@ -215,7 +215,7 @@ mod test {
             .add_buffer(entry_offsets)
             .add_child_data(entry_struct.into_data())
             .build()
-            .unwrap();
+            ?;
         let map_array: ArrayRef = Arc::new(MapArray::from(map_data));
         let input_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("test col", map_array, true)])?;
@@ -264,7 +264,7 @@ mod test {
 
         let map_array: ArrayRef = Arc::new(
             MapArray::new_from_strings(keys.clone().into_iter(), &values_data, &entry_offsets)
-                .unwrap(),
+                ?,
         );
         let input_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("test col", map_array, true)])?;

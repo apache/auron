@@ -149,14 +149,14 @@ mod test {
         // test: col2 like '%rr'
         let pattern = "rr".to_string();
         let expr = Arc::new(StringEndsWithExpr::new(
-            phys_expr::col("col2", &batch.schema()).unwrap(),
+            phys_expr::col("col2", &batch.schema())?,
             pattern,
         ));
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
             .into_array(batch.num_rows())
-            .unwrap();
+            ?;
 
         // verify result
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
@@ -197,7 +197,7 @@ mod test {
             .evaluate(&batch)
             .expect("Error evaluating expr")
             .into_array(batch.num_rows())
-            .unwrap();
+            ?;
 
         // verify result
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
