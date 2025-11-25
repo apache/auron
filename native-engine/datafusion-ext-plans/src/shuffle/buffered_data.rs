@@ -373,22 +373,22 @@ mod test {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> RecordBatch {
+    ) -> Result<RecordBatch> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Int32, false),
             Field::new(b.0, DataType::Int32, false),
             Field::new(c.0, DataType::Int32, false),
         ]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![
                 Arc::new(Int32Array::from(a.1.clone())),
                 Arc::new(Int32Array::from(b.1.clone())),
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
     #[tokio::test]

@@ -50,7 +50,7 @@ impl DefaultHTTPServer {
                 .worker_threads(1)
                 .enable_io()
                 .build()
-                .unwrap(),
+                ?,
             handlers: Mutex::new(vec![]),
         }
     }

@@ -102,7 +102,7 @@ fn hash_array<T: num::PrimInt>(
 
     macro_rules! hash_array_decimal {
         ($array_type:ident, $column:ident, $hashes:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().unwrap();
+            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
 
             if array.null_count() == 0 {
                 for (i, hash) in $hashes.iter_mut().enumerate() {
@@ -240,7 +240,7 @@ fn hash_one<T: num::PrimInt>(
 ) {
     macro_rules! hash_one_primitive {
         ($array_type:ident, $column:ident, $ty:ident, $hash:ident, $idx:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().unwrap();
+            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
             *$hash = $h(
                 (array.value($idx as usize) as $ty).to_le_bytes().as_ref(),
                 *$hash,
@@ -250,14 +250,14 @@ fn hash_one<T: num::PrimInt>(
 
     macro_rules! hash_one_binary {
         ($array_type:ident, $column:ident, $hash:ident, $idx:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().unwrap();
+            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
             *$hash = $h(&array.value($idx as usize).as_ref(), *$hash);
         };
     }
 
     macro_rules! hash_one_decimal {
         ($array_type:ident, $column:ident, $hash:ident, $idx:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().unwrap();
+            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
             *$hash = $h(array.value($idx as usize).to_le_bytes().as_ref(), *$hash);
         };
     }
@@ -488,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn test_list_array() {
+    fn test_list_array() -> Result<()> {
         // Create inner array data: [1, 2, 3, 4, 5, 6]
         let value_data = ArrayData::builder(DataType::Int32)
             .len(6)
@@ -496,7 +496,7 @@ mod tests {
                 &[1i32, 2, 3, 4, 5, 6].to_byte_slice(),
             ))
             .build()
-            .unwrap();
+            ?;
 
         // Create offset array to define list boundaries: [[1, 2], [3, 4, 5], [6]]
         let list_data_type = DataType::new_list(DataType::Int32, false);
@@ -505,7 +505,7 @@ mod tests {
             .add_buffer(Buffer::from_slice_ref(&[0i32, 2, 5, 6].to_byte_slice()))
             .add_child_data(value_data)
             .build()
-            .unwrap();
+            ?;
 
         let list_array = ListArray::from(list_data);
         let array_ref = Arc::new(list_array) as ArrayRef;
@@ -513,6 +513,7 @@ mod tests {
         // Test Murmur3 hash
         let hashes = create_murmur3_hashes(3, &[array_ref.clone()], 42);
         assert_eq!(hashes, vec![-222940379, -374492525, -331964951]);
+        Ok(())
     }
 
     #[test]
@@ -524,7 +525,7 @@ mod tests {
                 &[0, 1, 2, 3, 4, 5, 6, 7].to_byte_slice(),
             ))
             .build()
-            .unwrap();
+            ?;
         let value_data = ArrayData::builder(DataType::UInt32)
             .len(8)
             .add_buffer(Buffer::from_slice_ref(
@@ -532,7 +533,7 @@ mod tests {
             ))
             .null_bit_buffer(Some(Buffer::from(&[0b11010110])))
             .build()
-            .unwrap();
+            ?;
 
         // Construct a buffer for value offsets, for the nested array:
         //  [[0, 1, 2], [3, 4, 5], [6, 7]]
@@ -559,7 +560,7 @@ mod tests {
             .add_buffer(entry_offsets)
             .add_child_data(entry_struct.into_data())
             .build()
-            .unwrap();
+            ?;
         let map_array = MapArray::from(map_data);
 
         assert_eq!(&value_data, &map_array.values().to_data());
@@ -585,7 +586,7 @@ mod tests {
             unsafe { map_array.value_unchecked(0) }
                 .as_any()
                 .downcast_ref::<StructArray>()
-                .unwrap()
+                ?
         );
         for i in 0..3 {
             assert!(map_array.is_valid(i));
@@ -599,7 +600,7 @@ mod tests {
             .add_buffer(map_array.to_data().buffers()[0].clone())
             .add_child_data(map_array.to_data().child_data()[0].clone())
             .build()
-            .unwrap();
+            ?;
         let map_array = MapArray::from(map_data);
 
         assert_eq!(&value_data, &map_array.values().to_data());
@@ -619,14 +620,14 @@ mod tests {
                 .value(0)
                 .as_any()
                 .downcast_ref::<StructArray>()
-                .unwrap()
+                ?
         );
         assert_eq!(
             &struct_array,
             unsafe { map_array.value_unchecked(0) }
                 .as_any()
                 .downcast_ref::<StructArray>()
-                .unwrap()
+                ?
         );
     }
 }

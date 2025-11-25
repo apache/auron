@@ -613,108 +613,108 @@ mod test {
         let path = "$.owner";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some("amy".to_owned())
         );
 
         let path = "$.  owner";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some("amy".to_owned())
         );
 
         let path = "$.store.bicycle.price";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some("19.95".to_owned())
         );
 
         let path = "$.  store.  bicycle.  price";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some("19.95".to_owned())
         );
 
         let path = "$.store.fruit[0]";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some(r#"{"weight":8,"type":"apple"}"#.to_owned())
         );
 
         let path = "$. store.  fruit[0]";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some(r#"{"weight":8,"type":"apple"}"#.to_owned())
         );
 
         let path = "$.store.fruit[1].weight";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some("9".to_owned())
         );
 
         let path = "$.store.fruit[*]";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some(r#"[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}]"#.to_owned())
         );
 
         let path = "$. store.  fruit[*]";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some(r#"[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}]"#.to_owned())
         );
 
         let path = "$.store.fruit.[1].type";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some("pear".to_owned())
         );
 
         let path = "$. store.  fruit.  [1]. type";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             Some("pear".to_owned())
         );
 
         let path = "$.non_exist_key";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                ?
                 .evaluate(input)
-                .unwrap(),
+                ?,
             None
         );
         Ok(())
@@ -748,36 +748,36 @@ mod test {
                 }
             }"#;
         let input_array = Arc::new(StringArray::from(vec![input]));
-        let parsed = spark_parse_json(&[ColumnarValue::Array(input_array)]).unwrap();
+        let parsed = spark_parse_json(&[ColumnarValue::Array(input_array)])?;
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.county"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r.as_string::<i32>().iter().next()?;
         assert_eq!(v, Some(r#"["浦东","西直门"]"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.NOT_EXISTED"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r.as_string::<i32>().iter().next()?;
         assert_eq!(v, None);
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.name"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
-        assert!(v.unwrap().contains("Asher"));
+        let v = r.as_string::<i32>().iter().next()?;
+        assert!(v?.contains("Asher"));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.city"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r.as_string::<i32>().iter().next()?;
         assert_eq!(v, Some(r#"["1.234",1.234]"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location[0]"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r.as_string::<i32>().iter().next()?;
         assert_eq!(v, Some(r#"{"city":"1.234","county":"浦东"}"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location[].county"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r.as_string::<i32>().iter().next()?;
         assert_eq!(v, Some(r#"["浦东","西直门"]"#));
         Ok(())
     }
@@ -814,7 +814,7 @@ mod test {
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.i1.j2"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r.as_string::<i32>().iter().next()?;
 
         // NOTE:
         // standard jsonpath should output [[200,300],[400, 500],null,"other"]

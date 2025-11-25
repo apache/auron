@@ -684,28 +684,28 @@ mod test {
             ("u64", array2, true),
             ("bool", array3, true),
         ])
-        .unwrap();
+        ?;
 
         // test read after write
         let mut buf = vec![];
-        write_batch(batch.num_rows(), batch.columns(), &mut buf).unwrap();
+        write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
+            read_batch(&mut cursor, &batch.schema())??;
         assert_eq!(
-            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema()).unwrap(),
+            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
         );
 
         // test read after write sliced
         let sliced = batch.slice(1, 2);
         let mut buf = vec![];
-        write_batch(sliced.num_rows(), sliced.columns(), &mut buf).unwrap();
+        write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
+            read_batch(&mut cursor, &batch.schema())??;
         assert_eq!(
-            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema()).unwrap(),
+            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             sliced
         );
     }
@@ -724,7 +724,7 @@ mod test {
             ("list1", list_array.clone(), true),
             ("list2", list_array.clone(), true),
         ])
-        .unwrap();
+        ?;
 
         assert_batches_eq!(
             vec![
@@ -742,10 +742,10 @@ mod test {
 
         // test read after write
         let mut buf = vec![];
-        write_batch(batch.num_rows(), batch.columns(), &mut buf).unwrap();
+        write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
+            read_batch(&mut cursor, &batch.schema())??;
         assert_batches_eq!(
             vec![
                 "+-----------+-----------+",
@@ -757,16 +757,16 @@ mod test {
                 "| [6, 7]    | [6, 7]    |",
                 "+-----------+-----------+",
             ],
-            &[recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema()).unwrap()]
+            &[recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?]
         );
 
         // test read after write sliced
         let sliced = batch.slice(1, 2);
         let mut buf = vec![];
-        write_batch(sliced.num_rows(), sliced.columns(), &mut buf).unwrap();
+        write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
+            read_batch(&mut cursor, &batch.schema())??;
         assert_batches_eq!(
             vec![
                 "+----------+----------+",
@@ -776,7 +776,7 @@ mod test {
                 "| [3, , 5] | [3, , 5] |",
                 "+----------+----------+",
             ],
-            &[recover_named_batch(decoded_num_rows, &decoded_cols, sliced.schema()).unwrap()]
+            &[recover_named_batch(decoded_num_rows, &decoded_cols, sliced.schema())?]
         );
     }
 
@@ -797,35 +797,35 @@ mod test {
                 ]),
                 &[0, 3, 6, 8], // [00,11,22], [33,44,55], [66,77]
             )
-            .unwrap(),
+            ?,
         );
 
         let batch = RecordBatch::try_from_iter_with_nullable(vec![
             ("map1", map_array.clone(), true),
             ("map2", map_array.clone(), true),
         ])
-        .unwrap();
+        ?;
 
         // test read after write
         let mut buf = vec![];
-        write_batch(batch.num_rows(), batch.columns(), &mut buf).unwrap();
+        write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
+            read_batch(&mut cursor, &batch.schema())??;
         assert_eq!(
-            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema()).unwrap(),
+            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
         );
 
         // test read after write sliced
         let sliced = batch.slice(1, 2);
         let mut buf = vec![];
-        write_batch(sliced.num_rows(), sliced.columns(), &mut buf).unwrap();
+        write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
+            read_batch(&mut cursor, &batch.schema())??;
         assert_eq!(
-            recover_named_batch(decoded_num_rows, &decoded_cols, sliced.schema()).unwrap(),
+            recover_named_batch(decoded_num_rows, &decoded_cols, sliced.schema())?,
             sliced
         );
     }
@@ -837,35 +837,35 @@ mod test {
         let c3: ArrayRef = Arc::new(BooleanArray::from(vec![None, None, None, Some(true)]));
         let c4: ArrayRef = Arc::new(Int32Array::from(vec![None, None, None, Some(31)]));
         let struct_array: ArrayRef = Arc::new(
-            StructArray::try_from(vec![("c1", c1), ("c2", c2), ("c3", c3), ("c4", c4)]).unwrap(),
+            StructArray::try_from(vec![("c1", c1), ("c2", c2), ("c3", c3), ("c4", c4)])?,
         );
 
         let batch = RecordBatch::try_from_iter_with_nullable(vec![
             ("struct1", struct_array.clone(), true),
             ("struct2", struct_array.clone(), true),
         ])
-        .unwrap();
+        ?;
 
         // test read after write
         let mut buf = vec![];
-        write_batch(batch.num_rows(), batch.columns(), &mut buf).unwrap();
+        write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
+            read_batch(&mut cursor, &batch.schema())??;
         assert_eq!(
-            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema()).unwrap(),
+            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
         );
 
         // test read after write sliced
         let sliced = batch.slice(1, 2);
         let mut buf = vec![];
-        write_batch(sliced.num_rows(), sliced.columns(), &mut buf).unwrap();
+        write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
+            read_batch(&mut cursor, &batch.schema())??;
         assert_eq!(
-            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema()).unwrap(),
+            recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             sliced
         );
     }

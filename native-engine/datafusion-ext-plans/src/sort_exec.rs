@@ -1592,7 +1592,7 @@ mod fuzztest {
             None,
         )?);
         let sort = Arc::new(datafusion::physical_plan::sorts::sort::SortExec::new(
-            LexOrdering::new(sort_exprs.iter().cloned()).unwrap(),
+            LexOrdering::new(sort_exprs.iter().cloned()).expect("sort_exprs"),
             input,
         ));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;

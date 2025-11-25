@@ -709,7 +709,7 @@ mod tests {
         let columns: Vec<ArrayRef> = vec![Arc::new(id_array), Arc::new(name_array)];
 
         // Create RecordBatch
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
         // Create sort fields for RowConverter
         let sort_fields: Vec<SortField> = schema
@@ -721,8 +721,8 @@ mod tests {
             .collect();
 
         // Convert RecordBatch to Rows
-        let converter = RowConverter::new(sort_fields.clone()).unwrap();
-        let rows = converter.convert_columns(&batch.columns()).unwrap();
+        let converter = RowConverter::new(sort_fields.clone())?;
+        let rows = converter.convert_columns(&batch.columns())?;
 
         // Create field configs for RowNullChecker
         let field_configs: Vec<(DataType, SortOptions)> = schema
@@ -761,7 +761,7 @@ mod tests {
 
         let id_array = Int32Array::from(Vec::<Option<i32>>::new());
         let columns: Vec<ArrayRef> = vec![Arc::new(id_array)];
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
         let sort_fields: Vec<SortField> = schema
             .fields()
@@ -771,8 +771,8 @@ mod tests {
             })
             .collect();
 
-        let converter = RowConverter::new(sort_fields.clone()).unwrap();
-        let rows = converter.convert_columns(&batch.columns()).unwrap();
+        let converter = RowConverter::new(sort_fields.clone())?;
+        let rows = converter.convert_columns(&batch.columns())?;
 
         let null_buffer = checker.has_nulls(&rows);
         assert_eq!(null_buffer.len(), 0);
@@ -785,7 +785,7 @@ mod tests {
 
         let id_array = Int32Array::from(vec![None, None, None]);
         let columns: Vec<ArrayRef> = vec![Arc::new(id_array)];
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
         let sort_fields: Vec<SortField> = schema
             .fields()
@@ -795,8 +795,8 @@ mod tests {
             })
             .collect();
 
-        let converter = RowConverter::new(sort_fields.clone()).unwrap();
-        let rows = converter.convert_columns(&batch.columns()).unwrap();
+        let converter = RowConverter::new(sort_fields.clone())?;
+        let rows = converter.convert_columns(&batch.columns())?;
 
         let field_configs: Vec<(DataType, SortOptions)> = schema
             .fields()
@@ -825,7 +825,7 @@ mod tests {
         let id_array = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
         let name_array = StringArray::from(vec![Some("Alice"), Some("Bob"), Some("Charlie")]);
         let columns: Vec<ArrayRef> = vec![Arc::new(id_array), Arc::new(name_array)];
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
         let sort_fields: Vec<SortField> = schema
             .fields()
@@ -835,8 +835,8 @@ mod tests {
             })
             .collect();
 
-        let converter = RowConverter::new(sort_fields.clone()).unwrap();
-        let rows = converter.convert_columns(&batch.columns()).unwrap();
+        let converter = RowConverter::new(sort_fields.clone())?;
+        let rows = converter.convert_columns(&batch.columns())?;
 
         let field_configs: Vec<(DataType, SortOptions)> = schema
             .fields()

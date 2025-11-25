@@ -253,7 +253,7 @@ fn try_cast_string_array_to_integer(array: &dyn Array, cast_type: &DataType) -> 
     macro_rules! cast {
         ($target_type:ident) => {{
             type B = paste::paste! {[<$target_type Builder>]};
-            let array = array.as_any().downcast_ref::<StringArray>().unwrap();
+            let array = array.as_any().downcast_ref::<StringArray>().expect("Excepted a StringArray");
             let mut builder = B::new();
 
             for v in array.iter() {
@@ -434,7 +434,7 @@ mod test {
     fn test_boolean_to_string() {
         let bool_array: ArrayRef =
             Arc::new(BooleanArray::from_iter(vec![None, Some(true), Some(false)]));
-        let casted = cast(&bool_array, &DataType::Utf8).unwrap();
+        let casted = cast(&bool_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![None, Some("true"), Some("false")])
@@ -453,9 +453,9 @@ mod test {
             Some(f64::NEG_INFINITY),
             Some(f64::NAN),
         ]));
-        let casted = cast(&f64_array, &DataType::Int32).unwrap();
+        let casted = cast(&f64_array, &DataType::Int32)?;
         assert_eq!(
-            as_int32_array(&casted).unwrap(),
+            as_int32_array(&casted)?,
             &Int32Array::from_iter(vec![
                 None,
                 Some(123),
@@ -478,9 +478,9 @@ mod test {
             Some(i32::MAX),
             Some(i32::MIN),
         ]));
-        let casted = cast(&i32_array, &DataType::Float64).unwrap();
+        let casted = cast(&i32_array, &DataType::Float64)?;
         assert_eq!(
-            as_float64_array(&casted).unwrap(),
+            as_float64_array(&casted)?,
             &Float64Array::from_iter(vec![
                 None,
                 Some(123.0),
@@ -500,9 +500,9 @@ mod test {
             Some(i32::MAX),
             Some(i32::MIN),
         ]));
-        let casted = cast(&i32_array, &DataType::Decimal128(38, 18)).unwrap();
+        let casted = cast(&i32_array, &DataType::Decimal128(38, 18))?;
         assert_eq!(
-            as_decimal128_array(&casted).unwrap(),
+            as_decimal128_array(&casted)?,
             &Decimal128Array::from_iter(vec![
                 None,
                 Some(123000000000000000000),
@@ -511,7 +511,7 @@ mod test {
                 Some(i32::MIN as i128 * 1000000000000000000),
             ])
             .with_precision_and_scale(38, 18)
-            .unwrap()
+            ?
         );
     }
 
@@ -528,9 +528,9 @@ mod test {
             Some("123456789012345.678901234567890"),
             Some("-123456789012345.678901234567890"),
         ]));
-        let casted = cast(&string_array, &DataType::Decimal128(38, 18)).unwrap();
+        let casted = cast(&string_array, &DataType::Decimal128(38, 18))?;
         assert_eq!(
-            as_decimal128_array(&casted).unwrap(),
+            as_decimal128_array(&casted)?,
             &Decimal128Array::from_iter(vec![
                 None,
                 Some(10000000000),
@@ -543,7 +543,7 @@ mod test {
                 Some(-123456789012345678901234567890000i128),
             ])
             .with_precision_and_scale(38, 18)
-            .unwrap()
+            ?
         );
     }
 
@@ -559,11 +559,11 @@ mod test {
                 Some(i32::MIN as i128 * 1000000000000000000),
             ])
             .with_precision_and_scale(38, 18)
-            .unwrap(),
+            ?,
         );
-        let casted = cast(&decimal_array, &DataType::Utf8).unwrap();
+        let casted = cast(&decimal_array, &DataType::Utf8)?;
         assert_eq!(
-            casted.as_any().downcast_ref::<StringArray>().unwrap(),
+            casted.as_any().downcast_ref::<StringArray>()?,
             &StringArray::from_iter(vec![
                 None,
                 Some("123.000000000000000000"),
@@ -586,9 +586,9 @@ mod test {
             Some("-123456789012345"),
             Some("999999999999999999999999999999999"),
         ]));
-        let casted = cast(&string_array, &DataType::Int64).unwrap();
+        let casted = cast(&string_array, &DataType::Int64)?;
         assert_eq!(
-            casted.as_any().downcast_ref::<Int64Array>().unwrap(),
+            casted.as_any().downcast_ref::<Int64Array>()?,
             &Int64Array::from_iter(vec![
                 None,
                 Some(123),
@@ -615,10 +615,10 @@ mod test {
             Some("9999-99"),
             Some("99999-01"),
         ]));
-        let casted = cast(&string_array, &DataType::Date32).unwrap();
+        let casted = cast(&string_array, &DataType::Date32)?;
         assert_eq!(
             arrow::compute::cast(&casted, &DataType::Utf8)
-                .unwrap()
+                ?
                 .as_string(),
             &StringArray::from_iter(vec![
                 None,
