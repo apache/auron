@@ -36,13 +36,13 @@ pub fn write_scalar<W: Write>(value: &ScalarValue, nullable: bool, output: &mut 
         ($v:expr) => {{
             if nullable {
                 if let Some(v) = $v {
-                    write_u8(1, output).unwrap();
-                    output.write_all(&v.to_ne_bytes()).unwrap();
+                    write_u8(1, output).expect("ok");
+                    output.write_all(&v.to_ne_bytes()).expect("ok");
                 } else {
-                    write_u8(0, output).unwrap();
+                    write_u8(0, output).expect("ok");
                 }
             } else {
-                output.write_all(&$v.unwrap().to_ne_bytes()).unwrap();
+                output.write_all(&$v.expect("ok").to_ne_bytes()).expect("ok");
             }
         }};
     }
