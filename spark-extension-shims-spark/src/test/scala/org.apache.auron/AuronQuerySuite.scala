@@ -14,26 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.auron.AuronConf
 
 import org.apache.auron.util.AuronTestUtils
 
-class AuronQuerySuite
-    extends org.apache.spark.sql.QueryTest
-    with BaseAuronSQLSuite
-    with AuronSQLTestHelper {
+class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
   import testImplicits._
 
   test("test partition path has url encoded character") {
     withTable("t1") {
       sql(
         "create table t1 using parquet PARTITIONED BY (part) as select 1 as c1, 2 as c2, 'test test' as part")
-      val df = sql("select * from t1")
-      checkAnswer(df, Seq(Row(1, 2, "test test")))
+      checkSparkAnswerAndOperator("select * from t1")
     }
   }
 
@@ -41,29 +36,26 @@ class AuronQuerySuite
     withTable("t1", "t2") {
       sql("create table t1 using parquet as select 1 as c1, 2 as c2")
       sql("create table t2 using parquet as select 1 as c1, 3 as c3")
-      val df = sql("select 1 from t1 left join t2")
-      checkAnswer(df, Seq(Row(1)))
+      checkSparkAnswerAndOperator("select 1 from t1 left join t2")
     }
   }
 
   test("test filter with year function") {
     withTable("t1") {
       sql("create table t1 using parquet as select '2024-12-18' as event_time")
-      checkAnswer(
-        sql("""
+      checkSparkAnswerAndOperator(s"""
             |select year, count(*)
             |from (select event_time, year(event_time) as year from t1) t
             |where year <= 2024
             |group by year
-            |""".stripMargin),
-        Seq(Row(2024, 1)))
+            |""".stripMargin)
     }
   }
 
   test("test select multiple spark ext functions with the same signature") {
     withTable("t1") {
       sql("create table t1 using parquet as select '2024-12-18' as event_time")
-      checkAnswer(sql("select year(event_time), month(event_time) from t1"), Seq(Row(2024, 12)))
+      checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
     }
   }
 
@@ -82,9 +74,7 @@ class AuronQuerySuite
         sql(createTableStatement(format))
         sql(
           "insert into test_with_complex_type select 1 as id, map('zero', '0', 'one', '1') as m, array('test','auron') as l, 'auron' as s")
-        checkAnswer(
-          sql("select id,l,m from test_with_complex_type"),
-          Seq(Row(1, ArrayBuffer("test", "auron"), Map("one" -> "1", "zero" -> "0"))))
+        checkSparkAnswerAndOperator("select id,l,m from test_with_complex_type")
       })
   }
 
@@ -92,16 +82,14 @@ class AuronQuerySuite
     withTable("t1", "t2") {
       sql("create table t1(c1 binary, c2 int) using parquet")
       sql("insert into t1 values (cast('test1' as binary), 1), (cast('test2' as binary), 2)")
-      val df = sql("select c2 from t1 order by c1")
-      checkAnswer(df, Seq(Row(1), Row(2)))
+      checkSparkAnswerAndOperator("select c2 from t1 order by c1")
     }
   }
 
   test("repartition over MapType") {
     withTable("t_map") {
       sql("create table t_map using parquet as select map('a', '1', 'b', '2') as data_map")
-      val df = sql("SELECT /*+ repartition(10) */ data_map FROM t_map")
-      checkAnswer(df, Seq(Row(Map("a" -> "1", "b" -> "2"))))
+      checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ data_map FROM t_map")
     }
   }
 
@@ -109,8 +97,7 @@ class AuronQuerySuite
     withTable("t_map_struct") {
       sql(
         "create table t_map_struct using parquet as select named_struct('m', map('x', '1')) as data_struct")
-      val df = sql("SELECT /*+ repartition(10) */ data_struct FROM t_map_struct")
-      checkAnswer(df, Seq(Row(Row(Map("x" -> "1")))))
+      checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ data_struct FROM t_map_struct")
     }
   }
 
@@ -120,8 +107,7 @@ class AuronQuerySuite
           |create table t_array_map using parquet as
           |select array(map('k1', 1, 'k2', 2), map('k3', 3)) as array_of_map
           |""".stripMargin)
-      val df = sql("SELECT /*+ repartition(10) */ array_of_map FROM t_array_map")
-      checkAnswer(df, Seq(Row(Seq(Map("k1" -> 1, "k2" -> 2), Map("k3" -> 3)))))
+      checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ array_of_map FROM t_array_map")
     }
   }
 
@@ -131,8 +117,7 @@ class AuronQuerySuite
           |create table t_struct_map using parquet as
           |select named_struct('id', 101, 'metrics', map('ctr', 0.123d, 'cvr', 0.045d)) as user_metrics
           |""".stripMargin)
-      val df = sql("SELECT /*+ repartition(10) */ user_metrics FROM t_struct_map")
-      checkAnswer(df, Seq(Row(Row(101, Map("ctr" -> 0.123, "cvr" -> 0.045)))))
+      checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ user_metrics FROM t_struct_map")
     }
   }
 
@@ -145,8 +130,8 @@ class AuronQuerySuite
           |  'item2', named_struct('count', 7, 'score', 9.1d)
           |) as map_struct_value
           |""".stripMargin)
-      val df = sql("SELECT /*+ repartition(10) */ map_struct_value FROM t_map_struct_value")
-      checkAnswer(df, Seq(Row(Map("item1" -> Row(3, 4.5), "item2" -> Row(7, 9.1)))))
+      checkSparkAnswerAndOperator(
+        "SELECT /*+ repartition(10) */ map_struct_value FROM t_map_struct_value")
     }
   }
 
@@ -159,11 +144,7 @@ class AuronQuerySuite
           |  'outer2', map('inner3', 30)
           |) as nested_map
           |""".stripMargin)
-      val df = sql("SELECT /*+ repartition(10) */ nested_map FROM t_nested_map")
-      checkAnswer(
-        df,
-        Seq(Row(
-          Map("outer1" -> Map("inner1" -> 10, "inner2" -> 20), "outer2" -> Map("inner3" -> 30)))))
+      checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ nested_map FROM t_nested_map")
     }
   }
 
@@ -176,28 +157,22 @@ class AuronQuerySuite
           |  named_struct('name', 'user2', 'features', map('f3', 3.5d))
           |) as user_feature_array
           |""".stripMargin)
-      val df = sql("SELECT /*+ repartition(10) */ user_feature_array FROM t_array_struct_map")
-      checkAnswer(
-        df,
-        Seq(
-          Row(
-            Seq(Row("user1", Map("f1" -> 1.0f, "f2" -> 2.0f)), Row("user2", Map("f3" -> 3.5f))))))
+      checkSparkAnswerAndOperator(
+        "SELECT /*+ repartition(10) */ user_feature_array FROM t_array_struct_map")
     }
   }
 
   test("log function with negative input") {
     withTable("t1") {
       sql("create table t1 using parquet as select -1 as c1")
-      val df = sql("select ln(c1) from t1")
-      checkAnswer(df, Seq(Row(null)))
+      checkSparkAnswerAndOperator("select ln(c1) from t1")
     }
   }
 
   test("floor function with long input") {
     withTable("t1") {
       sql("create table t1 using parquet as select 1L as c1, 2.2 as c2")
-      val df = sql("select floor(c1), floor(c2) from t1")
-      checkAnswer(df, Seq(Row(1, 2)))
+      checkSparkAnswerAndOperator("select floor(c1), floor(c2) from t1")
     }
   }
 
@@ -213,9 +188,7 @@ class AuronQuerySuite
            | test_hive_orc_impl
            | VALUES(9, '12', 2020)
                """.stripMargin)
-
-      val df = spark.sql("SELECT _col2 FROM test_hive_orc_impl")
-      checkAnswer(df, Row("12"))
+      checkSparkAnswerAndOperator("SELECT _col2 FROM test_hive_orc_impl")
     }
   }
 
@@ -231,7 +204,7 @@ class AuronQuerySuite
               .write
               .orc(path)
             val correctAnswer = Seq(Row(1, 2), Row(3, 4), Row(5, 6), Row(null, null))
-            checkAnswer(spark.read.orc(path), correctAnswer)
+            checkSparkAnswerAndOperator(() => spark.read.orc(path))
 
             withTable("t") {
               sql(s"CREATE EXTERNAL TABLE t(c3 INT, c2 INT) USING ORC LOCATION '$path'")
@@ -242,7 +215,7 @@ class AuronQuerySuite
                 Seq(Row(null, 2), Row(null, 4), Row(null, 6), Row(null, null))
               }
 
-              checkAnswer(spark.table("t"), expected)
+              checkSparkAnswerAndOperator(() => spark.table("t"))
             }
           }
         }
@@ -263,7 +236,7 @@ class AuronQuerySuite
               .partitionBy("p")
               .orc(path)
             val correctAnswer = Seq(Row(1, 2, 1), Row(3, 4, 2), Row(5, 6, 3), Row(null, null, 4))
-            checkAnswer(spark.read.orc(path), correctAnswer)
+            checkSparkAnswerAndOperator(() => spark.read.orc(path))
 
             withTable("t") {
               sql(s"""
@@ -279,7 +252,7 @@ class AuronQuerySuite
                 Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3), Row(null, null, 4))
               }
 
-              checkAnswer(spark.table("t"), expected)
+              checkSparkAnswerAndOperator(() => spark.table("t"))
             }
           }
         }
@@ -297,15 +270,13 @@ class AuronQuerySuite
           |union all select '2024-12-18'
           |""".stripMargin)
 
-      checkAnswer(
-        sql("""
+      checkSparkAnswerAndOperator("""
             |select q, count(*)
             |from (select event_time, quarter(event_time) as q from t1) t
             |where q <= 3
             |group by q
             |order by q
-            |""".stripMargin),
-        Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+            |""".stripMargin)
     }
   }
 
@@ -374,26 +345,25 @@ class AuronQuerySuite
         checkAnswer(sql(q), Seq(expected))
     }
   }
-
   test("test filter with hour function") {
     withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
       withTable("t_hour") {
         sql("""
-            |create table t_hour using parquet as
-            |select to_timestamp('2024-12-18 01:23:45') as event_time union all
-            |select to_timestamp('2024-12-18 08:00:00') union all
-            |select to_timestamp('2024-12-18 08:59:59')
-            |""".stripMargin)
+              |create table t_hour using parquet as
+              |select to_timestamp('2024-12-18 01:23:45') as event_time union all
+              |select to_timestamp('2024-12-18 08:00:00') union all
+              |select to_timestamp('2024-12-18 08:59:59')
+              |""".stripMargin)
 
         // Keep rows where HOUR >= 8, then group by hour
         checkAnswer(
           sql("""
-              |select h, count(*)
-              |from (select hour(event_time) as h from t_hour) t
-              |where h >= 8
-              |group by h
-              |order by h
-              |""".stripMargin),
+                |select h, count(*)
+                |from (select hour(event_time) as h from t_hour) t
+                |where h >= 8
+                |group by h
+                |order by h
+                |""".stripMargin),
           Seq(Row(8, 2)))
       }
     }
@@ -403,20 +373,20 @@ class AuronQuerySuite
     withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
       withTable("t_minute") {
         sql("""
-            |create table t_minute using parquet as
-            |select to_timestamp('2024-12-18 00:00:00') as event_time union all
-            |select to_timestamp('2024-12-18 00:30:00') union all
-            |select to_timestamp('2024-12-18 12:30:59')
-            |""".stripMargin)
+              |create table t_minute using parquet as
+              |select to_timestamp('2024-12-18 00:00:00') as event_time union all
+              |select to_timestamp('2024-12-18 00:30:00') union all
+              |select to_timestamp('2024-12-18 12:30:59')
+              |""".stripMargin)
 
         // Keep rows where MINUTE = 30, then group by minute
         checkAnswer(
           sql("""
-              |select m, count(*)
-              |from (select minute(event_time) as m from t_minute) t
-              |where m = 30
-              |group by m
-              |""".stripMargin),
+                |select m, count(*)
+                |from (select minute(event_time) as m from t_minute) t
+                |where m = 30
+                |group by m
+                |""".stripMargin),
           Seq(Row(30, 2)))
       }
     }
@@ -426,20 +396,20 @@ class AuronQuerySuite
     withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
       withTable("t_second") {
         sql("""
-            |create table t_second using parquet as
-            |select to_timestamp('2024-12-18 00:00:00') as event_time union all
-            |select to_timestamp('2024-12-18 01:23:00') union all
-            |select to_timestamp('2024-12-18 23:59:45')
-            |""".stripMargin)
+              |create table t_second using parquet as
+              |select to_timestamp('2024-12-18 00:00:00') as event_time union all
+              |select to_timestamp('2024-12-18 01:23:00') union all
+              |select to_timestamp('2024-12-18 23:59:45')
+              |""".stripMargin)
 
         // Keep rows where SECOND = 0, then group by second
         checkAnswer(
           sql("""
-              |select s, count(*)
-              |from (select second(event_time) as s from t_second) t
-              |where s = 0
-              |group by s
-              |""".stripMargin),
+                |select s, count(*)
+                |from (select second(event_time) as s from t_second) t
+                |where s = 0
+                |group by s
+                |""".stripMargin),
           Seq(Row(0, 2)))
       }
     }
@@ -453,13 +423,13 @@ class AuronQuerySuite
           "create table t_date_parts using parquet as select date'2024-12-18' as d union all select date'2024-12-19'")
         checkAnswer(
           sql("""
-              |select
-              |  hour(d)   as h,
-              |  minute(d) as m,
-              |  second(d) as s
-              |from t_date_parts
-              |order by d
-              |""".stripMargin),
+                |select
+                |  hour(d)   as h,
+                |  minute(d) as m,
+                |  second(d) as s
+                |from t_date_parts
+                |order by d
+                |""".stripMargin),
           Seq(Row(0, 0, 0), Row(0, 0, 0)))
       }
     }
@@ -470,15 +440,15 @@ class AuronQuerySuite
       withTable("t_tz") {
         // Construct: UTC 1970-01-01 00:00:00 → Asia/Shanghai => local 08:00:00
         sql("""
-            |create table t_tz using parquet as
-            |select from_utc_timestamp(to_timestamp('1970-01-01 00:00:00'), 'Asia/Shanghai') as ts
-            |""".stripMargin)
+              |create table t_tz using parquet as
+              |select from_utc_timestamp(to_timestamp('1970-01-01 00:00:00'), 'Asia/Shanghai') as ts
+              |""".stripMargin)
 
         checkAnswer(
           sql("""
-              |select hour(ts), minute(ts), second(ts)
-              |from t_tz
-              |""".stripMargin),
+                |select hour(ts), minute(ts), second(ts)
+                |from t_tz
+                |""".stripMargin),
           Seq(Row(8, 0, 0)))
       }
     }
@@ -488,10 +458,10 @@ class AuronQuerySuite
     withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
       withTable("t_tz2") {
         sql("""
-            |create table t_tz2 using parquet as
-            |select from_utc_timestamp(to_timestamp('2000-01-01 00:00:00'), 'Asia/Kolkata')   as ts1,  -- +05:30
-            |       from_utc_timestamp(to_timestamp('2000-01-01 00:00:00'), 'Asia/Kathmandu') as ts2   -- +05:45
-            |""".stripMargin)
+              |create table t_tz2 using parquet as
+              |select from_utc_timestamp(to_timestamp('2000-01-01 00:00:00'), 'Asia/Kolkata')   as ts1,  -- +05:30
+              |       from_utc_timestamp(to_timestamp('2000-01-01 00:00:00'), 'Asia/Kathmandu') as ts2   -- +05:45
+              |""".stripMargin)
 
         // Kolkata -> 05:30:00; Kathmandu -> 05:45:00
         checkAnswer(

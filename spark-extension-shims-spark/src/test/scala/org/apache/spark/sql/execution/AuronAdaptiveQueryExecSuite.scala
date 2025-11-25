@@ -14,18 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.spark.sql.execution
 
-import org.apache.auron.sparkverEnableMembers
+import org.apache.spark.sql.AuronQueryTest
+
+import org.apache.auron.{sparkverEnableMembers, BaseAuronSQLSuite}
 
 @sparkverEnableMembers("3.5")
-class AuronAdaptiveQueryExecSuite
-    extends org.apache.spark.sql.QueryTest
-    with BaseAuronSQLSuite
-    with org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper {
+class AuronAdaptiveQueryExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
-  import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, SparkPlan}
   import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec}
   import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
   import org.apache.spark.sql.execution.exchange.Exchange

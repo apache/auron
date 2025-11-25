@@ -1112,6 +1112,8 @@ object AuronConverters extends Logging {
           },
           friendlyName = "NativeRDD.Empty")
       }
+
+      override val nodeName: String = s"NativeEmpty"
     }
     NativeEmptyExec(output, outputPartitioning, outputOrdering)
   }

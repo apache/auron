@@ -14,25 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.internal.SQLConf
 
-trait BuildInfoAuronSQLSuite extends SharedSparkSession {
-
-  override protected def sparkConf: SparkConf = {
-    super.sparkConf
-      .set("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
-      .set(
-        "spark.shuffle.manager",
-        "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
-      .set("spark.memory.offHeap.enabled", "false")
-      .set("spark.eventLog.enabled", "true")
-      .set("spark.ui.enabled", "true")
-      .set("spark.auron.ui.enabled", "true")
-      .set("spark.ui.port", "4040")
-      .set("spark.auron.enable", "true")
+trait AuronSQLTestHelper {
+  def withEnvConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SQLConf.get
+    val (keys, values) = pairs.unzip
+    val currentValues = keys.map { key =>
+      if (conf.contains(key)) {
+        Some(conf.getConfString(key))
+      } else {
+        None
+      }
+    }
+    (keys, values).zipped.foreach { (k, v) =>
+      conf.setConfString(k, v)
+    }
+    try f
+    finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => conf.setConfString(key, value)
+        case (key, None) => conf.unsetConf(key)
+      }
+    }
   }
-
 }
