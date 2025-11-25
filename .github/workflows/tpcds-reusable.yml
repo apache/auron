@@ -160,6 +160,7 @@ jobs:
 
       - name: Cargo clippy
         run: |
+#         Eliminate unwrap first, then switch to -D warnings to enforce all lints.
           cargo clippy --all-targets --workspace -- -A warnings  -A clippy::all  -D clippy::unwrap_used
 
       - name: Cargo test
