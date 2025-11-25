@@ -231,7 +231,7 @@ impl Agg for SparkUDAFWrapper {
         let rows = jni_call!(SparkUDAFWrapperContext(jcontext.as_obj()).initialize(
             num_rows as i32,
         )-> JObject)
-            .expect("num_rows");
+        .expect("num_rows");
 
         let jcontext = self.jcontext().expect("jcontext");
         let obj = jni_new_global_ref!(rows.as_obj()).expect("rows");

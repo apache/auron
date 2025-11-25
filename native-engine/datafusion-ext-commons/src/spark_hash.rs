@@ -102,7 +102,10 @@ fn hash_array<T: num::PrimInt>(
 
     macro_rules! hash_array_decimal {
         ($array_type:ident, $column:ident, $hashes:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
+            let array = $column
+                .as_any()
+                .downcast_ref::<$array_type>()
+                .expect("downcast");
 
             if array.null_count() == 0 {
                 for (i, hash) in $hashes.iter_mut().enumerate() {
@@ -121,7 +124,9 @@ fn hash_array<T: num::PrimInt>(
     match array.data_type() {
         DataType::Null => {}
         DataType::Boolean => {
-            let array = array.as_any().downcast_ref::<BooleanArray>()
+            let array = array
+                .as_any()
+                .downcast_ref::<BooleanArray>()
                 .expect("Expected a BooleanArray");
             if array.null_count() == 0 {
                 for (i, hash) in hashes_buffer.iter_mut().enumerate() {
@@ -218,7 +223,9 @@ fn create_hashes_dictionary<K: ArrowDictionaryKeyType, T: num::PrimInt>(
     hashes_buffer: &mut [T],
     h: impl Fn(&[u8], T) -> T + Copy,
 ) {
-    let dict_array = array.as_any().downcast_ref::<DictionaryArray<K>>()
+    let dict_array = array
+        .as_any()
+        .downcast_ref::<DictionaryArray<K>>()
         .expect("Expected a DictionaryArray");
 
     // Hash each dictionary value once, and then use that computed
@@ -240,7 +247,10 @@ fn hash_one<T: num::PrimInt>(
 ) {
     macro_rules! hash_one_primitive {
         ($array_type:ident, $column:ident, $ty:ident, $hash:ident, $idx:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
+            let array = $column
+                .as_any()
+                .downcast_ref::<$array_type>()
+                .expect("downcast");
             *$hash = $h(
                 (array.value($idx as usize) as $ty).to_le_bytes().as_ref(),
                 *$hash,
@@ -250,14 +260,20 @@ fn hash_one<T: num::PrimInt>(
 
     macro_rules! hash_one_binary {
         ($array_type:ident, $column:ident, $hash:ident, $idx:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
+            let array = $column
+                .as_any()
+                .downcast_ref::<$array_type>()
+                .expect("downcast");
             *$hash = $h(&array.value($idx as usize).as_ref(), *$hash);
         };
     }
 
     macro_rules! hash_one_decimal {
         ($array_type:ident, $column:ident, $hash:ident, $idx:ident, $h:expr) => {
-            let array = $column.as_any().downcast_ref::<$array_type>().expect("downcast");
+            let array = $column
+                .as_any()
+                .downcast_ref::<$array_type>()
+                .expect("downcast");
             *$hash = $h(array.value($idx as usize).to_le_bytes().as_ref(), *$hash);
         };
     }
@@ -266,7 +282,9 @@ fn hash_one<T: num::PrimInt>(
         match col.data_type() {
             DataType::Null => {}
             DataType::Boolean => {
-                let array = col.as_any().downcast_ref::<BooleanArray>()
+                let array = col
+                    .as_any()
+                    .downcast_ref::<BooleanArray>()
                     .expect("Expected a BooleanArray");
                 *hash = h(
                     (if array.value(idx) { 1u32 } else { 0u32 })
@@ -327,7 +345,9 @@ fn hash_one<T: num::PrimInt>(
                 hash_one_decimal!(Decimal128Array, col, hash, idx, h);
             }
             DataType::List(..) => {
-                let list_array = col.as_any().downcast_ref::<ListArray>()
+                let list_array = col
+                    .as_any()
+                    .downcast_ref::<ListArray>()
                     .expect("Expected a ListArray");
                 let value_array = list_array.value(idx);
                 for i in 0..value_array.len() {
@@ -335,7 +355,9 @@ fn hash_one<T: num::PrimInt>(
                 }
             }
             DataType::Map(..) => {
-                let map_array = col.as_any().downcast_ref::<MapArray>()
+                let map_array = col
+                    .as_any()
+                    .downcast_ref::<MapArray>()
                     .expect("Expected a MapArray");
                 let kv_array = map_array.value(idx);
                 let key_array = kv_array.column(0);
@@ -346,7 +368,9 @@ fn hash_one<T: num::PrimInt>(
                 }
             }
             DataType::Struct(_) => {
-                let struct_array = col.as_any().downcast_ref::<StructArray>()
+                let struct_array = col
+                    .as_any()
+                    .downcast_ref::<StructArray>()
                     .expect("Expected a StructArray");
                 for col in struct_array.columns() {
                     hash_one(col, idx, hash, h);
@@ -495,8 +519,7 @@ mod tests {
             .add_buffer(Buffer::from_slice_ref(
                 &[1i32, 2, 3, 4, 5, 6].to_byte_slice(),
             ))
-            .build()
-            ?;
+            .build()?;
 
         // Create offset array to define list boundaries: [[1, 2], [3, 4, 5], [6]]
         let list_data_type = DataType::new_list(DataType::Int32, false);
@@ -504,8 +527,7 @@ mod tests {
             .len(3)
             .add_buffer(Buffer::from_slice_ref(&[0i32, 2, 5, 6].to_byte_slice()))
             .add_child_data(value_data)
-            .build()
-            ?;
+            .build()?;
 
         let list_array = ListArray::from(list_data);
         let array_ref = Arc::new(list_array) as ArrayRef;
@@ -524,16 +546,14 @@ mod tests {
             .add_buffer(Buffer::from_slice_ref(
                 &[0, 1, 2, 3, 4, 5, 6, 7].to_byte_slice(),
             ))
-            .build()
-            ?;
+            .build()?;
         let value_data = ArrayData::builder(DataType::UInt32)
             .len(8)
             .add_buffer(Buffer::from_slice_ref(
                 &[0u32, 10, 20, 0, 40, 0, 60, 70].to_byte_slice(),
             ))
             .null_bit_buffer(Some(Buffer::from(&[0b11010110])))
-            .build()
-            ?;
+            .build()?;
 
         // Construct a buffer for value offsets, for the nested array:
         //  [[0, 1, 2], [3, 4, 5], [6, 7]]
@@ -559,8 +579,7 @@ mod tests {
             .len(3)
             .add_buffer(entry_offsets)
             .add_child_data(entry_struct.into_data())
-            .build()
-            ?;
+            .build()?;
         let map_array = MapArray::from(map_data);
 
         assert_eq!(&value_data, &map_array.values().to_data());
@@ -599,8 +618,7 @@ mod tests {
             .offset(1)
             .add_buffer(map_array.to_data().buffers()[0].clone())
             .add_child_data(map_array.to_data().child_data()[0].clone())
-            .build()
-            ?;
+            .build()?;
         let map_array = MapArray::from(map_data);
 
         assert_eq!(&value_data, &map_array.values().to_data());

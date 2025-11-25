@@ -102,7 +102,7 @@ impl PhysicalExpr for TryCastExpr {
 
 #[cfg(test)]
 mod test {
-    
+
     use std::sync::Arc;
 
     use arrow::{
@@ -115,7 +115,7 @@ mod test {
     use crate::cast::TryCastExpr;
 
     #[test]
-    fn test_ok_1() -> Result<(), Box<dyn std::error::Error>>  {
+    fn test_ok_1() -> Result<(), Box<dyn std::error::Error>> {
         // input: Array
         // cast Float32 into Int32
         let float_arr: ArrayRef = Arc::new(Float32Array::from(vec![
@@ -146,8 +146,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            ?;
+            .into_array(batch.num_rows())?;
 
         let expected: ArrayRef = Arc::new(Int32Array::from(vec![
             Some(7),
@@ -162,7 +161,7 @@ mod test {
     }
 
     #[test]
-    fn test_ok_2()  -> Result<(), Box<dyn std::error::Error>>  {
+    fn test_ok_2() -> Result<(), Box<dyn std::error::Error>> {
         // input: Array
         // cast Utf8 into Float32
         let string_arr: ArrayRef = Arc::new(StringArray::from(vec![
@@ -188,8 +187,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            ?;
+            .into_array(batch.num_rows())?;
 
         let expected: ArrayRef = Arc::new(Float32Array::from(vec![
             Some(123.0),
@@ -203,7 +201,7 @@ mod test {
     }
 
     #[test]
-    fn test_ok_3() -> Result<(), Box<dyn std::error::Error>>  {
+    fn test_ok_3() -> Result<(), Box<dyn std::error::Error>> {
         // input: Scalar
         // cast Utf8 into Float32
         let string_arr: ArrayRef = Arc::new(StringArray::from(vec![
@@ -226,8 +224,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            ?;
+            .into_array(batch.num_rows())?;
 
         let expected: ArrayRef = Arc::new(Float32Array::from(vec![
             Some(123.4),

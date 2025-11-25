@@ -401,7 +401,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_fixed_size_binary_fixed_size_binary() -> Result<()>  {
+    fn test_fixed_size_binary_fixed_size_binary() -> Result<()> {
         let items = vec![vec![1u8]];
         let array1 = FixedSizeBinaryArray::try_from_iter(items.into_iter())?;
         let items = vec![vec![2u8]];
@@ -414,7 +414,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_i32() -> Result<()>  {
+    fn test_i32() -> Result<()> {
         let array = Int32Array::from(vec![1, 2]);
 
         let eq = make_eq_comparator(&array, &array, false)?;
@@ -424,7 +424,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_i32_i32() -> Result<()>  {
+    fn test_i32_i32() -> Result<()> {
         let array1 = Int32Array::from(vec![1]);
         let array2 = Int32Array::from(vec![2]);
 
@@ -435,7 +435,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_f64()  -> Result<()>  {
+    fn test_f64() -> Result<()> {
         let array = Float64Array::from(vec![1.0, 2.0]);
 
         let eq = make_eq_comparator(&array, &array, false)?;
@@ -445,7 +445,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_f64_nan() -> Result<()>   {
+    fn test_f64_nan() -> Result<()> {
         let array = Float64Array::from(vec![1.0, f64::NAN]);
 
         let eq = make_eq_comparator(&array, &array, false)?;
@@ -457,7 +457,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_f64_zeros() -> Result<()>   {
+    fn test_f64_zeros() -> Result<()> {
         let array = Float64Array::from(vec![-0.0, 0.0]);
 
         let eq = make_eq_comparator(&array, &array, false)?;
@@ -468,7 +468,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_interval_day_time() -> Result<()>   {
+    fn test_interval_day_time() -> Result<()> {
         let array = IntervalDayTimeArray::from(vec![
             // 0 days, 1 second
             IntervalDayTimeType::make_value(0, 1000),
@@ -492,7 +492,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_interval_year_month()  -> Result<()>  {
+    fn test_interval_year_month() -> Result<()> {
         let array = IntervalYearMonthArray::from(vec![
             // 1 year, 0 months
             IntervalYearMonthType::make_value(1, 0),
@@ -514,7 +514,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_interval_month_day_nano()  -> Result<()>  {
+    fn test_interval_month_day_nano() -> Result<()> {
         let array = IntervalMonthDayNanoArray::from(vec![
             // 100 days
             IntervalMonthDayNanoType::make_value(0, 100, 0),
@@ -538,7 +538,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_decimal()  -> Result<()>  {
+    fn test_decimal() -> Result<()> {
         let array = vec![Some(5_i128), Some(2_i128), Some(3_i128)]
             .into_iter()
             .collect::<Decimal128Array>()
@@ -551,7 +551,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_decimali256()  -> Result<()>  {
+    fn test_decimali256() -> Result<()> {
         let array = vec![
             Some(i256::from_i128(5_i128)),
             Some(i256::from_i128(2_i128)),
@@ -568,7 +568,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_dict()  -> Result<()>  {
+    fn test_dict() -> Result<()> {
         let data = vec!["a", "b", "c", "a", "a", "c", "c"];
         let array = data.into_iter().collect::<DictionaryArray<Int16Type>>();
 
@@ -581,7 +581,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_multiple_dict()  -> Result<()>  {
+    fn test_multiple_dict() -> Result<()> {
         let d1 = vec!["a", "b", "c", "d"];
         let a1 = d1.into_iter().collect::<DictionaryArray<Int16Type>>();
         let d2 = vec!["e", "f", "g", "a"];
@@ -596,7 +596,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_primitive_dict()  -> Result<()>  {
+    fn test_primitive_dict() -> Result<()> {
         let values = Int32Array::from(vec![1_i32, 0, 2, 5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::new(keys, Arc::new(values));
@@ -616,7 +616,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_float_dict()  -> Result<()>  {
+    fn test_float_dict() -> Result<()> {
         let values = Float32Array::from(vec![1.0, 0.5, 2.1, 5.5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::try_new(keys, Arc::new(values))?;
@@ -636,7 +636,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_timestamp_dict()  -> Result<()>  {
+    fn test_timestamp_dict() -> Result<()> {
         let values = TimestampSecondArray::from(vec![1, 0, 2, 5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::new(keys, Arc::new(values));
@@ -656,7 +656,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_duration_dict()  -> Result<()>  {
+    fn test_duration_dict() -> Result<()> {
         let values = DurationSecondArray::from(vec![1, 0, 2, 5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::new(keys, Arc::new(values));
@@ -676,7 +676,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_decimal_dict() -> Result<()>   {
+    fn test_decimal_dict() -> Result<()> {
         let values = Decimal128Array::from(vec![1, 0, 2, 5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::new(keys, Arc::new(values));
@@ -696,7 +696,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_decimal256_dict()  -> Result<()>  {
+    fn test_decimal256_dict() -> Result<()> {
         let values = Decimal256Array::from(vec![
             i256::from_i128(1),
             i256::from_i128(0),
@@ -725,7 +725,7 @@ pub mod tests {
         Ok(())
     }
 
-    fn test_bytes_impl<T: ByteArrayType>()  -> Result<()>  {
+    fn test_bytes_impl<T: ByteArrayType>() -> Result<()> {
         let offsets = OffsetBuffer::from_lengths([3, 3, 1]);
         let a = GenericByteArray::<T>::new(offsets, b"abcdefa".into(), None);
         let eq = make_eq_comparator(&a, &a, false)?;
@@ -745,7 +745,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_lists()  -> Result<()>  {
+    fn test_lists() -> Result<()> {
         let mut a = ListBuilder::new(ListBuilder::new(Int32Builder::new()));
         a.extend([
             Some(vec![Some(vec![Some(1), Some(2), None]), Some(vec![None])]),
@@ -786,7 +786,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_struct()  -> Result<()>  {
+    fn test_struct() -> Result<()> {
         let fields = Fields::from(vec![
             Field::new("a", DataType::Int32, true),
             Field::new_list("b", Field::new("item", DataType::Int32, true), true),

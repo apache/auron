@@ -151,7 +151,8 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 Ok(Arc::new(FilterExec::try_new(predicates, input)?))
             }
             PhysicalPlanType::ParquetScan(scan) => {
-                let conf: FileScanConfig = scan.base_conf.as_ref().expect("base_conf").try_into()?;
+                let conf: FileScanConfig =
+                    scan.base_conf.as_ref().expect("base_conf").try_into()?;
                 let predicate = scan
                     .pruning_predicates
                     .iter()
@@ -168,7 +169,8 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )))
             }
             PhysicalPlanType::OrcScan(scan) => {
-                let conf: FileScanConfig = scan.base_conf.as_ref().expect("base_conf").try_into()?;
+                let conf: FileScanConfig =
+                    scan.base_conf.as_ref().expect("base_conf").try_into()?;
                 let predicate = scan
                     .pruning_predicates
                     .iter()
@@ -192,10 +194,14 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .on
                     .iter()
                     .map(|col| {
-                        let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().expect("left"), &left.schema())?;
-                        let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().expect("right"), &right.schema())?;
+                        let left_key = try_parse_physical_expr(
+                            &col.left.as_ref().expect("left"),
+                            &left.schema(),
+                        )?;
+                        let right_key = try_parse_physical_expr(
+                            &col.right.as_ref().expect("right"),
+                            &right.schema(),
+                        )?;
                         Ok((left_key, right_key))
                     })
                     .collect::<Result<_, Self::Error>>()?;
@@ -229,10 +235,14 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .on
                     .iter()
                     .map(|col| {
-                        let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().expect("left"), &left.schema())?;
-                        let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().expect("right"), &right.schema())?;
+                        let left_key = try_parse_physical_expr(
+                            &col.left.as_ref().expect("left"),
+                            &left.schema(),
+                        )?;
+                        let right_key = try_parse_physical_expr(
+                            &col.right.as_ref().expect("right"),
+                            &right.schema(),
+                        )?;
                         Ok((left_key, right_key))
                     })
                     .collect::<Result<_, Self::Error>>()?;
@@ -339,10 +349,14 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .on
                     .iter()
                     .map(|col| {
-                        let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().expect("left"), &left.schema())?;
-                        let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().expect("right"), &right.schema())?;
+                        let left_key = try_parse_physical_expr(
+                            &col.left.as_ref().expect("left"),
+                            &left.schema(),
+                        )?;
+                        let right_key = try_parse_physical_expr(
+                            &col.right.as_ref().expect("right"),
+                            &right.schema(),
+                        )?;
                         Ok((left_key, right_key))
                     })
                     .collect::<Result<_, Self::Error>>()?;
@@ -1136,13 +1150,19 @@ pub fn parse_protobuf_partitioning(
                     .collect::<Result<Vec<PhysicalExprRef>, _>>()?;
                 Ok(Some(Partitioning::HashPartitioning(
                     expr,
-                    hash_part.partition_count.try_into().expect("partition_count"),
+                    hash_part
+                        .partition_count
+                        .try_into()
+                        .expect("partition_count"),
                 )))
             }
 
             RepartitionType::RoundRobinRepartition(round_robin_part) => {
                 Ok(Some(Partitioning::RoundRobinPartitioning(
-                    round_robin_part.partition_count.try_into().expect("partition_count"),
+                    round_robin_part
+                        .partition_count
+                        .try_into()
+                        .expect("partition_count"),
                 )))
             }
 
@@ -1187,7 +1207,10 @@ pub fn parse_protobuf_partitioning(
                     let bound_rows = sort_row_converter.lock().convert_columns(&bound_cols)?;
                     Ok(Some(Partitioning::RangePartitioning(
                         exprs,
-                        range_part.partition_count.try_into().expect("partition_count"),
+                        range_part
+                            .partition_count
+                            .try_into()
+                            .expect("partition_count"),
                         Arc::new(bound_rows),
                     )))
                 }

@@ -248,7 +248,11 @@ pub fn create_array_interleaver(
                 let interleaver = Interleave::new(
                     values
                         .iter()
-                        .map(|v| downcast_any!(v, PrimitiveArray<$t>).expect("Excepted a PrimitiveArray").clone())
+                        .map(|v| {
+                            downcast_any!(v, PrimitiveArray<$t>)
+                                .expect("Excepted a PrimitiveArray")
+                                .clone()
+                        })
                         .collect::<Vec<_>>(),
                 );
                 let dt = $dt.clone();

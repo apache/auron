@@ -1049,7 +1049,7 @@ fn create_zero_column_batch(num_rows: usize) -> RecordBatch {
         vec![],
         &RecordBatchOptions::new().with_row_count(Some(num_rows)),
     )
-        .expect("record_batch")
+    .expect("record_batch")
 }
 
 struct PruneSortKeysFromBatch {
@@ -1450,7 +1450,11 @@ mod test {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let batch = build_table_i32(a, b, c)?;
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     #[tokio::test]

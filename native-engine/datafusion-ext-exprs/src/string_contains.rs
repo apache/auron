@@ -83,7 +83,10 @@ impl PhysicalExpr for StringContainsExpr {
 
         match expr {
             ColumnarValue::Array(array) => {
-                let string_array = array.as_any().downcast_ref::<StringArray>().expect("Expected a StringArray");
+                let string_array = array
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .expect("Expected a StringArray");
                 let ret_array =
                     Arc::new(BooleanArray::from_iter(string_array.iter().map(
                         |maybe_string| maybe_string.map(|string| string.contains(&self.infix)),
@@ -154,8 +157,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            ?;
+            .into_array(batch.num_rows())?;
 
         // verify result
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
@@ -193,8 +195,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            ?;
+            .into_array(batch.num_rows())?;
 
         // verify result
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![

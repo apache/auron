@@ -192,7 +192,11 @@ mod test {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let batch = build_table_i32(a, b, c)?;
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     #[tokio::test]
@@ -202,7 +206,7 @@ mod test {
             ("a", &vec![9, 8, 7, 6, 5, 4, 3, 2, 1, 0]),
             ("b", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
             ("c", &vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4]),
-        );
+        )?;
         let limit_exec = LimitExec::new(input, 2_u64);
         let session_ctx = SessionContext::new();
         let task_ctx = session_ctx.task_ctx();

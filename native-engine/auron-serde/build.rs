@@ -45,6 +45,5 @@ fn main() -> Result<(), String> {
     }
     prost_build
         .compile_protos(&["proto/auron.proto"], &["proto"])
-        .map_err(|e| format!("protobuf compilation failed: {e}")
-        )
+        .map_err(|e| format!("protobuf compilation failed: {e}"))
 }

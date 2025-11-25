@@ -75,9 +75,10 @@ impl RowNullChecker {
                 encoded_length: 0,
             },
             DataType::Boolean => FieldConfig::new_boolean(sort_options),
-            dt if dt.is_primitive() => {
-                FieldConfig::new_primitive(sort_options, 1 + dt.primitive_width().expect("primitive_width"))
-            }
+            dt if dt.is_primitive() => FieldConfig::new_primitive(
+                sort_options,
+                1 + dt.primitive_width().expect("primitive_width"),
+            ),
             // DataType::Int8 => FieldConfig::new_primitive(sort_options, 2), // 1 byte null flag +
             // // 1 byte value
             // DataType::Int16 => FieldConfig::new_primitive(sort_options, 3), /* 1 byte null flag +
@@ -445,8 +446,7 @@ impl FieldConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
-    use std::sync::Arc;
+    use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{ArrayRef, BooleanArray, Int32Array, RecordBatch, StringArray},
@@ -692,7 +692,7 @@ mod tests {
     }
 
     #[test]
-    fn test_has_nulls_with_rows() {
+    fn test_has_nulls_with_rows() -> Result<(), Box<dyn Error>> {
         use arrow::{array::ArrayRef, row::RowConverter};
 
         // Create a schema
@@ -747,10 +747,11 @@ mod tests {
         assert_eq!(null_buffer.is_valid(1), false); // Has null in name
         assert_eq!(null_buffer.is_valid(2), false); // Has null in id
         assert_eq!(null_buffer.is_valid(3), true); // No nulls
+        Ok(())
     }
 
     #[test]
-    fn test_has_nulls_empty_rows() {
+    fn test_has_nulls_empty_rows() -> Result<(), Box<dyn Error>> {
         // Test with empty rows
         let field_configs = vec![(DataType::Int32, SortOptions::default())];
         let checker = RowNullChecker::new(&field_configs);
@@ -776,10 +777,11 @@ mod tests {
 
         let null_buffer = checker.has_nulls(&rows);
         assert_eq!(null_buffer.len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_has_nulls_all_nulls() {
+    fn test_has_nulls_all_nulls() -> Result<(), Box<dyn Error>> {
         // Test with all rows containing nulls
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, true)]));
 
@@ -812,10 +814,11 @@ mod tests {
         for i in 0..3 {
             assert_eq!(null_buffer.is_valid(i), false);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_has_nulls_no_nulls() {
+    fn test_has_nulls_no_nulls() -> Result<(), Box<dyn Error>> {
         // Test with no nulls in any row
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, true),
@@ -852,5 +855,6 @@ mod tests {
         for i in 0..3 {
             assert_eq!(null_buffer.is_valid(i), true);
         }
+        Ok(())
     }
 }

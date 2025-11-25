@@ -221,7 +221,11 @@ mod test {
     fn build_table_int(a: (&str, &Vec<i32>)) -> Result<Arc<dyn ExecutionPlan>> {
         let batch = build_table_i32(a)?;
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     // build f32 table
@@ -238,7 +242,11 @@ mod test {
     fn build_table_float(a: (&str, &Vec<f32>)) -> Result<Arc<dyn ExecutionPlan>> {
         let batch = build_table_f32(a)?;
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     // build str table
@@ -255,7 +263,11 @@ mod test {
     fn build_table_string(a: (&str, &Vec<String>)) -> Result<Arc<dyn ExecutionPlan>> {
         let batch = build_table_str(a)?;
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     // build boolean table
@@ -272,7 +284,11 @@ mod test {
     fn build_table_boolean(a: (&str, &Vec<bool>)) -> Result<Arc<dyn ExecutionPlan>> {
         let batch = build_table_bool(a)?;
         let schema = batch.schema();
-        Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     #[tokio::test]
@@ -283,49 +299,36 @@ mod test {
         let schema = Schema::new(vec![Field::new("test_i32", DataType::Int32, false)]);
 
         let projections = vec![
-            vec![
-                binary(
-                    col("test_i32", &schema)?,
-                    Operator::Multiply,
-                    lit(ScalarValue::from(2)),
-                    &schema,
-                )?,
-            ],
-            vec![
-                binary(
-                    col("test_i32", &schema)?,
-                    Operator::Plus,
-                    lit(ScalarValue::from(100)),
-                    &schema,
-                )?,
-            ],
-            vec![
-                binary(
-                    col("test_i32", &schema)?,
-                    Operator::Divide,
-                    lit(ScalarValue::from(-2)),
-                    &schema,
-                )
-                ?,
-            ],
-            vec![
-                binary(
-                    col("test_i32", &schema)?,
-                    Operator::Modulo,
-                    lit(ScalarValue::from(2)),
-                    &schema,
-                )
-                ?,
-            ],
-            vec![
-                binary(
-                    col("test_i32", &schema)?,
-                    Operator::BitwiseShiftLeft,
-                    lit(ScalarValue::from(1)),
-                    &schema,
-                )
-                ?,
-            ],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::Multiply,
+                lit(ScalarValue::from(2)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::Plus,
+                lit(ScalarValue::from(100)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::Divide,
+                lit(ScalarValue::from(-2)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::Modulo,
+                lit(ScalarValue::from(2)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::BitwiseShiftLeft,
+                lit(ScalarValue::from(1)),
+                &schema,
+            )?],
         ];
 
         let expand_exec = ExpandExec::try_new(input.schema(), projections, input)?;
@@ -352,42 +355,30 @@ mod test {
         let schema = Schema::new(vec![Field::new("test_f32", DataType::Float32, false)]);
 
         let projections = vec![
-            vec![
-                binary(
-                    col("test_f32", &schema)?,
-                    Operator::Multiply,
-                    lit(ScalarValue::from(2.1_f32)),
-                    &schema,
-                )
-                ?,
-            ],
-            vec![
-                binary(
-                    col("test_f32", &schema)?,
-                    Operator::Plus,
-                    lit(ScalarValue::from(100_f32)),
-                    &schema,
-                )
-                ?,
-            ],
-            vec![
-                binary(
-                    col("test_f32", &schema)?,
-                    Operator::Divide,
-                    lit(ScalarValue::from(-2_f32)),
-                    &schema,
-                )
-                ?,
-            ],
-            vec![
-                binary(
-                    col("test_f32", &schema)?,
-                    Operator::Modulo,
-                    lit(ScalarValue::from(-2_f32)),
-                    &schema,
-                )
-                ?,
-            ],
+            vec![binary(
+                col("test_f32", &schema)?,
+                Operator::Multiply,
+                lit(ScalarValue::from(2.1_f32)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_f32", &schema)?,
+                Operator::Plus,
+                lit(ScalarValue::from(100_f32)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_f32", &schema)?,
+                Operator::Divide,
+                lit(ScalarValue::from(-2_f32)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_f32", &schema)?,
+                Operator::Modulo,
+                lit(ScalarValue::from(-2_f32)),
+                &schema,
+            )?],
         ];
 
         let expand_exec = ExpandExec::try_new(input.schema(), projections, input)?;
@@ -438,14 +429,12 @@ mod test {
         ))?;
         let schema = Schema::new(vec![Field::new("test_str", DataType::Utf8, false)]);
 
-        let projections = vec![vec![
-            binary(
-                col("test_str", &schema)?,
-                Operator::StringConcat,
-                lit(Some("app").expect("app")),
-                &schema,
-            )?,
-        ]];
+        let projections = vec![vec![binary(
+            col("test_str", &schema)?,
+            Operator::StringConcat,
+            lit(Some("app").expect("app")),
+            &schema,
+        )?]];
 
         let expand_exec = ExpandExec::try_new(input.schema(), projections, input)?;
 
@@ -476,24 +465,18 @@ mod test {
         let schema = Schema::new(vec![Field::new("test_bool", DataType::Boolean, false)]);
 
         let projections = vec![
-            vec![
-                binary(
-                    col("test_bool", &schema)?,
-                    Operator::And,
-                    lit(ScalarValue::Boolean(Some(true))),
-                    &schema,
-                )
-                ?,
-            ],
-            vec![
-                binary(
-                    col("test_bool", &schema)?,
-                    Operator::Or,
-                    lit(ScalarValue::Boolean(Some(true))),
-                    &schema,
-                )
-                ?,
-            ],
+            vec![binary(
+                col("test_bool", &schema)?,
+                Operator::And,
+                lit(ScalarValue::Boolean(Some(true))),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_bool", &schema)?,
+                Operator::Or,
+                lit(ScalarValue::Boolean(Some(true))),
+                &schema,
+            )?],
         ];
 
         let expand_exec = ExpandExec::try_new(input.schema(), projections, input)?;

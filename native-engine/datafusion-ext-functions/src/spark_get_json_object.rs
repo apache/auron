@@ -121,7 +121,10 @@ pub fn spark_parse_json(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
 pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_array = match &args[0] {
-        ColumnarValue::Array(array) => array.as_any().downcast_ref::<UserDefinedArray>().expect("Expected a UserDefinedArray"),
+        ColumnarValue::Array(array) => array
+            .as_any()
+            .downcast_ref::<UserDefinedArray>()
+            .expect("Expected a UserDefinedArray"),
         ColumnarValue::Scalar(_) => unreachable!(),
     };
 
@@ -153,7 +156,9 @@ pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarVa
 
     let output = StringArray::from_iter(json_array.iter().map(|value| {
         value.as_ref().and_then(|value| -> Option<Cow<str>> {
-            let json_value = value.downcast_ref::<ParsedJsonValue>().expect("Expected a ParsedJsonValue");
+            let json_value = value
+                .downcast_ref::<ParsedJsonValue>()
+                .expect("Expected a ParsedJsonValue");
             match json_value {
                 ParsedJsonValue::SerdeJson(v) => evaluator
                     .evaluate_with_value_serde_json(v)
@@ -186,7 +191,9 @@ pub fn spark_get_parsed_json_simple_field(
 
     let output = StringArray::from_iter(json_array.iter().map(|value| {
         value.as_ref().and_then(|value| {
-            let json_value = value.downcast_ref::<ParsedJsonValue>().expect("Expected a ParsedJsonValue");
+            let json_value = value
+                .downcast_ref::<ParsedJsonValue>()
+                .expect("Expected a ParsedJsonValue");
             match json_value {
                 ParsedJsonValue::SerdeJson(v) => v
                     .as_object()
@@ -214,7 +221,9 @@ fn parse_fallback(json_path: &str, json_array: &UserDefinedArray) -> Result<Stri
         let mut fallback_jsons_array = StringBuilder::new();
         for json in json_array.iter().flat_map(|value| {
             value.as_ref().and_then(|value| -> Option<&str> {
-                let json_value = value.downcast_ref::<ParsedJsonValue>().expect("Expected a ParsedJsonValue");
+                let json_value = value
+                    .downcast_ref::<ParsedJsonValue>()
+                    .expect("Expected a ParsedJsonValue");
                 if let ParsedJsonValue::Fallback(json) = json_value {
                     return Some(json.as_ref());
                 }
@@ -555,7 +564,9 @@ impl HiveGetJsonObjectMatcher {
                         .flat_map(|r| {
                             // keep consistent with hive UDFJson
                             let iter: Box<dyn Iterator<Item = sonic_rs::Value>> = match r {
-                                v if v.is_array() => Box::new(v.into_array().expect("array").into_iter()),
+                                v if v.is_array() => {
+                                    Box::new(v.into_array().expect("array").into_iter())
+                                }
                                 other => Box::new(std::iter::once(other)),
                             };
                             iter
@@ -623,109 +634,73 @@ mod test {
 
         let path = "$.owner";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some("amy".to_owned())
         );
 
         let path = "$.  owner";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some("amy".to_owned())
         );
 
         let path = "$.store.bicycle.price";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some("19.95".to_owned())
         );
 
         let path = "$.  store.  bicycle.  price";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some("19.95".to_owned())
         );
 
         let path = "$.store.fruit[0]";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some(r#"{"weight":8,"type":"apple"}"#.to_owned())
         );
 
         let path = "$. store.  fruit[0]";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some(r#"{"weight":8,"type":"apple"}"#.to_owned())
         );
 
         let path = "$.store.fruit[1].weight";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some("9".to_owned())
         );
 
         let path = "$.store.fruit[*]";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some(r#"[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}]"#.to_owned())
         );
 
         let path = "$. store.  fruit[*]";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some(r#"[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}]"#.to_owned())
         );
 
         let path = "$.store.fruit.[1].type";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some("pear".to_owned())
         );
 
         let path = "$. store.  fruit.  [1]. type";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             Some("pear".to_owned())
         );
 
         let path = "$.non_exist_key";
         assert_eq!(
-            HiveGetJsonObjectEvaluator::try_new(path)
-                ?
-                .evaluate(input)
-                ?,
+            HiveGetJsonObjectEvaluator::try_new(path)?.evaluate(input)?,
             None
         );
         Ok(())

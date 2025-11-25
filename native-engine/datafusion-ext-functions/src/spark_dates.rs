@@ -221,10 +221,7 @@ mod tests {
             Some(1975),
             None,
         ]));
-        assert_eq!(
-            &spark_year(&args)?.into_array(1)?,
-            &expected_ret
-        );
+        assert_eq!(&spark_year(&args)?.into_array(1)?, &expected_ret);
         Ok(())
     }
 
@@ -234,15 +231,12 @@ mod tests {
         let args = vec![ColumnarValue::Array(input)];
         let expected_ret: ArrayRef =
             Arc::new(Int32Array::from(vec![Some(1), Some(2), Some(3), None]));
-        assert_eq!(
-            &spark_month(&args)?.into_array(1)?,
-            &expected_ret
-        );
+        assert_eq!(&spark_month(&args)?.into_array(1)?, &expected_ret);
         Ok(())
     }
 
     #[test]
-    fn test_spark_day() -> Result<()>  {
+    fn test_spark_day() -> Result<()> {
         let input = Arc::new(Date32Array::from(vec![
             Some(0),
             Some(10),
@@ -260,15 +254,12 @@ mod tests {
             Some(10),
             None,
         ]));
-        assert_eq!(
-            &spark_day(&args)?.into_array(1)?,
-            &expected_ret
-        );
+        assert_eq!(&spark_day(&args)?.into_array(1)?, &expected_ret);
         Ok(())
     }
 
     #[test]
-    fn test_spark_quarter_basic() -> Result<()>  {
+    fn test_spark_quarter_basic() -> Result<()> {
         // Date32 days relative to 1970-01-01:
         //  0   -> 1970-01-01 (Q1)
         //  40  -> ~1970-02-10 (Q1)
