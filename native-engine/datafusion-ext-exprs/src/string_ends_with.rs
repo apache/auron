@@ -131,7 +131,7 @@ mod test {
     use crate::string_ends_with::StringEndsWithExpr;
 
     #[test]
-    fn test_array() {
+    fn test_array() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("abrrbrr".to_string()),
             Some("rrjndebcsabdji".to_string()),
@@ -167,10 +167,11 @@ mod test {
             Some(false),
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 
     #[test]
-    fn test_scalar_string() {
+    fn test_scalar_string() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // create a StringArray from the vector
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("Hello, Rust".to_string()),
@@ -208,5 +209,6 @@ mod test {
             Some(false),
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 }

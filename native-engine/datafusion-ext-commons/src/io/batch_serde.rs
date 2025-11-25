@@ -660,7 +660,7 @@ mod test {
     };
 
     #[test]
-    fn test_write_and_read_batch() {
+    fn test_write_and_read_batch() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let array1: ArrayRef = Arc::new(StringArray::from_iter([
             Some("20220101".to_owned()),
             Some("20220102你好🍹".to_owned()),
@@ -691,7 +691,7 @@ mod test {
         write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema())??;
+            read_batch(&mut cursor, &batch.schema()).unwrap().unwrap();
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
@@ -703,15 +703,16 @@ mod test {
         write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema())??;
+            read_batch(&mut cursor, &batch.schema()).expect("read_batch").expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             sliced
         );
+        Ok(())
     }
 
     #[test]
-    fn test_write_and_read_batch_for_list() {
+    fn test_write_and_read_batch_for_list() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let data = vec![
             Some(vec![Some(0), Some(1), Some(2)]),
             None,
@@ -745,7 +746,7 @@ mod test {
         write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema())??;
+            read_batch(&mut cursor, &batch.schema()).expect("read_batch").expect("non-empty");
         assert_batches_eq!(
             vec![
                 "+-----------+-----------+",
@@ -766,7 +767,7 @@ mod test {
         write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema())??;
+            read_batch(&mut cursor, &batch.schema()).expect("read_batch").expect("non-empty");
         assert_batches_eq!(
             vec![
                 "+----------+----------+",
@@ -778,10 +779,11 @@ mod test {
             ],
             &[recover_named_batch(decoded_num_rows, &decoded_cols, sliced.schema())?]
         );
+        Ok(())
     }
 
     #[test]
-    fn test_write_and_read_batch_for_map() {
+    fn test_write_and_read_batch_for_map() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let map_array: ArrayRef = Arc::new(
             MapArray::new_from_strings(
                 ["00", "11", "22", "33", "44", "55", "66", "77"].into_iter(),
@@ -811,7 +813,7 @@ mod test {
         write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema())??;
+            read_batch(&mut cursor, &batch.schema()).expect("read_batch").expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
@@ -823,15 +825,16 @@ mod test {
         write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema())??;
+            read_batch(&mut cursor, &batch.schema()).expect("read_batch").expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, sliced.schema())?,
             sliced
         );
+        Ok(())
     }
 
     #[test]
-    fn test_write_and_read_batch_for_struct() {
+    fn test_write_and_read_batch_for_struct() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let c1: ArrayRef = Arc::new(BooleanArray::from(vec![false, false, true, true]));
         let c2: ArrayRef = Arc::new(Int32Array::from(vec![42, 28, 19, 31]));
         let c3: ArrayRef = Arc::new(BooleanArray::from(vec![None, None, None, Some(true)]));
@@ -851,7 +854,7 @@ mod test {
         write_batch(batch.num_rows(), batch.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema())??;
+            read_batch(&mut cursor, &batch.schema()).expect("read_batch").expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             batch
@@ -863,10 +866,11 @@ mod test {
         write_batch(sliced.num_rows(), sliced.columns(), &mut buf)?;
         let mut cursor = Cursor::new(buf);
         let (decoded_num_rows, decoded_cols) =
-            read_batch(&mut cursor, &batch.schema())??;
+            read_batch(&mut cursor, &batch.schema()).expect("read_batch").expect("non-empty");
         assert_eq!(
             recover_named_batch(decoded_num_rows, &decoded_cols, batch.schema())?,
             sliced
         );
+        Ok(())
     }
 }

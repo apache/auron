@@ -28,7 +28,7 @@ mod tests {
     use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_sorted_eq,
-        common::JoinSide,
+        common::{JoinSide, Result},
         physical_expr::expressions::Column,
         physical_plan::{ExecutionPlan, common, joins::utils::*, test::TestMemoryExec},
         prelude::SessionContext,
@@ -80,13 +80,13 @@ mod tests {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Result<Arc<dyn ExecutionPlan>> {
+    ) -> Result<Arc<dyn ExecutionPlan>, Box<dyn std::error::Error>> {
         let batch = build_table_i32(a, b, c)?;
         let schema = batch.schema();
         Ok(Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?))
     }
 
-    fn build_table_from_batches(batches: Vec<RecordBatch>) -> Result<Arc<dyn ExecutionPlan>> {
+    fn build_table_from_batches(batches: Vec<RecordBatch>) -> Result<Arc<dyn ExecutionPlan>, Box<dyn std::error::Error>> {
         let first = batches.into_iter().next().ok_or_else(|| DataFusionError::Internal("empty batches".into()))?;
         let schema = first.schema();
         Ok(Arc::new(TestMemoryExec::try_new(&[batches], schema, None)?))
@@ -96,7 +96,7 @@ mod tests {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Result<Arc<dyn ExecutionPlan>> {
+    ) -> Result<Arc<dyn ExecutionPlan>, Box<dyn std::error::Error>> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Date32, false),
             Field::new(b.0, DataType::Date32, false),
@@ -120,7 +120,7 @@ mod tests {
         a: (&str, &Vec<i64>),
         b: (&str, &Vec<i64>),
         c: (&str, &Vec<i64>),
-    ) -> Result<Arc<dyn ExecutionPlan>> {
+    ) -> Result<Arc<dyn ExecutionPlan>, Box<dyn std::error::Error>> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Date64, false),
             Field::new(b.0, DataType::Date64, false),

@@ -25,7 +25,6 @@ use arrow::{
     datatypes::{DataType, Schema},
     record_batch::RecordBatch,
 };
-use arrow::array::DictionaryArray;
 use datafusion::{
     common::{Result, ScalarValue},
     logical_expr::ColumnarValue,
@@ -129,7 +128,7 @@ mod test {
     use crate::string_contains::StringContainsExpr;
 
     #[test]
-    fn test_ok() {
+    fn test_ok() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // create a StringArray from the vector
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("abrr".to_string()),
@@ -167,10 +166,11 @@ mod test {
             None,
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 
     #[test]
-    fn test_scalar_string() {
+    fn test_scalar_string() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // create a StringArray from the vector
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("abrr".to_string()),
@@ -205,5 +205,6 @@ mod test {
             Some(true),
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 }
