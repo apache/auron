@@ -397,6 +397,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
              |CAST(NULL AS STRING)     AS null_str,
              |CAST(NULL AS INT)        AS null_int
              |""".stripMargin)
+
       val sqlStr = s"""SELECT
                       |nvl2(null_int, int_val, 999)          AS int_only,
                       |nvl2(1,  str_val, int_val)            AS has_str,
