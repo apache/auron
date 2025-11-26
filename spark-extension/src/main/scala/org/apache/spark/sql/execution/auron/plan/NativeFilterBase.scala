@@ -32,9 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.IsNotNull
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.FilterExec
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution.{ExplainUtils, FilterExec, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 import org.apache.auron.metric.SparkMetricNode
@@ -110,5 +108,13 @@ abstract class NativeFilterBase(condition: Expression, override val child: Spark
         PhysicalPlanNode.newBuilder().setFilter(nativeFilterExec).build()
       },
       friendlyName = "NativeRDD.Filter")
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Input", child.output)}
+       |Condition : ${condition}
+       |""".stripMargin
   }
 }
