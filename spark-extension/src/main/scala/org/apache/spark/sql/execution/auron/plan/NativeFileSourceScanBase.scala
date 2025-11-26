@@ -160,8 +160,17 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
         case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
         case (_, _) => false
       }
-      .map { case (key, value) =>
-        s"$key: ${Utils.redact(conf.stringRedactionPattern, value)}"
+      .map {
+        case (key, _) if (key.equals("Location")) =>
+          val location = basedFileScan.relation.location
+          val numPaths = location.rootPaths.length
+          val abbreviatedLocation = if (numPaths <= 1) {
+            location.rootPaths.mkString("[", ", ", "]")
+          } else {
+            "[" + location.rootPaths.head + s", ... ${numPaths - 1} entries]"
+          }
+          s"$key: ${location.getClass.getSimpleName} ${Utils.redact(conf.stringRedactionPattern, abbreviatedLocation)}"
+        case (key, value) => s"$key: ${Utils.redact(conf.stringRedactionPattern, value)}"
       }
 
     s"""
