@@ -31,8 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution.{ExplainUtils, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.auron.plan.NativeProjectBase.getNativeProjectBuilder
 import org.apache.spark.sql.execution.metric.SQLMetric
 
@@ -88,6 +87,14 @@ abstract class NativeProjectBase(projectList: Seq[NamedExpression], override val
         PhysicalPlanNode.newBuilder().setProjection(nativeProjectExec).build()
       },
       friendlyName = "NativeRDD.Project")
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", projectList)}
+       |${ExplainUtils.generateFieldString("Input", child.output)}
+       |""".stripMargin
   }
 }
 
