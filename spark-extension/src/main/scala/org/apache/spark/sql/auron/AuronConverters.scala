@@ -474,7 +474,8 @@ object AuronConverters extends Logging {
         if (!enableScanParquetTimestamp) {
           assert(
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
-            "Parquet scan with timestamp type is not supported")
+            "Parquet scan with timestamp type is not supported. " +
+            "Set spark.auron.enable.scan.parquet.timestamp=true to enable timestamp support or remove timestamp columns from the query.")
         }
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
       case p if p.getClass.getName.endsWith("OrcFileFormat") =>
