@@ -474,8 +474,10 @@ object AuronConverters extends Logging {
         if (!enableScanParquetTimestamp) {
           assert(
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
-            "Parquet scan with timestamp type is not supported. " +
-            "Set spark.auron.enable.scan.parquet.timestamp=true to enable timestamp support or remove timestamp columns from the query.")
+            s"Parquet scan with timestamp type is not supported for table: ${tableIdentifier
+              .getOrElse("unknown")}. " +
+              "Set spark.auron.enable.scan.parquet.timestamp=true to enable timestamp support " +
+              "or remove timestamp columns from the query.")
         }
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
       case p if p.getClass.getName.endsWith("OrcFileFormat") =>
@@ -483,7 +485,10 @@ object AuronConverters extends Logging {
         if (!enableScanOrcTimestamp) {
           assert(
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
-            "ORC scan with timestamp type is not supported. Set spark.auron.enable.scan.orc.timestamp=true to enable timestamp support or remove timestamp columns from the query.")
+            s"ORC scan with timestamp type is not supported for tableIdentifier: ${tableIdentifier
+              .getOrElse("unknown")}. " +
+              "Set spark.auron.enable.scan.orc.timestamp=true to enable timestamp support " +
+              "or remove timestamp columns from the query.")
         }
         addRenameColumnsExec(Shims.get.createNativeOrcScanExec(exec))
       case p =>
