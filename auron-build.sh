@@ -395,23 +395,37 @@ JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk '{print $3}' | tr -d '"')
 PROJECT_VERSION=$(./build/mvn help:evaluate -N -Dexpression=project.version -Pspark-${SPARK_VER} -q -DforceStdout 2>/dev/null)
 RUST_VERSION=$(rustc --version | awk '{print $2}')
 
-declare -A build_info=(
-  ["spark.version"]="${SPARK_VER}"
-  ["rust.version"]="${RUST_VERSION}"
-  ["java.version"]="${JAVA_VERSION}"
-  ["project.version"]="${PROJECT_VERSION}"
-  ["scala.version"]="${SCALA_VER}"
-  ["celeborn.version"]="${CELEBORN_VER}"
-  ["uniffle.version"]="${UNIFFLE_VER}"
-  ["paimon.version"]="${PAIMON_VER}"
-  ["flink.version"]="${FLINK_VER}"
-  ["iceberg.version"]="${ICEBERG_VER}"
-  ["build.timestamp"]="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-)
+get_build_info() {
+  case "$1" in
+    "spark.version") echo "${SPARK_VER}" ;;
+    "rust.version") echo "${RUST_VERSION}" ;;
+    "java.version") echo "${JAVA_VERSION}" ;;
+    "project.version") echo "${PROJECT_VERSION}" ;;
+    "scala.version") echo "${SCALA_VER}" ;;
+    "celeborn.version") echo "${CELEBORN_VER}" ;;
+    "uniffle.version") echo "${UNIFFLE_VER}" ;;
+    "paimon.version") echo "${PAIMON_VER}" ;;
+    "flink.version") echo "${FLINK_VER}" ;;
+    "iceberg.version") echo "${ICEBERG_VER}" ;;
+    "build.timestamp") echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" ;;
+    *) echo "" ;;
+  esac
+}
 
 true > "$BUILD_INFO_FILE"
-for key in "${!build_info[@]}"; do
-  value="${build_info[$key]}"
+for key in \
+  "spark.version" \
+  "rust.version" \
+  "java.version" \
+  "project.version" \
+  "scala.version" \
+  "celeborn.version" \
+  "uniffle.version" \
+  "paimon.version" \
+  "flink.version" \
+  "iceberg.version" \
+  "build.timestamp"; do
+  value="$(get_build_info "$key")"
   if [[ -n "$value" ]]; then
     echo "$key=$value" >> "$BUILD_INFO_FILE"
   fi
