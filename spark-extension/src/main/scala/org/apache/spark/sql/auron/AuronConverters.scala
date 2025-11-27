@@ -483,7 +483,7 @@ object AuronConverters extends Logging {
         if (!enableScanOrcTimestamp) {
           assert(
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
-            "ORC scan with timestamp type is not supported")
+            "ORC scan with timestamp type is not supported. Set spark.auron.enable.scan.orc.timestamp=true to enable timestamp support or remove timestamp columns from the query.")
         }
         addRenameColumnsExec(Shims.get.createNativeOrcScanExec(exec))
       case p =>
