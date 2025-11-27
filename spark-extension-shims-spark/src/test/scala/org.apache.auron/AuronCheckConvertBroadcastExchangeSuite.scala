@@ -16,8 +16,7 @@
  */
 package org.apache.spark.sql.auron
 
-import org.apache.spark.sql.{AuronQueryTest, Row, SparkSession}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeExec
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 
