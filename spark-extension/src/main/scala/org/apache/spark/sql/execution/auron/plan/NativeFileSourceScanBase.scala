@@ -153,6 +153,10 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
 
   override protected def doCanonicalize(): SparkPlan = basedFileScan.canonicalized
 
+  /**
+   * Match Spark’s DataSourceScanExec verbose output for consistency.
+   * @see <a href="https://github.com/apache/spark/blob/65c3d1cb18c45528d8090ac905d87a8dcd779aa7/sql/core/src/main/scala/org/apache/spark/sql/execution/DataSourceScanExec.scala#L426-L449">Spark DataSourceScanExec</a>
+   */
   override def verboseStringWithOperatorId(): String = {
     val metadataStr = basedFileScan.metadata.toSeq.sorted
       .filterNot {
