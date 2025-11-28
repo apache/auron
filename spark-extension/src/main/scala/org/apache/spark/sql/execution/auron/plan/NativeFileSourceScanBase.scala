@@ -153,37 +153,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
 
   override protected def doCanonicalize(): SparkPlan = basedFileScan.canonicalized
 
-  /**
-   * Match Spark’s DataSourceScanExec verbose output for consistency.
-   * @see
-   *   <a
-   *   href="https://github.com/apache/spark/blob/65c3d1cb18c45528d8090ac905d87a8dcd779aa7/sql/core/src/main/scala/org/apache/spark/sql/execution/DataSourceScanExec.scala#L426-L449">Spark
-   *   DataSourceScanExec</a>
-   */
   override def verboseStringWithOperatorId(): String = {
-    val metadataStr = basedFileScan.metadata.toSeq.sorted
-      .filterNot {
-        case (_, value) if (value.isEmpty || value.equals("[]")) => true
-        case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
-        case (_, _) => false
-      }
-      .map {
-        case (key, _) if (key.equals("Location")) =>
-          val location = basedFileScan.relation.location
-          val numPaths = location.rootPaths.length
-          val abbreviatedLocation = if (numPaths <= 1) {
-            location.rootPaths.mkString("[", ", ", "]")
-          } else {
-            "[" + location.rootPaths.head + s", ... ${numPaths - 1} entries]"
-          }
-          s"$key: ${location.getClass.getSimpleName} ${Utils.redact(conf.stringRedactionPattern, abbreviatedLocation)}"
-        case (key, value) => s"$key: ${Utils.redact(conf.stringRedactionPattern, value)}"
-      }
-
-    s"""
-       |$formattedNodeName
-       |${ExplainUtils.generateFieldString("Output", output)}
-       |${metadataStr.mkString("\n")}
-       |""".stripMargin
+    basedFileScan.verboseStringWithOperatorId()
   }
 }
