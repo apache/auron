@@ -443,4 +443,26 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       checkSparkAnswerAndOperator(functions)
     }
   }
+
+  test("upper and lower functions") {
+    withSQLConf() {
+      withTable("t1") {
+        sql(s"CREATE TABLE t1(id INT, name STRING) USING parquet")
+        sql(s"""
+             |INSERT INTO t1 VALUES
+             | (1, 'fooBar'),
+             | (2, 'foo Bar foo-bar FOO-BAR foO-barR'),
+             | (3, 'straße'),
+             | (4, 'CAFÉ'),
+             | (5, '世界'),
+             | (6, '世 界'),
+             | (7, ''),
+             | (8, NULL)
+            """.stripMargin)
+
+        checkSparkAnswerAndOperator(
+          s"SELECT id, name, UPPER(name) AS up, LOWER(name) AS low FROM t1")
+      }
+    }
+  }
 }
