@@ -118,6 +118,19 @@ object NativeConverters extends Logging {
     }
   }
 
+  def existTimestampType(dataType: DataType): Boolean = {
+    dataType match {
+      case TimestampType =>
+        true
+      case at: ArrayType => existTimestampType(at.elementType)
+      case m: MapType =>
+        existTimestampType(m.keyType) || existTimestampType(m.valueType)
+      case s: StructType =>
+        s.fields.exists(e => existTimestampType(e.dataType))
+      case _ => false
+    }
+  }
+
   def roundRobinTypeSupported(dataType: DataType): Boolean = dataType match {
     case MapType(_, _, _) => false
     case ArrayType(elementType, _) => roundRobinTypeSupported(elementType)
@@ -864,7 +877,7 @@ object NativeConverters extends Logging {
       case e @ NullIf(left, right, _) =>
         buildExtScalarFunction("Spark_NullIf", left :: right :: Nil, e.dataType)
       case Md5(_1) =>
-        buildExtScalarFunction("MD5", Seq(unpackBinaryTypeCast(_1)), StringType)
+        buildExtScalarFunction("Spark_MD5", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Reverse(_1) =>
         buildScalarFunction(pb.ScalarFunction.Reverse, Seq(unpackBinaryTypeCast(_1)), StringType)
       case InitCap(_1) =>

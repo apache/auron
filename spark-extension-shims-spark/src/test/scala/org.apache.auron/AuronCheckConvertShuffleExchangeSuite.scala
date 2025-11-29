@@ -14,18 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron
 
-import org.apache.spark.sql.{QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{AuronQueryTest, Row, SparkSession}
+import org.apache.spark.sql.auron.AuronConverters
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AuronCheckConvertShuffleExchangeSuite
-    extends QueryTest
+    extends AuronQueryTest
     with SharedSparkSession
-    with AuronSQLTestHelper
-    with org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper {
+    with AuronSQLTestHelper {
 
   test(
     "test set auron shuffle manager convert to native shuffle exchange where set spark.auron.enable is true") {

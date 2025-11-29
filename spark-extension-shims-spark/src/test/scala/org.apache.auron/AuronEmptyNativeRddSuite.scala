@@ -14,13 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron
 
+import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.auron.{AuronConverters, EmptyNativeRDD, NativeRDD}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.auron.plan.{NativeOrcScanExec, NativeParquetScanExec}
 
 class AuronEmptyNativeRddSuite
-    extends org.apache.spark.sql.QueryTest
+    extends AuronQueryTest
     with BaseAuronSQLSuite
     with AuronSQLTestHelper {
 

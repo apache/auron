@@ -14,39 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
-
-import java.io.File
+package org.apache.auron
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.execution.ui.AuronSQLAppStatusListener
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.test.SharedSparkSession
 
-class BuildinfoInSparkUISuite
-    extends org.apache.spark.sql.QueryTest
-    with BuildInfoAuronSQLSuite
-    with AuronSQLTestHelper {
-
-  var testDir: File = _
+trait BaseAuronSQLSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = {
-    super.sparkConf.set("spark.eventLog.dir", testDir.toString)
-  }
-
-  override protected def beforeAll(): Unit = {
-    testDir = Utils.createTempDir(namePrefix = "spark-events")
-    super.beforeAll()
-  }
-
-  override protected def afterAll(): Unit = {
-    Utils.deleteRecursively(testDir)
-  }
-
-  test("test build info in spark UI ") {
-    val listeners = spark.sparkContext.listenerBus.findListenersByClass[AuronSQLAppStatusListener]
-    assert(listeners.size === 1)
-    val listener = listeners(0)
-    assert(listener.getAuronBuildInfo() == 1)
+    super.sparkConf
+      .set("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
+      .set(
+        "spark.shuffle.manager",
+        "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
+      .set("spark.memory.offHeap.enabled", "false")
+      .set("spark.auron.enable", "true")
   }
 
 }
