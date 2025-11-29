@@ -27,3 +27,33 @@ pub fn nulls_to_false(is_boolean: &BooleanArray) -> BooleanArray {
         None => is_boolean.clone(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use arrow::array::{Array, BooleanArray};
+
+    use super::nulls_to_false;
+
+    #[test]
+    fn converts_nulls_to_false() {
+        let input = BooleanArray::from(vec![Some(true), None, Some(false)]);
+        let output = nulls_to_false(&input);
+
+        assert!(output.nulls().is_none());
+
+        let got: Vec<Option<bool>> = output.iter().collect();
+        let expected = vec![Some(true), Some(false), Some(false)];
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn preserves_when_no_nulls() {
+        let input = BooleanArray::from(vec![Some(false), Some(true)]);
+        let output = nulls_to_false(&input);
+
+        assert!(output.nulls().is_none());
+        let got: Vec<Option<bool>> = output.iter().collect();
+        let expected = vec![Some(false), Some(true)];
+        assert_eq!(got, expected);
+    }
+}
