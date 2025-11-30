@@ -31,11 +31,11 @@
   <description>Apache Auron Iceberg ${icebergVersion} ${scalaVersion}</description>
 
   <dependencies>
-      <dependency>
-          <groupId>org.apache.auron</groupId>
-          <artifactId>spark-extension-shims-spark_2.12</artifactId>
-          <version>${project.version}</version>
-      </dependency>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>spark-extension-shims-spark_2.12</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-spark-runtime-${shortSparkVersion}_${scalaVersion}</artifactId>

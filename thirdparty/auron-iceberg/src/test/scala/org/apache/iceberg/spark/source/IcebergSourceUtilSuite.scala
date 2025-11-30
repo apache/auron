@@ -21,9 +21,9 @@ import org.apache.spark.sql.types.StructType
 import org.scalatest.funsuite.AnyFunSuite
 
 class IcebergSourceUtilSuite extends AnyFunSuite {
-
   test("isIcebergScan returns true for SparkBatchQueryScan") {
-    val icebergScan = new SparkBatchQueryScan(null, null, null, null, null, new java.util.ArrayList(), null)
+    val icebergScan =
+      new SparkBatchQueryScan(null, null, null, null, null, new java.util.ArrayList(), null)
     assert(IcebergSourceUtil.isIcebergScan(icebergScan) === true)
   }
 
