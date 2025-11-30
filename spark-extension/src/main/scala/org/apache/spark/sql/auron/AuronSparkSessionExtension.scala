@@ -19,6 +19,7 @@ package org.apache.spark.sql.auron
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -60,6 +61,11 @@ object AuronSparkSessionExtension extends Logging {
     logInfo(s" +${"-" * depth} $nodeName (convertible=$convertible, strategy=$strategy)")
     exec.children.foreach(dumpSimpleSparkPlanTreeNode(_, depth + 1))
   }
+
+  // Currently we assume the Auron supported shuffle manager has 'Auron' in its name.
+  def isShuffleManagerSupported(shuffleManager: ShuffleManager) = {
+    shuffleManager.getClass.getSimpleName.contains("Auron")
+  }
 }
 
 case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRule with Logging {
@@ -68,6 +74,14 @@ case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
   override def preColumnarTransitions: Rule[SparkPlan] = {
     new Rule[SparkPlan] {
       override def apply(sparkPlan: SparkPlan): SparkPlan = {
+        val shuffleManager = SparkEnv.get.shuffleManager
+        if (SparkEnv.get.conf.get(auronEnabledKey) &&
+          !isShuffleManagerSupported(shuffleManager)) {
+          throw new IllegalStateException(
+            s"${auronEnabledKey.key} is true, but the shuffle manager " +
+              s"isn't supported by Auron: ${shuffleManager.getClass.getName}")
+        }
+
         if (!sparkPlan.conf.getConf(auronEnabledKey)) {
           return sparkPlan // performs no conversion if auron is not enabled
         }
