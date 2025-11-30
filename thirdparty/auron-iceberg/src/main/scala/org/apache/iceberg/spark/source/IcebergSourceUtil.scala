@@ -16,12 +16,11 @@
  */
 package org.apache.iceberg.spark.source
 
+import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
+
 import org.apache.iceberg._
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.types.StructType
-
-import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
 
 object IcebergSourceUtil {
 
@@ -43,7 +42,8 @@ object IcebergSourceUtil {
     getScanAsSparkBatchQueryScan(scan).table()
   }
 
-  def getInputPartitionAsSparkInputPartition(inputPartition: InputPartition): SparkInputPartition = {
+  def getInputPartitionAsSparkInputPartition(
+      inputPartition: InputPartition): SparkInputPartition = {
     inputPartition match {
       case s: SparkInputPartition => s
       case _ => throw new IllegalArgumentException("InputPartition is not a SparkInputPartition")
@@ -56,20 +56,21 @@ object IcebergSourceUtil {
     case t if t.forall(_.isInstanceOf[CombinedScanTask]) =>
       t.iterator.flatMap(_.asCombinedScanTask().tasks().asScala).toList
     case _ =>
-      throw new UnsupportedOperationException(
-        "Unsupported iceberg scan task type"
-      )
+      throw new UnsupportedOperationException("Unsupported iceberg scan task type")
   }
 
+  // Access Spark private API from within the Iceberg package to avoid accessibility errors
+  def getReadSchema(scan: Scan): StructType = {
+    getScanAsSparkBatchQueryScan(scan).readSchema
+  }
 
-  // Extract file format from FileScanTask (Parquet/ORC)
-  def getFileFormat(fileScanTask: FileScanTask): String = fileScanTask.file().format().toString
+  def planInputPartitions(scan: Scan): Array[InputPartition] = {
+    getScanAsSparkBatchQueryScan(scan).toBatch.planInputPartitions()
+  }
 
-  // Extract file paths and splits from InputPartition
-
-  // Convert Iceberg schema to Spark schema
-  def convertSchema(icebergSchema: Schema): StructType = ???
-
-  // Extract residual filters/predicates
-  def extractResidualExpressions(fileScanTask: FileScanTask): Seq[Expression] = ???
+  def getFileScanTasksFromInputPartition(inputPartition: InputPartition): Seq[FileScanTask] = {
+    val sip = getInputPartitionAsSparkInputPartition(inputPartition)
+    val tasks = sip.taskGroup[ScanTask]().tasks().asScala
+    getFileScanTasks(tasks.toList)
+  }
 }

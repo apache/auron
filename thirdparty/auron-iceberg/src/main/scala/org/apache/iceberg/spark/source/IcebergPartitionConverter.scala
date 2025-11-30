@@ -16,15 +16,14 @@
  */
 package org.apache.iceberg.spark.source
 
+import java.nio.ByteBuffer
+
 import org.apache.iceberg.{FileScanTask, Table}
 import org.apache.iceberg.spark.SparkSchemaUtil
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.types.Decimal
-
-import java.nio.ByteBuffer
-import scala.jdk.CollectionConverters._
+import org.apache.spark.unsafe.types.UTF8String
 
 class IcebergPartitionValueConverter(table: Table) {
 
@@ -39,8 +38,7 @@ class IcebergPartitionValueConverter(table: Table) {
   require(
     partitionType.fields().size() == sparkPartitionSchema.fields.length,
     s"Mismatch between Iceberg partition fields (${partitionType.fields().size()}) " +
-      s"and Spark partition schema (${sparkPartitionSchema.fields.length})"
-  )
+      s"and Spark partition schema (${sparkPartitionSchema.fields.length})")
 
   private val fieldAccessors: Array[FieldAccessor] = {
     val sFields = sparkPartitionSchema.fields
@@ -56,19 +54,18 @@ class IcebergPartitionValueConverter(table: Table) {
       case _: DecimalType => classOf[java.math.BigDecimal]
       // Partition spec should only use primitives; anything else is a bug
       case other =>
-        throw new UnsupportedOperationException(
-          s"Unsupported Spark partition type: $other"
-        )
+        throw new UnsupportedOperationException(s"Unsupported Spark partition type: $other")
     }
 
     def converterFor(dt: DataType): Any => Any = dt match {
       case StringType =>
         (raw: Any) =>
           if (raw == null) null
-          else raw match {
-            case cs: CharSequence => UTF8String.fromString(cs.toString)
-            case other => UTF8String.fromString(other.toString)
-          }
+          else
+            raw match {
+              case cs: CharSequence => UTF8String.fromString(cs.toString)
+              case other => UTF8String.fromString(other.toString)
+            }
 
       case IntegerType | BooleanType | LongType | FloatType | DoubleType =>
         (raw: Any) => raw // already Catalyst-friendly primitives
@@ -86,18 +83,18 @@ class IcebergPartitionValueConverter(table: Table) {
       case BinaryType =>
         (raw: Any) =>
           if (raw == null) null
-          else raw match {
-            case bb: ByteBuffer =>
-              val dup = bb.duplicate()
-              val arr = new Array[Byte](dup.remaining())
-              dup.get(arr)
-              arr
-            case arr: Array[Byte] => arr
-            case other =>
-              throw new IllegalArgumentException(
-                s"Unexpected binary partition value type: ${other.getClass}"
-              )
-          }
+          else
+            raw match {
+              case bb: ByteBuffer =>
+                val dup = bb.duplicate()
+                val arr = new Array[Byte](dup.remaining())
+                dup.get(arr)
+                arr
+              case arr: Array[Byte] => arr
+              case other =>
+                throw new IllegalArgumentException(
+                  s"Unexpected binary partition value type: ${other.getClass}")
+            }
 
       case d: DecimalType =>
         (raw: Any) =>
@@ -114,16 +111,12 @@ class IcebergPartitionValueConverter(table: Table) {
       case other =>
         (_: Any) =>
           throw new UnsupportedOperationException(
-            s"Unsupported Spark partition type in converter: $other"
-          )
+            s"Unsupported Spark partition type in converter: $other")
     }
 
     sFields.map { field =>
       val dt = field.dataType
-      FieldAccessor(
-        javaClass = javaClassFor(dt),
-        convert = converterFor(dt)
-      )
+      FieldAccessor(javaClass = javaClassFor(dt), convert = converterFor(dt))
     }
   }
 
