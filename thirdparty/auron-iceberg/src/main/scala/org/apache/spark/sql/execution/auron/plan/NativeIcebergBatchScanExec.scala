@@ -47,14 +47,13 @@ import org.apache.auron.metric.SparkMetricNode
 /**
  * Native execution wrapper for Iceberg batch scans.
  *
- * Translates a Spark V2 Iceberg scan (SparkBatchQueryScan) into Auron's native
- * file scan plan and executes it via a NativeRDD. It constructs the corresponding
- * protobuf PhysicalPlanNode (ParquetScanExecNode or OrcScanExecNode), registers
- * Hadoop FS resources over the JNI bridge, and wires Spark input metrics to
- * native metrics.
+ * Translates a Spark V2 Iceberg scan (SparkBatchQueryScan) into Auron's native file scan plan and
+ * executes it via a NativeRDD. It constructs the corresponding protobuf PhysicalPlanNode
+ * (ParquetScanExecNode or OrcScanExecNode), registers Hadoop FS resources over the JNI bridge,
+ * and wires Spark input metrics to native metrics.
  *
- *
- * @param batchScanExec underlying Spark V2 BatchScanExec for the Iceberg source
+ * @param batchScanExec
+ *   underlying Spark V2 BatchScanExec for the Iceberg source
  */
 case class NativeIcebergBatchScanExec(batchScanExec: BatchScanExec)
     extends LeafExecNode
