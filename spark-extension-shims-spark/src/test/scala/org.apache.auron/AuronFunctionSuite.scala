@@ -19,6 +19,7 @@ package org.apache.auron
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.Row
 
 import org.apache.auron.util.AuronTestUtils
 
@@ -34,6 +35,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("sha2 function") {
+    // SPARK-36836: In Spark 3.0/3.1, sha2(..., 224) may produce garbled UTF instead of hex.
+    // For < 3.2, compare against known hex outputs directly; for >= 3.2, compare to Spark baseline.
     withTable("t1") {
       sql("create table t1 using parquet as select 'spark' as c1, '3.x' as version")
       val functions =
@@ -46,7 +49,21 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |  sha2(concat(c1, version), 512) as sha512
           |from t1
           |""".stripMargin
-      checkSparkAnswerAndOperator(functions)
+      if (AuronTestUtils.isSparkV32OrGreater) {
+        checkSparkAnswerAndOperator(functions)
+      } else {
+        val df = sql(functions)
+        // Expected hex for input concat('spark','3.x')
+        val expected = Seq(
+          Row(
+            "562d20689257f3f3a04ee9afb86d0ece2af106cf6c6e5e7d266043088ce5fbc0", // sha0 (256)
+            "562d20689257f3f3a04ee9afb86d0ece2af106cf6c6e5e7d266043088ce5fbc0", // sha256
+            "d0c8e9ccd5c7b3fdbacd2cfd6b4d65ca8489983b5e8c7c64cd77b634", // sha224
+            "77c1199808053619c29e9af2656e1ad2614772f6ea605d5757894d6aec2dfaf34ff6fd662def3b79e429e9ae5ecbfed1", // sha384
+            "c4e27d35517ca62243c1f322d7922dac175830be4668e8a1cf3befdcd287bb5b6f8c5f041c9d89e4609c8cfa242008c7c7133af1685f57bac9052c1212f1d089" // sha512
+          ))
+        checkAnswer(df, expected)
+      }
     }
   }
 
