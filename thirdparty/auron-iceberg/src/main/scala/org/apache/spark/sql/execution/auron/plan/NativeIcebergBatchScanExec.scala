@@ -16,19 +16,35 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import org.apache.spark.sql.auron.{NativeRDD, NativeSupports}
+import org.apache.iceberg.spark.source.IcebergSourceUtil
+import org.apache.spark.sql.auron.{NativeHelper, NativeRDD, NativeSupports}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.types.StructType
 
 case class NativeIcebergBatchScanExec(batchScanExec: BatchScanExec)
     extends LeafExecNode
     with NativeSupports {
 
-  override lazy val metrics: Map[String, SQLMetric] = ???
+  override lazy val metrics: Map[String, SQLMetric] = NativeHelper.getNativeFileScanMetrics(sparkContext)
 
   override protected def doExecuteNative(): NativeRDD = ???
 
   override def output: Seq[Attribute] = batchScanExec.output
+
+  override def outputPartitioning: Partitioning = batchScanExec.outputPartitioning
+
+  private lazy val icebergScan = IcebergSourceUtil.getScanAsSparkBatchQueryScan(batchScanExec.scan)
+
+  private lazy val icebergTable = IcebergSourceUtil.getTableFromScan(icebergScan)
+
+  //  Convert InputPartitions to FilePartitions
+  private lazy val filePartitions: Array[FilePartition] = IcebergUtils.getFilePartitions()
+
+  private lazy val readDataSchema: StructType = icebergScan.readSchema
+
 }

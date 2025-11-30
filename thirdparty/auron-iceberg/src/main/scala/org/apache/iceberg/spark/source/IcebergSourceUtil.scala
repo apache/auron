@@ -16,8 +16,10 @@
  */
 package org.apache.iceberg.spark.source
 
-import org.apache.iceberg.Table
-import org.apache.spark.sql.connector.read.Scan
+import org.apache.iceberg.{FileScanTask, Schema, Table}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.read.{InputPartition, Scan}
+import org.apache.spark.sql.types.StructType
 
 object IcebergSourceUtil {
 
@@ -38,4 +40,17 @@ object IcebergSourceUtil {
   def getTableFromScan(scan: Scan): Table = {
     getScanAsSparkBatchQueryScan(scan).table()
   }
+
+  // Extract file format from FileScanTask (Parquet/ORC)
+  def getFileFormat(fileScanTask: FileScanTask): String = fileScanTask.file().format().toString
+
+  // Extract file paths and splits from InputPartition
+  def extractFileScanTasks(partition: InputPartition): Seq[FileScanTask] = ???
+
+  // Convert Iceberg schema to Spark schema
+  def convertSchema(icebergSchema: Schema): StructType = ???
+
+  // Extract residual filters/predicates
+  def extractResidualExpressions(fileScanTask: FileScanTask): Seq[Expression] = ???
+
 }
