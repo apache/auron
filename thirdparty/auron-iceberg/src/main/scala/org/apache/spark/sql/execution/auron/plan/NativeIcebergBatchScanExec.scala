@@ -16,18 +16,24 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import org.apache.iceberg.spark.source.IcebergSourceUtil
-import org.apache.spark.sql.auron.{NativeHelper, NativeRDD, NativeSupports}
+import org.apache.iceberg.spark.SparkSchemaUtil
+import org.apache.iceberg.spark.source.{IcebergPartitionValueConverter, IcebergSourceUtil}
+import org.apache.iceberg.{FileScanTask, ScanTask}
+import org.apache.spark.sql.auron.{NativeHelper, NativeRDD, NativeSupports, Shims}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 
+import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
+
 case class NativeIcebergBatchScanExec(batchScanExec: BatchScanExec)
-    extends LeafExecNode
+  extends LeafExecNode
     with NativeSupports {
 
   override lazy val metrics: Map[String, SQLMetric] = NativeHelper.getNativeFileScanMetrics(sparkContext)
@@ -42,9 +48,43 @@ case class NativeIcebergBatchScanExec(batchScanExec: BatchScanExec)
 
   private lazy val icebergTable = IcebergSourceUtil.getTableFromScan(icebergScan)
 
-  //  Convert InputPartitions to FilePartitions
-  private lazy val filePartitions: Array[FilePartition] = IcebergUtils.getFilePartitions()
+  private lazy val filePartitions: Seq[FilePartition] = getFilePartitions
 
   private lazy val readDataSchema: StructType = icebergScan.readSchema
 
+  private val partitionValueConverter = new IcebergPartitionValueConverter(icebergTable)
+
+  private def getFilePartitions: Seq[FilePartition] = {
+    val sparkSession = Shims.get.getSqlContext(batchScanExec).sparkSession
+    val maxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
+
+    val inputPartitions = icebergScan.toBatch.planInputPartitions()
+    val partitionedFiles = inputPartitions.flatMap { partition =>
+      val fileScanTasks = extractFileScanTasks(partition)
+      fileScanTasks.map { fileScanTask =>
+        val filePath = fileScanTask.file().location();
+        val start = fileScanTask.start();
+        val length = fileScanTask.length();
+
+        val partitionValues = partitionValueConverter.convert(fileScanTask)
+        Shims.get.getPartitionedFile(
+          partitionValues,
+          filePath,
+          start,
+          length,
+        )
+      }
+    }
+    FilePartition.getFilePartitions(
+      sparkSession,
+      partitionedFiles,
+      maxSplitBytes
+    )
+  }
+
+  private def extractFileScanTasks(partition: InputPartition): Seq[FileScanTask] = {
+    val sparkInputPartitions = IcebergSourceUtil.getInputPartitionAsSparkInputPartition(partition)
+    val tasks = sparkInputPartitions.taskGroup[ScanTask]().tasks().asScala
+    IcebergSourceUtil.getFileScanTasks(tasks.toList)
+  }
 }

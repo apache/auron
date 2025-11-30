@@ -16,10 +16,12 @@
  */
 package org.apache.iceberg.spark.source
 
-import org.apache.iceberg.{FileScanTask, Schema, Table}
+import org.apache.iceberg._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.types.StructType
+
+import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
 
 object IcebergSourceUtil {
 
@@ -41,16 +43,33 @@ object IcebergSourceUtil {
     getScanAsSparkBatchQueryScan(scan).table()
   }
 
+  def getInputPartitionAsSparkInputPartition(inputPartition: InputPartition): SparkInputPartition = {
+    inputPartition match {
+      case s: SparkInputPartition => s
+      case _ => throw new IllegalArgumentException("InputPartition is not a SparkInputPartition")
+    }
+  }
+
+  def getFileScanTasks(tasks: List[ScanTask]): List[FileScanTask] = tasks match {
+    case t if t.forall(_.isFileScanTask) =>
+      t.map(_.asFileScanTask())
+    case t if t.forall(_.isInstanceOf[CombinedScanTask]) =>
+      t.iterator.flatMap(_.asCombinedScanTask().tasks().asScala).toList
+    case _ =>
+      throw new UnsupportedOperationException(
+        "Unsupported iceberg scan task type"
+      )
+  }
+
+
   // Extract file format from FileScanTask (Parquet/ORC)
   def getFileFormat(fileScanTask: FileScanTask): String = fileScanTask.file().format().toString
 
   // Extract file paths and splits from InputPartition
-  def extractFileScanTasks(partition: InputPartition): Seq[FileScanTask] = ???
 
   // Convert Iceberg schema to Spark schema
   def convertSchema(icebergSchema: Schema): StructType = ???
 
   // Extract residual filters/predicates
   def extractResidualExpressions(fileScanTask: FileScanTask): Seq[Expression] = ???
-
 }
