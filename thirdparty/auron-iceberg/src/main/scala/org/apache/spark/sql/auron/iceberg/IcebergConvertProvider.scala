@@ -50,7 +50,6 @@ class IcebergConvertProvider extends AuronConvertProvider {
     val scan = IcebergSourceUtil.getScanAsSparkBatchQueryScan(batchScanExec.scan)
     val table = IcebergSourceUtil.getTableFromScan(scan)
 
-    // Log conversion details
     AuronLogUtils.logDebugPlanConversion(
       batchScanExec,
       Seq("scan" -> scan.getClass, "table" -> table.getClass, "output" -> batchScanExec.output))

@@ -25,16 +25,15 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
-class IcebergPartitionValueConverter(table: Table) {
+// Converts Iceberg partition data to Spark InternalRow.
+class IcebergPartitionConverter(table: Table) {
 
   private case class FieldAccessor(javaClass: Class[_], convert: Any => Any)
 
-  // Use Iceberg's partition spec → Spark schema as the single source of truth
   private val partitionType = table.spec().partitionType()
   private val sparkPartitionSchema: StructType =
     SparkSchemaUtil.convert(partitionType.asSchema())
 
-  // Fail fast if something is off
   require(
     partitionType.fields().size() == sparkPartitionSchema.fields.length,
     s"Mismatch between Iceberg partition fields (${partitionType.fields().size()}) " +
@@ -52,7 +51,6 @@ class IcebergPartitionValueConverter(table: Table) {
       case StringType => classOf[CharSequence]
       case BinaryType => classOf[java.nio.ByteBuffer]
       case _: DecimalType => classOf[java.math.BigDecimal]
-      // Partition spec should only use primitives; anything else is a bug
       case other =>
         throw new UnsupportedOperationException(s"Unsupported Spark partition type: $other")
     }
@@ -68,17 +66,17 @@ class IcebergPartitionValueConverter(table: Table) {
             }
 
       case IntegerType | BooleanType | LongType | FloatType | DoubleType =>
-        (raw: Any) => raw // already Catalyst-friendly primitives
+        (raw: Any) => raw
 
       case DateType =>
         (raw: Any) =>
           if (raw == null) null
-          else raw.asInstanceOf[Integer].intValue() // days
+          else raw.asInstanceOf[Integer].intValue()
 
       case TimestampType =>
         (raw: Any) =>
           if (raw == null) null
-          else raw.asInstanceOf[Long] // micros
+          else raw.asInstanceOf[Long]
 
       case BinaryType =>
         (raw: Any) =>

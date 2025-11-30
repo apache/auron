@@ -59,7 +59,6 @@ object IcebergSourceUtil {
       throw new UnsupportedOperationException("Unsupported iceberg scan task type")
   }
 
-  // Access Spark private API from within the Iceberg package to avoid accessibility errors
   def getReadSchema(scan: Scan): StructType = {
     getScanAsSparkBatchQueryScan(scan).readSchema
   }

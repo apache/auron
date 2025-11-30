@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.iceberg.FileScanTask
-import org.apache.iceberg.spark.source.{IcebergPartitionValueConverter, IcebergSourceUtil}
+import org.apache.iceberg.spark.source.{IcebergPartitionConverter, IcebergSourceUtil}
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.auron._
@@ -129,7 +129,7 @@ case class NativeIcebergBatchScanExec(batchScanExec: BatchScanExec)
   private lazy val readDataSchema: StructType =
     IcebergSourceUtil.getReadSchema(batchScanExec.scan)
 
-  private val partitionValueConverter = new IcebergPartitionValueConverter(icebergTable)
+  private val partitionValueConverter = new IcebergPartitionConverter(icebergTable)
 
   private def getFilePartitions: Seq[FilePartition] = {
     val sparkSession = Shims.get.getSqlContext(batchScanExec).sparkSession
