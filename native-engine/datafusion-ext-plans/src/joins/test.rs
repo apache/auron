@@ -91,8 +91,11 @@ mod tests {
     }
 
     fn build_table_from_batches(batches: Vec<RecordBatch>) -> Arc<dyn ExecutionPlan> {
-        let schema = batches.first().expect("first").schema();
-        Arc::new(TestMemoryExec::try_new(&[batches], schema, None).expect("memory_exec"))
+        let schema = batches.first().expect("missing first batch").schema();
+        Arc::new(
+            TestMemoryExec::try_new(&[batches], schema, None)
+                .expect("failed to create memory exec"),
+        )
     }
 
     fn build_date_table(
@@ -618,12 +621,12 @@ mod tests {
             ("a1", &vec![Some(1), Some(2), None, Some(4), Some(5)]),
             ("b1", &vec![Some(4), Some(5), Some(6), None, Some(8)]),
             ("c1", &vec![Some(7), Some(8), Some(9), Some(10), Some(11)]),
-        );
+        )?;
         let right = build_table_i32_nullable(
             ("a2", &vec![Some(10), Some(20), Some(30)]),
             ("b1", &vec![Some(4), Some(5), Some(7)]),
             ("c2", &vec![Some(70), Some(80), Some(90)]),
-        );
+        )?;
         let on: JoinOn = vec![(
             Arc::new(Column::new_with_schema("b1", &left.schema())?),
             Arc::new(Column::new_with_schema("b1", &right.schema())?),

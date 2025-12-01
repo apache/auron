@@ -1292,12 +1292,12 @@ impl From<&protobuf::ColumnStats> for ColumnStatistics {
             max_value: cs
                 .max_value
                 .as_ref()
-                .map(|m| Precision::Exact(m.try_into().expect("max_value")))
+                .map(|m| Precision::Exact(m.try_into().expect("invalid max_value")))
                 .unwrap_or(Precision::Absent),
             min_value: cs
                 .min_value
                 .as_ref()
-                .map(|m| Precision::Exact(m.try_into().expect("min_value")))
+                .map(|m| Precision::Exact(m.try_into().expect("invalid min_value")))
                 .unwrap_or(Precision::Absent),
             sum_value: Precision::Absent,
             distinct_count: Precision::Exact(cs.distinct_count as usize),
