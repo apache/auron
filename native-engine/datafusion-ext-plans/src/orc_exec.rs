@@ -43,6 +43,7 @@ use futures::{FutureExt, StreamExt, future::BoxFuture};
 use futures_util::TryStreamExt;
 use once_cell::sync::OnceCell;
 use orc_rust::{
+    TimestampPrecision,
     arrow_reader::ArrowReaderBuilder,
     projection::ProjectionMask,
     reader::{AsyncChunkReader, metadata::FileMetadata},
@@ -245,6 +246,7 @@ impl FileOpener for OrcOpener {
             let mut builder = ArrowReaderBuilder::try_new_async(reader)
                 .await
                 .or_else(|err| df_execution_err!("create orc reader error: {err}"))?;
+            builder = builder.with_timestamp_precision(TimestampPrecision::Microsecond);
             if let Some(range) = file_meta.range.clone() {
                 let range = range.start as usize..range.end as usize;
                 builder = builder.with_file_byte_range(range);
