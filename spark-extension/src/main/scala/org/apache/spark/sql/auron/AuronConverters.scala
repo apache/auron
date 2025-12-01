@@ -155,7 +155,7 @@ object AuronConverters extends Logging {
     extConvertProviders.exists(_.isSupported(exec))
   }
 
-  def enableExchange(): Boolean = {
+  def enableExchange: Boolean = {
     enableShuffleExechange && supportedShuffleManager
   }
 
