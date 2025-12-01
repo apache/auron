@@ -803,7 +803,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::CharacterLength => f::unicode::character_length(),
             ScalarFunction::Chr => f::string::chr(),
             ScalarFunction::ConcatWithSeparator => f::string::concat_ws(),
-            ScalarFunction::InitCap => f::unicode::initcap(),
+            // ScalarFunction::InitCap => f::unicode::initcap(),
             ScalarFunction::Left => f::unicode::left(),
             ScalarFunction::Lpad => f::unicode::lpad(),
             ScalarFunction::Random => f::math::random(),

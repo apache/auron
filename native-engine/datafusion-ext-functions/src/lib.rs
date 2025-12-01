@@ -24,7 +24,6 @@ mod spark_crypto;
 mod spark_dates;
 pub mod spark_get_json_object;
 mod spark_hash;
-mod spark_isnan;
 mod spark_make_array;
 mod spark_make_decimal;
 mod spark_normalize_nan_and_zero;
