@@ -65,7 +65,7 @@ pub extern "system" fn Java_org_apache_auron_jni_JniBridge_callNative(
             let log_level = env
                 .get_string(log_level)
                 .map(|s| String::from(s))
-                .expect("log_level");
+                .expect("init: failed to read log_level from env");
             eprintln!("initializing logging with level: {}", log_level);
             init_logging(log_level.as_str());
 
@@ -106,7 +106,10 @@ pub extern "system" fn Java_org_apache_auron_jni_JniBridge_callNative(
         // create execution runtime
         let runtime = Box::new(NativeExecutionRuntime::start(
             native_wrapper,
-            SESSION.get().expect("session").task_ctx(),
+            SESSION
+                .get()
+                .expect("session must be initialized")
+                .task_ctx(),
         )?);
 
         // returns runtime raw pointer

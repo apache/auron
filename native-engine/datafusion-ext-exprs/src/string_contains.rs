@@ -119,7 +119,7 @@ impl PhysicalExpr for StringContainsExpr {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
+    use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{ArrayRef, BooleanArray, StringArray},
@@ -131,7 +131,7 @@ mod test {
     use crate::string_contains::StringContainsExpr;
 
     #[test]
-    fn test_ok() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_ok() -> Result<(), Box<dyn Error>> {
         // create a StringArray from the vector
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("abrr".to_string()),
@@ -172,7 +172,7 @@ mod test {
     }
 
     #[test]
-    fn test_scalar_string() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_scalar_string() -> Result<(), Box<dyn Error>> {
         // create a StringArray from the vector
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("abrr".to_string()),

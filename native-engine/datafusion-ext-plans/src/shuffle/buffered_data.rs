@@ -311,7 +311,8 @@ fn sort_batches_by_partition_id(
                     part_ids
                 }
                 Partitioning::RangePartitioning(sort_expr, _, bounds) => {
-                    evaluate_range_partition_ids(&batch, sort_expr, bounds).expect("eval_part_ids")
+                    evaluate_range_partition_ids(&batch, sort_expr, bounds)
+                        .expect("failed to evaluate range partition ids")
                 }
                 _ => unreachable!("unsupported partitioning: {:?}", partitioning),
             };

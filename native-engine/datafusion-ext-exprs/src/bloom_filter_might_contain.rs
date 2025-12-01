@@ -140,7 +140,7 @@ impl PhysicalExpr for BloomFilterMightContainExpr {
         let bloom_filter = bloom_filter
             .as_ref()
             .as_ref()
-            .expect("non-null bloom_filter");
+            .expect("bloom_filter must be present");
 
         // process with bloom filter
         let value = self.value_expr.evaluate(batch)?;

@@ -121,8 +121,7 @@ impl PhysicalExpr for StringStartsWithExpr {
 
 #[cfg(test)]
 mod test {
-
-    use std::sync::Arc;
+    use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{ArrayRef, BooleanArray, StringArray},
@@ -134,7 +133,7 @@ mod test {
     use crate::string_starts_with::StringStartsWithExpr;
 
     #[test]
-    fn test_ok() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_ok() -> Result<(), Box<dyn Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             None,
             Some("rabaok".to_string()),
@@ -170,7 +169,7 @@ mod test {
     }
 
     #[test]
-    fn test_scalar_string() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_scalar_string() -> Result<(), Box<dyn Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("Hello, Rust".to_string()),
             Some("Hello, He".to_string()),

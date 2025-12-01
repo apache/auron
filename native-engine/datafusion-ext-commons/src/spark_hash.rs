@@ -69,7 +69,7 @@ fn hash_array<T: num::PrimInt>(
             let array = $column
                 .as_any()
                 .downcast_ref::<$array_type>()
-                .expect("downcast");
+                .expect("downcast to expected array type failed");
             if array.null_count() == 0 {
                 for (i, hash) in $hashes.iter_mut().enumerate() {
                     *hash = $h(&array.value(i).as_ref(), *hash);
@@ -89,7 +89,7 @@ fn hash_array<T: num::PrimInt>(
             let array = $column
                 .as_any()
                 .downcast_ref::<$array_type>()
-                .expect("downcast");
+                .expect("downcast to expected array type failed");
             let values = array.values();
 
             if array.null_count() == 0 {
@@ -111,7 +111,7 @@ fn hash_array<T: num::PrimInt>(
             let array = $column
                 .as_any()
                 .downcast_ref::<$array_type>()
-                .expect("downcast");
+                .expect("downcast to expected array type failed");
 
             if array.null_count() == 0 {
                 for (i, hash) in $hashes.iter_mut().enumerate() {
@@ -256,7 +256,7 @@ fn hash_one<T: num::PrimInt>(
             let array = $column
                 .as_any()
                 .downcast_ref::<$array_type>()
-                .expect("downcast");
+                .expect("downcast to expected array type failed");
             *$hash = $h(
                 (array.value($idx as usize) as $ty).to_le_bytes().as_ref(),
                 *$hash,
@@ -269,7 +269,7 @@ fn hash_one<T: num::PrimInt>(
             let array = $column
                 .as_any()
                 .downcast_ref::<$array_type>()
-                .expect("downcast");
+                .expect("downcast to expected array type failed");
             *$hash = $h(&array.value($idx as usize).as_ref(), *$hash);
         };
     }
@@ -279,7 +279,7 @@ fn hash_one<T: num::PrimInt>(
             let array = $column
                 .as_any()
                 .downcast_ref::<$array_type>()
-                .expect("downcast");
+                .expect("downcast to expected array type failed");
             *$hash = $h(array.value($idx as usize).to_le_bytes().as_ref(), *$hash);
         };
     }
@@ -389,7 +389,7 @@ fn hash_one<T: num::PrimInt>(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{
@@ -518,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn test_list_array() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_list_array() -> Result<(), Box<dyn Error>> {
         // Create inner array data: [1, 2, 3, 4, 5, 6]
         let value_data = ArrayData::builder(DataType::Int32)
             .len(6)
@@ -545,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_array() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_map_array() -> Result<(), Box<dyn Error>> {
         // Construct key and values
         let key_data = ArrayData::builder(DataType::Int32)
             .len(8)

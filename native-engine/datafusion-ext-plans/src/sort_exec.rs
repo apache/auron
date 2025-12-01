@@ -460,7 +460,7 @@ impl SortedBlock for InMemSortedBlock {
         if let Some(batch) = batch {
             self.mem_used -= batch.get_batch_mem_size();
             self.mem_used -= self.sorted_keys[0].mem_size();
-            self.sorted_keys.pop_front().expect("pop_front");
+            self.sorted_keys.pop_front().expect("missing key");
             self.cur_row_idx = usize::MAX;
             Ok(Some(batch))
         } else {
@@ -1049,7 +1049,7 @@ fn create_zero_column_batch(num_rows: usize) -> RecordBatch {
         vec![],
         &RecordBatchOptions::new().with_row_count(Some(num_rows)),
     )
-    .expect("record_batch")
+    .expect("failed to create empty RecordBatch")
 }
 
 struct PruneSortKeysFromBatch {
@@ -1293,7 +1293,7 @@ impl KeyCollector for SqueezeKeyCollector {
     fn add_key(&mut self, key: &[u8]) {
         self.sorted_key_writer
             .write_key(key, &mut self.store)
-            .expect("write_key");
+            .expect("failed to write key");
     }
 
     fn freeze(&mut self) {
@@ -1596,7 +1596,7 @@ mod fuzztest {
             None,
         )?);
         let sort = Arc::new(datafusion::physical_plan::sorts::sort::SortExec::new(
-            LexOrdering::new(sort_exprs.iter().cloned()).expect("sort_exprs"),
+            LexOrdering::new(sort_exprs.iter().cloned()).expect("invalid sort exprs"),
             input,
         ));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;

@@ -121,8 +121,7 @@ impl PhysicalExpr for StringEndsWithExpr {
 
 #[cfg(test)]
 mod test {
-
-    use std::sync::Arc;
+    use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{ArrayRef, BooleanArray, StringArray},
@@ -134,7 +133,7 @@ mod test {
     use crate::string_ends_with::StringEndsWithExpr;
 
     #[test]
-    fn test_array() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_array() -> Result<(), Box<dyn Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("abrrbrr".to_string()),
             Some("rrjndebcsabdji".to_string()),
@@ -173,7 +172,7 @@ mod test {
     }
 
     #[test]
-    fn test_scalar_string() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_scalar_string() -> Result<(), Box<dyn Error>> {
         // create a StringArray from the vector
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("Hello, Rust".to_string()),

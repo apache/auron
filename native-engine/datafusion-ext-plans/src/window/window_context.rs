@@ -137,7 +137,7 @@ impl WindowContext {
         Ok(self
             .partition_row_converter
             .lock()
-            .expect("lock")
+            .expect("partition_row_converter lock poisoned")
             .convert_columns(
                 &self
                     .partition_spec
@@ -154,7 +154,7 @@ impl WindowContext {
         Ok(self
             .order_row_converter
             .lock()
-            .expect("lock")
+            .expect("order_row_converter lock poisoned")
             .convert_columns(
                 &self
                     .order_spec

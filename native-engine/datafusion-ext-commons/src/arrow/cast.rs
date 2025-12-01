@@ -166,7 +166,11 @@ pub fn cast_impl(
                             col = struct_.column_by_name(adjust.as_str());
                         }
                         if col.is_some() {
-                            cast_impl(col.expect("col"), field.data_type(), match_struct_fields)
+                            cast_impl(
+                                col.expect("column missing"),
+                                field.data_type(),
+                                match_struct_fields,
+                            )
                         } else {
                             null_column_name.push(field.name().clone());
                             Ok(new_null_array(field.data_type(), struct_.len()))
@@ -255,13 +259,10 @@ fn try_cast_string_array_to_integer(array: &dyn Array, cast_type: &DataType) -> 
     macro_rules! cast {
         ($target_type:ident) => {{
             type B = paste::paste! {[<$target_type Builder>]};
-            let array = array
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .expect("Excepted a StringArray");
+            let string_array = as_string_array(array);
             let mut builder = B::new();
 
-            for v in array.iter() {
+            for v in string_array.iter() {
                 match v {
                     Some(s) => builder.append_option(to_integer(s)),
                     None => builder.append_null(),
@@ -311,7 +312,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
     }
 
     let separator = b'.';
-    let radix = T::from_usize(10).expect("from_usize(10)");
+    let radix = T::from_usize(10).expect("from_usize(10) failed");
     let stop_value = T::min_value() / radix;
     let mut result = T::zero();
 
@@ -339,7 +340,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
             return None;
         }
 
-        result = result * radix - T::from_u8(digit).expect("digit 0..=9");
+        result = result * radix - T::from_u8(digit).expect("digit must be in 0..=9");
         // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE /
         // radix), we can just use `result > 0` to check overflow. If result
         // overflows, we should stop.
@@ -431,14 +432,15 @@ fn to_date(s: &str) -> Option<i32> {
 
 #[cfg(test)]
 mod test {
-    use std::{error::Error, result::Result};
-
-    use datafusion::common::cast::{as_decimal128_array, as_float64_array, as_int32_array};
+    use datafusion::common::{
+        Result,
+        cast::{as_decimal128_array, as_float64_array, as_int32_array},
+    };
 
     use super::*;
 
     #[test]
-    fn test_boolean_to_string() -> Result<(), Box<dyn Error>> {
+    fn test_boolean_to_string() -> Result<()> {
         let bool_array: ArrayRef =
             Arc::new(BooleanArray::from_iter(vec![None, Some(true), Some(false)]));
         let casted = cast(&bool_array, &DataType::Utf8)?;
@@ -450,7 +452,7 @@ mod test {
     }
 
     #[test]
-    fn test_float_to_int() -> Result<(), Box<dyn Error>> {
+    fn test_float_to_int() -> Result<()> {
         let f64_array: ArrayRef = Arc::new(Float64Array::from_iter(vec![
             None,
             Some(123.456),
@@ -479,7 +481,7 @@ mod test {
     }
 
     #[test]
-    fn test_int_to_float() -> Result<(), Box<dyn Error>> {
+    fn test_int_to_float() -> Result<()> {
         let i32_array: ArrayRef = Arc::new(Int32Array::from_iter(vec![
             None,
             Some(123),
@@ -502,7 +504,7 @@ mod test {
     }
 
     #[test]
-    fn test_int_to_decimal() -> Result<(), Box<dyn Error>> {
+    fn test_int_to_decimal() -> Result<()> {
         let i32_array: ArrayRef = Arc::new(Int32Array::from_iter(vec![
             None,
             Some(123),
@@ -526,7 +528,7 @@ mod test {
     }
 
     #[test]
-    fn test_string_to_decimal() -> Result<(), Box<dyn Error>> {
+    fn test_string_to_decimal() -> Result<()> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("1e-8"),
@@ -558,7 +560,7 @@ mod test {
     }
 
     #[test]
-    fn test_decimal_to_string() -> Result<(), Box<dyn Error>> {
+    fn test_decimal_to_string() -> Result<()> {
         let decimal_array: ArrayRef = Arc::new(
             Decimal128Array::from_iter(vec![
                 None,
@@ -575,7 +577,7 @@ mod test {
             casted
                 .as_any()
                 .downcast_ref::<StringArray>()
-                .ok_or("StringArray")?,
+                .expect("Expected a StringArray"),
             &StringArray::from_iter(vec![
                 None,
                 Some("123.000000000000000000"),
@@ -589,7 +591,7 @@ mod test {
     }
 
     #[test]
-    fn test_string_to_bigint() -> Result<(), Box<dyn Error>> {
+    fn test_string_to_bigint() -> Result<()> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("123"),
@@ -604,7 +606,7 @@ mod test {
             casted
                 .as_any()
                 .downcast_ref::<Int64Array>()
-                .ok_or("Int64Array")?,
+                .expect("Expected a Int64Array"),
             &Int64Array::from_iter(vec![
                 None,
                 Some(123),
@@ -619,7 +621,7 @@ mod test {
     }
 
     #[test]
-    fn test_string_to_date() -> Result<(), Box<dyn Error>> {
+    fn test_string_to_date() -> Result<()> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("2001-02-03"),

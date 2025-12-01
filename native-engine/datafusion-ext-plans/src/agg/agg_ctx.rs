@@ -283,7 +283,7 @@ impl AggContext {
                     .iter()
                     .skip(batch_start_idx)
                     .take(batch_end_idx - batch_start_idx)
-                    .map(|bytes| bytes.expect("bytes"))
+                    .map(|bytes| bytes.expect("non-null bytes"))
                     .collect::<Vec<_>>();
                 let mut cursors = array
                     .iter()
