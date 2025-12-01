@@ -91,8 +91,11 @@ mod tests {
     }
 
     fn build_table_from_batches(batches: Vec<RecordBatch>) -> Arc<dyn ExecutionPlan> {
-        let schema = batches.first().expect("first").schema();
-        Arc::new(TestMemoryExec::try_new(&[batches], schema, None).expect("memory_exec"))
+        let schema = batches.first().expect("missing first batch").schema();
+        Arc::new(
+            TestMemoryExec::try_new(&[batches], schema, None)
+                .expect("failed to create memory exec"),
+        )
     }
 
     fn build_date_table(

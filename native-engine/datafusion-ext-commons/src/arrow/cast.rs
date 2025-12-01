@@ -259,7 +259,10 @@ fn try_cast_string_array_to_integer(array: &dyn Array, cast_type: &DataType) -> 
     macro_rules! cast {
         ($target_type:ident) => {{
             type B = paste::paste! {[<$target_type Builder>]};
-            let string_array = as_string_array(array);
+            let string_array = array
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("Expected a StringArray");
             let mut builder = B::new();
 
             for v in string_array.iter() {
