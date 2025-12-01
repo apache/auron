@@ -398,8 +398,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |    test_is_nan
         """.stripMargin
 
-        checkSparkAnswerAndOperator(functions)
-      }
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
