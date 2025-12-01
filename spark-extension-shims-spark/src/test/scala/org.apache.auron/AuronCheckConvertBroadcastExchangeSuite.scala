@@ -14,13 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron
+package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeExec
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
-
-import org.apache.auron.BaseAuronSQLSuite
 
 class AuronCheckConvertBroadcastExchangeSuite extends AuronQueryTest with BaseAuronSQLSuite {
   import testImplicits._
