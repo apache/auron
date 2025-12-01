@@ -58,7 +58,6 @@ fn initcap(input: &str) -> String {
             } else {
                 out.extend(ch.to_lowercase());
             }
-
             prev_is_space = ch == ' ';
         }
     }
