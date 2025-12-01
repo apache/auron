@@ -33,13 +33,17 @@ class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
     super.sparkConf.set("spark.eventLog.dir", testDir.toString)
   }
 
-  override protected def beforeAll(): Unit = {
+  override def beforeAll(): Unit = {
     testDir = Utils.createTempDir(namePrefix = "spark-events")
     super.beforeAll()
   }
 
-  override protected def afterAll(): Unit = {
-    Utils.deleteRecursively(testDir)
+  override def afterAll(): Unit = {
+    try {
+      super.afterAll()
+    } finally {
+      Utils.deleteRecursively(testDir)
+    }
   }
 
   test("test build info in spark UI ") {

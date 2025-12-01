@@ -30,95 +30,124 @@ class IcebergPartitionConverter(table: Table) {
 
   private case class FieldAccessor(javaClass: Class[_], convert: Any => Any)
 
-  private val partitionType = table.spec().partitionType()
-  private val sparkPartitionSchema: StructType =
-    SparkSchemaUtil.convert(partitionType.asSchema())
+  private val tableSparkPartitionSchema: StructType =
+    SparkSchemaUtil.convert(table.spec().partitionType().asSchema())
 
   require(
-    partitionType.fields().size() == sparkPartitionSchema.fields.length,
-    s"Mismatch between Iceberg partition fields (${partitionType.fields().size()}) " +
-      s"and Spark partition schema (${sparkPartitionSchema.fields.length})")
+    table.spec().partitionType().fields().size() == tableSparkPartitionSchema.fields.length,
+    s"Mismatch between Iceberg partition fields (${table.spec().partitionType().fields().size()}) " +
+      s"and Spark partition schema (${tableSparkPartitionSchema.fields.length})")
 
-  private val fieldAccessors: Array[FieldAccessor] = {
-    val sFields = sparkPartitionSchema.fields
+  private def javaClassFor(dt: DataType): Class[_] = dt match {
+    case BooleanType => classOf[java.lang.Boolean]
+    case IntegerType | DateType => classOf[java.lang.Integer]
+    case LongType | TimestampType => classOf[java.lang.Long]
+    case dt if dt.typeName == "timestamp_ntz" => classOf[java.lang.Long]
+    case dt if dt.typeName == "time" => classOf[java.lang.Long]
+    case FloatType => classOf[java.lang.Float]
+    case DoubleType => classOf[java.lang.Double]
+    case StringType => classOf[CharSequence]
+    case BinaryType => classOf[java.nio.ByteBuffer]
+    case _: DecimalType => classOf[java.math.BigDecimal]
+    case other =>
+      throw new UnsupportedOperationException(
+        s"Unsupported Spark partition type from partitionType.asSchema(): $other")
+  }
 
-    def javaClassFor(dt: DataType): Class[_] = dt match {
-      case BooleanType => classOf[java.lang.Boolean]
-      case IntegerType | DateType => classOf[java.lang.Integer]
-      case LongType | TimestampType => classOf[java.lang.Long]
-      case FloatType => classOf[java.lang.Float]
-      case DoubleType => classOf[java.lang.Double]
-      case StringType => classOf[CharSequence]
-      case BinaryType => classOf[java.nio.ByteBuffer]
-      case _: DecimalType => classOf[java.math.BigDecimal]
-      case other =>
-        throw new UnsupportedOperationException(s"Unsupported Spark partition type: $other")
-    }
-
-    def converterFor(dt: DataType): Any => Any = dt match {
-      case StringType =>
-        (raw: Any) =>
-          if (raw == null) null
-          else
-            raw match {
-              case cs: CharSequence => UTF8String.fromString(cs.toString)
-              case other => UTF8String.fromString(other.toString)
-            }
-
-      case IntegerType | BooleanType | LongType | FloatType | DoubleType =>
-        (raw: Any) => raw
-
-      case DateType =>
-        (raw: Any) =>
-          if (raw == null) null
-          else raw.asInstanceOf[Integer].intValue()
-
-      case TimestampType =>
-        (raw: Any) =>
-          if (raw == null) null
-          else raw.asInstanceOf[Long]
-
-      case BinaryType =>
-        (raw: Any) =>
-          if (raw == null) null
-          else
-            raw match {
-              case bb: ByteBuffer =>
-                val dup = bb.duplicate()
-                val arr = new Array[Byte](dup.remaining())
-                dup.get(arr)
-                arr
-              case arr: Array[Byte] => arr
-              case other =>
-                throw new IllegalArgumentException(
-                  s"Unexpected binary partition value type: ${other.getClass}")
-            }
-
-      case d: DecimalType =>
-        (raw: Any) =>
-          if (raw == null) null
-          else {
-            val bd: java.math.BigDecimal = raw match {
-              case bd: java.math.BigDecimal => bd
-              case s: String => new java.math.BigDecimal(s)
-              case other => new java.math.BigDecimal(other.toString)
-            }
-            Decimal(bd, d.precision, d.scale)
+  private def converterFor(dt: DataType): Any => Any = dt match {
+    case StringType =>
+      (raw: Any) =>
+        if (raw == null) null
+        else
+          raw match {
+            case cs: CharSequence => UTF8String.fromString(cs.toString)
+            case other => UTF8String.fromString(other.toString)
           }
 
-      case other =>
-        (_: Any) =>
-          throw new UnsupportedOperationException(
-            s"Unsupported Spark partition type in converter: $other")
-    }
+    case IntegerType | BooleanType | LongType | FloatType | DoubleType =>
+      (raw: Any) => raw
 
+    case DateType =>
+      (raw: Any) =>
+        if (raw == null) null
+        else raw.asInstanceOf[Integer].intValue()
+
+    case TimestampType =>
+      (raw: Any) =>
+        if (raw == null) null
+        else raw.asInstanceOf[Long]
+
+    case dt if dt.typeName == "timestamp_ntz" =>
+      (raw: Any) =>
+        if (raw == null) null
+        else raw.asInstanceOf[Long]
+
+    case dt if dt.typeName == "time" =>
+      (raw: Any) =>
+        if (raw == null) null
+        else raw.asInstanceOf[Long]
+
+    case BinaryType =>
+      (raw: Any) =>
+        if (raw == null) null
+        else
+          raw match {
+            case bb: ByteBuffer =>
+              val dup = bb.duplicate()
+              val arr = new Array[Byte](dup.remaining())
+              dup.get(arr)
+              arr
+            case arr: Array[Byte] => arr
+            case other =>
+              throw new IllegalArgumentException(
+                s"Unexpected binary partition value type: ${other.getClass}")
+          }
+
+    case d: DecimalType =>
+      (raw: Any) =>
+        if (raw == null) null
+        else {
+          val bd: java.math.BigDecimal = raw match {
+            case bd: java.math.BigDecimal => bd
+            case s: String => new java.math.BigDecimal(s)
+            case other => new java.math.BigDecimal(other.toString)
+          }
+          val normalized = bd.setScale(d.scale, java.math.RoundingMode.UNNECESSARY)
+          Decimal(normalized, d.precision, d.scale)
+        }
+
+    case other =>
+      (_: Any) =>
+        throw new UnsupportedOperationException(
+          s"Unsupported Spark partition type in converter from partitionType.asSchema(): $other")
+  }
+
+  private def buildFieldAccessors(sparkSchema: StructType): Array[FieldAccessor] = {
+    val sFields = sparkSchema.fields
     sFields.map { field =>
       val dt = field.dataType
       FieldAccessor(javaClass = javaClassFor(dt), convert = converterFor(dt))
     }
   }
 
+  private val specCache = scala.collection.mutable
+    .AnyRefMap[org.apache.iceberg.PartitionSpec, (StructType, Array[FieldAccessor])]()
+
+  private def accessorsFor(
+      spec: org.apache.iceberg.PartitionSpec): (StructType, Array[FieldAccessor]) = {
+    specCache.getOrElseUpdate(
+      spec, {
+        val pt = spec.partitionType()
+        val sps = SparkSchemaUtil.convert(pt.asSchema())
+        require(
+          pt.fields().size() == sps.fields.length,
+          s"Mismatch between Iceberg partition fields (${pt.fields().size()}) and Spark partition schema (${sps.fields.length})")
+        (sps, buildFieldAccessors(sps))
+      })
+  }
+
   def convert(task: FileScanTask): InternalRow = {
+    val (sparkSchema, fieldAccessors) = accessorsFor(task.spec())
     val partitionData = task.file().partition()
     if (partitionData == null || fieldAccessors.isEmpty) {
       InternalRow.empty
@@ -133,5 +162,5 @@ class IcebergPartitionConverter(table: Table) {
     }
   }
 
-  def schema: StructType = sparkPartitionSchema
+  def schema: StructType = tableSparkPartitionSchema
 }
