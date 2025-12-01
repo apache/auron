@@ -77,7 +77,9 @@ impl RowNullChecker {
             DataType::Boolean => FieldConfig::new_boolean(sort_options),
             dt if dt.is_primitive() => FieldConfig::new_primitive(
                 sort_options,
-                1 + dt.primitive_width().expect("primitive_width"),
+                1 + dt
+                    .primitive_width()
+                    .expect("primitive_width must be present"),
             ),
             // DataType::Int8 => FieldConfig::new_primitive(sort_options, 2), // 1 byte null flag +
             // // 1 byte value

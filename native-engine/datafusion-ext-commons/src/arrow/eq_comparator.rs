@@ -275,8 +275,14 @@ fn eq_fixed_list(
         ignores_null,
     )?;
 
-    let l_size = left.value_length().to_usize().expect("left len to_usize");
-    let r_size = right.value_length().to_usize().expect("right len to_usize");
+    let l_size = left
+        .value_length()
+        .to_usize()
+        .expect("left length to_usize failed");
+    let r_size = right
+        .value_length()
+        .to_usize()
+        .expect("right length to_usize failed");
     let size_eq = l_size == r_size;
 
     let f = eq_impl(left, right, ignores_null, move |i, j| {

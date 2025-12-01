@@ -442,7 +442,7 @@ impl AccList {
     }
 
     pub fn append(&mut self, value: &ScalarValue, nullable: bool) {
-        write_scalar(&value, nullable, &mut self.raw).expect("write_scalar");
+        write_scalar(&value, nullable, &mut self.raw).expect("write scalar failed");
     }
 
     pub fn merge(&mut self, other: &mut Self) {
@@ -456,7 +456,9 @@ impl AccList {
 
             fn next(&mut self) -> Option<Self::Item> {
                 if self.0.position() < self.0.get_ref().len() as u64 {
-                    return Some(read_scalar(&mut self.0, &self.1, self.2).expect("read_scalar"));
+                    return Some(
+                        read_scalar(&mut self.0, &self.1, self.2).expect("read scalar failed"),
+                    );
                 }
                 None
             }
@@ -534,7 +536,7 @@ impl AccSet {
 
     pub fn append(&mut self, value: &ScalarValue, nullable: bool) {
         let old_raw_len = self.list.raw.len();
-        write_scalar(value, nullable, &mut self.list.raw).expect("write_scalar");
+        write_scalar(value, nullable, &mut self.list.raw).expect("write scalar failed");
         self.append_raw_inline(old_raw_len);
     }
 
