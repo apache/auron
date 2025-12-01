@@ -52,7 +52,7 @@ pub fn string_upper(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         ColumnarValue::Scalar(ScalarValue::Utf8(Some(str))) => Ok(ColumnarValue::Scalar(
             ScalarValue::Utf8(Some(str.to_uppercase())),
         )),
-        _ => df_execution_err!("string_lower only supports literal utf8"),
+        _ => df_execution_err!("string_upper only supports literal utf8"),
     }
 }
 

@@ -18,7 +18,6 @@ package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row, SparkSession}
 import org.apache.spark.sql.auron.AuronConverters
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeExec
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.test.SharedSparkSession
@@ -37,6 +36,7 @@ class AuronCheckConvertBroadcastExchangeSuite
       .appName("checkConvertToBroadcast")
       .config("spark.sql.shuffle.partitions", "4")
       .config("spark.sql.autoBroadcastJoinThreshold", -1)
+      .config("spark.sql.adaptive.enabled", "true")
       .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
       .config(
         "spark.shuffle.manager",
@@ -51,14 +51,11 @@ class AuronCheckConvertBroadcastExchangeSuite
       spark.sql(
         "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b on a.c1 = b.c1")
 
-    val plan = executePlan.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
-    val broadcastExchangeExec =
-      plan.executedPlan
-        .collectFirst { case broadcastExchangeExec: BroadcastExchangeExec =>
-          broadcastExchangeExec
-        }
-
-    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.get)
+    val broadcastExchangeExec = collect(executePlan.queryExecution.executedPlan) {
+      case broadcastExchangeExec: BroadcastExchangeExec => broadcastExchangeExec
+    }
+    assert(broadcastExchangeExec.nonEmpty, "BroadcastExchangeExec not found in plan")
+    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.head)
     assert(afterConvertPlan.isInstanceOf[NativeBroadcastExchangeExec])
     checkAnswer(executePlan, Seq(Row(1, 2)))
   }
@@ -71,6 +68,7 @@ class AuronCheckConvertBroadcastExchangeSuite
       .appName("checkConvertToBroadcast")
       .config("spark.sql.shuffle.partitions", "4")
       .config("spark.sql.autoBroadcastJoinThreshold", -1)
+      .config("spark.sql.adaptive.enabled", "true")
       .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
       .config(
         "spark.shuffle.manager",
@@ -85,14 +83,11 @@ class AuronCheckConvertBroadcastExchangeSuite
       spark.sql(
         "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b ")
 
-    val plan = executePlan.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
-    val broadcastExchangeExec =
-      plan.executedPlan
-        .collectFirst { case broadcastExchangeExec: BroadcastExchangeExec =>
-          broadcastExchangeExec
-        }
-
-    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.get)
+    val broadcastExchangeExec = collect(executePlan.queryExecution.executedPlan) {
+      case broadcastExchangeExec: BroadcastExchangeExec => broadcastExchangeExec
+    }
+    assert(broadcastExchangeExec.nonEmpty, "BroadcastExchangeExec not found in plan")
+    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.head)
     assert(afterConvertPlan.isInstanceOf[NativeBroadcastExchangeExec])
     checkAnswer(executePlan, Seq(Row(1, 2)))
   }
@@ -105,6 +100,7 @@ class AuronCheckConvertBroadcastExchangeSuite
       .appName("checkConvertToBroadcast")
       .config("spark.sql.shuffle.partitions", "4")
       .config("spark.sql.autoBroadcastJoinThreshold", -1)
+      .config("spark.sql.adaptive.enabled", "true")
       .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
       .config(
         "spark.shuffle.manager",
@@ -120,14 +116,11 @@ class AuronCheckConvertBroadcastExchangeSuite
       spark.sql(
         "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b on a.c1 = b.c1")
 
-    val plan = executePlan.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
-    val broadcastExchangeExec =
-      plan.executedPlan
-        .collectFirst { case broadcastExchangeExec: BroadcastExchangeExec =>
-          broadcastExchangeExec
-        }
-
-    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.get)
+    val broadcastExchangeExec = collect(executePlan.queryExecution.executedPlan) {
+      case broadcastExchangeExec: BroadcastExchangeExec => broadcastExchangeExec
+    }
+    assert(broadcastExchangeExec.nonEmpty, "BroadcastExchangeExec not found in plan")
+    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.head)
     assert(afterConvertPlan.isInstanceOf[BroadcastExchangeExec])
     checkAnswer(executePlan, Seq(Row(1, 2)))
   }
@@ -140,6 +133,7 @@ class AuronCheckConvertBroadcastExchangeSuite
       .appName("checkConvertToBroadcast")
       .config("spark.sql.shuffle.partitions", "4")
       .config("spark.sql.autoBroadcastJoinThreshold", -1)
+      .config("spark.sql.adaptive.enabled", "true")
       .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
       .config(
         "spark.shuffle.manager",
@@ -155,16 +149,12 @@ class AuronCheckConvertBroadcastExchangeSuite
       spark.sql(
         "select /*+ broadcast(a)*/ a.c1, a.c2 from broad_cast_table1 a inner join broad_cast_table2 b ")
 
-    val plan = executePlan.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
-    val broadcastExchangeExec =
-      plan.executedPlan
-        .collectFirst { case broadcastExchangeExec: BroadcastExchangeExec =>
-          broadcastExchangeExec
-        }
-
-    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.get)
+    val broadcastExchangeExec = collect(executePlan.queryExecution.executedPlan) {
+      case broadcastExchangeExec: BroadcastExchangeExec => broadcastExchangeExec
+    }
+    assert(broadcastExchangeExec.nonEmpty, "BroadcastExchangeExec not found in plan")
+    val afterConvertPlan = AuronConverters.convertSparkPlan(broadcastExchangeExec.head)
     assert(afterConvertPlan.isInstanceOf[BroadcastExchangeExec])
     checkAnswer(executePlan, Seq(Row(1, 2)))
   }
-
 }

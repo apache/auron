@@ -195,11 +195,8 @@ object AuronConverters extends Logging {
 
   def convertSparkPlan(exec: SparkPlan): SparkPlan = {
     exec match {
-      case e: ShuffleExchangeExec => tryConvert(e, convertShuffleExchangeExec)
-      case e: BroadcastExchangeExec if enableBroadcastExchange =>
-        tryConvert(e, convertBroadcastExchangeExec)
       case e: ShuffleExchangeExec if enableExchange => tryConvert(e, convertShuffleExchangeExec)
-      case e: BroadcastExchangeExec =>
+      case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
         tryConvert(e, convertFileSourceScanExec)

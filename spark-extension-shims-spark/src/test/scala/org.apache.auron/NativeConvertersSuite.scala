@@ -64,13 +64,13 @@ class NativeConvertersSuite
   }
 
   test("cast trim disabled via auron conf") {
-    withEnvConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "false") {
+    withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "false") {
       assertNonTrimmedCast(" 42 ", IntegerType)
     }
   }
 
   test("cast trim disabled via auron conf for boolean cast") {
-    withEnvConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "false") {
+    withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "false") {
       assertNonTrimmedCast(" true ", BooleanType)
     }
   }
