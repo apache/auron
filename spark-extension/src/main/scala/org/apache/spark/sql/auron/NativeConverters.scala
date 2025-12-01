@@ -87,7 +87,7 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 object NativeConverters extends Logging {
 
-  private val sparkAuronConfig: AuronConfiguration =
+  private def sparkAuronConfig: AuronConfiguration =
     AuronAdaptor.getInstance.getAuronConfiguration
   def udfEnabled: Boolean =
     AuronConverters.getBooleanConf("spark.auron.udf.enabled", defaultValue = true)
@@ -99,6 +99,8 @@ object NativeConverters extends Logging {
     AuronConverters.getBooleanConf("spark.auron.decimal.arithOp.enabled", defaultValue = false)
   def datetimeExtractEnabled: Boolean =
     AuronConverters.getBooleanConf("spark.auron.datetime.extract.enabled", defaultValue = false)
+  def castTrimStringEnabled: Boolean =
+    AuronConverters.getBooleanConf("spark.auron.cast.trimString", defaultValue = true)
 
   def scalarTypeSupported(dataType: DataType): Boolean = {
     dataType match {
@@ -475,7 +477,7 @@ object NativeConverters extends Logging {
           if (cast.child.dataType == StringType &&
             (cast.dataType.isInstanceOf[NumericType] || cast.dataType
               .isInstanceOf[BooleanType]) &&
-            sparkAuronConfig.getBoolean(SparkAuronConfiguration.CAST_STRING_TRIM_ENABLE)) {
+            castTrimStringEnabled) {
             // converting Cast(str as num) to StringTrim(Cast(str as num)) if enabled
             StringTrim(cast.child)
           } else {
@@ -866,7 +868,7 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_StringLower", e.children, e.dataType)
       case e: Upper
           if sparkAuronConfig.getBoolean(SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE) =>
-        buildExtScalarFunction("Spark_StringLower", e.children, e.dataType)
+        buildExtScalarFunction("Spark_StringUpper", e.children, e.dataType)
 
       case e: StringTrim =>
         buildScalarFunction(pb.ScalarFunction.Trim, e.srcStr +: e.trimStr.toSeq, e.dataType)
