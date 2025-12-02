@@ -383,8 +383,15 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   test("test function IsNaN") {
     withTable("t1") {
-      sql(
-        "create table test_is_nan using parquet as select cast('NaN' as double) as c1, cast('NaN' as float) as c2, cast(null as double) as c3, cast(null as double) as c4, 5.5f as c5, cast(null as float) as c6")
+      sql("""
+          |create table test_is_nan using parquet as select
+          |  cast('NaN' as double) as c1,
+          |  cast('NaN' as float) as c2,
+          |  cast(null as double) as c3,
+          |  cast(null as double) as c4,
+          |  cast(5.5 as float) as c5,
+          |  cast(null as float) as c6
+          |""".stripMargin)
       val functions =
         """
           |select
