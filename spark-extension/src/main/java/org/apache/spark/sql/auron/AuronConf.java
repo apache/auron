@@ -136,6 +136,9 @@ public enum AuronConf {
 
     ORC_FORCE_POSITIONAL_EVOLUTION("spark.auron.orc.force.positional.evolution", false),
 
+    // use microsecond precision when reading ORC timestamp columns
+    ORC_TIMESTAMP_USE_MICROSECOND("spark.auron.orc.timestamp.use.microsecond", false),
+
     NATIVE_LOG_LEVEL("spark.auron.native.log.level", "info");
 
     public final String key;
