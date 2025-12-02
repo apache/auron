@@ -1336,7 +1336,7 @@ object NativeConverters extends Logging {
       fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
     val tzArg: Expression = child.dataType match {
       case TimestampType =>
-        Literal(SQLConf.get.sessionLocalTimeZone, StringType)
+        Literal.create(SQLConf.get.sessionLocalTimeZone, StringType)
       case _ =>
         Literal.create(null, StringType)
     }
