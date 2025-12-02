@@ -281,20 +281,25 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("lpad/rpad basic") {
-    Seq(
-      ("select lpad('abc', 5, '*')", Row("**abc")),
-      ("select rpad('abc', 5, '*')", Row("abc**")),
-      ("select lpad('spark', 2, '0')", Row("sp")),
-      ("select rpad('spark', 2, '0')", Row("sp")),
-      ("select lpad('9', 5, 'ab')", Row("abab9")),
-      ("select rpad('9', 5, 'ab')", Row("9abab")),
-      ("select lpad('hi', 5, '')", Row("hi")),
-      ("select rpad('hi', 5, '')", Row("hi")),
-      ("select lpad('x', 0, 'a')", Row("")),
-      ("select rpad('x', -1, 'a')", Row("")),
-      ("select lpad('Z', 3, '++')", Row("++Z")),
-      ("select rpad('Z', 3, 'AB')", Row("ZAB"))).foreach { case (q, expected) =>
-      checkAnswer(sql(q), Seq(expected))
+    withTable("pad_tbl") {
+      // 创建表并插入数据
+      sql(s"CREATE TABLE pad_tbl(id INT, txt STRING, len INT, pad STRING) USING parquet")
+      sql(s"""
+             |INSERT INTO pad_tbl VALUES
+             | (1, 'abc', 5, ''),
+             | (2, 'abc', 5, ' '),
+             | (3, 'spark', 2, '0'),
+             | (4, 'spark', 2, '0'),
+             | (5, '9', 5, 'ab'),
+             | (6, '9', 5, 'ab'),
+             | (7, 'hi', 5, ''),
+             | (8, 'hi', 5, ''),
+             | (9, 'x', 0, 'a'),
+             | (10,'x', -1, 'a'),
+             | (11,'Z', 3, '++'),
+             | (12,'Z', 3, 'AB')
+      """.stripMargin)
+      checkSparkAnswerAndOperator("SELECT LPAD(txt, len, pad), rpad(txt, len, pad) FROM pad_tbl")
     }
   }
 
