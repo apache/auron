@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-set -ex
+set -o pipefail
 
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
@@ -60,16 +60,25 @@ checksum() {
         exit 1
     fi
 
-    echo "$features_arg" | $hash_cmd | awk '{print $1}'
+    feat_sum="$(echo "$features_arg" | $hash_cmd | awk '{print $1}' )"
 
-    find Cargo.toml Cargo.lock native-engine "$cache_libpath" | \
+    files_sum="$(
+        find Cargo.toml Cargo.lock native-engine "$cache_libpath" | \
         xargs $hash_cmd 2>&1 | \
         sort -k1 | \
         $hash_cmd | awk '{print $1}'
+    )"
+
+    printf "%s%s" "$feat_sum" "$files_sum" | $hash_cmd | awk '{print $1}'
 }
 
 if [ -f "$cache_libpath" ]; then
-  old_checksum="$(cat "$cache_checksum_file" 2>&1 || true)"
+  if [ -f "$cache_checksum_file" ]; then
+    old_checksum="$(cat "$cache_checksum_file")"
+  else
+    old_checksum="No checksum file found."
+  fi
+
   new_checksum="$(checksum)"
 
   echo -e "old build-checksum: \n$old_checksum\n========"
