@@ -89,7 +89,7 @@ abstract class NativeWindowBase(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
 
-  private def nativeWindowExprs = windowExpression.map { named =>
+  private lazy val nativeWindowExprs = windowExpression.map { named =>
     val field = NativeConverters.convertField(Util.getSchema(named :: Nil).fields(0))
     val windowExprBuilder = pb.WindowExprNode.newBuilder().setField(field)
     windowExprBuilder.setReturnType(NativeConverters.convertDataType(named.dataType))
@@ -167,11 +167,11 @@ abstract class NativeWindowBase(
     windowExprBuilder.build()
   }
 
-  private def nativePartitionSpecExprs = partitionSpec.map { partition =>
+  private lazy val nativePartitionSpecExprs = partitionSpec.map { partition =>
     NativeConverters.convertExpr(partition)
   }
 
-  private def nativeOrderSpecExprs = orderSpec.map { sortOrder =>
+  private lazy val nativeOrderSpecExprs = orderSpec.map { sortOrder =>
     pb.PhysicalExprNode
       .newBuilder()
       .setSort(
@@ -192,9 +192,6 @@ abstract class NativeWindowBase(
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
-    val nativeWindowExprs = this.nativeWindowExprs
-    val nativeOrderSpecExprs = this.nativeOrderSpecExprs
-    val nativePartitionSpecExprs = this.nativePartitionSpecExprs
 
     new NativeRDD(
       sparkContext,

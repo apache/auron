@@ -68,7 +68,7 @@ abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
     .toMap
 
   // should not include partition columns
-  protected def nativeFileSchema: pb.Schema =
+  protected lazy val nativeFileSchema: pb.Schema =
     NativeConverters.convertSchema(StructType(relation.tableMeta.dataSchema.map {
       case field if basedHiveScan.requestedAttributes.exists(_.name == field.name) =>
         field.copy(nullable = true)
@@ -77,36 +77,37 @@ abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
         StructField(field.name, NullType, nullable = true)
     }))
 
-  protected def nativePartitionSchema: pb.Schema =
+  protected lazy val nativePartitionSchema: pb.Schema =
     NativeConverters.convertSchema(partitionSchema)
 
-  protected def nativeFileGroups: FilePartition => pb.FileGroup = (partition: FilePartition) => {
-    // list input file statuses
-    val nativePartitionedFile = (file: PartitionedFile) => {
-      val nativePartitionValues = partitionSchema.zipWithIndex.map { case (field, index) =>
-        NativeConverters
-          .convertExpr(Literal(file.partitionValues.get(index, field.dataType), field.dataType))
-          .getLiteral
+  protected def nativeFileGroups: FilePartition => pb.FileGroup =
+    (partition: FilePartition) => {
+      // list input file statuses
+      val nativePartitionedFile = (file: PartitionedFile) => {
+        val nativePartitionValues = partitionSchema.zipWithIndex.map { case (field, index) =>
+          NativeConverters
+            .convertExpr(Literal(file.partitionValues.get(index, field.dataType), field.dataType))
+            .getLiteral
+        }
+        pb.PartitionedFile
+          .newBuilder()
+          .setPath(s"${file.filePath}")
+          .setSize(fileSizes(file.filePath))
+          .addAllPartitionValues(nativePartitionValues.asJava)
+          .setLastModifiedNs(0)
+          .setRange(
+            pb.FileRange
+              .newBuilder()
+              .setStart(file.start)
+              .setEnd(file.start + file.length)
+              .build())
+          .build()
       }
-      pb.PartitionedFile
+      pb.FileGroup
         .newBuilder()
-        .setPath(s"${file.filePath}")
-        .setSize(fileSizes(file.filePath))
-        .addAllPartitionValues(nativePartitionValues.asJava)
-        .setLastModifiedNs(0)
-        .setRange(
-          pb.FileRange
-            .newBuilder()
-            .setStart(file.start)
-            .setEnd(file.start + file.length)
-            .build())
+        .addAllFiles(partition.files.map(nativePartitionedFile).toList.asJava)
         .build()
     }
-    pb.FileGroup
-      .newBuilder()
-      .addAllFiles(partition.files.map(nativePartitionedFile).toList.asJava)
-      .build()
-  }
 
   // check whether native converting is supported
   nativeFileSchema

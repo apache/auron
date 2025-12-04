@@ -59,8 +59,8 @@ abstract class NativeExpandBase(
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
   override def outputOrdering: Seq[SortOrder] = Nil
 
-  private def nativeSchema = Util.getNativeSchema(output)
-  private def nativeProjections = projections.map { projection =>
+  private lazy val nativeSchema = Util.getNativeSchema(output)
+  private lazy val nativeProjections = projections.map { projection =>
     projection
       .zip(Util.getSchema(output).fields.map(_.dataType))
       .map(e => NativeConverters.convertExpr(Cast(e._1, e._2)))
@@ -73,8 +73,6 @@ abstract class NativeExpandBase(
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
-    val nativeSchema = this.nativeSchema
-    val nativeProjections = this.nativeProjections
 
     new NativeRDD(
       sparkContext,

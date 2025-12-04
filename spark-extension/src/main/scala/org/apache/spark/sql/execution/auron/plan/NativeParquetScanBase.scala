@@ -47,10 +47,6 @@ abstract class NativeParquetScanBase(basedFileScan: FileSourceScanExec)
             inputMetric.incRecordsRead(v)
           case _ =>
         }))
-      val nativePruningPredicateFilters = this.nativePruningPredicateFilters
-      val nativeFileSchema = this.nativeFileSchema
-      val nativeFileGroups = this.nativeFileGroups
-      val nativePartitionSchema = this.nativePartitionSchema
 
       val projection = schema.map(field => basedFileScan.relation.schema.fieldIndex(field.name))
       val broadcastedHadoopConf = this.broadcastedHadoopConf

@@ -72,7 +72,7 @@ abstract class NativeGenerateBase(
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = Nil
 
-  private def nativeGenerator = generator match {
+  private lazy val nativeGenerator = generator match {
     case Explode(child) =>
       pb.Generator
         .newBuilder()
@@ -117,10 +117,10 @@ abstract class NativeGenerateBase(
         .build()
   }
 
-  private def nativeGeneratorOutput =
+  private lazy val nativeGeneratorOutput =
     Util.getSchema(generatorOutput).map(NativeConverters.convertField)
 
-  private def nativeRequiredChildOutput =
+  private lazy val nativeRequiredChildOutput =
     Util.getSchema(requiredChildOutput).map(_.name)
 
   // check whether native converting is supported
@@ -131,9 +131,6 @@ abstract class NativeGenerateBase(
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
-    val nativeGenerator = this.nativeGenerator
-    val nativeGeneratorOutput = this.nativeGeneratorOutput
-    val nativeRequiredChildOutput = this.nativeRequiredChildOutput
 
     new NativeRDD(
       sparkContext,

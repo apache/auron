@@ -90,9 +90,9 @@ abstract class NativeBroadcastJoinBase(
     }
   }
 
-  private def nativeSchema = Util.getNativeSchema(output)
+  private lazy val nativeSchema = Util.getNativeSchema(output)
 
-  private def nativeJoinOn = {
+  private lazy val nativeJoinOn = {
     if (leftKeys.nonEmpty && rightKeys.nonEmpty) {
       val rewrittenLeftKeys = rewriteKeyExprToLong(leftKeys)
       val rewrittenRightKeys = rewriteKeyExprToLong(rightKeys)
@@ -108,9 +108,9 @@ abstract class NativeBroadcastJoinBase(
     }
   }
 
-  private def nativeJoinType = NativeConverters.convertJoinType(joinType)
+  private lazy val nativeJoinType = NativeConverters.convertJoinType(joinType)
 
-  private def nativeBroadcastSide = broadcastSide match {
+  private lazy val nativeBroadcastSide = broadcastSide match {
     case BroadcastLeft => pb.JoinSide.LEFT_SIDE
     case BroadcastRight => pb.JoinSide.RIGHT_SIDE
   }
@@ -127,9 +127,6 @@ abstract class NativeBroadcastJoinBase(
     val leftRDD = NativeHelper.executeNative(left)
     val rightRDD = NativeHelper.executeNative(right)
     val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
-    val nativeSchema = this.nativeSchema
-    val nativeJoinType = this.nativeJoinType
-    val nativeJoinOn = this.nativeJoinOn
 
     val (probedRDD, builtRDD) = broadcastSide match {
       case BroadcastLeft => (rightRDD, leftRDD)

@@ -61,7 +61,7 @@ abstract class NativeFilterBase(condition: Expression, override val child: Spark
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  private def nativeFilterExprs = {
+  private lazy val nativeFilterExprs = {
     val splittedExprs = ArrayBuffer[PhysicalExprNode]()
 
     // do not split simple IsNotNull(col) exprs
@@ -90,7 +90,6 @@ abstract class NativeFilterBase(condition: Expression, override val child: Spark
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
-    val nativeFilterExprs = this.nativeFilterExprs
     new NativeRDD(
       sparkContext,
       nativeMetrics,

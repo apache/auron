@@ -63,7 +63,7 @@ abstract class NativeTakeOrderedBase(
   override def outputPartitioning: Partitioning = SinglePartition
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
-  private def nativeSortExprs = sortOrder.map { sortOrder =>
+  private lazy val nativeSortExprs = sortOrder.map { sortOrder =>
     PhysicalExprNode
       .newBuilder()
       .setSort(
@@ -125,7 +125,6 @@ abstract class NativeTakeOrderedBase(
     // merge top-K from every children partitions into a single partition
     val shuffled = Shims.get.createNativeShuffleExchangeExec(SinglePartition, partial)
     val shuffledRDD = NativeHelper.executeNative(shuffled)
-    val nativeSortExprs = this.nativeSortExprs
 
     // take top-K from the final partition
     new NativeRDD(

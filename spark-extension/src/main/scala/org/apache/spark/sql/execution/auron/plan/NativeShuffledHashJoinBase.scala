@@ -62,9 +62,9 @@ abstract class NativeShuffledHashJoinBase(
         "input_row_count"))
       .toSeq: _*)
 
-  private def nativeSchema = Util.getNativeSchema(output)
+  private lazy val nativeSchema = Util.getNativeSchema(output)
 
-  private def nativeJoinOn = {
+  private lazy val nativeJoinOn = {
     val rewrittenLeftKeys = rewriteKeyExprToLong(leftKeys)
     val rewrittenRightKeys = rewriteKeyExprToLong(rightKeys)
     rewrittenLeftKeys.zip(rewrittenRightKeys).map { case (leftKey, rightKey) =>
@@ -76,9 +76,9 @@ abstract class NativeShuffledHashJoinBase(
     }
   }
 
-  private def nativeJoinType = NativeConverters.convertJoinType(joinType)
+  private lazy val nativeJoinType = NativeConverters.convertJoinType(joinType)
 
-  private def nativeBuildSide = buildSide match {
+  private lazy val nativeBuildSide = buildSide match {
     case BuildLeft => pb.JoinSide.LEFT_SIDE
     case BuildRight => pb.JoinSide.RIGHT_SIDE
   }
@@ -95,9 +95,6 @@ abstract class NativeShuffledHashJoinBase(
     val leftRDD = NativeHelper.executeNative(left)
     val rightRDD = NativeHelper.executeNative(right)
     val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
-    val nativeJoinOn = this.nativeJoinOn
-    val nativeJoinType = this.nativeJoinType
-    val nativeBuildSide = this.nativeBuildSide
 
     val (partitions, partitioner) = if (joinType != RightOuter) {
       (leftRDD.partitions, leftRDD.partitioner)

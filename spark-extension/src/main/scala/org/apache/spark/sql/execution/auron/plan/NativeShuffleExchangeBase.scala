@@ -85,15 +85,15 @@ abstract class NativeShuffleExchangeBase(
       metrics)
   }
 
-  def nativeSchema: Schema = Util.getNativeSchema(child.output)
+  lazy val nativeSchema: Schema = Util.getNativeSchema(child.output)
 
-  private def nativeHashExprs = outputPartitioning match {
+  private lazy val nativeHashExprs = outputPartitioning match {
     case HashPartitioning(expressions, _) =>
       expressions.map(expr => NativeConverters.convertExpr(expr)).toList
     case _ => null
   }
 
-  private def nativeSortExecNode = outputPartitioning match {
+  private lazy val nativeSortExecNode = outputPartitioning match {
     case RangePartitioning(expressions, _) =>
       val nativeSortExprs = expressions.map { sortOrder =>
         PhysicalExprNode
@@ -147,7 +147,6 @@ abstract class NativeShuffleExchangeBase(
       (partition, taskContext) => {
         val shuffleReadMetrics = taskContext.taskMetrics().createTempShuffleReadMetrics()
         val metricReporter = new SQLShuffleReadMetricsReporter(shuffleReadMetrics, metrics)
-        val nativeSchema = this.nativeSchema
 
         // store fetch iterator in jni resource before native compute
         val jniResourceId = s"NativeShuffleReadExec:${UUID.randomUUID().toString}"

@@ -62,7 +62,7 @@ abstract class NativeProjectBase(projectList: Seq[NamedExpression], override val
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  private def nativeProject = getNativeProjectBuilder(projectList).buildPartial()
+  private lazy val nativeProject = getNativeProjectBuilder(projectList).buildPartial()
 
   // check whether native converting is supported
   nativeProject
@@ -70,7 +70,6 @@ abstract class NativeProjectBase(projectList: Seq[NamedExpression], override val
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
-    val nativeProject = this.nativeProject
 
     new NativeRDD(
       sparkContext,
