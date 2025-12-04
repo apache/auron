@@ -33,7 +33,7 @@ pub fn string_initcap(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         ColumnarValue::Scalar(ScalarValue::Utf8(Some(str))) => {
             Ok(ColumnarValue::Scalar(ScalarValue::Utf8(Some(initcap(str)))))
         }
-        _ => df_execution_err!("string_initcap only supports literal utf8"),
+        _ => df_execution_err!("Unsupported args {args:?} for `string_initcap`"),
     }
 }
 
