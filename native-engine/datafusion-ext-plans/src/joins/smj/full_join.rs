@@ -131,14 +131,12 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                     cur_forward!(cur2);
 
                     // iterate both stream, find smaller one, use it for probing
-                    let mut has_multi_equal = false;
                     let mut l_equal = true;
                     let mut r_equal = true;
                     while l_equal && r_equal {
                         if l_equal {
                             l_equal = !cur1.finished() && cur1.cur_key() == cur1.key(l_key_idx);
                             if l_equal {
-                                has_multi_equal = true;
                                 equal_lindices.push(cur1.cur_idx());
                                 cur_forward!(cur1);
                             }
@@ -146,7 +144,6 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                         if r_equal {
                             r_equal = !cur2.finished() && cur2.cur_key() == cur2.key(r_key_idx);
                             if r_equal {
-                                has_multi_equal = true;
                                 equal_rindices.push(cur2.cur_idx());
                                 cur_forward!(cur2);
                             }
@@ -154,6 +151,7 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                     }
 
                     // fast path for one-to-one join
+                    let has_multi_equal = equal_lindices.len() > 1 || equal_rindices.len() > 1;
                     if !has_multi_equal {
                         self.lindices.push(l_key_idx);
                         self.rindices.push(r_key_idx);
