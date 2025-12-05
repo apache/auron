@@ -341,10 +341,10 @@ mod tests {
         writer.finish_current_buf()?;
 
         let mut reader = IpcCompressionReader::new(Cursor::new(buf));
-        let (num_rows1, arrays1) = reader.read_batch(&schema)?.unwrap();
+        let (num_rows1, arrays1) = reader.read_batch(&schema)?.expect("non-empty batch");
         assert_eq!(num_rows1, 2);
         assert_eq!(arrays1, &[test_array1]);
-        let (num_rows2, arrays2) = reader.read_batch(&schema)?.unwrap();
+        let (num_rows2, arrays2) = reader.read_batch(&schema)?.expect("non-empty batch");
         assert_eq!(num_rows2, 2);
         assert_eq!(arrays2, &[test_array2]);
         assert!(reader.read_batch(&schema)?.is_none());

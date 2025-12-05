@@ -27,6 +27,10 @@ members = [
     "native-engine/auron-memmgr",
 ]
 
+[workspace.lints.clippy]
+unwrap_used = "deny"
+panic = "deny"
+
 [profile.release]
 opt-level = 3
 lto = true

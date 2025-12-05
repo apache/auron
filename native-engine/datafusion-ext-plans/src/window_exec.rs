@@ -272,6 +272,7 @@ mod test {
     use arrow::{array::*, datatypes::*, record_batch::RecordBatch};
     use datafusion::{
         assert_batches_eq,
+        common::Result,
         physical_expr::{PhysicalSortExpr, expressions::Column},
         physical_plan::{ExecutionPlan, test::TestMemoryExec},
         prelude::SessionContext,
@@ -287,32 +288,36 @@ mod test {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> RecordBatch {
+    ) -> Result<RecordBatch> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Int32, false),
             Field::new(b.0, DataType::Int32, false),
             Field::new(c.0, DataType::Int32, false),
         ]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![
                 Arc::new(Int32Array::from(a.1.clone())),
                 Arc::new(Int32Array::from(b.1.clone())),
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
     fn build_table(
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_i32(a, b, c);
+    ) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_i32(a, b, c)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     #[tokio::test]
@@ -325,7 +330,7 @@ mod test {
             ("a1", &vec![1, 1, 1, 1, 2, 3, 3]),
             ("b1", &vec![1, 2, 2, 3, 4, 1, 1]),
             ("c1", &vec![0, 0, 0, 0, 0, 0, 0]),
-        );
+        )?;
         let window_exprs = vec![
             WindowExpr::new(
                 WindowFunction::RankLike(WindowRankType::RowNumber),
@@ -385,7 +390,7 @@ mod test {
             ("a1", &vec![1, 3, 3, 1, 1, 1, 2]),
             ("b1", &vec![1, 1, 1, 2, 2, 3, 4]),
             ("c1", &vec![0, 0, 0, 0, 0, 0, 0]),
-        );
+        )?;
         let window_exprs = vec![
             WindowExpr::new(
                 WindowFunction::RankLike(WindowRankType::RowNumber),
@@ -452,7 +457,7 @@ mod test {
             ("a1", &vec![1, 1, 1, 1, 2, 3, 3]),
             ("b1", &vec![1, 2, 2, 3, 4, 1, 1]),
             ("c1", &vec![0, 0, 0, 0, 0, 0, 0]),
-        );
+        )?;
         let window_exprs = vec![WindowExpr::new(
             WindowFunction::RankLike(WindowRankType::RowNumber),
             vec![],
