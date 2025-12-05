@@ -260,6 +260,26 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("ORC timestamp microsecond precision configuration") {
+    Seq(true, false).foreach { useMicrosecond =>
+      withEnvConf(AuronConf.ORC_TIMESTAMP_USE_MICROSECOND.key -> useMicrosecond.toString) {
+        withTempPath { f =>
+          val path = f.getCanonicalPath
+          Seq(
+            "2024-01-01 10:00:00.123456789",
+            "2024-06-15 15:30:30.987654321",
+            "2024-12-31 23:59:59.111222333")
+            .toDF("ts_str")
+            .selectExpr("cast(ts_str as timestamp) as ts")
+            .write
+            .orc(path)
+
+          checkSparkAnswerAndOperator(() => spark.read.orc(path).select("ts"))
+        }
+      }
+    }
+  }
+
   test("test filter with quarter function") {
     withTable("t1") {
       sql("""
