@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 public class ValidateSparkPlanInjector {
 
     private static final Logger logger = LoggerFactory.getLogger(ValidateSparkPlanInjector.class);
+    private static volatile boolean classNotFound = false;
     private static boolean injected = false;
 
     public static synchronized void inject() {
@@ -38,12 +39,19 @@ public class ValidateSparkPlanInjector {
             logger.warn("ValidateSparkPlan already injected, skipping.");
             return;
         }
+        if (classNotFound) {
+            return;
+        }
         try {
-            ByteBuddyAgent.install();
+            // First check if the class exists before installing the agent
             ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
             TypeDescription typeDescription = TypePool.Default.of(contextClassLoader)
                     .describe("org.apache.spark.sql.execution.adaptive.ValidateSparkPlan$")
                     .resolve();
+
+            // Only install ByteBuddyAgent if the class exists
+            ByteBuddyAgent.install();
+
             new ByteBuddy()
                     .redefine(typeDescription, ClassFileLocator.ForClassLoader.of(contextClassLoader))
                     .method(named("apply"))
@@ -53,6 +61,7 @@ public class ValidateSparkPlanInjector {
             logger.info("Successfully injected ValidateSparkPlan.");
             injected = true;
         } catch (TypePool.Resolution.NoSuchTypeException e) {
+            classNotFound = true;
             logger.debug("No such type of ValidateSparkPlan", e);
         }
     }
