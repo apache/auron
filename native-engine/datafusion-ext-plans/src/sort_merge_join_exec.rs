@@ -205,7 +205,8 @@ impl SortMergeJoinExec {
                         .sub_duration(poll_time.duration());
                 })
             });
-        Ok(exec_ctx.coalesce_with_default_batch_size(output))
+        Ok(exec_ctx
+            .coalesce_with_default_batch_size(exec_ctx.split_with_default_batch_size(output)))
     }
 }
 
