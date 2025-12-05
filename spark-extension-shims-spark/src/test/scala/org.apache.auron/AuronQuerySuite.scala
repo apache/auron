@@ -282,7 +282,6 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
   test("lpad/rpad basic") {
     withTable("pad_tbl") {
-      // 创建表并插入数据
       sql(s"CREATE TABLE pad_tbl(id INT, txt STRING, len INT, pad STRING) USING parquet")
       sql(s"""
              |INSERT INTO pad_tbl VALUES
