@@ -137,16 +137,16 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("round function with varying scales for intPi") {
-    withTable("t2") {
-      sql("CREATE TABLE t2 (c1 INT) USING parquet")
+    withTable("t3") {
+      sql("CREATE TABLE t3 (c1 INT) USING parquet")
 
       val intPi: Int = 314159265
-      sql(s"INSERT INTO t2 VALUES($intPi)")
+      sql(s"INSERT INTO t3 VALUES($intPi)")
 
       val scales = -6 to 6
 
       scales.foreach { scale =>
-        checkSparkAnswerAndOperator(s"SELECT round(c1, $scale) AS xx FROM t2")
+        checkSparkAnswerAndOperator(s"SELECT round(c1, $scale) AS xx FROM t3")
       }
     }
   }
