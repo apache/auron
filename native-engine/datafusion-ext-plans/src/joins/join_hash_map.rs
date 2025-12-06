@@ -102,10 +102,10 @@ impl Table {
             "join hash table: number of rows exceeded 2^30: {num_rows}"
         );
         let hashes = join_create_hashes(num_rows, key_columns);
-        Self::craete_from_key_columns_and_hashes(num_rows, key_columns, hashes)
+        Self::create_from_key_columns_and_hashes(num_rows, key_columns, hashes)
     }
 
-    fn craete_from_key_columns_and_hashes(
+    fn create_from_key_columns_and_hashes(
         num_rows: usize,
         key_columns: &[ArrayRef],
         hashes: Vec<u32>,
@@ -319,7 +319,7 @@ impl JoinHashMap {
         hashes: Vec<u32>,
     ) -> Result<Self> {
         let table =
-            Table::craete_from_key_columns_and_hashes(data_batch.num_rows(), &key_columns, hashes)?;
+            Table::create_from_key_columns_and_hashes(data_batch.num_rows(), &key_columns, hashes)?;
 
         Ok(Self {
             data_batch,
