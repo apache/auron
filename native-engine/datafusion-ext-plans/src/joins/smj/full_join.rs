@@ -127,6 +127,10 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                     equal_rindices.push(cur2.cur_idx());
                     let l_key_idx = cur1.cur_idx();
                     let r_key_idx = cur2.cur_idx();
+                    // Current equal key. We will find all the rows
+                    // with the same key in both streams.
+                    let current_key = cur1.key(l_key_idx);
+
                     cur_forward!(cur1);
                     cur_forward!(cur2);
 
@@ -136,7 +140,7 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                     let mut r_equal = true;
                     while l_equal && r_equal {
                         if l_equal {
-                            l_equal = !cur1.finished() && cur1.cur_key() == cur1.key(l_key_idx);
+                            l_equal = !cur1.finished() && cur1.cur_key() == current_key;
                             if l_equal {
                                 has_multi_equal = true;
                                 equal_lindices.push(cur1.cur_idx());
@@ -144,7 +148,7 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                             }
                         }
                         if r_equal {
-                            r_equal = !cur2.finished() && cur2.cur_key() == cur2.key(r_key_idx);
+                            r_equal = !cur2.finished() && cur2.cur_key() == current_key;
                             if r_equal {
                                 has_multi_equal = true;
                                 equal_rindices.push(cur2.cur_idx());
@@ -167,7 +171,7 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
 
                     if r_equal {
                         // stream right side
-                        while !cur2.finished() && cur2.cur_key() == cur1.key(l_key_idx) {
+                        while !cur2.finished() && cur2.cur_key() == current_key {
                             for &lidx in &equal_lindices {
                                 self.lindices.push(lidx);
                                 self.rindices.push(cur2.cur_idx());
@@ -182,7 +186,7 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
 
                     if l_equal {
                         // stream left side
-                        while !cur1.finished() && cur1.cur_key() == cur2.key(r_key_idx) {
+                        while !cur1.finished() && cur1.cur_key() == current_key {
                             for &ridx in &equal_rindices {
                                 self.lindices.push(cur1.cur_idx());
                                 self.rindices.push(ridx);
