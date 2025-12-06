@@ -144,6 +144,9 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                 Ordering::Equal => {
                     let l_key_idx = cur1.cur_idx();
                     let r_key_idx = cur2.cur_idx();
+                    // Current equal key. We will find all the rows
+                    // with the same key.
+                    let current_key = cur1.key(l_key_idx);
 
                     if P.join_side == L && P.semi {
                         self.indices.push(l_key_idx);
@@ -160,7 +163,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                     let mut r_equal = true;
                     while l_equal && r_equal {
                         if l_equal {
-                            l_equal = !cur1.finished() && cur1.cur_key() == cur1.key(l_key_idx);
+                            l_equal = !cur1.finished() && cur1.cur_key() == current_key;
                             if l_equal {
                                 if P.join_side == L && P.semi {
                                     self.indices.push(cur1.cur_idx());
@@ -169,7 +172,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                             }
                         }
                         if r_equal {
-                            r_equal = !cur2.finished() && cur2.cur_key() == cur2.key(r_key_idx);
+                            r_equal = !cur2.finished() && cur2.cur_key() == current_key;
                             if r_equal {
                                 if P.join_side == R && P.semi {
                                     self.indices.push(cur2.cur_idx());
@@ -181,7 +184,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
 
                     if l_equal {
                         // stream left side
-                        while !cur1.finished() && cur1.cur_key() == cur2.key(r_key_idx) {
+                        while !cur1.finished() && cur1.cur_key() == current_key {
                             if P.join_side == L && P.semi {
                                 self.indices.push(cur1.cur_idx());
                             }
@@ -195,7 +198,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
 
                     if r_equal {
                         // stream right side
-                        while !cur2.finished() && cur2.cur_key() == cur1.key(l_key_idx) {
+                        while !cur2.finished() && cur2.cur_key() == current_key {
                             if P.join_side == R && P.semi {
                                 self.indices.push(cur2.cur_idx());
                             }
