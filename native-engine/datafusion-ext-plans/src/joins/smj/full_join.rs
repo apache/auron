@@ -160,9 +160,14 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                         continue;
                     }
 
-                    for (&lidx, &ridx) in equal_lindices.iter().cartesian_product(&equal_rindices) {
-                        self.lindices.push(lidx);
-                        self.rindices.push(ridx);
+                    for &lidx in &equal_lindices {
+                        for &ridx in &equal_rindices {
+                            self.lindices.push(lidx);
+                            self.rindices.push(ridx);
+                            if self.should_flush() {
+                                self.as_mut().flush(cur1, cur2).await?;
+                            }
+                        }
                     }
 
                     if r_equal {
