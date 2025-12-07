@@ -167,7 +167,9 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                     let new_size = equal_lindices.len() * equal_rindices.len();
                     if self.has_enough_room(new_size) {
                         // old cartesian_product way
-                        for (&lidx, &ridx) in equal_lindices.iter().cartesian_product(&equal_rindices) {
+                        for (&lidx, &ridx) in
+                            equal_lindices.iter().cartesian_product(&equal_rindices)
+                        {
                             self.lindices.push(lidx);
                             self.rindices.push(ridx);
                         }

@@ -32,9 +32,9 @@ mod tests {
         error::Result,
         physical_expr::expressions::Column,
         physical_plan::{ExecutionPlan, common, joins::utils::*, test::TestMemoryExec},
-        prelude::SessionContext,
+        prelude::{SessionConfig, SessionContext},
     };
-    use datafusion::prelude::SessionConfig;
+
     use crate::{
         broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
         broadcast_join_exec::BroadcastJoinExec,
@@ -270,7 +270,7 @@ mod tests {
         right: Arc<dyn ExecutionPlan>,
         on: JoinOn,
         join_type: JoinType,
-        batch_size: usize
+        batch_size: usize,
     ) -> Result<(Vec<String>, Vec<RecordBatch>)> {
         MemManager::init(1000000);
         let session_config = SessionConfig::new().with_batch_size(batch_size);
@@ -572,15 +572,55 @@ mod tests {
                 "| 1  | 5  | 5  | 1  | 7  | 7  |",
                 "+----+----+----+----+----+----+",
             ];
-            let (_, batches) = join_collect_with_batch_size(test_type, left.clone(), right.clone(), on.clone(), Inner, 2).await?;
+            let (_, batches) = join_collect_with_batch_size(
+                test_type,
+                left.clone(),
+                right.clone(),
+                on.clone(),
+                Inner,
+                2,
+            )
+            .await?;
             assert_batches_sorted_eq!(expected, &batches);
-            let (_, batches) = join_collect_with_batch_size(test_type, left.clone(), right.clone(), on.clone(), Inner, 3).await?;
+            let (_, batches) = join_collect_with_batch_size(
+                test_type,
+                left.clone(),
+                right.clone(),
+                on.clone(),
+                Inner,
+                3,
+            )
+            .await?;
             assert_batches_sorted_eq!(expected, &batches);
-            let (_, batches) = join_collect_with_batch_size(test_type, left.clone(), right.clone(), on.clone(), Inner, 4).await?;
+            let (_, batches) = join_collect_with_batch_size(
+                test_type,
+                left.clone(),
+                right.clone(),
+                on.clone(),
+                Inner,
+                4,
+            )
+            .await?;
             assert_batches_sorted_eq!(expected, &batches);
-            let (_, batches) = join_collect_with_batch_size(test_type, left.clone(), right.clone(), on.clone(), Inner, 5).await?;
+            let (_, batches) = join_collect_with_batch_size(
+                test_type,
+                left.clone(),
+                right.clone(),
+                on.clone(),
+                Inner,
+                5,
+            )
+            .await?;
             assert_batches_sorted_eq!(expected, &batches);
-            let (_, batches) = join_collect_with_batch_size(test_type, left.clone(), right.clone(), on.clone(), Inner, 7).await?;
+            let (_, batches) = join_collect_with_batch_size(
+                test_type,
+                left.clone(),
+                right.clone(),
+                on.clone(),
+                Inner,
+                7,
+            )
+            .await?;
             assert_batches_sorted_eq!(expected, &batches);
         }
         Ok(())
