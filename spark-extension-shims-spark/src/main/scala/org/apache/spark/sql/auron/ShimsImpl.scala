@@ -294,6 +294,11 @@ class ShimsImpl extends Shims with Logging {
   override def createNativeLocalLimitExec(limit: Long, child: SparkPlan): NativeLocalLimitBase =
     NativeLocalLimitExec(limit, child)
 
+  override def createNativeCollectLimitExec(
+      limit: Int,
+      child: SparkPlan): NativeCollectLimitBase =
+    NativeCollectLimitExec(limit, child)
+
   override def createNativeParquetInsertIntoHiveTableExec(
       cmd: InsertIntoHiveTable,
       child: SparkPlan): NativeParquetInsertIntoHiveTableBase =

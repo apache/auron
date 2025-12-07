@@ -18,8 +18,7 @@ package org.apache.auron
 
 import java.text.SimpleDateFormat
 
-import org.apache.spark.sql.AuronQueryTest
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AuronQueryTest, Row}
 
 import org.apache.auron.util.AuronTestUtils
 

@@ -123,6 +123,8 @@ abstract class Shims {
 
   def createNativeLocalLimitExec(limit: Long, child: SparkPlan): NativeLocalLimitBase
 
+  def createNativeCollectLimitExec(limit: Int, child: SparkPlan): NativeCollectLimitBase
+
   def createNativeParquetInsertIntoHiveTableExec(
       cmd: InsertIntoHiveTable,
       child: SparkPlan): NativeParquetInsertIntoHiveTableBase
