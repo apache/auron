@@ -246,7 +246,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                      |LOCATION '$path'
                      |""".stripMargin)
               sql("MSCK REPAIR TABLE t")
-              val expected = if (forcePositionalEvolution) {
+              if (forcePositionalEvolution) {
                 correctAnswer
               } else {
                 Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3), Row(null, null, 4))
