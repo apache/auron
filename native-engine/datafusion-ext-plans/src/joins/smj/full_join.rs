@@ -57,7 +57,7 @@ impl<const L_OUTER: bool, const R_OUTER: bool> FullJoiner<L_OUTER, R_OUTER> {
     }
 
     fn has_enough_room(&self, new_size: usize) -> bool {
-        self.lindices.len() + new_size < self.join_params.batch_size
+        self.lindices.len() + new_size <= self.join_params.batch_size
     }
 
     async fn flush(
