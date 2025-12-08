@@ -275,7 +275,6 @@ mod tests {
         MemManager::init(1000000);
         let session_config = SessionConfig::new().with_batch_size(batch_size);
         let session_ctx = SessionContext::new_with_config(session_config);
-        let session_ctx = SessionContext::new();
         let task_ctx = session_ctx.task_ctx();
         let schema = build_join_schema_for_test(&left.schema(), &right.schema(), join_type)?;
 
