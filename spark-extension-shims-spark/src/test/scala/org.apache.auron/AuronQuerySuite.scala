@@ -298,7 +298,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
              | (11,'Z', 3, '++'),
              | (12,'Z', 3, 'AB')
       """.stripMargin)
-      checkSparkAnswerAndOperator("SELECT LPAD(txt, len, pad), rpad(txt, len, pad) FROM pad_tbl")
+      checkSparkAnswerAndOperator("SELECT LPAD(txt, len, pad), RPAD(txt, len, pad) FROM pad_tbl")
     }
   }
 
