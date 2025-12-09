@@ -21,7 +21,7 @@
     <arrowVersion>16.0.0</arrowVersion>
     <protobufVersion>3.21.9</protobufVersion>
     <paimonVersion>1.1.1</paimonVersion>
-    <celebornVersion>0.6.0</celebornVersion>
+    <celebornVersion>0.6.2</celebornVersion>
   </properties>
 
   <dependencyManagement>
@@ -416,7 +416,7 @@
       <id>spark-3.5</id>
       <properties>
         <shimName>spark-3.5</shimName>
-        <pkgSuffix>-kwai</pkgSuffix>
+        <pkgSuffix>-kwai-adapt-cele060</pkgSuffix>
         <shimPkg>spark-extension-shims-spark3</shimPkg>
         <javaVersion>1.8</javaVersion>
         <scalaVersion>2.12</scalaVersion>

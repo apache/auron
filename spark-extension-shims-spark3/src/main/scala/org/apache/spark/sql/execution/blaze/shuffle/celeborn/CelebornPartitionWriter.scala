@@ -64,7 +64,27 @@ class CelebornPartitionWriter(
   override def close(success: Boolean): Unit = {
     val waitStartTime = System.nanoTime()
     if (success) {
-      shuffleClient.mapperEnd(shuffleId, mapId, encodedAttemptId, numMappers)
+      try {
+        // Try new API with numPartitions parameter (Celeborn 0.6+)
+        shuffleClient.mapperEnd(shuffleId, mapId, encodedAttemptId, numMappers, numPartitions)
+      } catch {
+        case _: NoSuchMethodError =>
+          // Fallback to old API without numPartitions parameter (Celeborn 0.5.x)
+          // Use reflection to avoid compilation error with new version
+          try {
+            val method = shuffleClient.getClass.getMethod(
+              "mapperEnd",
+              classOf[Int], classOf[Int], classOf[Int], classOf[Int])
+            method.invoke(shuffleClient,
+              Int.box(shuffleId),
+              Int.box(mapId),
+              Int.box(encodedAttemptId),
+              Int.box(numMappers))
+          } catch {
+            case e: Exception =>
+              logWarning(s"mapperEnd failed with error: ${e.getMessage}", e)
+          }
+      }
     }
     shuffleClient.cleanup(shuffleId, mapId, encodedAttemptId)
     metrics.incWriteTime(System.nanoTime() - waitStartTime)
