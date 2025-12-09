@@ -219,6 +219,55 @@ pub fn cast_impl(
         (&DataType::Utf8, DataType::Decimal128(..)) => {
             arrow::compute::kernels::cast::cast(&to_plain_string_array(array), cast_type)?
         }
+        // struct to string (spark compatible)
+        (&DataType::Struct(_), &DataType::Utf8) => {
+            let struct_array = as_struct_array(array);
+            let num_columns = struct_array.num_columns();
+
+            let casted_columns: Vec<ArrayRef> = struct_array
+                .columns()
+                .iter()
+                .map(|col| cast_impl(col, &DataType::Utf8, match_struct_fields))
+                .collect::<Result<Vec<_>>>()?;
+
+            let string_columns: Vec<&StringArray> = casted_columns
+                .iter()
+                .map(|col| as_string_array(col))
+                .collect();
+
+            let mut builder = StringBuilder::new();
+
+            for row_idx in 0..struct_array.len() {
+                if struct_array.is_null(row_idx) {
+                    builder.append_null();
+                } else {
+                    let mut row_str = String::from("{");
+
+                    if num_columns > 0 {
+                        if struct_array.column(0).is_null(row_idx) {
+                            row_str.push_str("null");
+                        } else {
+                            row_str.push_str(string_columns[0].value(row_idx));
+                        }
+
+                        for col_idx in 1..num_columns {
+                            row_str.push(',');
+                            if struct_array.column(col_idx).is_null(row_idx) {
+                                row_str.push_str(" null");
+                            } else {
+                                row_str.push(' ');
+                                row_str.push_str(string_columns[col_idx].value(row_idx));
+                            }
+                        }
+                    }
+
+                    row_str.push('}');
+                    builder.append_value(&row_str);
+                }
+            }
+
+            Arc::new(builder.finish())
+        }
         _ => {
             // default cast
             arrow::compute::kernels::cast::cast(array, cast_type)?
@@ -631,6 +680,119 @@ mod test {
                 None,
                 None,
             ])
+        );
+    }
+
+    #[test]
+    fn test_struct_to_string() {
+        // Create a struct array with fields: (int32, string, boolean)
+        let int_array = Int32Array::from(vec![Some(1), Some(2), None, Some(4), None]);
+        let string_array = StringArray::from(vec![Some("a"), None, Some("c"), Some("d"), None]);
+        let bool_array = BooleanArray::from(vec![Some(true), Some(false), Some(true), None, None]);
+
+        let struct_array: ArrayRef = Arc::new(StructArray::from(vec![
+            (
+                Arc::new(Field::new("f1", DataType::Int32, true)),
+                Arc::new(int_array) as ArrayRef,
+            ),
+            (
+                Arc::new(Field::new("f2", DataType::Utf8, true)),
+                Arc::new(string_array) as ArrayRef,
+            ),
+            (
+                Arc::new(Field::new("f3", DataType::Boolean, true)),
+                Arc::new(bool_array) as ArrayRef,
+            ),
+        ]));
+
+        let casted = cast(&struct_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![
+                Some("{1, a, true}"),
+                Some("{2, null, false}"),
+                Some("{null, c, true}"),
+                Some("{4, d, null}"),
+                Some("{null, null, null}"),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_struct_to_string_with_null_struct() {
+        // Create a struct array where some rows are entirely null
+        let int_array = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
+        let string_array = StringArray::from(vec![Some("a"), Some("b"), Some("c")]);
+
+        let fields = Fields::from(vec![
+            Field::new("f1", DataType::Int32, true),
+            Field::new("f2", DataType::Utf8, true),
+        ]);
+
+        // Set null at index 1
+        let nulls = arrow::buffer::NullBuffer::from(vec![true, false, true]);
+        let struct_array_with_nulls: ArrayRef = Arc::new(StructArray::new(
+            fields,
+            vec![
+                Arc::new(int_array) as ArrayRef,
+                Arc::new(string_array) as ArrayRef,
+            ],
+            Some(nulls),
+        ));
+
+        let casted = cast(&struct_array_with_nulls, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("{1, a}"), None, Some("{3, c}"),])
+        );
+    }
+
+    #[test]
+    fn test_empty_struct_to_string() {
+        // Create a struct array with zero fields but 2 rows
+        let struct_array: ArrayRef = Arc::new(StructArray::new_empty_fields(2, None));
+
+        let casted = cast(&struct_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("{}"), Some("{}")])
+        );
+    }
+
+    #[test]
+    fn test_nested_struct_to_string() {
+        // Create a nested struct: struct<int, struct<string, bool>>
+        let inner_string = StringArray::from(vec![Some("x"), Some("y")]);
+        let inner_bool = BooleanArray::from(vec![Some(true), None]);
+
+        let inner_struct: ArrayRef = Arc::new(StructArray::from(vec![
+            (
+                Arc::new(Field::new("s1", DataType::Utf8, true)),
+                Arc::new(inner_string) as ArrayRef,
+            ),
+            (
+                Arc::new(Field::new("s2", DataType::Boolean, true)),
+                Arc::new(inner_bool) as ArrayRef,
+            ),
+        ]));
+
+        let outer_int = Int32Array::from(vec![Some(100), Some(200)]);
+
+        let outer_struct: ArrayRef = Arc::new(StructArray::from(vec![
+            (
+                Arc::new(Field::new("f1", DataType::Int32, true)),
+                Arc::new(outer_int) as ArrayRef,
+            ),
+            (
+                Arc::new(Field::new("f2", inner_struct.data_type().clone(), true)),
+                inner_struct,
+            ),
+        ]));
+
+        let casted = cast(&outer_struct, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("{100, {x, true}}"), Some("{200, {y, null}}"),])
         );
     }
 }
