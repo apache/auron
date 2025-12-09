@@ -147,7 +147,6 @@ class BlazeCelebornShuffleReader[K, C](
 
     reader.read().map { kv =>
       val celebornInputStream = kv._2.asInstanceOf[CelebornInputStream]
-
       // force disable decompression because compression is skipped in shuffle writer
       try {
         FieldUtils.writeField(
@@ -156,7 +155,7 @@ class BlazeCelebornShuffleReader[K, C](
           Boolean.box(false).asInstanceOf[Object],
           true)
       } catch {
-        case _: IllegalAccessException =>
+        case _: IllegalArgumentException =>
           // ignore if field not found (likely in celeborn-0.6.0)
       }
       celebornInputStream
