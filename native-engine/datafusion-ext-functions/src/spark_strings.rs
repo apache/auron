@@ -38,6 +38,9 @@ pub fn string_lower(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         ColumnarValue::Scalar(ScalarValue::Utf8(Some(str))) => Ok(ColumnarValue::Scalar(
             ScalarValue::Utf8(Some(str.to_lowercase())),
         )),
+        ColumnarValue::Scalar(ScalarValue::Utf8(None)) => {
+            Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None)))
+        }
         _ => df_execution_err!("string_lower only supports literal utf8"),
     }
 }
@@ -52,6 +55,9 @@ pub fn string_upper(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         ColumnarValue::Scalar(ScalarValue::Utf8(Some(str))) => Ok(ColumnarValue::Scalar(
             ScalarValue::Utf8(Some(str.to_uppercase())),
         )),
+        ColumnarValue::Scalar(ScalarValue::Utf8(None)) => {
+            Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None)))
+        }
         _ => df_execution_err!("string_upper only supports literal utf8"),
     }
 }
@@ -368,6 +374,24 @@ mod test {
             vec![Some("{123}"), Some("a'asd'"), None,]
         );
         Ok(())
+    }
+
+    #[test]
+    fn test_string_lower_null_scalar() -> Result<()> {
+        let r = string_lower(&vec![ColumnarValue::Scalar(ScalarValue::Utf8(None))])?;
+        match r {
+            ColumnarValue::Scalar(ScalarValue::Utf8(None)) => Ok(()),
+            other => panic!("Expected null Utf8 scalar, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_string_upper_null_scalar() -> Result<()> {
+        let r = string_upper(&vec![ColumnarValue::Scalar(ScalarValue::Utf8(None))])?;
+        match r {
+            ColumnarValue::Scalar(ScalarValue::Utf8(None)) => Ok(()),
+            other => panic!("Expected null Utf8 scalar, got: {:?}", other),
+        }
     }
 
     #[test]
