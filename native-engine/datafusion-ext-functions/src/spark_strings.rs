@@ -218,11 +218,11 @@ pub fn string_concat_ws(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                     }
                 }
                 ColumnarValue::Scalar(scalar) => {
-                    if let ScalarValue::Utf8(s) = scalar {
-                        match s {
-                            Some(s) => return Ok(Arg::Literal(&s)),
-                            None => return Ok(Arg::Ignore),
-                        }
+                    if scalar.is_null() {
+                        return Ok(Arg::Ignore);
+                    }
+                    if let ScalarValue::Utf8(Some(s)) = scalar {
+                        return Ok(Arg::Literal(&s));
                     }
                     if let ScalarValue::List(l) = scalar
                         && l.data_type() == &DataType::Utf8
