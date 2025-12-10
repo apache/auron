@@ -19,7 +19,7 @@ package org.apache.spark.sql.auron
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.execution.{CollectLimitExec, ExpandExec, FileSourceScanExec, FilterExec, GenerateExec, GlobalLimitExec, LocalLimitExec, LocalTableScanExec, ProjectExec, SortExec, SparkPlan, TakeOrderedAndProjectExec, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
