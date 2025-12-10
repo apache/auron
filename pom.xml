@@ -416,7 +416,7 @@
       <id>spark-3.5</id>
       <properties>
         <shimName>spark-3.5</shimName>
-        <pkgSuffix>-kwai-adapt-cele060</pkgSuffix>
+        <pkgSuffix>-kwai-adapt-cele060-fix-non-partition-len</pkgSuffix>
         <shimPkg>spark-extension-shims-spark3</shimPkg>
         <javaVersion>1.8</javaVersion>
         <scalaVersion>2.12</scalaVersion>

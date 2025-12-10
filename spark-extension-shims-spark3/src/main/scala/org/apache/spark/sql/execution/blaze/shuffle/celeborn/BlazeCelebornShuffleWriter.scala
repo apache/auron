@@ -16,7 +16,7 @@
 package org.apache.spark.sql.execution.blaze.shuffle.celeborn
 
 import org.apache.celeborn.client.ShuffleClient
-import org.apache.spark.TaskContext
+import org.apache.spark.{TaskContext, SparkEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.ShuffleHandle
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
@@ -24,6 +24,7 @@ import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.shuffle.celeborn.CelebornShuffleHandle
 import org.apache.spark.shuffle.celeborn.ExecutorShuffleIdTracker
 import org.apache.spark.shuffle.celeborn.SparkUtils
+import org.apache.spark.sql.blaze.Shims
 import org.apache.spark.sql.execution.blaze.shuffle.BlazeRssShuffleWriterBase
 import org.apache.spark.sql.execution.blaze.shuffle.RssPartitionWriterBase
 import org.blaze.sparkver
@@ -67,5 +68,20 @@ class BlazeCelebornShuffleWriter[K, V](
   override def rssStop(success: Boolean): Option[MapStatus] = {
     celebornShuffleWriter.write(Iterator.empty) // force flush
     celebornShuffleWriter.stop(success)
+  }
+
+  // Override stop to use partition length map directly instead of rssStop's mapStatus
+  // because celeborn writer doesn't populate partition sizes correctly when using native writer
+  override def stop(success: Boolean): Option[MapStatus] = {
+    if (!success) {
+      return None
+    }
+
+    // Always use getPartitionLengthMap for Celeborn to get correct partition sizes
+    val blockManagerId = SparkEnv.get.blockManager.shuffleServerId
+    Some(Shims.get.getMapStatus(
+      blockManagerId,
+      celebornPartitionWriter.getPartitionLengthMap,
+      taskContext.partitionId()))
   }
 }
