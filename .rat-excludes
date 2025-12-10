@@ -32,3 +32,4 @@
 NOTICE*
 docs/**
 build/apache-maven-*/**
+src/main/resources/auron-build-info.properties
