@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
 import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
-import org.apache.spark.sql.execution.{CollectLimitExec, ExpandExec, FileSourceScanExec, FilterExec, GenerateExec, GlobalLimitExec, LeafExecNode, LocalLimitExec, LocalTableScanExec, ProjectExec, SortExec, SparkPlan, TakeOrderedAndProjectExec, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
