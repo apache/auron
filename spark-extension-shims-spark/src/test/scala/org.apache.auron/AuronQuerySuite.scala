@@ -462,39 +462,46 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("cast struct to string") {
-    withTable("t_struct") {
-      sql("""
-            |create table t_struct using parquet as
-            |select named_struct('a', 1, 'b', 'hello', 'c', true) as s
-            |union all select named_struct('a', 2, 'b', 'world', 'c', false)
-            |union all select named_struct('a', null, 'b', 'test', 'c', null)
-            |""".stripMargin)
+    // SPARK-32499 SPARK-32501 SPARK-33291
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_struct") {
+        sql("""
+              |create table t_struct using parquet as
+              |select named_struct('a', 1, 'b', 'hello', 'c', true) as s
+              |union all select named_struct('a', 2, 'b', 'world', 'c', false)
+              |union all select named_struct('a', null, 'b', 'test', 'c', null)
+              |""".stripMargin)
 
-      checkSparkAnswerAndOperator("select cast(s as string) from t_struct")
+        checkSparkAnswerAndOperator("select cast(s as string) from t_struct")
+      }
     }
   }
 
   test("cast nested struct to string") {
-    withTable("t_nested_struct") {
-      sql("""
-            |create table t_nested_struct using parquet as
-            |select named_struct('id', 1, 'inner', named_struct('x', 'a', 'y', 10)) as s
-            |union all select named_struct('id', 2, 'inner', named_struct('x', 'b', 'y', 20))
-            |""".stripMargin)
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_nested_struct") {
+        sql("""
+              |create table t_nested_struct using parquet as
+              |select named_struct('id', 1, 'inner', named_struct('x', 'a', 'y', 10)) as s
+              |union all select named_struct('id', 2, 'inner', named_struct('x', 'b', 'y', 20))
+              |""".stripMargin)
 
-      checkSparkAnswerAndOperator("select cast(s as string) from t_nested_struct")
+        checkSparkAnswerAndOperator("select cast(s as string) from t_nested_struct")
+      }
     }
   }
 
   test("cast struct with null fields to string") {
-    withTable("t_struct_nulls") {
-      sql("""
-            |create table t_struct_nulls using parquet as
-            |select named_struct('f1', cast(null as int), 'f2', cast(null as string)) as s
-            |union all select named_struct('f1', 100, 'f2', 'value')
-            |""".stripMargin)
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_struct_nulls") {
+        sql("""
+              |create table t_struct_nulls using parquet as
+              |select named_struct('f1', cast(null as int), 'f2', cast(null as string)) as s
+              |union all select named_struct('f1', 100, 'f2', 'value')
+              |""".stripMargin)
 
-      checkSparkAnswerAndOperator("select cast(s as string) from t_struct_nulls")
+        checkSparkAnswerAndOperator("select cast(s as string) from t_struct_nulls")
+      }
     }
   }
 }
