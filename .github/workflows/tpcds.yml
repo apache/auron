@@ -60,6 +60,7 @@ jobs:
     with:
       sparkver: spark-3.3
       hadoop-profile: 'hadoop3'
+      sparktests: true
 
   test-spark-34-jdk11:
     name: Test spark-3.4
