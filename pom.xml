@@ -148,6 +148,18 @@
       </dependency>
       <dependency>
         <groupId>org.apache.spark</groupId>
+        <artifactId>spark-hive_${scalaVersion}</artifactId>
+        <version>${sparkVersion}</version>
+        <type>test-jar</type>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
         <artifactId>spark-sql_${scalaVersion}</artifactId>
         <version>${sparkVersion}</version>
         <exclusions>
@@ -218,11 +230,22 @@
         <version>${scalaTestVersion}</version>
       </dependency>
       <dependency>
+        <groupId>org.scalatestplus</groupId>
+        <artifactId>scalatestplus-scalacheck_${scalaVersion}</artifactId>
+        <version>3.1.0.0-RC2</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-core_${scalaVersion}</artifactId>
         <version>${sparkVersion}</version>
         <type>test-jar</type>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-catalyst_${scalaVersion}</artifactId>
+        <version>${sparkVersion}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.spark</groupId>
@@ -240,6 +263,13 @@
       <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-sql_${scalaVersion}</artifactId>
+        <version>${sparkVersion}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-tags_${scalaVersion}</artifactId>
         <version>${sparkVersion}</version>
         <type>test-jar</type>
         <scope>test</scope>
@@ -887,6 +917,13 @@
       <properties>
         <icebergVersion>1.9.2</icebergVersion>
       </properties>
+    </profile>
+
+    <profile>
+      <id>spark-tests</id>
+      <modules>
+        <module>auron-spark-tests</module>
+      </modules>
     </profile>
   </profiles>
 </project>

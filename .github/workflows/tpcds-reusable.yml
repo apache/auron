@@ -24,6 +24,11 @@ on:
         description: 'Maven profile id to resolve sparkVersion (e.g., spark-3.5)'
         required: true
         type: string
+      sparktests:
+        description: 'Whether to enable spark correctness tests'
+        required: false
+        type: string
+        default: 'false'
       hadoop-profile:
         description: 'Hadoop profile (e.g., hadoop2.7, hadoop3)'
         required: true
@@ -181,6 +186,11 @@ jobs:
           fi
           if [ -n "${{ inputs.unifflever }}" ]; then
             CMD="$CMD --uniffle $UNIFFLE_NUMBER"
+          fi
+
+          SPARK_TESTS="${{ inputs.sparktests }}"
+          if [[ "$SPARK_TESTS" == "true" ]]; then
+            CMD="$CMD --sparktests true"
           fi
 
           echo "Running: $CMD"
