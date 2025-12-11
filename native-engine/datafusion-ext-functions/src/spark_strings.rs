@@ -330,7 +330,7 @@ mod test {
         },
         physical_plan::ColumnarValue,
     };
-
+    use datafusion_ext_commons::df_execution_err;
     use crate::spark_strings::{
         string_concat, string_concat_ws, string_lower, string_repeat, string_space, string_split,
         string_upper,
@@ -381,7 +381,7 @@ mod test {
         let r = string_lower(&vec![ColumnarValue::Scalar(ScalarValue::Utf8(None))])?;
         match r {
             ColumnarValue::Scalar(ScalarValue::Utf8(None)) => Ok(()),
-            other => panic!("Expected null Utf8 scalar, got: {:?}", other),
+            other => df_execution_err!("Expected null Utf8 scalar, got: {:?}", other),
         }
     }
 
@@ -390,7 +390,7 @@ mod test {
         let r = string_upper(&vec![ColumnarValue::Scalar(ScalarValue::Utf8(None))])?;
         match r {
             ColumnarValue::Scalar(ScalarValue::Utf8(None)) => Ok(()),
-            other => panic!("Expected null Utf8 scalar, got: {:?}", other),
+            other => df_execution_err!("Expected null Utf8 scalar, got: {:?}", other),
         }
     }
 
