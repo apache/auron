@@ -76,24 +76,4 @@ class AuronCelebornShuffleWriter[K, V](
       Shims.get
         .getMapStatus(blockManagerId, celebornPartitionWriter.getPartitionLengthMap, mapId))
   }
-
-  // Override stop to use partition length map directly instead of rssStop's mapStatus
-  // because celeborn writer doesn't populate partition sizes correctly when using native writer
-  override def stop(success: Boolean): Option[MapStatus] = {
-    if (!success) {
-      celebornShuffleWriter.stop(success)
-      return None
-    }
-
-    celebornShuffleWriter.write(Iterator.empty)
-    celebornShuffleWriter.stop(success)
-
-    // Always use getPartitionLengthMap for Celeborn to get correct partition sizes
-    val blockManagerId = SparkEnv.get.blockManager.shuffleServerId
-    Some(
-      Shims.get.getMapStatus(
-        blockManagerId,
-        celebornPartitionWriter.getPartitionLengthMap,
-        taskContext.partitionId()))
-  }
 }
