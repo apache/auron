@@ -331,6 +331,7 @@ mod test {
         physical_plan::ColumnarValue,
     };
     use datafusion_ext_commons::df_execution_err;
+
     use crate::spark_strings::{
         string_concat, string_concat_ws, string_lower, string_repeat, string_space, string_split,
         string_upper,
