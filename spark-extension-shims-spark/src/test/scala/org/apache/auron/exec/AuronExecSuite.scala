@@ -18,6 +18,7 @@ package org.apache.auron.exec
 
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.execution.auron.plan.{NativeGlobalLimitExec, NativeLocalLimitExec, NativeTakeOrderedExec}
+
 import org.apache.auron.BaseAuronSQLSuite
 import org.apache.auron.util.AuronTestUtils
 
