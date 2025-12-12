@@ -56,6 +56,10 @@ impl<const L_OUTER: bool, const R_OUTER: bool> FullJoiner<L_OUTER, R_OUTER> {
         self.lindices.len() >= self.join_params.batch_size
     }
 
+    fn has_enough_room(&self, new_size: usize) -> bool {
+        self.lindices.len() + new_size <= self.join_params.batch_size
+    }
+
     async fn flush(
         mut self: Pin<&mut Self>,
         cur1: &mut StreamCursor,
@@ -160,9 +164,26 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
                         continue;
                     }
 
-                    for (&lidx, &ridx) in equal_lindices.iter().cartesian_product(&equal_rindices) {
-                        self.lindices.push(lidx);
-                        self.rindices.push(ridx);
+                    let new_size = equal_lindices.len() * equal_rindices.len();
+                    if self.has_enough_room(new_size) {
+                        // old cartesian_product way
+                        for (&lidx, &ridx) in
+                            equal_lindices.iter().cartesian_product(&equal_rindices)
+                        {
+                            self.lindices.push(lidx);
+                            self.rindices.push(ridx);
+                        }
+                    } else {
+                        // do more aggressive flush
+                        for &lidx in &equal_lindices {
+                            for &ridx in &equal_rindices {
+                                self.lindices.push(lidx);
+                                self.rindices.push(ridx);
+                                if self.should_flush() {
+                                    self.as_mut().flush(cur1, cur2).await?;
+                                }
+                            }
+                        }
                     }
 
                     if r_equal {
