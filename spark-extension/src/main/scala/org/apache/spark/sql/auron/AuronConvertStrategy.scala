@@ -19,19 +19,7 @@ package org.apache.spark.sql.auron
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.execution.ExpandExec
-import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.FilterExec
-import org.apache.spark.sql.execution.GenerateExec
-import org.apache.spark.sql.execution.GlobalLimitExec
-import org.apache.spark.sql.execution.LocalLimitExec
-import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.execution.ProjectExec
-import org.apache.spark.sql.execution.SortExec
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.TakeOrderedAndProjectExec
-import org.apache.spark.sql.execution.UnaryExecNode
-import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
@@ -161,6 +149,8 @@ object AuronConvertStrategy extends Logging {
       case e: GlobalLimitExec if isNative(e.child) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
       case e: TakeOrderedAndProjectExec if isNative(e.child) =>
+        e.setTagValue(convertStrategyTag, AlwaysConvert)
+      case e: CollectLimitExec if isNative(e.child) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
       case e: HashAggregateExec if isNative(e.child) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)

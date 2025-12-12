@@ -49,20 +49,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
 import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
-import org.apache.spark.sql.execution.ExpandExec
-import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.FilterExec
-import org.apache.spark.sql.execution.GenerateExec
-import org.apache.spark.sql.execution.GlobalLimitExec
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.LocalLimitExec
-import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.execution.ProjectExec
-import org.apache.spark.sql.execution.SortExec
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.TakeOrderedAndProjectExec
-import org.apache.spark.sql.execution.UnaryExecNode
-import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
@@ -119,6 +106,8 @@ object AuronConverters extends Logging {
     getBooleanConf("spark.auron.enable.global.limit", defaultValue = true)
   def enableTakeOrderedAndProject: Boolean =
     getBooleanConf("spark.auron.enable.take.ordered.and.project", defaultValue = true)
+  def enableCollectLimit: Boolean =
+    getBooleanConf("spark.auron.enable.collectLimit", defaultValue = true)
   def enableAggr: Boolean =
     getBooleanConf("spark.auron.enable.aggr", defaultValue = true)
   def enableExpand: Boolean =
@@ -227,6 +216,8 @@ object AuronConverters extends Logging {
         tryConvert(e, convertGlobalLimitExec)
       case e: TakeOrderedAndProjectExec if enableTakeOrderedAndProject =>
         tryConvert(e, convertTakeOrderedAndProjectExec)
+      case e: CollectLimitExec if enableCollectLimit =>
+        tryConvert(e, convertCollectLimitExec)
 
       case e: HashAggregateExec if enableAggr => // hash aggregate
         val convertedAgg = tryConvert(e, convertHashAggregateExec)
@@ -325,6 +316,8 @@ object AuronConverters extends Logging {
           "Conversion disabled: spark.auron.enable.global.limit=false."
         case _: TakeOrderedAndProjectExec if !enableTakeOrderedAndProject =>
           "Conversion disabled: spark.auron.enable.take.ordered.and.project=false."
+        case _: CollectLimitExec if !enableCollectLimit =>
+          "Conversion disabled: spark.auron.enable.collectLimit=false."
         case _: HashAggregateExec if !enableAggr =>
           "Conversion disabled: spark.auron.enable.aggr=false."
         case _: ObjectHashAggregateExec if !enableAggr =>
@@ -794,6 +787,11 @@ object AuronConverters extends Logging {
     } else {
       nativeTakeOrdered
     }
+  }
+
+  def convertCollectLimitExec(exec: CollectLimitExec): SparkPlan = {
+    logDebugPlanConversion(exec)
+    Shims.get.createNativeCollectLimitExec(exec.limit, exec.child)
   }
 
   def convertHashAggregateExec(exec: HashAggregateExec): SparkPlan = {
