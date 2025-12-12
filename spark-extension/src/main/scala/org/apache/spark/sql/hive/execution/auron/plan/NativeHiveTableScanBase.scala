@@ -70,7 +70,7 @@ abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
   // should not include partition columns
   protected def nativeFileSchema: pb.Schema =
     NativeConverters.convertSchema(StructType(relation.tableMeta.dataSchema.map {
-      case field if basedHiveScan.requestedAttributes.exists(_.name == field.name) =>
+      case field if output.exists(_.name == field.name) =>
         field.copy(nullable = true)
       case field =>
         // avoid converting unsupported type in non-used fields
