@@ -792,7 +792,7 @@
         <module>thirdparty/auron-celeborn-0.6</module>
       </modules>
       <properties>
-        <celebornVersion>0.6.1</celebornVersion>
+        <celebornVersion>0.6.2</celebornVersion>
       </properties>
     </profile>
 

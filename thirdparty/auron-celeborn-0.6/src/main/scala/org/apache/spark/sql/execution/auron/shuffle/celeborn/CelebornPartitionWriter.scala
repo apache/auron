@@ -65,7 +65,7 @@ class CelebornPartitionWriter(
   override def close(success: Boolean): Unit = {
     val waitStartTime = System.nanoTime()
     if (success) {
-      shuffleClient.mapperEnd(shuffleId, mapId, encodedAttemptId, numMappers)
+      shuffleClient.mapperEnd(shuffleId, mapId, encodedAttemptId, numMappers, numPartitions)
     }
     shuffleClient.cleanup(shuffleId, mapId, encodedAttemptId)
     metrics.incWriteTime(System.nanoTime() - waitStartTime)
