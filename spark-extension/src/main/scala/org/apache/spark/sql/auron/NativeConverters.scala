@@ -882,8 +882,8 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_MD5", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Reverse(_1) =>
         buildScalarFunction(pb.ScalarFunction.Reverse, Seq(unpackBinaryTypeCast(_1)), StringType)
-      case InitCap(_1) =>
-        buildScalarFunction(pb.ScalarFunction.InitCap, Seq(unpackBinaryTypeCast(_1)), StringType)
+      case e: InitCap =>
+        buildExtScalarFunction("Spark_InitCap", e.children, e.dataType)
       case Sha2(_1, Literal(224, _)) =>
         buildExtScalarFunction("Spark_Sha224", Seq(unpackBinaryTypeCast(_1)), StringType)
       case Sha2(_1, Literal(0, _)) =>

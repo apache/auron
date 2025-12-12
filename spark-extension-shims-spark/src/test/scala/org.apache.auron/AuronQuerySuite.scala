@@ -316,37 +316,53 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("initcap basic") {
-    Seq(
-      ("select initcap('spark sql')", Row("Spark Sql")),
-      ("select initcap('SPARK')", Row("Spark")),
-      ("select initcap('sPaRk')", Row("Spark")),
-      ("select initcap('')", Row("")),
-      ("select initcap(null)", Row(null))).foreach { case (q, expected) =>
-      checkAnswer(sql(q), Seq(expected))
+    withTable("initcap_basic_tbl") {
+      sql(s"CREATE TABLE initcap_basic_tbl(id INT, txt STRING) USING parquet")
+      sql(s"""
+           |INSERT INTO initcap_basic_tbl VALUES
+           | (1, 'spark sql'),
+           | (2, 'SPARK'),
+           | (3, 'sPaRk'),
+           | (4, ''),
+           | (5, NULL)
+        """.stripMargin)
+      checkSparkAnswerAndOperator("select id, initcap(txt) from initcap_basic_tbl")
     }
   }
 
   test("initcap: word boundaries and punctuation") {
-    Seq(
-      ("select initcap('hello world')", Row("Hello World")),
-      ("select initcap('hello_world')", Row("Hello_world")),
-      ("select initcap('über-alles')", Row("Über-alles")),
-      ("select initcap('foo.bar/baz')", Row("Foo.bar/baz")),
-      ("select initcap('v2Ray is COOL')", Row("V2ray Is Cool")),
-      ("select initcap('rock''n''roll')", Row("Rocknroll")),
-      ("select initcap('hi\\tthere')", Row("Hi\tthere")),
-      ("select initcap('hi\\nthere')", Row("Hi\nthere"))).foreach { case (q, expected) =>
-      checkAnswer(sql(q), Seq(expected))
+    withTable("initcap_bound_tbl") {
+      sql(s"CREATE TABLE initcap_bound_tbl(id INT, txt STRING) USING parquet")
+      sql(s"""
+           |INSERT INTO initcap_bound_tbl VALUES
+           | (1, 'hello world'),
+           | (2, 'hello_world'),
+           | (3, 'über-alles'),
+           | (4, 'foo.bar/baz'),
+           | (5, 'v2Ray is COOL'),
+           | (6, 'rock''n''roll'),
+           | (7, 'hi\tthere'),
+           | (8, 'hi\nthere')
+        """.stripMargin)
+      checkSparkAnswerAndOperator("select id, initcap(txt) from initcap_bound_tbl")
     }
   }
 
   test("initcap: mixed cases and edge cases") {
-    Seq(
-      ("select initcap('a1b2 c3D4')", Row("A1b2 C3d4")),
-      ("select initcap('---abc---')", Row("---abc---")),
-      ("select initcap('  multiple   spaces ')", Row("  Multiple   Spaces "))).foreach {
-      case (q, expected) =>
-        checkAnswer(sql(q), Seq(expected))
+    withTable("initcap_mixed_tbl") {
+      sql(s"CREATE TABLE initcap_mixed_tbl(id INT, txt STRING) USING parquet")
+      sql(s"""
+           |INSERT INTO initcap_mixed_tbl VALUES
+           | (1, 'a1b2 c3D4'),
+           | (2, '---abc--- ABC --ABC-- 世界 世 界 '),
+           | (3, ' multiple   spaces '),
+           | (4, 'AbCdE aBcDe'),
+           | (5, ' A B A b '),
+           | (6, 'aBćDe  ab世De AbĆdE aB世De ÄBĆΔE'),
+           | (7, 'i\u0307onic  FIDELİO'),
+           | (8, 'a🙃B🙃c  😄 😆')
+        """.stripMargin)
+      checkSparkAnswerAndOperator("select id, initcap(txt) from initcap_mixed_tbl")
     }
   }
 
