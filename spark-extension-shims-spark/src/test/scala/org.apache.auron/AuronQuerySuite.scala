@@ -281,20 +281,24 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("lpad/rpad basic") {
-    Seq(
-      ("select lpad('abc', 5, '*')", Row("**abc")),
-      ("select rpad('abc', 5, '*')", Row("abc**")),
-      ("select lpad('spark', 2, '0')", Row("sp")),
-      ("select rpad('spark', 2, '0')", Row("sp")),
-      ("select lpad('9', 5, 'ab')", Row("abab9")),
-      ("select rpad('9', 5, 'ab')", Row("9abab")),
-      ("select lpad('hi', 5, '')", Row("hi")),
-      ("select rpad('hi', 5, '')", Row("hi")),
-      ("select lpad('x', 0, 'a')", Row("")),
-      ("select rpad('x', -1, 'a')", Row("")),
-      ("select lpad('Z', 3, '++')", Row("++Z")),
-      ("select rpad('Z', 3, 'AB')", Row("ZAB"))).foreach { case (q, expected) =>
-      checkAnswer(sql(q), Seq(expected))
+    withTable("pad_tbl") {
+      sql(s"CREATE TABLE pad_tbl(id INT, txt STRING, len INT, pad STRING) USING parquet")
+      sql(s"""
+             |INSERT INTO pad_tbl VALUES
+             | (1, 'abc', 5, ''),
+             | (2, 'abc', 5, ' '),
+             | (3, 'spark', 2, '0'),
+             | (4, 'spark', 2, '0'),
+             | (5, '9', 5, 'ab'),
+             | (6, '9', 5, 'ab'),
+             | (7, 'hi', 5, ''),
+             | (8, 'hi', 5, ''),
+             | (9, 'x', 0, 'a'),
+             | (10,'x', -1, 'a'),
+             | (11,'Z', 3, '++'),
+             | (12,'Z', 3, 'AB')
+      """.stripMargin)
+      checkSparkAnswerAndOperator("SELECT LPAD(txt, len, pad), RPAD(txt, len, pad) FROM pad_tbl")
     }
   }
 
@@ -345,6 +349,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         checkAnswer(sql(q), Seq(expected))
     }
   }
+
   test("test filter with hour function") {
     withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
       withTable("t_hour") {
@@ -356,15 +361,13 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |""".stripMargin)
 
         // Keep rows where HOUR >= 8, then group by hour
-        checkAnswer(
-          sql("""
+        checkSparkAnswerAndOperator("""
                 |select h, count(*)
                 |from (select hour(event_time) as h from t_hour) t
                 |where h >= 8
                 |group by h
                 |order by h
-                |""".stripMargin),
-          Seq(Row(8, 2)))
+                |""".stripMargin)
       }
     }
   }
@@ -380,14 +383,12 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |""".stripMargin)
 
         // Keep rows where MINUTE = 30, then group by minute
-        checkAnswer(
-          sql("""
+        checkSparkAnswerAndOperator("""
                 |select m, count(*)
                 |from (select minute(event_time) as m from t_minute) t
                 |where m = 30
                 |group by m
-                |""".stripMargin),
-          Seq(Row(30, 2)))
+                |""".stripMargin)
       }
     }
   }
@@ -403,14 +404,12 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |""".stripMargin)
 
         // Keep rows where SECOND = 0, then group by second
-        checkAnswer(
-          sql("""
+        checkSparkAnswerAndOperator("""
                 |select s, count(*)
                 |from (select second(event_time) as s from t_second) t
                 |where s = 0
                 |group by s
-                |""".stripMargin),
-          Seq(Row(0, 2)))
+                |""".stripMargin)
       }
     }
   }
@@ -421,16 +420,14 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       withTable("t_date_parts") {
         sql(
           "create table t_date_parts using parquet as select date'2024-12-18' as d union all select date'2024-12-19'")
-        checkAnswer(
-          sql("""
+        checkSparkAnswerAndOperator("""
                 |select
                 |  hour(d)   as h,
                 |  minute(d) as m,
                 |  second(d) as s
                 |from t_date_parts
                 |order by d
-                |""".stripMargin),
-          Seq(Row(0, 0, 0), Row(0, 0, 0)))
+                |""".stripMargin)
       }
     }
   }
@@ -444,12 +441,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |select from_utc_timestamp(to_timestamp('1970-01-01 00:00:00'), 'Asia/Shanghai') as ts
               |""".stripMargin)
 
-        checkAnswer(
-          sql("""
+        checkSparkAnswerAndOperator("""
                 |select hour(ts), minute(ts), second(ts)
                 |from t_tz
-                |""".stripMargin),
-          Seq(Row(8, 0, 0)))
+                |""".stripMargin)
       }
     }
   }
@@ -464,9 +459,52 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |""".stripMargin)
 
         // Kolkata -> 05:30:00; Kathmandu -> 05:45:00
-        checkAnswer(
-          sql("select minute(ts1), second(ts1), minute(ts2), second(ts2) from t_tz2"),
-          Seq(Row(30, 0, 45, 0)))
+        checkSparkAnswerAndOperator(
+          "select minute(ts1), second(ts1), minute(ts2), second(ts2) from t_tz2")
+      }
+    }
+  }
+
+  test("cast struct to string") {
+    // SPARK-32499 SPARK-32501 SPARK-33291
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_struct") {
+        sql("""
+              |create table t_struct using parquet as
+              |select named_struct('a', 1, 'b', 'hello', 'c', true) as s
+              |union all select named_struct('a', 2, 'b', 'world', 'c', false)
+              |union all select named_struct('a', null, 'b', 'test', 'c', null)
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(s as string) from t_struct")
+      }
+    }
+  }
+
+  test("cast nested struct to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_nested_struct") {
+        sql("""
+              |create table t_nested_struct using parquet as
+              |select named_struct('id', 1, 'inner', named_struct('x', 'a', 'y', 10)) as s
+              |union all select named_struct('id', 2, 'inner', named_struct('x', 'b', 'y', 20))
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(s as string) from t_nested_struct")
+      }
+    }
+  }
+
+  test("cast struct with null fields to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_struct_nulls") {
+        sql("""
+              |create table t_struct_nulls using parquet as
+              |select named_struct('f1', cast(null as int), 'f2', cast(null as string)) as s
+              |union all select named_struct('f1', 100, 'f2', 'value')
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(s as string) from t_struct_nulls")
       }
     }
   }

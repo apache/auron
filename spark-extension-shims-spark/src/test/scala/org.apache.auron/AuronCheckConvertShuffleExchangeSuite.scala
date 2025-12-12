@@ -16,81 +16,39 @@
  */
 package org.apache.auron
 
-import org.apache.spark.sql.{AuronQueryTest, Row, SparkSession}
-import org.apache.spark.sql.auron.AuronConverters
+import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.auron.{AuronColumnarOverrides, AuronConverters}
+import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.test.SharedSparkSession
 
-class AuronCheckConvertShuffleExchangeSuite
-    extends AuronQueryTest
-    with SharedSparkSession
-    with AuronSQLTestHelper {
+class AuronCheckConvertShuffleExchangeSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   test(
     "test set auron shuffle manager convert to native shuffle exchange where set spark.auron.enable is true") {
     withTable("test_shuffle") {
-      val spark = SparkSession
-        .builder()
-        .master("local[2]")
-        .appName("checkConvertToNativeShuffleManger")
-        .config("spark.sql.shuffle.partitions", "4")
-        .config("spark.sql.autoBroadcastJoinThreshold", -1)
-        .config("spark.sql.adaptive.enabled", "true")
-        .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
-        .config(
-          "spark.shuffle.manager",
-          "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
-        .config("spark.memory.offHeap.enabled", "false")
-        .config("spark.auron.enable", "true")
-        .getOrCreate()
-
       spark.sql("drop table if exists test_shuffle")
       spark.sql(
         "create table if not exists test_shuffle using parquet PARTITIONED BY (part) as select 1 as c1, 2 as c2, 'test test' as part")
-      val executePlan =
-        spark.sql("select c1, count(1) from test_shuffle group by c1")
 
-      val shuffleExchangeExec = collect(executePlan.queryExecution.executedPlan) {
-        case shuffleExchangeExec: ShuffleExchangeExec => shuffleExchangeExec
+      withSQLConf(
+        "spark.shuffle.manager" -> "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager") {
+        val df = spark.sql("select c1, count(1) from test_shuffle group by c1")
+        checkAnswer(df, Seq(Row(1, 1)))
+        assert(collectFirst(df.queryExecution.executedPlan) { case e: NativeShuffleExchangeExec =>
+          e
+        }.isDefined)
       }
-      assert(shuffleExchangeExec.nonEmpty, "ShuffleExchangeExec not found in plan")
-      val afterConvertPlan = AuronConverters.convertSparkPlan(shuffleExchangeExec.head)
-      assert(afterConvertPlan.isInstanceOf[NativeShuffleExchangeExec])
-      checkAnswer(executePlan, Seq(Row(1, 1)))
     }
   }
 
-  test(
-    "test set non auron shuffle manager do not convert to native shuffle exchange where set spark.auron.enable is true") {
-    withTable("test_shuffle") {
-      val spark = SparkSession
-        .builder()
-        .master("local[2]")
-        .appName("checkConvertToNativeShuffleManger")
-        .config("spark.sql.shuffle.partitions", "4")
-        .config("spark.sql.autoBroadcastJoinThreshold", -1)
-        .config("spark.sql.adaptive.enabled", "true")
-        .config("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
-        .config("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
-        .config("spark.memory.offHeap.enabled", "false")
-        .config("spark.auron.enable", "true")
-        .getOrCreate()
-      spark.sql("drop table if exists test_shuffle")
-      spark.sql(
-        "create table if not exists test_shuffle using parquet PARTITIONED BY (part) as select 1 as c1, 2 as c2, 'test test' as part")
-      val executePlan =
-        spark.sql("select c1, count(1) from test_shuffle group by c1")
-
-      val shuffleExchangeExec = collect(executePlan.queryExecution.executedPlan) {
-        case shuffleExchangeExec: ShuffleExchangeExec => shuffleExchangeExec
+  test("fails when non-Auron shuffle manager with set spark.auron.enable is true") {
+    withSQLConf("spark.shuffle.manager" -> "org.apache.spark.shuffle.sort.SortShuffleManager") {
+      val emptyExec =
+        AuronConverters.createEmptyExec(Seq.empty, UnknownPartitioning(1), Seq.empty)
+      // With a non-Auron shuffle manager, preColumnarTransitions should fail fast
+      intercept[AssertionError] {
+        AuronColumnarOverrides(spark).preColumnarTransitions.apply(emptyExec)
       }
-      assert(shuffleExchangeExec.nonEmpty, "ShuffleExchangeExec not found in plan")
-      val afterConvertPlan = AuronConverters.convertSparkPlan(shuffleExchangeExec.head)
-      assert(afterConvertPlan.isInstanceOf[ShuffleExchangeExec])
-      checkAnswer(executePlan, Seq(Row(1, 1)))
-
     }
   }
-
 }

@@ -14,6 +14,7 @@
 // limitations under the License.
 
 pub mod array_size;
+pub mod boolean;
 pub mod cast;
 pub mod coalesce;
 pub mod eq_comparator;

@@ -381,27 +381,31 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
-  ignore("DISABLED: isNaN native semantics mismatch (null -> false)") {
-    /* TODO: enable once Spark-compatible isNaN lands https://github.com/apache/auron/issues/1646 */
-
-    test("test function IsNaN") {
-      withTable("t1") {
-        sql(
-          "create table test_is_nan using parquet as select cast('NaN' as double) as c1, cast('NaN' as float) as c2, log(-3) as c3, cast(null as double) as c4, 5.5f as c5")
-        val functions =
-          """
-            |select
-            |    isnan(c1),
-            |    isnan(c2),
-            |    isnan(c3),
-            |    isnan(c4),
-            |    isnan(c5)
-            |from
-            |    test_is_nan
+  test("test function IsNaN") {
+    withTable("t1") {
+      sql("""
+          |create table test_is_nan using parquet as select
+          |  cast('NaN' as double) as c1,
+          |  cast('NaN' as float) as c2,
+          |  cast(null as double) as c3,
+          |  cast(null as double) as c4,
+          |  cast(5.5 as float) as c5,
+          |  cast(null as float) as c6
+          |""".stripMargin)
+      val functions =
+        """
+          |select
+          |    isnan(c1),
+          |    isnan(c2),
+          |    isnan(c3),
+          |    isnan(c4),
+          |    isnan(c5),
+          |    isnan(c6)
+          |from
+          |    test_is_nan
         """.stripMargin
 
-        checkSparkAnswerAndOperator(functions)
-      }
+      checkSparkAnswerAndOperator(functions)
     }
   }
 
