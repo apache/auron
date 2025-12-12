@@ -179,7 +179,7 @@ impl AggHashMapKey for &[u8] {
     }
 
     fn into_owned(self) -> OwnedKey {
-        OwnedKey::from_slice(self)
+        OwnedKey::from(self)
     }
 }
 
