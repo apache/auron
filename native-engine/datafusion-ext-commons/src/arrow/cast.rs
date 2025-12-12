@@ -219,6 +219,52 @@ pub fn cast_impl(
         (&DataType::Utf8, DataType::Decimal128(..)) => {
             arrow::compute::kernels::cast::cast(&to_plain_string_array(array), cast_type)?
         }
+        // map to string (spark compatible)
+        (&DataType::Map(..), &DataType::Utf8) => {
+            let map_array = as_map_array(array);
+            let entries = map_array.entries();
+            let keys = entries.column(0);
+            let values = entries.column(1);
+
+            let casted_keys = cast_impl(keys, &DataType::Utf8, match_struct_fields)?;
+            let casted_values = cast_impl(values, &DataType::Utf8, match_struct_fields)?;
+
+            let string_keys = as_string_array(&casted_keys);
+            let string_values = as_string_array(&casted_values);
+
+            let mut builder = StringBuilder::new();
+
+            for row_idx in 0..map_array.len() {
+                if map_array.is_null(row_idx) {
+                    builder.append_null();
+                } else {
+                    let mut row_str = String::from("{");
+                    let start = map_array.value_offsets()[row_idx] as usize;
+                    let end = map_array.value_offsets()[row_idx + 1] as usize;
+
+                    for i in start..end {
+                        if i > start {
+                            row_str.push_str(", ");
+                        }
+
+                        row_str.push_str(string_keys.value(i));
+                        row_str.push_str(" ->");
+
+                        if values.is_null(i) {
+                            row_str.push_str(" null");
+                        } else {
+                            row_str.push(' ');
+                            row_str.push_str(string_values.value(i));
+                        }
+                    }
+
+                    row_str.push('}');
+                    builder.append_value(&row_str);
+                }
+            }
+
+            Arc::new(builder.finish())
+        }
         // struct to string (spark compatible)
         (&DataType::Struct(_), &DataType::Utf8) => {
             let struct_array = as_struct_array(array);
@@ -793,6 +839,178 @@ mod test {
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{100, {x, true}}"), Some("{200, {y, null}}"),])
+        );
+    }
+
+    #[test]
+    fn test_map_to_string() {
+        // Create a map array: Map<Int32, String>
+        let key_field = Arc::new(Field::new("key", DataType::Int32, false));
+        let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
+        let entries_field = Arc::new(Field::new(
+            "entries",
+            DataType::Struct(Fields::from(vec![
+                key_field.as_ref().clone(),
+                value_field.as_ref().clone(),
+            ])),
+            false,
+        ));
+
+        let keys = Int32Array::from(vec![1, 2, 3, 4, 5]);
+        let values = StringArray::from(vec![Some("a"), Some("b"), None, Some("d"), Some("e")]);
+
+        let entries = StructArray::from(vec![
+            (key_field.clone(), Arc::new(keys) as ArrayRef),
+            (value_field.clone(), Arc::new(values) as ArrayRef),
+        ]);
+
+        let offsets = arrow::buffer::OffsetBuffer::new(vec![0i32, 2, 3, 5].into());
+        let map_array: ArrayRef = Arc::new(MapArray::new(
+            entries_field.clone(),
+            offsets,
+            entries,
+            None,
+            false,
+        ));
+
+        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![
+                Some("{1 -> a, 2 -> b}"),
+                Some("{3 -> null}"),
+                Some("{4 -> d, 5 -> e}"),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_map_to_string_with_null_map() {
+        // Create a map array with null rows
+        let key_field = Arc::new(Field::new("key", DataType::Int32, false));
+        let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
+        let entries_field = Arc::new(Field::new(
+            "entries",
+            DataType::Struct(Fields::from(vec![
+                key_field.as_ref().clone(),
+                value_field.as_ref().clone(),
+            ])),
+            false,
+        ));
+
+        let keys = Int32Array::from(vec![1, 2, 3]);
+        let values = StringArray::from(vec![Some("a"), Some("b"), Some("c")]);
+
+        let entries = StructArray::from(vec![
+            (key_field.clone(), Arc::new(keys) as ArrayRef),
+            (value_field.clone(), Arc::new(values) as ArrayRef),
+        ]);
+
+        let offsets = arrow::buffer::OffsetBuffer::new(vec![0i32, 1, 2, 3].into());
+        let nulls = arrow::buffer::NullBuffer::from(vec![true, false, true]);
+        let map_array: ArrayRef = Arc::new(MapArray::new(
+            entries_field.clone(),
+            offsets,
+            entries,
+            Some(nulls),
+            false,
+        ));
+
+        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("{1 -> a}"), None, Some("{3 -> c}"),])
+        );
+    }
+
+    #[test]
+    fn test_empty_map_to_string() {
+        // Create an empty map array
+        let key_field = Arc::new(Field::new("key", DataType::Int32, false));
+        let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
+        let entries_field = Arc::new(Field::new(
+            "entries",
+            DataType::Struct(Fields::from(vec![
+                key_field.as_ref().clone(),
+                value_field.as_ref().clone(),
+            ])),
+            false,
+        ));
+
+        let keys = Int32Array::from(vec![] as Vec<i32>);
+        let values = StringArray::from(vec![] as Vec<Option<&str>>);
+
+        let entries = StructArray::from(vec![
+            (key_field.clone(), Arc::new(keys) as ArrayRef),
+            (value_field.clone(), Arc::new(values) as ArrayRef),
+        ]);
+
+        // Two rows, both empty maps
+        let offsets = arrow::buffer::OffsetBuffer::new(vec![0i32, 0, 0].into());
+        let map_array: ArrayRef = Arc::new(MapArray::new(
+            entries_field.clone(),
+            offsets,
+            entries,
+            None,
+            false,
+        ));
+
+        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("{}"), Some("{}")])
+        );
+    }
+
+    #[test]
+    fn test_nested_map_to_string() {
+        // Create a map with struct values: Map<Int32, Struct<String, Boolean>>
+        let key_field = Arc::new(Field::new("key", DataType::Int32, false));
+
+        let inner_string_field = Arc::new(Field::new("s1", DataType::Utf8, true));
+        let inner_bool_field = Arc::new(Field::new("s2", DataType::Boolean, true));
+        let inner_struct_type = DataType::Struct(Fields::from(vec![
+            inner_string_field.as_ref().clone(),
+            inner_bool_field.as_ref().clone(),
+        ]));
+
+        let value_field = Arc::new(Field::new("value", inner_struct_type.clone(), true));
+        let entries_field = Arc::new(Field::new(
+            "entries",
+            DataType::Struct(Fields::from(vec![
+                key_field.as_ref().clone(),
+                value_field.as_ref().clone(),
+            ])),
+            false,
+        ));
+
+        let keys = Int32Array::from(vec![1, 2]);
+        let inner_strings = StringArray::from(vec![Some("x"), Some("y")]);
+        let inner_bools = BooleanArray::from(vec![Some(true), None]);
+        let inner_struct: ArrayRef = Arc::new(StructArray::from(vec![
+            (inner_string_field, Arc::new(inner_strings) as ArrayRef),
+            (inner_bool_field, Arc::new(inner_bools) as ArrayRef),
+        ]));
+
+        let entries = StructArray::from(vec![
+            (key_field.clone(), Arc::new(keys) as ArrayRef),
+            (value_field.clone(), inner_struct),
+        ]);
+
+        // One row with 2 entries
+        let offsets = arrow::buffer::OffsetBuffer::new(vec![0i32, 2].into());
+        let map_array: ArrayRef = Arc::new(MapArray::new(
+            entries_field.clone(),
+            offsets,
+            entries,
+            None,
+            false,
+        ));
+
+        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("{1 -> {x, true}, 2 -> {y, null}}")])
         );
     }
 }
