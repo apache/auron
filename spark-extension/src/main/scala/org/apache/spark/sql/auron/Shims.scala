@@ -149,16 +149,17 @@ abstract class Shims {
       global: Boolean,
       child: SparkPlan): NativeSortBase
 
-  def createNativeTakeOrderedExec(
+  def createNativeTakeOrderedAndProjectExec(
       limit: Long,
       sortOrder: Seq[SortOrder],
-      child: SparkPlan): NativeTakeOrderedBase
+      projectList: Seq[NamedExpression],
+      child: SparkPlan): NativeTakeOrderedAndProjectBase
 
   def createNativePartialTakeOrderedExec(
       limit: Long,
       sortOrder: Seq[SortOrder],
       child: SparkPlan,
-      metrics: Map[String, SQLMetric]): NativePartialTakeOrderedBase
+      metrics: Map[String, SQLMetric]): NativePartialTakeOrderedAndProjectBase
 
   def createNativeUnionExec(children: Seq[SparkPlan], output: Seq[Attribute]): NativeUnionBase
 

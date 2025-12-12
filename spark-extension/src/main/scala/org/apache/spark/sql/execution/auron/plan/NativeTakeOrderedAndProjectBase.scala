@@ -27,16 +27,14 @@ import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Ascending
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.NullsFirst
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, NamedExpression, NullsFirst, SortOrder, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution.auron.plan.NativeProjectBase.getNativeProjectBuilder
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 import org.apache.auron.metric.SparkMetricNode
@@ -46,9 +44,10 @@ import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.protobuf.PhysicalSortExprNode
 import org.apache.auron.protobuf.SortExecNode
 
-abstract class NativeTakeOrderedBase(
+abstract class NativeTakeOrderedAndProjectBase(
     limit: Long,
     sortOrder: Seq[SortOrder],
+    projectList: Seq[NamedExpression],
     override val child: SparkPlan)
     extends UnaryExecNode
     with NativeSupports {
@@ -76,12 +75,14 @@ abstract class NativeTakeOrderedBase(
       .build()
   }
 
+  private def nativeProject = getNativeProjectBuilder(projectList).buildPartial()
+
   override def executeCollect(): Array[InternalRow] = {
     val partial = Shims.get.createNativePartialTakeOrderedExec(limit, sortOrder, child, metrics)
     val ord = new LazilyGeneratedOrdering(sortOrder, output)
 
     // all partitions are sorted, so perform a sorted-merge to achieve the result
-    partial
+    val data = partial
       .execute()
       .map(_.copy())
       .mapPartitions(iter => Iterator.single(iter.toArray))
@@ -110,10 +111,18 @@ abstract class NativeTakeOrderedBase(
         }
         result.toArray
       }
+
+    if (projectList != child.output) {
+      val proj = UnsafeProjection.create(projectList, child.output)
+      data.map(r => proj(r).copy())
+    } else {
+      data
+    }
   }
 
   // check whether native converting is supported
   nativeSortExprs
+  nativeProject
 
   override def doExecuteNative(): NativeRDD = {
     val partial = Shims.get.createNativePartialTakeOrderedExec(limit, sortOrder, child, metrics)
@@ -126,6 +135,7 @@ abstract class NativeTakeOrderedBase(
     val shuffled = Shims.get.createNativeShuffleExchangeExec(SinglePartition, partial)
     val shuffledRDD = NativeHelper.executeNative(shuffled)
     val nativeSortExprs = this.nativeSortExprs
+    val nativeProject = this.nativeProject
 
     // take top-K from the final partition
     new NativeRDD(
@@ -137,19 +147,27 @@ abstract class NativeTakeOrderedBase(
       rddShuffleReadFull = false,
       (_, taskContext) => {
         val inputPartition = shuffledRDD.partitions(0)
-        val nativeTakeOrderedExec = SortExecNode
+        val sortExec = SortExecNode
           .newBuilder()
           .setInput(shuffledRDD.nativePlan(inputPartition, taskContext))
           .addAllExpr(nativeSortExprs.asJava)
           .setFetchLimit(FetchLimit.newBuilder().setLimit(limit))
           .build()
-        PhysicalPlanNode.newBuilder().setSort(nativeTakeOrderedExec).build()
+        val nativeTakeOrderedExec = PhysicalPlanNode.newBuilder().setSort(sortExec).build()
+
+        if (projectList != child.output) {
+          val nativeTakeOrderedAndProjectExec =
+            nativeProject.toBuilder.setInput(nativeTakeOrderedExec).build()
+          PhysicalPlanNode.newBuilder().setProjection(nativeTakeOrderedAndProjectExec).build()
+        } else {
+          nativeTakeOrderedExec
+        }
       },
-      friendlyName = "NativeRDD.FinalTakeOrdered")
+      friendlyName = "NativeRDD.FinalTakeOrderedAndProject")
   }
 }
 
-abstract class NativePartialTakeOrderedBase(
+abstract class NativePartialTakeOrderedAndProjectBase(
     limit: Long,
     sortOrder: Seq[SortOrder],
     override val child: SparkPlan,
@@ -197,6 +215,6 @@ abstract class NativePartialTakeOrderedBase(
           .build()
         PhysicalPlanNode.newBuilder().setSort(nativeTakeOrderedExec).build()
       },
-      friendlyName = "NativeRDD.PartialTakeOrdered")
+      friendlyName = "NativeRDD.PartialTakeOrderedAndProject")
   }
 }
