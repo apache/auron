@@ -232,6 +232,11 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .description("orc force positional evolution. ")
             .booleanType()
             .defaultValue(false);
+    public static final ConfigOption<Boolean> ORC_TIMESTAMP_USE_MICROSECOND = ConfigOptions.key(
+                    "auron.orc.timestamp.use.microsecond")
+            .description("use microsecond precision when reading ORC timestamp columns. ")
+            .booleanType()
+            .defaultValue(false);
 
     private final SparkConf sparkConf;
 
