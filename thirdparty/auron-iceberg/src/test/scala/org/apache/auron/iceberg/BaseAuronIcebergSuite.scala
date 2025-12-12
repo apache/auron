@@ -30,5 +30,6 @@ trait BaseAuronIcebergSuite extends SharedSparkSession {
       .set("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
       .set("spark.sql.catalog.local.type", "hadoop")
       .set("spark.sql.catalog.local.warehouse", "iceberg_warehouse")
+      .set("spark.ui.enabled", "false")
   }
 }
