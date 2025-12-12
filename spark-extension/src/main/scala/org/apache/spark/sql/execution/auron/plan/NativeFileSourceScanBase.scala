@@ -74,12 +74,12 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
   // predicate pruning is buggy for decimal type, so we need to
   // temporarily disable predicate pruning for decimal type
   // see https://github.com/apache/auron/issues/1032
-  protected def nativePruningPredicateFilters: Seq[pb.PhysicalExprNode] =
+  protected lazy val nativePruningPredicateFilters: Seq[pb.PhysicalExprNode] =
     basedFileScan.dataFilters
       .filter(expr => expr.find(_.dataType.isInstanceOf[DecimalType]).isEmpty)
       .map(expr => NativeConverters.convertScanPruningExpr(expr))
 
-  protected def nativeFileSchema: pb.Schema =
+  protected lazy val nativeFileSchema: pb.Schema =
     NativeConverters.convertSchema(StructType(basedFileScan.relation.dataSchema.map {
       case field if basedFileScan.requiredSchema.exists(_.name == field.name) =>
         field.copy(nullable = true)
@@ -88,7 +88,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
         StructField(field.name, NullType, nullable = true)
     }))
 
-  protected def nativePartitionSchema: pb.Schema =
+  protected lazy val nativePartitionSchema: pb.Schema =
     NativeConverters.convertSchema(partitionSchema)
 
   protected def nativeFileGroups: FilePartition => pb.FileGroup = (partition: FilePartition) => {
@@ -123,7 +123,6 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
   nativePruningPredicateFilters
   nativeFileSchema
   nativePartitionSchema
-  nativeFileGroups
 
   protected def putJniBridgeResource(
       resourceId: String,

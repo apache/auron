@@ -73,9 +73,9 @@ abstract class NativeSortMergeJoinBase(
     keys.map(SortOrder(_, Ascending))
   }
 
-  private def nativeSchema = Util.getNativeSchema(output)
+  private lazy val nativeSchema = Util.getNativeSchema(output)
 
-  private def nativeJoinOn = leftKeys.zip(rightKeys).map { case (leftKey, rightKey) =>
+  private lazy val nativeJoinOn = leftKeys.zip(rightKeys).map { case (leftKey, rightKey) =>
     val leftKeyExpr = NativeConverters.convertExpr(leftKey)
     val rightKeyExpr = NativeConverters.convertExpr(rightKey)
     JoinOn
@@ -85,7 +85,7 @@ abstract class NativeSortMergeJoinBase(
       .build()
   }
 
-  private def nativeSortOptions = nativeJoinOn.map(_ => {
+  private lazy val nativeSortOptions = nativeJoinOn.map(_ => {
     SortOptions
       .newBuilder()
       .setAsc(true)
@@ -93,7 +93,7 @@ abstract class NativeSortMergeJoinBase(
       .build()
   })
 
-  private def nativeJoinType = NativeConverters.convertJoinType(joinType)
+  private lazy val nativeJoinType = NativeConverters.convertJoinType(joinType)
 
   // check whether native converting is supported
   nativeSchema
@@ -105,9 +105,6 @@ abstract class NativeSortMergeJoinBase(
     val leftRDD = NativeHelper.executeNative(left)
     val rightRDD = NativeHelper.executeNative(right)
     val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
-    val nativeSortOptions = this.nativeSortOptions
-    val nativeJoinOn = this.nativeJoinOn
-    val nativeJoinType = this.nativeJoinType
 
     val (partitions, partitioner) = if (joinType != RightOuter) {
       (leftRDD.partitions, leftRDD.partitioner)
