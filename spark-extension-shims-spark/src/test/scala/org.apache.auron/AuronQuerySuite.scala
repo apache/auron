@@ -508,4 +508,61 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       }
     }
   }
+
+  test("cast map to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_map") {
+        sql("""
+              |create table t_map using parquet as
+              |select map('a', 1, 'b', 2) as m
+              |union all select map('x', 10, 'y', 20, 'z', 30)
+              |union all select map('key', null)
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(m as string) from t_map")
+      }
+    }
+  }
+
+  test("cast nested map to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_nested_map") {
+        sql("""
+              |create table t_nested_map using parquet as
+              |select map('outer1', map('inner1', 1, 'inner2', 2)) as m
+              |union all select map('outer2', map('inner3', 3))
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(m as string) from t_nested_map")
+      }
+    }
+  }
+
+  test("cast map with struct value to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_map_struct") {
+        sql("""
+              |create table t_map_struct using parquet as
+              |select map('k1', named_struct('x', 'a', 'y', 10)) as m
+              |union all select map('k2', named_struct('x', 'b', 'y', 20))
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(m as string) from t_map_struct")
+      }
+    }
+  }
+
+  test("cast empty map to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_empty_map") {
+        sql("""
+              |create table t_empty_map using parquet as
+              |select map() as m
+              |union all select map('a', 1)
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(m as string) from t_empty_map")
+      }
+    }
+  }
 }
