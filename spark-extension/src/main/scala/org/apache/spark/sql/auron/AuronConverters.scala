@@ -783,17 +783,11 @@ object AuronConverters extends Logging {
 
   def convertTakeOrderedAndProjectExec(exec: TakeOrderedAndProjectExec): SparkPlan = {
     logDebugPlanConversion(exec)
-    val nativeTakeOrdered = Shims.get.createNativeTakeOrderedExec(
+    Shims.get.createNativeTakeOrderedAndProjectExec(
       exec.limit,
       exec.sortOrder,
+      exec.projectList,
       addRenameColumnsExec(convertToNative(exec.child)))
-
-    if (exec.projectList != exec.child.output) {
-      val project = ProjectExec(exec.projectList, nativeTakeOrdered)
-      tryConvert(project, convertProjectExec)
-    } else {
-      nativeTakeOrdered
-    }
   }
 
   def convertHashAggregateExec(exec: HashAggregateExec): SparkPlan = {

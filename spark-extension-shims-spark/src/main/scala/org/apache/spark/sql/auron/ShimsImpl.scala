@@ -87,8 +87,8 @@ import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortBase
 import org.apache.spark.sql.execution.auron.plan.NativeSortExec
-import org.apache.spark.sql.execution.auron.plan.NativeTakeOrderedBase
-import org.apache.spark.sql.execution.auron.plan.NativeTakeOrderedExec
+import org.apache.spark.sql.execution.auron.plan.NativeTakeOrderedAndProjectBase
+import org.apache.spark.sql.execution.auron.plan.NativeTakeOrderedAndProjectExec
 import org.apache.spark.sql.execution.auron.plan.NativeUnionBase
 import org.apache.spark.sql.execution.auron.plan.NativeUnionExec
 import org.apache.spark.sql.execution.auron.plan.NativeWindowBase
@@ -328,17 +328,18 @@ class ShimsImpl extends Shims with Logging {
       child: SparkPlan): NativeSortBase =
     NativeSortExec(sortOrder, global, child)
 
-  override def createNativeTakeOrderedExec(
+  override def createNativeTakeOrderedAndProjectExec(
       limit: Long,
       sortOrder: Seq[SortOrder],
-      child: SparkPlan): NativeTakeOrderedBase =
-    NativeTakeOrderedExec(limit, sortOrder, child)
+      projectList: Seq[NamedExpression],
+      child: SparkPlan): NativeTakeOrderedAndProjectBase =
+    NativeTakeOrderedAndProjectExec(limit, sortOrder, projectList, child)
 
   override def createNativePartialTakeOrderedExec(
       limit: Long,
       sortOrder: Seq[SortOrder],
       child: SparkPlan,
-      metrics: Map[String, SQLMetric]): NativePartialTakeOrderedBase =
+      metrics: Map[String, SQLMetric]): NativePartialTakeOrderedAndProjectBase =
     NativePartialTakeOrderedExec(limit, sortOrder, child, metrics)
 
   override def createNativeUnionExec(
