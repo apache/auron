@@ -2794,7 +2794,7 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 [[package]]
 name = "orc-rust"
 version = "0.7.0"
-source = "git+https://github.com/auron-project/datafusion-orc.git?rev=16cf770#16cf7704df4a86fa25487ddd9e8379bf6e6bc24c"
+source = "git+https://github.com/auron-project/datafusion-orc.git?rev=8785b99#8785b99323a0269e37d7078818badf0f96a69416"
 dependencies = [
  "arrow",
  "async-trait",
