@@ -43,6 +43,7 @@ use futures::{FutureExt, StreamExt, future::BoxFuture};
 use futures_util::TryStreamExt;
 use once_cell::sync::OnceCell;
 use orc_rust::{
+    TimestampPrecision,
     arrow_reader::ArrowReaderBuilder,
     projection::ProjectionMask,
     reader::{AsyncChunkReader, metadata::FileMetadata},
@@ -158,6 +159,7 @@ impl ExecutionPlan for OrcExec {
         };
 
         let force_positional_evolution = conf::ORC_FORCE_POSITIONAL_EVOLUTION.value()?;
+        let use_microsecond_precision = conf::ORC_TIMESTAMP_USE_MICROSECOND.value()?;
 
         let opener: Arc<dyn FileOpener> = Arc::new(OrcOpener {
             projection,
@@ -167,6 +169,7 @@ impl ExecutionPlan for OrcExec {
             partition_index: partition,
             metrics: self.metrics.clone(),
             force_positional_evolution,
+            use_microsecond_precision,
         });
 
         let file_stream = Box::pin(FileStream::new(
@@ -213,6 +216,7 @@ struct OrcOpener {
     partition_index: usize,
     metrics: ExecutionPlanMetricsSet,
     force_positional_evolution: bool,
+    use_microsecond_precision: bool,
 }
 
 impl FileOpener for OrcOpener {
@@ -240,11 +244,15 @@ impl FileOpener for OrcOpener {
             projected_schema,
             self.force_positional_evolution,
         );
+        let use_microsecond = self.use_microsecond_precision;
 
         Ok(Box::pin(async move {
             let mut builder = ArrowReaderBuilder::try_new_async(reader)
                 .await
                 .or_else(|err| df_execution_err!("create orc reader error: {err}"))?;
+            if use_microsecond {
+                builder = builder.with_timestamp_precision(TimestampPrecision::Microsecond);
+            }
             if let Some(range) = file_meta.range.clone() {
                 let range = range.start as usize..range.end as usize;
                 builder = builder.with_file_byte_range(range);
