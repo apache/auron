@@ -83,7 +83,10 @@ impl PhysicalExpr for StringContainsExpr {
 
         match expr {
             ColumnarValue::Array(array) => {
-                let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+                let string_array = array
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .expect("Expected a StringArray");
                 let ret_array =
                     Arc::new(BooleanArray::from_iter(string_array.iter().map(
                         |maybe_string| maybe_string.map(|string| string.contains(&self.infix)),
@@ -116,7 +119,7 @@ impl PhysicalExpr for StringContainsExpr {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
+    use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{ArrayRef, BooleanArray, StringArray},
@@ -128,7 +131,7 @@ mod test {
     use crate::string_contains::StringContainsExpr;
 
     #[test]
-    fn test_ok() {
+    fn test_ok() -> Result<(), Box<dyn Error>> {
         // create a StringArray from the vector
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("abrr".to_string()),
@@ -148,14 +151,13 @@ mod test {
         // test: col1 like 'ba%'
         let pattern = "ba".to_string();
         let expr = Arc::new(StringContainsExpr::new(
-            phys_expr::col("col1", &batch.schema()).unwrap(),
+            phys_expr::col("col1", &batch.schema())?,
             pattern,
         ));
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            .unwrap();
+            .into_array(batch.num_rows())?;
 
         // verify result
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
@@ -166,10 +168,11 @@ mod test {
             None,
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 
     #[test]
-    fn test_scalar_string() {
+    fn test_scalar_string() -> Result<(), Box<dyn Error>> {
         // create a StringArray from the vector
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("abrr".to_string()),
@@ -192,8 +195,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            .unwrap();
+            .into_array(batch.num_rows())?;
 
         // verify result
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
@@ -204,5 +206,6 @@ mod test {
             Some(true),
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 }

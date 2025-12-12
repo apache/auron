@@ -31,7 +31,10 @@ pub fn spark_unscaled_value(args: &[ColumnarValue]) -> Result<ColumnarValue> {
             _ => ColumnarValue::Scalar(ScalarValue::Int64(None)),
         },
         ColumnarValue::Array(array) => {
-            let array = array.as_any().downcast_ref::<Decimal128Array>().unwrap();
+            let array = array
+                .as_any()
+                .downcast_ref::<Decimal128Array>()
+                .expect("Expected a Decimal128Array");
             let mut output = Int64Builder::new();
 
             for v in array.into_iter() {

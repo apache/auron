@@ -31,10 +31,12 @@ pub mod string_starts_with;
 
 fn down_cast_any_ref(any: &dyn Any) -> &dyn Any {
     if any.is::<PhysicalExprRef>() {
-        any.downcast_ref::<PhysicalExprRef>().unwrap().as_any()
+        any.downcast_ref::<PhysicalExprRef>()
+            .expect("Expected a PhysicalExpr")
+            .as_any()
     } else if any.is::<Box<dyn PhysicalExpr>>() {
         any.downcast_ref::<Box<dyn PhysicalExpr>>()
-            .unwrap()
+            .expect("Expected a PhysicalExpr")
             .as_any()
     } else {
         any
