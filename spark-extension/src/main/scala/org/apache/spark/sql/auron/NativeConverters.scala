@@ -102,7 +102,10 @@ object NativeConverters extends Logging {
   def castTrimStringEnabled: Boolean =
     AuronConverters.getBooleanConf("spark.auron.cast.trimString", defaultValue = true)
 
-  def scalarTypeSupported(dataType: DataType): Boolean = {
+  /**
+   * Is the data type(scalar or complex) supported by Auron.
+   */
+  def isTypeSupported(dataType: DataType): Boolean = {
     dataType match {
       case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
           DoubleType | StringType | DateType | TimestampType =>
@@ -111,11 +114,11 @@ object NativeConverters extends Logging {
       case _: DecimalType =>
         // auron only supports 64-bit decimal
         false
-      case at: ArrayType => scalarTypeSupported(at.elementType)
+      case at: ArrayType => isTypeSupported(at.elementType)
       case m: MapType =>
-        scalarTypeSupported(m.keyType) && scalarTypeSupported(m.valueType)
+        isTypeSupported(m.keyType) && isTypeSupported(m.valueType)
       case s: StructType =>
-        s.fields.forall(e => scalarTypeSupported(e.dataType))
+        s.fields.forall(e => isTypeSupported(e.dataType))
       case _ => false
     }
   }
