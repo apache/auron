@@ -183,6 +183,11 @@ jobs:
             CMD="$CMD --uniffle $UNIFFLE_NUMBER"
           fi
 
+          SPARK_NUMBER="${{ inputs.sparktests }}"
+          if [[ "$SPARK_TESTS" == "true" ]]; then
+            CMD="$CMD --sparktests true"
+          fi
+
           echo "Running: $CMD"
           exec $CMD
 

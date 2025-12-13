@@ -53,6 +53,7 @@ print_help() {
     echo "  --release                Activate release profile"
     echo "  --clean <true|false>     Clean before build (default: true)"
     echo "  --skiptests <true|false> Skip unit tests (default: true)"
+    echo "  --sparktests <true|false> Run spark tests (default: false)"
     echo "  --docker <true|false>    Build in Docker environment (default: false)"
     IFS=','; echo "  --image <NAME>           Docker image to use (e.g. ${SUPPORTED_OS_IMAGES[*]}, default: ${SUPPORTED_OS_IMAGES[*]:0:1})"; unset IFS
     IFS=','; echo "  --sparkver <VERSION>     Specify Spark version (e.g. ${SUPPORTED_SPARK_VERSIONS[*]})"; unset IFS
@@ -124,6 +125,7 @@ PRE_PROFILE=false
 RELEASE_PROFILE=false
 CLEAN=true
 SKIP_TESTS=true
+SPARK_TESTS=false
 SPARK_VER=""
 FLINK_VER=""
 SCALA_VER=""
@@ -184,6 +186,15 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "ERROR: --skiptests requires true/false" >&2
+                exit 1
+            fi
+            ;;
+        --sparktests)
+            if [[ -n "$2" && "$2" =~ ^(true|false)$ ]]; then
+                SPARK_TESTS="$2"
+                shift 2
+            else
+                echo "ERROR: --sparktests requires true/false" >&2
                 exit 1
             fi
             ;;
@@ -351,6 +362,10 @@ if [[ "$SKIP_TESTS" == true ]]; then
     BUILD_ARGS+=("package" "-DskipTests")
 else
     BUILD_ARGS+=("package")
+fi
+
+if [[ "$SPARK_TESTS" == true ]]; then
+    BUILD_ARGS+=("-Pspark-tests")
 fi
 
 if [[ "$PRE_PROFILE" == true ]]; then
