@@ -83,45 +83,6 @@ env:
   WGET_OPTS: "--tries=3 --timeout=30 -c"
 
 jobs:
-  build-validator:
-    name: Build TPC-DS Validator
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Cache TPC-DS Validator
-        uses: actions/cache@v4
-        id: cache-tpcds-validator
-        with:
-          key: tpcds-validator_${{ inputs.scalaver }}
-          path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
-
-      - name: Checkout TPC-DS Validator
-        uses: actions/checkout@v4
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        with:
-          repository: auron-project/tpcds-validator
-
-      - name: Setup Java and Maven cache
-        uses: actions/setup-java@v4
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        with:
-          distribution: 'adopt-hotspot'
-          java-version: ${{ inputs.javaver }}
-          cache: 'maven'
-
-      - name: Build TPC-DS Validator
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        run: ./build/mvn package -DskipTests -Pscala-${{ inputs.scalaver }}
-
-      - name: Upload TPC-DS Validator
-        uses: actions/upload-artifact@v4
-        with:
-          name: >
-            tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
-            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
-            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
-          path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
-          overwrite: true
-
   build-auron-jar:
     name: Build Auron JAR
     runs-on: ubuntu-24.04
@@ -265,14 +226,6 @@ jobs:
             }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
-      - name: Download TPC-DS Validator JAR
-        uses: actions/download-artifact@v4
-        with:
-          name: >
-            tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
-            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
-            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
-
       - name: Checkout TPC-DS Data
         uses: actions/checkout@v4
         with:
@@ -391,6 +344,7 @@ jobs:
           export RUST_BACKTRACE=1
           export SCALA_VERSION=${{ inputs.scalaver }}
           export SPARK_HOME=spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
+          export SPARK_TPCDS_DATA=dev/tpcds_1g
           dev/run-tpcds-test \
             ${{ inputs.extrasparkconf }} \
             --data-location dev/tpcds_1g \

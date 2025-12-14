@@ -1,0 +1,91 @@
+90
+<|COL|>EXPRESS<|COL|>Mid Atlantic<|COL|>1223<|COL|>1314<|COL|>1257<|COL|>0<|COL|>0
+<|COL|>EXPRESS<|COL|>NY Metro<|COL|>1274<|COL|>1296<|COL|>1286<|COL|>0<|COL|>0
+<|COL|>EXPRESS<|COL|>North Midwest<|COL|>1159<|COL|>1329<|COL|>1276<|COL|>0<|COL|>0
+<|COL|>LIBRARY<|COL|>Mid Atlantic<|COL|>941<|COL|>978<|COL|>948<|COL|>0<|COL|>0
+<|COL|>LIBRARY<|COL|>NY Metro<|COL|>886<|COL|>1001<|COL|>1009<|COL|>0<|COL|>0
+<|COL|>LIBRARY<|COL|>North Midwest<|COL|>917<|COL|>943<|COL|>991<|COL|>0<|COL|>0
+<|COL|>NEXT DAY<|COL|>Mid Atlantic<|COL|>1304<|COL|>1264<|COL|>1349<|COL|>0<|COL|>0
+<|COL|>NEXT DAY<|COL|>NY Metro<|COL|>1271<|COL|>1251<|COL|>1291<|COL|>0<|COL|>0
+<|COL|>NEXT DAY<|COL|>North Midwest<|COL|>1199<|COL|>1233<|COL|>1273<|COL|>0<|COL|>0
+<|COL|>OVERNIGHT<|COL|>Mid Atlantic<|COL|>965<|COL|>989<|COL|>967<|COL|>0<|COL|>0
+<|COL|>OVERNIGHT<|COL|>NY Metro<|COL|>979<|COL|>993<|COL|>1039<|COL|>0<|COL|>0
+<|COL|>OVERNIGHT<|COL|>North Midwest<|COL|>946<|COL|>1016<|COL|>905<|COL|>0<|COL|>0
+<|COL|>REGULAR<|COL|>Mid Atlantic<|COL|>933<|COL|>994<|COL|>997<|COL|>0<|COL|>0
+<|COL|>REGULAR<|COL|>NY Metro<|COL|>961<|COL|>1022<|COL|>1034<|COL|>0<|COL|>0
+<|COL|>REGULAR<|COL|>North Midwest<|COL|>893<|COL|>921<|COL|>949<|COL|>0<|COL|>0
+<|COL|>TWO DAY<|COL|>Mid Atlantic<|COL|>972<|COL|>968<|COL|>972<|COL|>0<|COL|>0
+<|COL|>TWO DAY<|COL|>NY Metro<|COL|>926<|COL|>974<|COL|>1004<|COL|>0<|COL|>0
+<|COL|>TWO DAY<|COL|>North Midwest<|COL|>941<|COL|>921<|COL|>981<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>EXPRESS<|COL|>Mid Atlantic<|COL|>1270<|COL|>1318<|COL|>1281<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>EXPRESS<|COL|>NY Metro<|COL|>1226<|COL|>1287<|COL|>1282<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>EXPRESS<|COL|>North Midwest<|COL|>1208<|COL|>1242<|COL|>1294<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>LIBRARY<|COL|>Mid Atlantic<|COL|>962<|COL|>976<|COL|>1009<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>LIBRARY<|COL|>NY Metro<|COL|>978<|COL|>984<|COL|>999<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>LIBRARY<|COL|>North Midwest<|COL|>898<|COL|>959<|COL|>958<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>NEXT DAY<|COL|>Mid Atlantic<|COL|>1225<|COL|>1328<|COL|>1327<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>NEXT DAY<|COL|>NY Metro<|COL|>1262<|COL|>1325<|COL|>1246<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>NEXT DAY<|COL|>North Midwest<|COL|>1227<|COL|>1300<|COL|>1276<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>OVERNIGHT<|COL|>Mid Atlantic<|COL|>956<|COL|>935<|COL|>990<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>OVERNIGHT<|COL|>NY Metro<|COL|>982<|COL|>930<|COL|>993<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>OVERNIGHT<|COL|>North Midwest<|COL|>907<|COL|>990<|COL|>955<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>REGULAR<|COL|>Mid Atlantic<|COL|>928<|COL|>974<|COL|>1005<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>REGULAR<|COL|>NY Metro<|COL|>942<|COL|>1009<|COL|>948<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>REGULAR<|COL|>North Midwest<|COL|>921<|COL|>968<|COL|>925<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>TWO DAY<|COL|>Mid Atlantic<|COL|>954<|COL|>971<|COL|>979<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>TWO DAY<|COL|>NY Metro<|COL|>947<|COL|>1013<|COL|>952<|COL|>0<|COL|>0
+Bad cards must make.<|COL|>TWO DAY<|COL|>North Midwest<|COL|>904<|COL|>930<|COL|>947<|COL|>0<|COL|>0
+Conventional childr<|COL|>EXPRESS<|COL|>Mid Atlantic<|COL|>1214<|COL|>1296<|COL|>1243<|COL|>0<|COL|>0
+Conventional childr<|COL|>EXPRESS<|COL|>NY Metro<|COL|>1284<|COL|>1331<|COL|>1277<|COL|>0<|COL|>0
+Conventional childr<|COL|>EXPRESS<|COL|>North Midwest<|COL|>1180<|COL|>1287<|COL|>1226<|COL|>0<|COL|>0
+Conventional childr<|COL|>LIBRARY<|COL|>Mid Atlantic<|COL|>990<|COL|>1008<|COL|>962<|COL|>0<|COL|>0
+Conventional childr<|COL|>LIBRARY<|COL|>NY Metro<|COL|>983<|COL|>976<|COL|>981<|COL|>0<|COL|>0
+Conventional childr<|COL|>LIBRARY<|COL|>North Midwest<|COL|>925<|COL|>892<|COL|>953<|COL|>0<|COL|>0
+Conventional childr<|COL|>NEXT DAY<|COL|>Mid Atlantic<|COL|>1284<|COL|>1315<|COL|>1274<|COL|>0<|COL|>0
+Conventional childr<|COL|>NEXT DAY<|COL|>NY Metro<|COL|>1288<|COL|>1280<|COL|>1284<|COL|>0<|COL|>0
+Conventional childr<|COL|>NEXT DAY<|COL|>North Midwest<|COL|>1249<|COL|>1278<|COL|>1308<|COL|>0<|COL|>0
+Conventional childr<|COL|>OVERNIGHT<|COL|>Mid Atlantic<|COL|>897<|COL|>973<|COL|>926<|COL|>0<|COL|>0
+Conventional childr<|COL|>OVERNIGHT<|COL|>NY Metro<|COL|>958<|COL|>963<|COL|>897<|COL|>0<|COL|>0
+Conventional childr<|COL|>OVERNIGHT<|COL|>North Midwest<|COL|>942<|COL|>934<|COL|>937<|COL|>0<|COL|>0
+Conventional childr<|COL|>REGULAR<|COL|>Mid Atlantic<|COL|>941<|COL|>1007<|COL|>945<|COL|>0<|COL|>0
+Conventional childr<|COL|>REGULAR<|COL|>NY Metro<|COL|>949<|COL|>928<|COL|>987<|COL|>0<|COL|>0
+Conventional childr<|COL|>REGULAR<|COL|>North Midwest<|COL|>920<|COL|>927<|COL|>925<|COL|>0<|COL|>0
+Conventional childr<|COL|>TWO DAY<|COL|>Mid Atlantic<|COL|>926<|COL|>979<|COL|>1047<|COL|>0<|COL|>0
+Conventional childr<|COL|>TWO DAY<|COL|>NY Metro<|COL|>925<|COL|>1007<|COL|>962<|COL|>0<|COL|>0
+Conventional childr<|COL|>TWO DAY<|COL|>North Midwest<|COL|>879<|COL|>980<|COL|>971<|COL|>0<|COL|>0
+Doors canno<|COL|>EXPRESS<|COL|>Mid Atlantic<|COL|>1240<|COL|>1245<|COL|>1267<|COL|>0<|COL|>0
+Doors canno<|COL|>EXPRESS<|COL|>NY Metro<|COL|>1234<|COL|>1270<|COL|>1349<|COL|>0<|COL|>0
+Doors canno<|COL|>EXPRESS<|COL|>North Midwest<|COL|>1185<|COL|>1238<|COL|>1197<|COL|>0<|COL|>0
+Doors canno<|COL|>LIBRARY<|COL|>Mid Atlantic<|COL|>873<|COL|>974<|COL|>948<|COL|>0<|COL|>0
+Doors canno<|COL|>LIBRARY<|COL|>NY Metro<|COL|>987<|COL|>1005<|COL|>990<|COL|>0<|COL|>0
+Doors canno<|COL|>LIBRARY<|COL|>North Midwest<|COL|>947<|COL|>952<|COL|>1025<|COL|>0<|COL|>0
+Doors canno<|COL|>NEXT DAY<|COL|>Mid Atlantic<|COL|>1264<|COL|>1276<|COL|>1185<|COL|>0<|COL|>0
+Doors canno<|COL|>NEXT DAY<|COL|>NY Metro<|COL|>1263<|COL|>1337<|COL|>1310<|COL|>0<|COL|>0
+Doors canno<|COL|>NEXT DAY<|COL|>North Midwest<|COL|>1202<|COL|>1247<|COL|>1278<|COL|>0<|COL|>0
+Doors canno<|COL|>OVERNIGHT<|COL|>Mid Atlantic<|COL|>912<|COL|>888<|COL|>934<|COL|>0<|COL|>0
+Doors canno<|COL|>OVERNIGHT<|COL|>NY Metro<|COL|>942<|COL|>1003<|COL|>959<|COL|>0<|COL|>0
+Doors canno<|COL|>OVERNIGHT<|COL|>North Midwest<|COL|>896<|COL|>903<|COL|>911<|COL|>0<|COL|>0
+Doors canno<|COL|>REGULAR<|COL|>Mid Atlantic<|COL|>888<|COL|>953<|COL|>974<|COL|>0<|COL|>0
+Doors canno<|COL|>REGULAR<|COL|>NY Metro<|COL|>971<|COL|>1028<|COL|>946<|COL|>0<|COL|>0
+Doors canno<|COL|>REGULAR<|COL|>North Midwest<|COL|>937<|COL|>974<|COL|>914<|COL|>0<|COL|>0
+Doors canno<|COL|>TWO DAY<|COL|>Mid Atlantic<|COL|>974<|COL|>898<|COL|>985<|COL|>0<|COL|>0
+Doors canno<|COL|>TWO DAY<|COL|>NY Metro<|COL|>982<|COL|>1017<|COL|>997<|COL|>0<|COL|>0
+Doors canno<|COL|>TWO DAY<|COL|>North Midwest<|COL|>985<|COL|>937<|COL|>959<|COL|>0<|COL|>0
+Important issues liv<|COL|>EXPRESS<|COL|>Mid Atlantic<|COL|>1322<|COL|>1329<|COL|>1293<|COL|>0<|COL|>0
+Important issues liv<|COL|>EXPRESS<|COL|>NY Metro<|COL|>1301<|COL|>1300<|COL|>1239<|COL|>0<|COL|>0
+Important issues liv<|COL|>EXPRESS<|COL|>North Midwest<|COL|>1266<|COL|>1228<|COL|>1285<|COL|>0<|COL|>0
+Important issues liv<|COL|>LIBRARY<|COL|>Mid Atlantic<|COL|>988<|COL|>997<|COL|>925<|COL|>0<|COL|>0
+Important issues liv<|COL|>LIBRARY<|COL|>NY Metro<|COL|>947<|COL|>963<|COL|>988<|COL|>0<|COL|>0
+Important issues liv<|COL|>LIBRARY<|COL|>North Midwest<|COL|>937<|COL|>972<|COL|>964<|COL|>0<|COL|>0
+Important issues liv<|COL|>NEXT DAY<|COL|>Mid Atlantic<|COL|>1221<|COL|>1268<|COL|>1217<|COL|>0<|COL|>0
+Important issues liv<|COL|>NEXT DAY<|COL|>NY Metro<|COL|>1281<|COL|>1311<|COL|>1310<|COL|>0<|COL|>0
+Important issues liv<|COL|>NEXT DAY<|COL|>North Midwest<|COL|>1219<|COL|>1214<|COL|>1327<|COL|>0<|COL|>0
+Important issues liv<|COL|>OVERNIGHT<|COL|>Mid Atlantic<|COL|>929<|COL|>1018<|COL|>991<|COL|>0<|COL|>0
+Important issues liv<|COL|>OVERNIGHT<|COL|>NY Metro<|COL|>950<|COL|>965<|COL|>931<|COL|>0<|COL|>0
+Important issues liv<|COL|>OVERNIGHT<|COL|>North Midwest<|COL|>936<|COL|>989<|COL|>932<|COL|>0<|COL|>0
+Important issues liv<|COL|>REGULAR<|COL|>Mid Atlantic<|COL|>961<|COL|>995<|COL|>949<|COL|>0<|COL|>0
+Important issues liv<|COL|>REGULAR<|COL|>NY Metro<|COL|>972<|COL|>934<|COL|>1018<|COL|>0<|COL|>0
+Important issues liv<|COL|>REGULAR<|COL|>North Midwest<|COL|>905<|COL|>947<|COL|>941<|COL|>0<|COL|>0
+Important issues liv<|COL|>TWO DAY<|COL|>Mid Atlantic<|COL|>954<|COL|>982<|COL|>944<|COL|>0<|COL|>0
+Important issues liv<|COL|>TWO DAY<|COL|>NY Metro<|COL|>844<|COL|>972<|COL|>1006<|COL|>0<|COL|>0
+Important issues liv<|COL|>TWO DAY<|COL|>North Midwest<|COL|>914<|COL|>969<|COL|>960<|COL|>0<|COL|>0
