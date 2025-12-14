@@ -393,7 +393,7 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
   }
 
   // only run single query locally test
-  val sqlNum = "q4"
+  val sqlNum = "q1"
   test(s"TPC-DS query: $sqlNum") {
     val sqlStr = FileUtils.readFileToString(
       new File(s"$tpcdsQueriesPath/$sqlNum.sql"),

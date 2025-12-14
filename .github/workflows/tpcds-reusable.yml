@@ -345,10 +345,11 @@ jobs:
           export SCALA_VERSION=${{ inputs.scalaver }}
           export SPARK_HOME=spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
           export SPARK_TPCDS_DATA=dev/tpcds_1g
-          dev/run-tpcds-test \
-            ${{ inputs.extrasparkconf }} \
-            --data-location dev/tpcds_1g \
-            --query-filter ${{ matrix.query }}
+          mvn -B -Ppre -Pspark-3.5 -Pscala-2.12 -Dsuites=org.apache.spark.sql.AuronTPCDSV1Suite test
+#          dev/run-tpcds-test \
+#            ${{ inputs.extrasparkconf }} \
+#            --data-location dev/tpcds_1g \
+#            --query-filter ${{ matrix.query }}
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
