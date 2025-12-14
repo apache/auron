@@ -271,6 +271,58 @@
   </dependencies>
 
   <build>
+    <pluginManagement>
+      <plugins>
+        <!-- disable surefire globally, only enable it on pure Java modules -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven.plugin.surefire.version}</version>
+          <!-- Note config is repeated in scalatest config -->
+          <configuration>
+            <skipTests>false</skipTests>
+            <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+            <argLine>${extraJavaTestArgs}</argLine>
+            <environmentVariables />
+            <systemPropertyVariables>
+              <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
+              <spark.driver.memory>1g</spark.driver.memory>
+            </systemPropertyVariables>
+          </configuration>
+        </plugin>
+        <!-- enable scalatest -->
+        <plugin>
+          <groupId>org.scalatest</groupId>
+          <artifactId>scalatest-maven-plugin</artifactId>
+          <version>${maven.plugin.scalatest.version}</version>
+          <!-- Note config is repeated in surefire config -->
+          <configuration>
+            <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+            <junitxml>.</junitxml>
+            <filereports>TestSuite.txt</filereports>
+            <argLine>${extraJavaTestArgs}</argLine>
+            <environmentVariables />
+            <systemProperties>
+              <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
+              <spark.driver.memory>1g</spark.driver.memory>
+            </systemProperties>
+            <tagsToExclude>${maven.plugin.scalatest.exclude.tags}</tagsToExclude>
+            <tagsToInclude>${maven.plugin.scalatest.include.tags}</tagsToInclude>
+            <debugForkedProcess>${maven.plugin.scalatest.debug.enabled}</debugForkedProcess>
+            <debugArgLine>${debugArgLine}</debugArgLine>
+          </configuration>
+          <executions>
+            <execution>
+              <id>test</id>
+              <goals>
+                <goal>test</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
     <plugins>
       <!-- compile java -->
       <plugin>
@@ -328,54 +380,6 @@
               <goal>testCompile</goal>
             </goals>
             <phase>process-test-resources</phase>
-          </execution>
-        </executions>
-      </plugin>
-
-      <!-- disable surefire globally, only enable it on pure Java modules -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <version>${maven.plugin.surefire.version}</version>
-        <!-- Note config is repeated in scalatest config -->
-        <configuration>
-          <skipTests>false</skipTests>
-          <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
-          <argLine>${extraJavaTestArgs}</argLine>
-          <environmentVariables />
-          <systemPropertyVariables>
-            <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
-            <spark.driver.memory>1g</spark.driver.memory>
-          </systemPropertyVariables>
-        </configuration>
-      </plugin>
-      <!-- enable scalatest -->
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-        <version>${maven.plugin.scalatest.version}</version>
-        <!-- Note config is repeated in surefire config -->
-        <configuration>
-          <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-          <junitxml>.</junitxml>
-          <filereports>TestSuite.txt</filereports>
-          <argLine>${extraJavaTestArgs}</argLine>
-          <environmentVariables />
-          <systemProperties>
-            <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
-            <spark.driver.memory>1g</spark.driver.memory>
-          </systemProperties>
-          <tagsToExclude>${maven.plugin.scalatest.exclude.tags}</tagsToExclude>
-          <tagsToInclude>${maven.plugin.scalatest.include.tags}</tagsToInclude>
-          <debugForkedProcess>${maven.plugin.scalatest.debug.enabled}</debugForkedProcess>
-          <debugArgLine>${debugArgLine}</debugArgLine>
-        </configuration>
-        <executions>
-          <execution>
-            <id>test</id>
-            <goals>
-              <goal>test</goal>
-            </goals>
           </execution>
         </executions>
       </plugin>

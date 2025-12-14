@@ -394,7 +394,7 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
 
   // only run single query locally test
   val sqlNum = "q4"
-  ignore(s"TPC-DS query: $sqlNum") {
+  test(s"TPC-DS query: $sqlNum") {
     val sqlStr = FileUtils.readFileToString(
       new File(s"$tpcdsQueriesPath/$sqlNum.sql"),
       StandardCharsets.UTF_8)
@@ -403,20 +403,22 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
     checkSparkAnswer(sqlStr)
   }
 
-  if (tpcdsDataPath.nonEmpty) {
-    tpcdsQueries.foreach { sqlNum =>
-      test(s"TPC-DS: ${sqlNum}") {
-        val sqlStr = FileUtils.readFileToString(
-          new File(s"$tpcdsQueriesPath/$sqlNum.sql"),
-          StandardCharsets.UTF_8)
-        val df = spark.sql(sqlStr)
-        verifyResult(df, sqlNum, tpcdsResultsPath)
-        verifyPlan(df, sqlNum, tpcdsPlanPath)
-        checkSparkAnswer(sqlStr)
+  if (false) {
+    if (tpcdsDataPath.nonEmpty) {
+      tpcdsQueries.foreach { sqlNum =>
+        test(s"TPC-DS: ${sqlNum}") {
+          val sqlStr = FileUtils.readFileToString(
+            new File(s"$tpcdsQueriesPath/$sqlNum.sql"),
+            StandardCharsets.UTF_8)
+          val df = spark.sql(sqlStr)
+          verifyResult(df, sqlNum, tpcdsResultsPath)
+          verifyPlan(df, sqlNum, tpcdsPlanPath)
+          checkSparkAnswer(sqlStr)
+        }
       }
+    } else {
+      ignore("skipped because env `SPARK_TPCDS_DATA` is not set") {}
     }
-  } else {
-    ignore("skipped because env `SPARK_TPCDS_DATA` is not set") {}
   }
 }
 

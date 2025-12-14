@@ -38,4 +38,6 @@ extrasparkconf="
 queries='["q1,q2,q3,q4,q5,q6,q7,q8,q9"]'
 export SPARK_TPCDS_DATA="dev/tpcds_1g"
 export QUERY_FILTER="${queries}"
-./build/mvn -B -Ppre -Pspark-3.5 -Pscala-2.12 -Dsuites=org.apache.spark.sql.AuronTPCDSSuite test -pl spark-extension-shims-spark
+#./build/mvn -B -Ppre -Pspark-3.5 -Pscala-2.12 -Dsuites=org.apache.spark.sql.AuronTPCDSSuite test -pl spark-extension-shims-spark
+
+mvn -B -Ppre -Pspark-3.5 -Pscala-2.12 -Dsuites=org.apache.spark.sql.AuronTPCDSV1Suite test
