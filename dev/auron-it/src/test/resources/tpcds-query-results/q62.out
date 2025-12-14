@@ -1,0 +1,101 @@
+100
+<|COL|>EXPRESS<|COL|>site_0<|COL|>260<|COL|>283<|COL|>296<|COL|>314<|COL|>0
+<|COL|>EXPRESS<|COL|>site_1<|COL|>330<|COL|>285<|COL|>315<|COL|>329<|COL|>0
+<|COL|>EXPRESS<|COL|>site_2<|COL|>283<|COL|>291<|COL|>318<|COL|>333<|COL|>0
+<|COL|>EXPRESS<|COL|>site_3<|COL|>274<|COL|>280<|COL|>277<|COL|>258<|COL|>0
+<|COL|>EXPRESS<|COL|>site_4<|COL|>247<|COL|>244<|COL|>268<|COL|>259<|COL|>0
+<|COL|>LIBRARY<|COL|>site_0<|COL|>197<|COL|>180<|COL|>203<|COL|>180<|COL|>0
+<|COL|>LIBRARY<|COL|>site_1<|COL|>208<|COL|>205<|COL|>185<|COL|>211<|COL|>0
+<|COL|>LIBRARY<|COL|>site_2<|COL|>258<|COL|>230<|COL|>267<|COL|>243<|COL|>0
+<|COL|>LIBRARY<|COL|>site_3<|COL|>243<|COL|>204<|COL|>241<|COL|>252<|COL|>0
+<|COL|>LIBRARY<|COL|>site_4<|COL|>211<|COL|>213<|COL|>216<|COL|>206<|COL|>0
+<|COL|>NEXT DAY<|COL|>site_0<|COL|>332<|COL|>290<|COL|>340<|COL|>289<|COL|>0
+<|COL|>NEXT DAY<|COL|>site_1<|COL|>297<|COL|>292<|COL|>275<|COL|>334<|COL|>0
+<|COL|>NEXT DAY<|COL|>site_2<|COL|>287<|COL|>253<|COL|>272<|COL|>220<|COL|>0
+<|COL|>NEXT DAY<|COL|>site_3<|COL|>255<|COL|>252<|COL|>243<|COL|>264<|COL|>0
+<|COL|>NEXT DAY<|COL|>site_4<|COL|>300<|COL|>309<|COL|>309<|COL|>281<|COL|>0
+<|COL|>OVERNIGHT<|COL|>site_0<|COL|>242<|COL|>224<|COL|>226<|COL|>237<|COL|>0
+<|COL|>OVERNIGHT<|COL|>site_1<|COL|>237<|COL|>202<|COL|>213<|COL|>204<|COL|>0
+<|COL|>OVERNIGHT<|COL|>site_2<|COL|>172<|COL|>182<|COL|>158<|COL|>181<|COL|>0
+<|COL|>OVERNIGHT<|COL|>site_3<|COL|>217<|COL|>193<|COL|>201<|COL|>175<|COL|>0
+<|COL|>OVERNIGHT<|COL|>site_4<|COL|>231<|COL|>251<|COL|>249<|COL|>237<|COL|>0
+<|COL|>REGULAR<|COL|>site_0<|COL|>227<|COL|>216<|COL|>199<|COL|>193<|COL|>0
+<|COL|>REGULAR<|COL|>site_1<|COL|>239<|COL|>209<|COL|>254<|COL|>246<|COL|>0
+<|COL|>REGULAR<|COL|>site_2<|COL|>235<|COL|>241<|COL|>259<|COL|>219<|COL|>0
+<|COL|>REGULAR<|COL|>site_3<|COL|>204<|COL|>212<|COL|>185<|COL|>237<|COL|>0
+<|COL|>REGULAR<|COL|>site_4<|COL|>171<|COL|>176<|COL|>182<|COL|>163<|COL|>0
+<|COL|>TWO DAY<|COL|>site_0<|COL|>189<|COL|>201<|COL|>202<|COL|>218<|COL|>0
+<|COL|>TWO DAY<|COL|>site_1<|COL|>199<|COL|>170<|COL|>177<|COL|>174<|COL|>0
+<|COL|>TWO DAY<|COL|>site_2<|COL|>200<|COL|>202<|COL|>181<|COL|>179<|COL|>0
+<|COL|>TWO DAY<|COL|>site_3<|COL|>237<|COL|>234<|COL|>233<|COL|>253<|COL|>0
+<|COL|>TWO DAY<|COL|>site_4<|COL|>233<|COL|>229<|COL|>234<|COL|>238<|COL|>0
+Bad cards must make.<|COL|>EXPRESS<|COL|>site_0<|COL|>251<|COL|>248<|COL|>268<|COL|>277<|COL|>0
+Bad cards must make.<|COL|>EXPRESS<|COL|>site_1<|COL|>262<|COL|>304<|COL|>290<|COL|>267<|COL|>0
+Bad cards must make.<|COL|>EXPRESS<|COL|>site_2<|COL|>287<|COL|>290<|COL|>293<|COL|>286<|COL|>0
+Bad cards must make.<|COL|>EXPRESS<|COL|>site_3<|COL|>283<|COL|>260<|COL|>267<|COL|>290<|COL|>0
+Bad cards must make.<|COL|>EXPRESS<|COL|>site_4<|COL|>281<|COL|>310<|COL|>309<|COL|>321<|COL|>0
+Bad cards must make.<|COL|>LIBRARY<|COL|>site_0<|COL|>254<|COL|>265<|COL|>226<|COL|>231<|COL|>0
+Bad cards must make.<|COL|>LIBRARY<|COL|>site_1<|COL|>198<|COL|>231<|COL|>211<|COL|>201<|COL|>0
+Bad cards must make.<|COL|>LIBRARY<|COL|>site_2<|COL|>181<|COL|>172<|COL|>190<|COL|>176<|COL|>0
+Bad cards must make.<|COL|>LIBRARY<|COL|>site_3<|COL|>196<|COL|>214<|COL|>173<|COL|>226<|COL|>0
+Bad cards must make.<|COL|>LIBRARY<|COL|>site_4<|COL|>241<|COL|>241<|COL|>247<|COL|>236<|COL|>0
+Bad cards must make.<|COL|>NEXT DAY<|COL|>site_0<|COL|>259<|COL|>255<|COL|>279<|COL|>260<|COL|>0
+Bad cards must make.<|COL|>NEXT DAY<|COL|>site_1<|COL|>287<|COL|>334<|COL|>295<|COL|>300<|COL|>0
+Bad cards must make.<|COL|>NEXT DAY<|COL|>site_2<|COL|>269<|COL|>309<|COL|>306<|COL|>272<|COL|>0
+Bad cards must make.<|COL|>NEXT DAY<|COL|>site_3<|COL|>281<|COL|>322<|COL|>308<|COL|>277<|COL|>0
+Bad cards must make.<|COL|>NEXT DAY<|COL|>site_4<|COL|>273<|COL|>295<|COL|>275<|COL|>281<|COL|>0
+Bad cards must make.<|COL|>OVERNIGHT<|COL|>site_0<|COL|>221<|COL|>216<|COL|>201<|COL|>213<|COL|>0
+Bad cards must make.<|COL|>OVERNIGHT<|COL|>site_1<|COL|>250<|COL|>228<|COL|>257<|COL|>235<|COL|>0
+Bad cards must make.<|COL|>OVERNIGHT<|COL|>site_2<|COL|>255<|COL|>223<|COL|>230<|COL|>238<|COL|>0
+Bad cards must make.<|COL|>OVERNIGHT<|COL|>site_3<|COL|>195<|COL|>217<|COL|>199<|COL|>211<|COL|>0
+Bad cards must make.<|COL|>OVERNIGHT<|COL|>site_4<|COL|>175<|COL|>165<|COL|>169<|COL|>164<|COL|>0
+Bad cards must make.<|COL|>REGULAR<|COL|>site_0<|COL|>176<|COL|>239<|COL|>220<|COL|>233<|COL|>0
+Bad cards must make.<|COL|>REGULAR<|COL|>site_1<|COL|>187<|COL|>163<|COL|>200<|COL|>198<|COL|>0
+Bad cards must make.<|COL|>REGULAR<|COL|>site_2<|COL|>190<|COL|>231<|COL|>195<|COL|>208<|COL|>0
+Bad cards must make.<|COL|>REGULAR<|COL|>site_3<|COL|>227<|COL|>241<|COL|>231<|COL|>252<|COL|>0
+Bad cards must make.<|COL|>REGULAR<|COL|>site_4<|COL|>258<|COL|>245<|COL|>260<|COL|>245<|COL|>0
+Bad cards must make.<|COL|>TWO DAY<|COL|>site_0<|COL|>222<|COL|>235<|COL|>235<|COL|>223<|COL|>0
+Bad cards must make.<|COL|>TWO DAY<|COL|>site_1<|COL|>264<|COL|>248<|COL|>237<|COL|>227<|COL|>0
+Bad cards must make.<|COL|>TWO DAY<|COL|>site_2<|COL|>181<|COL|>230<|COL|>231<|COL|>207<|COL|>0
+Bad cards must make.<|COL|>TWO DAY<|COL|>site_3<|COL|>182<|COL|>158<|COL|>209<|COL|>185<|COL|>0
+Bad cards must make.<|COL|>TWO DAY<|COL|>site_4<|COL|>203<|COL|>218<|COL|>198<|COL|>221<|COL|>0
+Conventional childr<|COL|>EXPRESS<|COL|>site_0<|COL|>311<|COL|>308<|COL|>336<|COL|>287<|COL|>0
+Conventional childr<|COL|>EXPRESS<|COL|>site_1<|COL|>250<|COL|>269<|COL|>273<|COL|>260<|COL|>0
+Conventional childr<|COL|>EXPRESS<|COL|>site_2<|COL|>255<|COL|>280<|COL|>235<|COL|>276<|COL|>0
+Conventional childr<|COL|>EXPRESS<|COL|>site_3<|COL|>269<|COL|>292<|COL|>303<|COL|>278<|COL|>0
+Conventional childr<|COL|>EXPRESS<|COL|>site_4<|COL|>275<|COL|>324<|COL|>268<|COL|>330<|COL|>0
+Conventional childr<|COL|>LIBRARY<|COL|>site_0<|COL|>212<|COL|>211<|COL|>225<|COL|>250<|COL|>0
+Conventional childr<|COL|>LIBRARY<|COL|>site_1<|COL|>218<|COL|>249<|COL|>244<|COL|>204<|COL|>0
+Conventional childr<|COL|>LIBRARY<|COL|>site_2<|COL|>203<|COL|>215<|COL|>222<|COL|>205<|COL|>0
+Conventional childr<|COL|>LIBRARY<|COL|>site_3<|COL|>163<|COL|>181<|COL|>180<|COL|>193<|COL|>0
+Conventional childr<|COL|>LIBRARY<|COL|>site_4<|COL|>189<|COL|>208<|COL|>207<|COL|>191<|COL|>0
+Conventional childr<|COL|>NEXT DAY<|COL|>site_0<|COL|>253<|COL|>269<|COL|>285<|COL|>258<|COL|>0
+Conventional childr<|COL|>NEXT DAY<|COL|>site_1<|COL|>289<|COL|>244<|COL|>254<|COL|>269<|COL|>0
+Conventional childr<|COL|>NEXT DAY<|COL|>site_2<|COL|>341<|COL|>290<|COL|>310<|COL|>315<|COL|>0
+Conventional childr<|COL|>NEXT DAY<|COL|>site_3<|COL|>309<|COL|>294<|COL|>328<|COL|>270<|COL|>0
+Conventional childr<|COL|>NEXT DAY<|COL|>site_4<|COL|>312<|COL|>311<|COL|>275<|COL|>291<|COL|>0
+Conventional childr<|COL|>OVERNIGHT<|COL|>site_0<|COL|>180<|COL|>193<|COL|>167<|COL|>211<|COL|>0
+Conventional childr<|COL|>OVERNIGHT<|COL|>site_1<|COL|>196<|COL|>210<|COL|>238<|COL|>194<|COL|>0
+Conventional childr<|COL|>OVERNIGHT<|COL|>site_2<|COL|>218<|COL|>236<|COL|>287<|COL|>220<|COL|>0
+Conventional childr<|COL|>OVERNIGHT<|COL|>site_3<|COL|>235<|COL|>253<|COL|>228<|COL|>246<|COL|>0
+Conventional childr<|COL|>OVERNIGHT<|COL|>site_4<|COL|>211<|COL|>199<|COL|>201<|COL|>201<|COL|>0
+Conventional childr<|COL|>REGULAR<|COL|>site_0<|COL|>209<|COL|>262<|COL|>232<|COL|>207<|COL|>0
+Conventional childr<|COL|>REGULAR<|COL|>site_1<|COL|>214<|COL|>218<|COL|>222<|COL|>227<|COL|>0
+Conventional childr<|COL|>REGULAR<|COL|>site_2<|COL|>166<|COL|>193<|COL|>184<|COL|>183<|COL|>0
+Conventional childr<|COL|>REGULAR<|COL|>site_3<|COL|>195<|COL|>191<|COL|>221<|COL|>219<|COL|>0
+Conventional childr<|COL|>REGULAR<|COL|>site_4<|COL|>248<|COL|>236<|COL|>244<|COL|>256<|COL|>0
+Conventional childr<|COL|>TWO DAY<|COL|>site_0<|COL|>192<|COL|>225<|COL|>232<|COL|>225<|COL|>0
+Conventional childr<|COL|>TWO DAY<|COL|>site_1<|COL|>248<|COL|>239<|COL|>233<|COL|>251<|COL|>0
+Conventional childr<|COL|>TWO DAY<|COL|>site_2<|COL|>230<|COL|>214<|COL|>237<|COL|>201<|COL|>0
+Conventional childr<|COL|>TWO DAY<|COL|>site_3<|COL|>236<|COL|>190<|COL|>190<|COL|>222<|COL|>0
+Conventional childr<|COL|>TWO DAY<|COL|>site_4<|COL|>197<|COL|>159<|COL|>202<|COL|>176<|COL|>0
+Doors canno<|COL|>EXPRESS<|COL|>site_0<|COL|>303<|COL|>312<|COL|>304<|COL|>319<|COL|>0
+Doors canno<|COL|>EXPRESS<|COL|>site_1<|COL|>321<|COL|>278<|COL|>313<|COL|>297<|COL|>0
+Doors canno<|COL|>EXPRESS<|COL|>site_2<|COL|>267<|COL|>277<|COL|>265<|COL|>257<|COL|>0
+Doors canno<|COL|>EXPRESS<|COL|>site_3<|COL|>263<|COL|>245<|COL|>258<|COL|>285<|COL|>0
+Doors canno<|COL|>EXPRESS<|COL|>site_4<|COL|>282<|COL|>313<|COL|>319<|COL|>323<|COL|>0
+Doors canno<|COL|>LIBRARY<|COL|>site_0<|COL|>201<|COL|>210<|COL|>201<|COL|>200<|COL|>0
+Doors canno<|COL|>LIBRARY<|COL|>site_1<|COL|>239<|COL|>217<|COL|>208<|COL|>206<|COL|>0
+Doors canno<|COL|>LIBRARY<|COL|>site_2<|COL|>229<|COL|>233<|COL|>244<|COL|>241<|COL|>0
+Doors canno<|COL|>LIBRARY<|COL|>site_3<|COL|>216<|COL|>198<|COL|>182<|COL|>222<|COL|>0
+Doors canno<|COL|>LIBRARY<|COL|>site_4<|COL|>176<|COL|>163<|COL|>170<|COL|>216<|COL|>0

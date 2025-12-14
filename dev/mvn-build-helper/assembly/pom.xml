@@ -24,10 +24,11 @@
     <version>${project.version}</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <artifactId>assembly</artifactId>
+
+  <artifactId>auron-${shimName}_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
-  <name>Apache Auron Assembly</name>
-  <description>Apache Auron Assembly Project</description>
+  <name>Apache Auron</name>
+  <description>Apache Auron Shaded JAR</description>
 
   <properties>
     <auron.shade.packageName>auron</auron.shade.packageName>

@@ -84,6 +84,7 @@ env:
 
 jobs:
   build-validator:
+    if: false
     name: Build TPC-DS Validator
     runs-on: ubuntu-24.04
     steps:
@@ -175,7 +176,7 @@ jobs:
             UNIFFLE_NUMBER="${UNIFFLE_NUMBER#uniffle-}"
           fi
           
-          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }} --skiptests false"
+          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }} --skiptests true"
           if [ -n "${{ inputs.celebornver }}" ]; then
             CMD="$CMD --celeborn $CELEBORN_NUMBER"
           fi
@@ -210,7 +211,7 @@ jobs:
 
   run-tpcds-test:
     name: Run TPC-DS test ${{ matrix.query }}
-    needs: [build-validator, build-auron-jar]
+    needs: [build-auron-jar]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -271,6 +272,7 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Download TPC-DS Validator JAR
+        if: false
         uses: actions/download-artifact@v4
         with:
           name: >
@@ -396,10 +398,25 @@ jobs:
           export RUST_BACKTRACE=1
           export SCALA_VERSION=${{ inputs.scalaver }}
           export SPARK_HOME=spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
-          dev/run-tpcds-test \
-            ${{ inputs.extrasparkconf }} \
-            --data-location dev/tpcds_1g \
-            --query-filter ${{ matrix.query }}
+          export SPARK_TPCDS_EXTRA_CONF="${{ inputs.extrasparkconf }}"
+          export SPARK_TPCDS_DATA=${{ github.workspace }}/dev/tpcds_1g
+          export SPARK_TPCDS_QUERY=${{ matrix.query }}
+          
+          if [ -n "${{ inputs.celebornver }}" ]; then
+            RSS_PROFILE="-Pceleborn,${{ inputs.celebornver }}"
+          fi
+          if [ -n "${{ inputs.unifflever }}" ]; then
+            RSS_PROFILE="-Puniffle,${{ inputs.unifflever }}"
+          fi
+          
+          ./build/mvn install -Ppre -P${{ inputs.sparkver }} -P${{ inputs.scalaver }} ${RSS_PROFILE} -DskipTests -Drat.skip=true -Dscalafix.skip=true
+          
+          cd dev/auron-it
+          ./build/mvn -Ppre -P${{ inputs.sparkver }} -P${{ inputs.scalaver }}  ${RSS_PROFILE} -Dsuites=org.apache.spark.sql.AuronTPCDSV1Suite test
+#          dev/run-tpcds-test \
+#            ${{ inputs.extrasparkconf }} \
+#            --data-location dev/tpcds_1g \
+#            --query-filter ${{ matrix.query }}
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
