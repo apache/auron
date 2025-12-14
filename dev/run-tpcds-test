@@ -29,16 +29,46 @@ fi
 _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 echo $_DIR
 
-# Load common functions
-. "${_DIR}/utils.sh"
+# Function to join an input array by a given separator
+join_by() {
+  local IFS="$1"
+  shift
+  echo "$*"
+}
+
+# Split input arguments into two parts: Spark confs and args
+parse_args_for_spark_submit() {
+  SPARK_CONF=()
+  ARGS=()
+  while [ ! -z "$1" ]; do
+    if [[ "$1" =~ ^--master= ]]; then
+      SPARK_CONF+=($1)
+    elif [ "$1" == "--conf" ]; then
+      shift
+      SPARK_CONF+=("--conf $1")
+    else
+      ARGS+=($1)
+    fi
+    shift
+  done
+}
 
 # Do some preparations before launching spark-submit
 parse_args_for_spark_submit "$@"
+echo "SPARK_CONF-------"
+printf '%s\n' "${SPARK_CONF[@]}"
+echo "ARGS-------"
+printf '%s' "${ARGS[@]}"
 
 # Resolve a jar location for the TPCDS data generator
 find_resource() {
-  local jar_file="tpcds-validator_${SCALA_VERSION:-2.12}-0.1.0-SNAPSHOT-with-dependencies.jar"
-  local built_jar="$_DIR/../${jar_file}"
+  #local jar_file="auron-spark-*.jar"
+  #local built_jar="$_DIR/../target/${jar_file}"
+  local jar_pattern="auron-spark-*.jar"
+  local target_dir="$_DIR/../target"
+  local built_jar
+
+  built_jar=$(find "$target_dir" -name "$jar_pattern" -print -quit)  # 只找一个匹配
   if [[ -e "$built_jar" ]]; then
     RESOURCE=$built_jar
   else
@@ -49,10 +79,12 @@ find_resource() {
 
 find_resource
 
+set -ex
+
 echo "Using \`spark-submit\` from path: $SPARK_HOME" 1>&2
 exec "${SPARK_HOME}"/bin/spark-submit \
   --driver-memory 5g \
-  --class org.apache.spark.sql.execution.benchmark.TPCDSQueryValidator  \
+  --class org.apache.spark.sql.AuronTPCDSSuite  \
   --conf spark.sql.extensions=org.apache.spark.sql.auron.AuronSparkSessionExtension \
   --conf spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager \
   --conf spark.sql.shuffle.partitions=1000 \

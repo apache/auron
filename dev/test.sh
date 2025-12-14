@@ -17,36 +17,8 @@
 # limitations under the License.
 #
 
-#
-# Common functions in scripts
+set -ex
 
-# Function to join an input array by a given separator
-join_by() {
-  local IFS="$1"
-  shift
-  echo "$*"
-}
-
-# Function to run a given command
-run_cmd() {
-  local command="$1"
-  local working_dir="$2"
-
-  # Preserve the calling directory
-  _CALLING_DIR="$(pwd)"
-
-  # Run the given command and check if it works well
-  cd ${working_dir} && ${command}
-  if [ $? = 127 ]; then
-    echo "Cannot run '${command}', so check if the command works"
-    exit 1
-  fi
-
-  # Reset the current working directory
-  cd "${_CALLING_DIR}"
-}
-
-# Split input arguments into two parts: Spark confs and args
 parse_args_for_spark_submit() {
   SPARK_CONF=()
   ARGS=()
@@ -63,14 +35,11 @@ parse_args_for_spark_submit() {
   done
 }
 
-# Resolve a jar location for the TPCDS data generator
-find_resource() {
-  local jar_file="tpcds-validator_${SCALA_VERSION:-2.12}-0.1.0-SNAPSHOT-with-dependencies.jar"
-  local built_jar="$_DIR/../target/${jar_file}"
-  if [[ -e "$built_jar" ]]; then
-    RESOURCE=$built_jar
-  else
-    echo "${built_jar} not found"
-    exit 1
-  fi
-}
+# 调用示例（和你原来完全一样）
+parse_args_for_spark_submit --conf spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.celeborn.AuronCelebornShuffleManager --conf spark.serializer=org.apache.spark.serializer.KryoSerializer --conf spark.celeborn.client.spark.shuffle.writer=hash --conf spark.celeborn.client.push.replicate.enabled=false  --data-location dev/tpcds_1g
+
+
+echo "SPARK_CONF-------"
+printf '%s\n' "${SPARK_CONF[@]}"   # 改成这种方式才能正确显示带空格的元素
+echo "ARGS-------"
+printf '%s' "${ARGS[@]}"

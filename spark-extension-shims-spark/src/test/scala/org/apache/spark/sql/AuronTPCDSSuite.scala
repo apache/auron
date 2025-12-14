@@ -16,6 +16,12 @@
  */
 package org.apache.spark.sql
 
+import java.io.File
+import java.nio.charset.StandardCharsets
+
+import scala.collection.mutable
+import scala.util.matching.Regex
+
 import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.auron.Shims
@@ -23,17 +29,12 @@ import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DoubleType
 
-import java.io.File
-import java.nio.charset.StandardCharsets
-import scala.collection.mutable
-import scala.util.matching.Regex
-
 /**
- *
  */
 abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
 
-  protected val tpcdsDataPath: String = sys.env.getOrElse("SPARK_TPCDS_DATA", "/Users/yew1eb/workspaces/tpcds-validator/tpcds_1g")
+  protected val tpcdsDataPath: String =
+    sys.env.getOrElse("SPARK_TPCDS_DATA", "/Users/yew1eb/workspaces/tpcds-validator/tpcds_1g")
 
   protected val rootPath: String = getClass.getResource("/").getPath
   protected val tpcdsQueriesPath: String = rootPath + "/tpcds-queries"
@@ -222,9 +223,9 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
   }
 
   protected def compareResultStr(
-                                  sqlNum: String,
-                                  result: Array[Row],
-                                  resultsPath: String): Unit = {
+      sqlNum: String,
+      result: Array[Row],
+      resultsPath: String): Unit = {
     val resultStr = new StringBuffer()
     resultStr.append(result.length).append("\n")
     result.foreach(r => resultStr.append(r.mkString(colSep)).append("\n"))
@@ -243,8 +244,7 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
         StandardCharsets.UTF_8)
 
     if (expectedResult != resultStr.toString) {
-      fail(
-        s"""
+      fail(s"""
            |=== $sqlNum result does NOT match expected ===
            |[Expected]
            |${expectedResult}
@@ -255,9 +255,9 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
   }
 
   protected def compareDoubleResult(
-                                     sqlNum: String,
-                                     result: Array[Row],
-                                     resultsPath: String): Unit = {
+      sqlNum: String,
+      result: Array[Row],
+      resultsPath: String): Unit = {
 
     if (RE_GENERATE) {
       var resultStr = new StringBuilder()
@@ -305,10 +305,10 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
   }
 
   private def failureMessage(
-                              sqlNum: String,
-                              rowIndex: Int,
-                              expected: String,
-                              actual: String): String = {
+      sqlNum: String,
+      rowIndex: Int,
+      expected: String,
+      actual: String): String = {
     s"""
        |=== Row $rowIndex - $sqlNum result does NOT match expected ===
        |[Expected]
@@ -339,10 +339,10 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
 
     // Replace occurrences in the plan using the normalized map
     def replaceWithNormalizedValues(
-                                     plan: String,
-                                     regex: Regex,
-                                     normalizedMap: Map[String, String],
-                                     format: String): String = {
+        plan: String,
+        regex: Regex,
+        normalizedMap: Map[String, String],
+        format: String): String = {
       regex.replaceAllIn(plan, regexMatch => s"$format${normalizedMap(regexMatch.toString)}")
     }
 
@@ -380,8 +380,7 @@ abstract class AuronTPCDSSuite extends AuronQueryTest with SharedSparkSession {
     FileUtils.writeStringToFile(actualFile, actual, StandardCharsets.UTF_8)
 
     if (expected != actual) {
-      fail(
-        s"""
+      fail(s"""
            |Plans did not match for query: $sqlNum
            |Expected explain plan: ${expectedFile.getAbsolutePath}
            |
