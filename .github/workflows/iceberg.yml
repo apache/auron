@@ -1,0 +1,68 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Iceberg
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - branch-*
+  pull_request:
+    branches:
+      - master
+      - branch-*
+
+concurrency:
+  group: iceberg-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-flink:
+    name: Test Iceberg ${{ matrix.iceberg }} javaVersion ${{ matrix.javaver }} scalaVersion ${{ matrix.scalaver }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        iceberg: [ "1.9" ]
+        javaver: [ "11", "17"]
+        scalaver: [ "2.12" ]
+        module: [ "thirdparty/auron-iceberg" ]
+        sparkver: [ "spark-3.4", "spark-3.5" ]
+
+
+    steps:
+      - name: Checkout Auron
+        uses: actions/checkout@v4
+
+      - name: Setup Java and Maven cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt-hotspot'
+          java-version: ${{ matrix.javaver }}
+          cache: 'maven'
+
+      - name: Test Iceberg Module
+        run: ./build/mvn -B test -X -pl ${{ matrix.module }} -am -Pscala-${{ matrix.scalaver }} -Piceberg-${{ matrix.iceberg }} -P${{ matrix.sparkver }} -Prelease
+
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.module }}-test-report
+          path: ${{ matrix.module }}/target/surefire-reports
