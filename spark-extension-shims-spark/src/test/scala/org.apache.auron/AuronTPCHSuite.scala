@@ -18,7 +18,6 @@ package org.apache.spark.sql.auron
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -35,12 +34,11 @@ abstract class AuronTPCHSuite extends QueryTest with SharedSparkSession {
   protected val regenGoldenFiles: Boolean =
     sys.env.getOrElse("REGEN_TPCH_GOLDEN_FILES", "0") == "1"
 
-  protected val baseResourcePath =
-    Paths.get("spark-extension-shims-spark", "src", "test", "resources").toAbsolutePath.toString
-  protected val tpchDataPath: String = s"$baseResourcePath/tpch-data-parquet"
-  protected val tpchQueriesPath: String = s"$baseResourcePath/tpch-queries"
-  protected val tpchResultsPath: String = s"$baseResourcePath/tpch-query-results"
-  protected val tpchPlanPath: String = s"$baseResourcePath/tpch-plan-stability"
+  protected val rootPath: String = getClass.getResource("/").getPath
+  protected val tpchDataPath: String = s"$rootPath/tpch-data-parquet"
+  protected val tpchQueriesPath: String = s"$rootPath/tpch-queries"
+  protected val tpchResultsPath: String = s"$rootPath/tpch-query-results"
+  protected val tpchPlanPath: String = s"$rootPath/tpch-plan-stability"
 
   protected val colSep: String = "<|COL|>"
 

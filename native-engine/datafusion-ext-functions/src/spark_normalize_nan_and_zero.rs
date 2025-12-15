@@ -37,6 +37,12 @@ pub fn spark_normalize_nan_and_zero(args: &[ColumnarValue]) -> Result<ColumnarVa
         ColumnarValue::Scalar(ScalarValue::Float64(Some(v))) => Ok(ColumnarValue::Scalar(
             ScalarValue::Float64(Some(normalize_float(*v))),
         )),
+        ColumnarValue::Scalar(ScalarValue::Float32(None)) => {
+            Ok(ColumnarValue::Scalar(ScalarValue::Float32(None)))
+        }
+        ColumnarValue::Scalar(ScalarValue::Float64(None)) => {
+            Ok(ColumnarValue::Scalar(ScalarValue::Float64(None)))
+        }
         ColumnarValue::Array(array) => match array.as_ref().data_type() {
             DataType::Float32 => Ok(ColumnarValue::Array(Arc::new(Float32Array::from_iter(
                 as_float32_array(array)?
@@ -54,7 +60,7 @@ pub fn spark_normalize_nan_and_zero(args: &[ColumnarValue]) -> Result<ColumnarVa
             ),
         },
         other_dt => df_execution_err!(
-            "spark_normalize_nan_and_zero only supports non-null Float32/Float64 scalars or Float32/Float64 arrays, not: {:?}",
+            "spark_normalize_nan_and_zero only supports Float32/Float64 scalars or Float32/Float64 arrays, not: {:?}",
             other_dt.data_type()
         ),
     }
@@ -152,4 +158,27 @@ mod test {
         Float32,
         Float32Array
     );
+
+    macro_rules! test_normalize_nan_and_zero_null_scalar {
+        ($test_name:ident, $scalar_variant:ident) => {
+            #[test]
+            fn $test_name() -> Result<(), Box<dyn Error>> {
+                let input_columnar_value =
+                    ColumnarValue::Scalar(ScalarValue::$scalar_variant(None));
+                let result = spark_normalize_nan_and_zero(&vec![input_columnar_value])?;
+                match result {
+                    ColumnarValue::Scalar(ScalarValue::$scalar_variant(None)) => Ok(()),
+                    other => panic!(
+                        "Expected null {} scalar, got: {:?}",
+                        stringify!($scalar_variant),
+                        other
+                    ),
+                }
+            }
+        };
+    }
+
+    test_normalize_nan_and_zero_null_scalar!(test_normalize_nan_and_zero_null_scalar_f64, Float64);
+
+    test_normalize_nan_and_zero_null_scalar!(test_normalize_nan_and_zero_null_scalar_f32, Float32);
 }

@@ -28,7 +28,7 @@ import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
-import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, roundRobinTypeSupported, scalarTypeSupported, StubExpr}
+import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -155,11 +155,16 @@ object AuronConverters extends Logging {
     extConvertProviders.exists(_.isSupported(exec))
   }
 
-  def enableExchange(): Boolean = {
-    val shuffleMangerName = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
-    enableShuffleExechange && !shuffleMangerName.isEmpty && (shuffleMangerName.contains(
-      "AuronShuffleManager") || shuffleMangerName.contains(
-      "AuronUniffleShuffleManager") || shuffleMangerName.contains("AuronCelebornShuffleManager"))
+  def enableExchange: Boolean = {
+    enableShuffleExechange && supportedShuffleManager
+  }
+
+  private val supportedShuffleManagers: Seq[String] =
+    Seq("AuronShuffleManager", "AuronUniffleShuffleManager", "AuronCelebornShuffleManager")
+
+  def supportedShuffleManager: Boolean = {
+    val name = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
+    supportedShuffleManagers.exists(name.contains)
   }
 
   // format: off
@@ -398,7 +403,7 @@ object AuronConverters extends Logging {
     outputPartitioning match {
       case partitioning: RangePartitioning =>
         val unsupportedOrderType = partitioning.ordering
-          .find(e => !scalarTypeSupported(e.dataType))
+          .find(e => !isTypeSupported(e.dataType))
         assert(
           unsupportedOrderType.isEmpty,
           s"Unsupported order type in range partitioning: ${unsupportedOrderType.get}")

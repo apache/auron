@@ -102,7 +102,10 @@ object NativeConverters extends Logging {
   def castTrimStringEnabled: Boolean =
     AuronConverters.getBooleanConf("spark.auron.cast.trimString", defaultValue = true)
 
-  def scalarTypeSupported(dataType: DataType): Boolean = {
+  /**
+   * Is the data type(scalar or complex) supported by Auron.
+   */
+  def isTypeSupported(dataType: DataType): Boolean = {
     dataType match {
       case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
           DoubleType | StringType | DateType | TimestampType =>
@@ -111,11 +114,11 @@ object NativeConverters extends Logging {
       case _: DecimalType =>
         // auron only supports 64-bit decimal
         false
-      case at: ArrayType => scalarTypeSupported(at.elementType)
+      case at: ArrayType => isTypeSupported(at.elementType)
       case m: MapType =>
-        scalarTypeSupported(m.keyType) && scalarTypeSupported(m.valueType)
+        isTypeSupported(m.keyType) && isTypeSupported(m.valueType)
       case s: StructType =>
-        s.fields.forall(e => scalarTypeSupported(e.dataType))
+        s.fields.forall(e => isTypeSupported(e.dataType))
       case _ => false
     }
   }
@@ -844,7 +847,7 @@ object NativeConverters extends Logging {
         buildScalarFunction(pb.ScalarFunction.Factorial, e.children, e.dataType)
       case e: Hex => buildScalarFunction(pb.ScalarFunction.Hex, e.children, e.dataType)
       case e: IsNaN =>
-        buildScalarFunction(pb.ScalarFunction.IsNaN, e.children, e.dataType)
+        buildExtScalarFunction("Spark_IsNaN", e.children, e.dataType)
       case e: Round =>
         e.scale match {
           case Literal(n: Int, _) =>
@@ -984,10 +987,16 @@ object NativeConverters extends Logging {
         val children = e.children.map(Cast(_, e.dataType))
         buildScalarFunction(pb.ScalarFunction.Coalesce, children, e.dataType)
 
-      case e: StringLPad =>
-        buildScalarFunction(pb.ScalarFunction.Lpad, e.children, StringType)
-      case e: StringRPad =>
-        buildScalarFunction(pb.ScalarFunction.Rpad, e.children, StringType)
+      case e @ StringLPad(str, len, pad) =>
+        buildScalarFunction(
+          pb.ScalarFunction.Lpad,
+          Seq(str, castIfNecessary(len, LongType), pad),
+          StringType)
+      case e @ StringRPad(str, len, pad) =>
+        buildScalarFunction(
+          pb.ScalarFunction.Rpad,
+          Seq(str, castIfNecessary(len, LongType), pad),
+          StringType)
 
       case e @ If(predicate, trueValue, falseValue) =>
         val castedTrueValue = trueValue match {
@@ -1336,7 +1345,7 @@ object NativeConverters extends Logging {
       fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
     val tzArg: Expression = child.dataType match {
       case TimestampType =>
-        Literal(SQLConf.get.sessionLocalTimeZone, StringType)
+        Literal.create(SQLConf.get.sessionLocalTimeZone, StringType)
       case _ =>
         Literal.create(null, StringType)
     }

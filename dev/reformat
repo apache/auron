@@ -40,6 +40,14 @@ function run_maven() {
   fi
 }
 
+# check or format the rust code
+if [[ "$CHECK" == "true" ]]; then
+  cargo fmt --check
+else
+  cargo fix --all --allow-dirty --allow-staged --allow-no-vcs
+  cargo fmt --all -q --
+fi
+
 # Check or format all code, including third-party code, with spark-3.5
 sparkver=spark-3.5
 for celebornver in celeborn-0.5 celeborn-0.6
@@ -53,11 +61,3 @@ for sparkver in "${sparkvers[@]}"
 do
   run_maven -P"${sparkver}"
 done
-
-# check or format the rust code
-if [[ "$CHECK" == "true" ]]; then
-  cargo fmt --check
-else
-  cargo fix --all --allow-dirty --allow-staged --allow-no-vcs
-  cargo fmt --all -q --
-fi

@@ -37,3 +37,4 @@ build/apache-maven-*/**
 **/tpch-queries/**
 **/tpch-query-results/**
 
+src/main/resources/auron-build-info.properties
