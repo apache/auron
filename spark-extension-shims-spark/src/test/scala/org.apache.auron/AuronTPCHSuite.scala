@@ -42,7 +42,7 @@ abstract class AuronTPCHSuite extends QueryTest with SharedSparkSession {
 
   protected val colSep: String = "<|COL|>"
 
-  protected val tpchQueryIds: Seq[String] = (1 to 22).map("q" + _)
+  protected val tpchQueries: Seq[String] = (1 to 22).map("q" + _)
 
   protected val tpchTables: Seq[String] =
     Seq("customer", "lineitem", "nation", "orders", "part", "partsupp", "region", "supplier")
@@ -233,7 +233,7 @@ abstract class AuronTPCHSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  tpchQueryIds.foreach { queryId =>
+  tpchQueries.foreach { queryId =>
     test(s"TPC-H $queryId") {
       val queryFile = new File(s"$tpchQueriesPath/$queryId.sql")
       val sqlText = FileUtils.readFileToString(queryFile, StandardCharsets.UTF_8).trim
