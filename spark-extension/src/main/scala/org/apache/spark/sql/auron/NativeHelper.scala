@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.auron.columnar.ColumnarHelper
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.metric.SparkMetricNode
@@ -73,7 +73,8 @@ object NativeHelper extends Logging {
   val nativeMemory: Long = {
     val heapMemory = Runtime.getRuntime.maxMemory()
     val offheapMemory = totalMemory - heapMemory
-    logWarning(s"memory total: $totalMemory, onheap: $heapMemory, offheap: $offheapMemory")
+    logWarning(s"memory total: ${Utils.bytesToString(totalMemory)}, onheap: ${Utils.bytesToString(
+      heapMemory)}, offheap: ${Utils.bytesToString(offheapMemory)}")
     offheapMemory
   }
 
