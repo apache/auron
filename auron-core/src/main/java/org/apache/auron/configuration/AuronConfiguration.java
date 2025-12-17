@@ -85,7 +85,7 @@ public abstract class AuronConfiguration {
      * default value.
      *
      * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapper for any key of the option
+     * @param overrideDefault The value to return if no value was mapped for any key of the option
      * @return the configured value associated with the given config option, or the overrideDefault
      */
     public int getInteger(ConfigOption<Integer> configOption, int overrideDefault) {
@@ -108,7 +108,7 @@ public abstract class AuronConfiguration {
      * default value.
      *
      * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapper for any key of the option
+     * @param overrideDefault The value to return if no value was mapped for any key of the option
      * @return the configured value associated with the given config option, or the overrideDefault
      */
     public long getLong(ConfigOption<Long> configOption, long overrideDefault) {
@@ -131,7 +131,7 @@ public abstract class AuronConfiguration {
      * value.
      *
      * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapper for any key of the option
+     * @param overrideDefault The value to return if no value was mapped for any key of the option
      * @return the configured value associated with the given config option, or the overrideDefault
      */
     public boolean getBoolean(ConfigOption<Boolean> configOption, boolean overrideDefault) {
@@ -154,7 +154,7 @@ public abstract class AuronConfiguration {
      * value.
      *
      * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapper for any key of the option
+     * @param overrideDefault The value to return if no value was mapped for any key of the option
      * @return the configured value associated with the given config option, or the overrideDefault
      */
     public float getFloat(ConfigOption<Float> configOption, float overrideDefault) {
@@ -177,7 +177,7 @@ public abstract class AuronConfiguration {
      * default value.
      *
      * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapper for any key of the option
+     * @param overrideDefault The value to return if no value was mapped for any key of the option
      * @return the configured value associated with the given config option, or the overrideDefault
      */
     public double getDouble(ConfigOption<Double> configOption, double overrideDefault) {
