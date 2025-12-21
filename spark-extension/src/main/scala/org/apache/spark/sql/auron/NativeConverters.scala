@@ -556,6 +556,7 @@ object NativeConverters extends Logging {
       case LessThan(lhs, rhs) => buildBinaryExprNode(lhs, rhs, "Lt")
       case GreaterThanOrEqual(lhs, rhs) => buildBinaryExprNode(lhs, rhs, "GtEq")
       case LessThanOrEqual(lhs, rhs) => buildBinaryExprNode(lhs, rhs, "LtEq")
+      case EqualNullSafe(lhs, rhs) => buildBinaryExprNode(lhs, rhs, "IsNotDistinctFrom")
 
       case e: Add if !e.dataType.isInstanceOf[DecimalType] || decimalArithOpEnabled =>
         val lhs = e.left
