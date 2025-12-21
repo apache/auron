@@ -101,6 +101,10 @@ object NativeConverters extends Logging {
     AuronConverters.getBooleanConf("spark.auron.datetime.extract.enabled", defaultValue = false)
   def castTrimStringEnabled: Boolean =
     AuronConverters.getBooleanConf("spark.auron.cast.trimString", defaultValue = true)
+  def singleChildFallbackEnabled: Boolean =
+    AuronConverters.getBooleanConf(
+      "spark.auron.expression.singleChildFallback.enabled",
+      defaultValue = true)
 
   /**
    * Is the data type(scalar or complex) supported by Auron.
@@ -286,6 +290,10 @@ object NativeConverters extends Logging {
   def convertExpr(sparkExpr: Expression): pb.PhysicalExprNode = {
     def fallbackToError: Expression => pb.PhysicalExprNode = { e =>
       throw new NotImplementedError(s"unsupported expression: (${e.getClass}) $e")
+    }
+
+    if (!singleChildFallbackEnabled) {
+      return convertExprWithFallback(sparkExpr, isPruningExpr = false, fallbackToError)
     }
 
     try {
