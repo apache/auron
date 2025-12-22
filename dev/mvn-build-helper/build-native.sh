@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-set -o pipefail
+set -eo pipefail
 
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
