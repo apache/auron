@@ -154,7 +154,7 @@ abstract class NativeParquetSinkBase(
           .addAllProp(nativeProps.asJava)
         PhysicalPlanNode.newBuilder().setParquetSink(parquetSink).build()
       },
-      "ParquetSink")
+      friendlyName = "NativeRDD.ParquetSink")
   }
 
   protected def newHadoopConf(_tableDesc: TableDesc): Configuration =
