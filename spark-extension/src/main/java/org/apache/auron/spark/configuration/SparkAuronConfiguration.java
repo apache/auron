@@ -27,6 +27,7 @@ import org.apache.spark.internal.config.ConfigEntry;
 import org.apache.spark.internal.config.ConfigEntryWithDefault;
 import scala.Option;
 import scala.collection.immutable.List$;
+import sun.security.pkcs11.P11Util;
 
 /**
  * Spark configuration proxy for Auron.
@@ -235,6 +236,11 @@ public class SparkAuronConfiguration extends AuronConfiguration {
     public static final ConfigOption<Boolean> ORC_TIMESTAMP_USE_MICROSECOND = ConfigOptions.key(
                     "auron.orc.timestamp.use.microsecond")
             .description("use microsecond precision when reading ORC timestamp columns. ")
+            .booleanType()
+            .defaultValue(false);
+    public static final ConfigOption<Boolean> ORC_SCHEMA_ISCASE_SENSITIVE = ConfigOptions.key(
+                    "auron.orc.schema.iscasesensitive")
+            .description("does matching ORC file schema distinguish between uppercase and lowercase ")
             .booleanType()
             .defaultValue(false);
 

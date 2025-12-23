@@ -160,6 +160,7 @@ impl ExecutionPlan for OrcExec {
 
         let force_positional_evolution = conf::ORC_FORCE_POSITIONAL_EVOLUTION.value()?;
         let use_microsecond_precision = conf::ORC_TIMESTAMP_USE_MICROSECOND.value()?;
+        let is_case_sensitive = conf::ORC_SCHEMA_ISCASE_SENSITIVE.value()?;
 
         let opener: Arc<dyn FileOpener> = Arc::new(OrcOpener {
             projection,
@@ -364,17 +365,26 @@ impl SchemaAdapter {
                 }
             }
         } else {
-            for named_column in file_named_columns {
-                // Case-insensitive field name matching
-                let named_column_name_lower = named_column.name().to_lowercase();
-                if let Some((proj_idx, _)) =
-                self.projected_schema.fields().iter().enumerate()
-                    .find(|(_, f)| f.name().to_lowercase() == named_column_name_lower)
+            if is_case_sensitive {
+                for named_column in file_named_columns {
+                    if let Some((proj_idx, _)) =
+                    self.projected_schema.fields().find(named_column.name())
                     {
                         field_mappings[proj_idx] = Some(projection.len());
                         projection.push(named_column.data_type().column_index());
+                        }
                     }
-                }
+                } else {
+                    // Case-insensitive field name matching
+                    let named_column_name_lower = named_column.name().to_lowercase();
+                    if let Some((proj_idx, _)) =
+                    self.projected_schema.fields()
+                    .iter().enumerate().find(|(_, f)| f.name().to_lowercase() == named_column_name_lower)
+                    {
+                        field_mappings[proj_idx] = Some(projection.len());
+                        projection.push(named_column.data_type().column_index());
+                        }
+                    }
         }
 
         Ok((
