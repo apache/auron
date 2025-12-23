@@ -248,6 +248,7 @@ impl FileOpener for OrcOpener {
             self.force_positional_evolution,
         );
         let use_microsecond = self.use_microsecond_precision;
+        let is_case = self.is_case_sensitive;
 
         Ok(Box::pin(async move {
             let mut builder = ArrowReaderBuilder::try_new_async(reader)
@@ -262,7 +263,7 @@ impl FileOpener for OrcOpener {
             }
 
             let (schema_mapping, projection) =
-                schema_adapter.map_schema(builder.file_metadata(), is_case_sensitive)?;
+                schema_adapter.map_schema(builder.file_metadata(), is_case)?;
 
             let projection_mask =
                 ProjectionMask::roots(builder.file_metadata().root_data_type(), projection);
@@ -382,7 +383,9 @@ impl SchemaAdapter {
                     let named_column_name_lower = named_column.name().to_lowercase();
                     if let Some((proj_idx, _)) =
                     self.projected_schema.fields()
-                    .iter().enumerate().find(|(_, f)| f.name().to_lowercase() == named_column_name_lower)
+                    .iter()
+                    .enumerate()
+                    .find(|(_, f)| f.name().to_lowercase() == named_column_name_lower)
                     {
                         field_mappings[proj_idx] = Some(projection.len());
                         projection.push(named_column.data_type().column_index());
