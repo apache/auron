@@ -86,8 +86,8 @@ const NUM_MAX_MERGING_BATCHES: usize = 32;
 pub struct SortExec {
     input: Arc<dyn ExecutionPlan>,
     exprs: Vec<PhysicalSortExpr>,
-    skip: usize,
     limit: Option<usize>,
+    offset: usize,
     metrics: ExecutionPlanMetricsSet,
     record_output: bool,
     props: OnceCell<PlanProperties>,
@@ -97,15 +97,15 @@ impl SortExec {
     pub fn new(
         input: Arc<dyn ExecutionPlan>,
         exprs: Vec<PhysicalSortExpr>,
-        skip: usize,
         limit: Option<usize>,
+        offset: usize,
     ) -> Self {
         let metrics = ExecutionPlanMetricsSet::new();
         Self {
             input,
             exprs,
-            skip,
             limit,
+            offset,
             metrics,
             record_output: true,
             props: OnceCell::new(),
@@ -132,8 +132,8 @@ pub fn create_default_ascending_sort_exec(
                 options: Default::default(),
             })
             .collect(),
-        0,
         None,
+        0
     );
     if let Some(execution_plan_metrics) = execution_plan_metrics {
         sort_exec.metrics = execution_plan_metrics;
@@ -189,8 +189,8 @@ impl ExecutionPlan for SortExec {
         Ok(Arc::new(Self::new(
             children[0].clone(),
             self.exprs.clone(),
-            self.skip,
             self.limit,
+            self.offset
         )))
     }
 
@@ -212,7 +212,7 @@ impl ExecutionPlan for SortExec {
             self.input.statistics()?,
             self.schema(),
             self.limit,
-            self.skip,
+            self.offset,
             1,
         )
     }
@@ -234,7 +234,7 @@ impl SortExec {
             mem_consumer_info: None,
             weak: Weak::new(),
             prune_sort_keys_from_batch: prune_sort_keys_from_batch.clone(),
-            skip: self.skip,
+            skip: self.offset,
             limit: self.limit.unwrap_or(usize::MAX),
             record_output: self.record_output,
             in_mem_blocks: Default::default(),
@@ -1503,7 +1503,7 @@ mod test {
             options: SortOptions::default(),
         }];
 
-        let sort = SortExec::new(input, sort_exprs, 0, Some(6));
+        let sort = SortExec::new(input, sort_exprs, Some(6), 0);
         let output = sort.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
         let expected = vec![
@@ -1538,7 +1538,7 @@ mod test {
             options: SortOptions::default(),
         }];
 
-        let sort = SortExec::new(input, sort_exprs, 3, Some(8));
+        let sort = SortExec::new(input, sort_exprs, Some(8), 3);
         let output = sort.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
         let expected = vec![
@@ -1650,7 +1650,7 @@ mod fuzztest {
             schema.clone(),
             None,
         )?);
-        let sort = Arc::new(SortExec::new(input, sort_exprs.clone(), 0, None));
+        let sort = Arc::new(SortExec::new(input, sort_exprs.clone(), None, 0));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
         let a = concat_batches(&schema, &output)?;
         let a_row_count = sort.clone().statistics()?.num_rows;

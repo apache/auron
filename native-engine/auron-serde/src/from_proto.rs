@@ -316,11 +316,11 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 });
 
                 let fetch = sort.fetch_limit.as_ref();
-                let offset = fetch.map(|f| f.offset as usize).unwrap_or(0);
                 let limit = fetch.map(|f| f.limit as usize);
+                let offset = fetch.map(|f| f.offset as usize).unwrap_or(0);
 
                 // always preserve partitioning
-                Ok(Arc::new(SortExec::new(input, exprs, offset, limit)))
+                Ok(Arc::new(SortExec::new(input, exprs, limit, offset)))
             }
             PhysicalPlanType::BroadcastJoinBuildHashMap(bhm) => {
                 let input: Arc<dyn ExecutionPlan> = convert_box_required!(bhm.input)?;
