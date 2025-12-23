@@ -133,7 +133,7 @@ pub fn create_default_ascending_sort_exec(
             })
             .collect(),
         None,
-        0
+        0,
     );
     if let Some(execution_plan_metrics) = execution_plan_metrics {
         sort_exec.metrics = execution_plan_metrics;
@@ -190,7 +190,7 @@ impl ExecutionPlan for SortExec {
             children[0].clone(),
             self.exprs.clone(),
             self.limit,
-            self.offset
+            self.offset,
         )))
     }
 
