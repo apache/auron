@@ -42,17 +42,17 @@ use crate::common::execution_context::ExecutionContext;
 pub struct LimitExec {
     input: Arc<dyn ExecutionPlan>,
     limit: usize,
-    skip: usize,
+    offset: usize,
     pub metrics: ExecutionPlanMetricsSet,
     props: OnceCell<PlanProperties>,
 }
 
 impl LimitExec {
-    pub fn new(input: Arc<dyn ExecutionPlan>, limit: usize, skip: usize) -> Self {
+    pub fn new(input: Arc<dyn ExecutionPlan>, limit: usize, offset: usize) -> Self {
         Self {
             input,
             limit,
-            skip,
+            offset,
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
         }
@@ -61,7 +61,7 @@ impl LimitExec {
 
 impl DisplayAs for LimitExec {
     fn fmt_as(&self, _t: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "LimitExec(limit={},skip={})", self.limit, self.skip)
+        write!(f, "LimitExec(limit={},offset={})", self.limit, self.offset)
     }
 }
 
@@ -100,7 +100,7 @@ impl ExecutionPlan for LimitExec {
         Ok(Arc::new(Self::new(
             children[0].clone(),
             self.limit,
-            self.skip,
+            self.offset,
         )))
     }
 
@@ -111,10 +111,10 @@ impl ExecutionPlan for LimitExec {
     ) -> Result<SendableRecordBatchStream> {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
         let input = exec_ctx.execute_with_input_stats(&self.input)?;
-        if self.skip == 0 {
+        if self.offset == 0 {
             execute_limit(input, self.limit, exec_ctx)
         } else {
-            execute_limit_with_skip(input, self.limit, self.skip, exec_ctx)
+            execute_limit_with_offset(input, self.limit, self.offset, exec_ctx)
         }
     }
 
@@ -123,7 +123,7 @@ impl ExecutionPlan for LimitExec {
             self.input.statistics()?,
             self.schema(),
             Some(self.limit),
-            self.skip,
+            self.offset,
             1,
         )
     }
@@ -154,7 +154,7 @@ fn execute_limit(
         }))
 }
 
-fn execute_limit_with_skip(
+fn execute_limit_with_offset(
     mut input: SendableRecordBatchStream,
     limit: usize,
     offset: usize,
