@@ -769,7 +769,10 @@ object NativeConverters extends Logging {
         }
 
       // if rhs is complex in and/or operators, use short-circuiting implementation
-      case And(lhs, rhs) if rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
+      // or if forceShortCircuitAndOr is enabled, always use short-circuiting
+      case And(lhs, rhs)
+          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR)
+            || rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
         buildExprNode {
           _.setScAndExpr(
             pb.PhysicalSCAndExprNode
@@ -777,7 +780,9 @@ object NativeConverters extends Logging {
               .setLeft(convertExprWithFallback(lhs, isPruningExpr, fallback))
               .setRight(convertExprWithFallback(rhs, isPruningExpr, fallback)))
         }
-      case Or(lhs, rhs) if rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
+      case Or(lhs, rhs)
+          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR)
+            || rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
         buildExprNode {
           _.setScOrExpr(
             pb.PhysicalSCOrExprNode

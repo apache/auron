@@ -238,6 +238,13 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .booleanType()
             .defaultValue(false);
 
+    public static final ConfigOption<Boolean> FORCE_SHORT_CIRCUIT_AND_OR = ConfigOptions.key(
+                    "auron.forceShortCircuitAndOr")
+            .description("force using short-circuit evaluation (PhysicalSCAndExprNode/PhysicalSCOrExprNode) "
+                    + "for And/Or expressions, regardless of whether rhs contains HiveUDF. ")
+            .booleanType()
+            .defaultValue(false);
+
     private final SparkConf sparkConf;
 
     public SparkAuronConfiguration(SparkConf conf) {
