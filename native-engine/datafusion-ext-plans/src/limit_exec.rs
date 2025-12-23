@@ -272,7 +272,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_limit_with_skip() -> Result<()> {
+    async fn test_limit_with_offset() -> Result<()> {
         let input = build_table(
             ("a", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
             ("b", &vec![9, 8, 7, 6, 5, 4, 3, 2, 1, 0]),
