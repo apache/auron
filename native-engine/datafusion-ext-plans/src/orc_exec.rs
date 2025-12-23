@@ -379,6 +379,7 @@ impl SchemaAdapter {
                         }
                     }
                 } else {
+                    for named_column in file_named_columns {
                     // Case-insensitive field name matching
                     let named_column_name_lower = named_column.name().to_lowercase();
                     if let Some((proj_idx, _)) =
@@ -391,6 +392,7 @@ impl SchemaAdapter {
                         projection.push(named_column.data_type().column_index());
                         }
                     }
+                }
         }
 
         Ok((
