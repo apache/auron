@@ -171,6 +171,7 @@ impl ExecutionPlan for OrcExec {
             metrics: self.metrics.clone(),
             force_positional_evolution,
             use_microsecond_precision,
+            is_case_sensitive
         });
 
         let file_stream = Box::pin(FileStream::new(
@@ -218,6 +219,7 @@ struct OrcOpener {
     metrics: ExecutionPlanMetricsSet,
     force_positional_evolution: bool,
     use_microsecond_precision: bool,
+    is_case_sensitive: bool
 }
 
 impl FileOpener for OrcOpener {
@@ -260,7 +262,7 @@ impl FileOpener for OrcOpener {
             }
 
             let (schema_mapping, projection) =
-                schema_adapter.map_schema(builder.file_metadata())?;
+                schema_adapter.map_schema(builder.file_metadata(), is_case_sensitive)?;
 
             let projection_mask =
                 ProjectionMask::roots(builder.file_metadata().root_data_type(), projection);
@@ -326,6 +328,7 @@ impl SchemaAdapter {
     fn map_schema(
         &self,
         orc_file_meta: &FileMetadata,
+        is_case_sensitive: bool
     ) -> Result<(Arc<dyn SchemaMapper>, Vec<usize>)> {
         let mut projection = Vec::with_capacity(self.projected_schema.fields().len());
         let mut field_mappings = vec![None; self.projected_schema.fields().len()];
