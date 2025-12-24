@@ -17,12 +17,14 @@
 
 //! Execution plan for reading Parquet files
 
-use std::{any::Any, fmt, fmt::Formatter, ops::Range, pin::Pin, sync::Arc};
+use std::{any::Any, fmt, fmt::Formatter, ops::Range, sync::Arc};
 
 use arrow::datatypes::SchemaRef;
 use arrow_schema::DataType;
 use blaze_jni_bridge::{
-    conf, conf::BooleanConf, jni_call_static, jni_new_global_ref, jni_new_string,
+    conf,
+    conf::{BooleanConf, IntConf},
+    jni_call_static, jni_new_global_ref, jni_new_string,
 };
 use bytes::Bytes;
 use datafusion::{
@@ -48,7 +50,7 @@ use datafusion::{
 };
 use datafusion_ext_commons::{batch_size, hadoop_fs::FsProvider};
 use fmt::Debug;
-use futures::{FutureExt, StreamExt, future::BoxFuture};
+use futures::{FutureExt, future::BoxFuture};
 use itertools::Itertools;
 use object_store::ObjectMeta;
 use once_cell::sync::OnceCell;
@@ -56,7 +58,10 @@ use parking_lot::Mutex;
 
 use crate::{
     common::execution_context::ExecutionContext,
-    scan::{BlazeSchemaAdapterFactory, internal_file_reader::InternalFileReader},
+    scan::{
+        BlazeSchemaAdapterFactory, internal_file_reader::InternalFileReader,
+        parallel::parallel_scan,
+    },
 };
 
 /// Execution plan for scanning one or more Parquet partitions
@@ -198,46 +203,70 @@ impl ExecutionPlan for ParquetExec {
         let _timer = elapsed_compute.timer();
         let io_time = exec_ctx.register_timer_metric("io_time");
 
+        let predicate = self.predicate.clone();
+        let pruning_predicate = self.pruning_predicate.clone();
+        let page_pruning_predicate = self.page_pruning_predicate.clone();
+        let metrics = self.metrics.clone();
+
         // get fs object from jni bridge resource
         let resource_id = jni_new_string!(&self.fs_resource_id)?;
         let fs = jni_call_static!(JniBridge.getResource(resource_id.as_obj()) -> JObject)?;
         let fs_provider = Arc::new(FsProvider::new(jni_new_global_ref!(fs.as_obj())?, &io_time));
+        let parquet_file_reader_factory = Arc::new(FsReaderFactory::new(fs_provider.clone()));
 
         let schema_adapter_factory = Arc::new(BlazeSchemaAdapterFactory);
-        let projection = match self.base_config.file_column_projection_indices() {
-            Some(proj) => proj,
-            None => (0..self.base_config.file_schema.fields().len()).collect(),
+        let projection: Arc<[usize]> = match self.base_config.file_column_projection_indices() {
+            Some(proj) => proj.into(),
+            None => (0..self.base_config.file_schema.fields().len())
+                .collect::<Vec<_>>()
+                .into(),
         };
 
         let page_filtering_enabled = conf::PARQUET_ENABLE_PAGE_FILTERING.value()?;
         let bloom_filter_enabled = conf::PARQUET_ENABLE_BLOOM_FILTER.value()?;
+        let base_config = self.base_config.clone();
 
-        let opener = ParquetOpener {
-            partition_index: partition,
-            projection: Arc::from(projection),
-            batch_size: batch_size(),
-            limit: self.base_config.limit,
-            predicate: self.predicate.clone(),
-            pruning_predicate: self.pruning_predicate.clone(),
-            page_pruning_predicate: self.page_pruning_predicate.clone(),
-            table_schema: self.base_config.file_schema.clone(),
-            metadata_size_hint: None,
-            metrics: self.metrics.clone(),
-            parquet_file_reader_factory: Arc::new(FsReaderFactory::new(fs_provider)),
-            pushdown_filters: page_filtering_enabled,
-            reorder_filters: page_filtering_enabled,
-            enable_page_index: page_filtering_enabled,
-            enable_bloom_filter: bloom_filter_enabled,
-            schema_adapter_factory,
-        };
+        let exec_ctx_cloned = exec_ctx.clone();
+        let create_file_stream_fn =
+            move |file_scan_config: &FileScanConfig| -> Result<SendableRecordBatchStream> {
+                let opener = ParquetOpener {
+                    partition_index: partition,
+                    projection: projection.clone(),
+                    batch_size: batch_size(),
+                    limit: file_scan_config.limit,
+                    predicate: predicate.clone(),
+                    pruning_predicate: pruning_predicate.clone(),
+                    page_pruning_predicate: page_pruning_predicate.clone(),
+                    table_schema: file_scan_config.file_schema.clone(),
+                    metadata_size_hint: None,
+                    metrics: metrics.clone(),
+                    parquet_file_reader_factory: parquet_file_reader_factory.clone(),
+                    pushdown_filters: page_filtering_enabled,
+                    reorder_filters: page_filtering_enabled,
+                    enable_page_index: page_filtering_enabled,
+                    enable_bloom_filter: bloom_filter_enabled,
+                    schema_adapter_factory: schema_adapter_factory.clone(),
+                };
+                let mut file_stream = FileStream::new(
+                    file_scan_config,
+                    exec_ctx_cloned.partition_id(),
+                    opener,
+                    exec_ctx_cloned.execution_plan_metrics(),
+                )?;
+                if conf::IGNORE_CORRUPTED_FILES.value()? {
+                    file_stream = file_stream.with_on_error(OnError::Skip);
+                }
+                Ok(Box::pin(file_stream))
+            };
 
-        let mut file_stream = FileStream::new(&self.base_config, partition, opener, &self.metrics)?;
-        if conf::IGNORE_CORRUPTED_FILES.value()? {
-            file_stream = file_stream.with_on_error(OnError::Skip);
-        }
-
-        let timed_stream = execute_parquet_scan(Box::pin(file_stream), exec_ctx.clone())?;
-        Ok(exec_ctx.coalesce_with_default_batch_size(timed_stream))
+        let num_parallel_scan_files = conf::NUM_PARALLEL_SCAN_FILES.value()? as usize;
+        let scan_stream = parallel_scan(
+            exec_ctx.clone(),
+            base_config,
+            create_file_stream_fn,
+            num_parallel_scan_files,
+        )?;
+        Ok(exec_ctx.coalesce_with_default_batch_size(scan_stream))
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
@@ -247,22 +276,6 @@ impl ExecutionPlan for ParquetExec {
     fn statistics(&self) -> Result<Statistics> {
         Ok(self.projected_statistics.clone())
     }
-}
-
-fn execute_parquet_scan(
-    mut stream: Pin<Box<FileStream<ParquetOpener>>>,
-    exec_ctx: Arc<ExecutionContext>,
-) -> Result<SendableRecordBatchStream> {
-    Ok(exec_ctx
-        .clone()
-        .output_with_sender("ParquetScan", move |sender| async move {
-            sender.exclude_time(exec_ctx.baseline_metrics().elapsed_compute());
-            let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
-            while let Some(batch) = stream.next().await.transpose()? {
-                sender.send(batch).await;
-            }
-            Ok(())
-        }))
 }
 
 #[derive(Clone)]

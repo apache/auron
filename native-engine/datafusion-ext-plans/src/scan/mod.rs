@@ -25,6 +25,7 @@ use datafusion::{
 use datafusion_ext_commons::df_execution_err;
 
 pub mod internal_file_reader;
+pub mod parallel;
 
 #[derive(Debug)]
 pub struct BlazeSchemaAdapterFactory;

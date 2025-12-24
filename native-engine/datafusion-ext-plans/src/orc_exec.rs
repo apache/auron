@@ -15,11 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{any::Any, fmt, fmt::Formatter, pin::Pin, sync::Arc};
+use std::{any::Any, fmt, fmt::Formatter, sync::Arc};
 
 use arrow::{datatypes::SchemaRef, error::ArrowError};
 use blaze_jni_bridge::{
-    conf, conf::BooleanConf, jni_call_static, jni_new_global_ref, jni_new_string,
+    conf,
+    conf::{BooleanConf, IntConf},
+    jni_call_static, jni_new_global_ref, jni_new_string,
 };
 use bytes::Bytes;
 use datafusion::{
@@ -48,7 +50,7 @@ use orc_rust::{
 
 use crate::{
     common::execution_context::ExecutionContext,
-    scan::{BlazeSchemaMapping, internal_file_reader::InternalFileReader},
+    scan::{BlazeSchemaMapping, internal_file_reader::InternalFileReader, parallel::parallel_scan},
 };
 
 /// Execution plan for scanning one or more Orc partitions
@@ -154,33 +156,43 @@ impl ExecutionPlan for OrcExec {
         let resource_id = jni_new_string!(&self.fs_resource_id)?;
         let fs = jni_call_static!(JniBridge.getResource(resource_id.as_obj()) -> JObject)?;
         let fs_provider = Arc::new(FsProvider::new(jni_new_global_ref!(fs.as_obj())?, &io_time));
-
+        let metrics = self.metrics.clone();
         let projection = match self.base_config.file_column_projection_indices() {
             Some(proj) => proj,
             None => (0..self.base_config.file_schema.fields().len()).collect(),
         };
 
         let force_positional_evolution = conf::ORC_FORCE_POSITIONAL_EVOLUTION.value()?;
+        let exec_ctx_cloned = exec_ctx.clone();
+        let create_file_scan_config =
+            move |file_scan_config: &FileScanConfig| -> Result<SendableRecordBatchStream> {
+                let opener = OrcOpener {
+                    projection: projection.clone(),
+                    batch_size: batch_size(),
+                    table_schema: file_scan_config.file_schema.clone(),
+                    fs_provider: fs_provider.clone(),
+                    partition_index: partition,
+                    metrics: metrics.clone(),
+                    force_positional_evolution,
+                };
 
-        let opener = OrcOpener {
-            projection,
-            batch_size: batch_size(),
-            table_schema: self.base_config.file_schema.clone(),
-            fs_provider,
-            partition_index: partition,
-            metrics: self.metrics.clone(),
-            force_positional_evolution,
-        };
+                let file_stream = FileStream::new(
+                    file_scan_config,
+                    partition,
+                    opener,
+                    exec_ctx_cloned.execution_plan_metrics(),
+                )?;
+                Ok(Box::pin(file_stream))
+            };
 
-        let file_stream = Box::pin(FileStream::new(
-            &self.base_config,
-            partition,
-            opener,
-            exec_ctx.execution_plan_metrics(),
-        )?);
-
-        let timed_stream = execute_orc_scan(file_stream, exec_ctx.clone())?;
-        Ok(exec_ctx.coalesce_with_default_batch_size(timed_stream))
+        let num_parallel_scan_files = conf::NUM_PARALLEL_SCAN_FILES.value()? as usize;
+        let scan_stream = parallel_scan(
+            exec_ctx.clone(),
+            self.base_config.clone(),
+            create_file_scan_config,
+            num_parallel_scan_files,
+        )?;
+        Ok(exec_ctx.coalesce_with_default_batch_size(scan_stream))
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
@@ -190,22 +202,6 @@ impl ExecutionPlan for OrcExec {
     fn statistics(&self) -> Result<Statistics> {
         Ok(self.projected_statistics.clone())
     }
-}
-
-fn execute_orc_scan(
-    mut stream: Pin<Box<FileStream<OrcOpener>>>,
-    exec_ctx: Arc<ExecutionContext>,
-) -> Result<SendableRecordBatchStream> {
-    Ok(exec_ctx
-        .clone()
-        .output_with_sender("OrcScan", move |sender| async move {
-            sender.exclude_time(exec_ctx.baseline_metrics().elapsed_compute());
-            let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
-            while let Some(batch) = stream.next().await.transpose()? {
-                sender.send(batch).await;
-            }
-            Ok(())
-        }))
 }
 
 struct OrcOpener {

@@ -112,6 +112,9 @@ public enum BlazeConf {
 
     ORC_FORCE_POSITIONAL_EVOLUTION("spark.blaze.orc.force.positional.evolution", false),
 
+    // number of parallel scan files
+    NUM_PARALLEL_SCAN_FILES("spark.blaze.numParallelScanFiles", 4),
+
     NATIVE_LOG_LEVEL("spark.blaze.native.log.level", "info");
 
     public final String key;
