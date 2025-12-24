@@ -27,6 +27,7 @@ import org.apache.spark.internal.config.ConfigEntry;
 import org.apache.spark.internal.config.ConfigEntryWithDefault;
 import scala.Option;
 import scala.collection.immutable.List$;
+
 /**
  * Spark configuration proxy for Auron.
  * All configuration prefixes start with spark.
