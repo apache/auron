@@ -219,7 +219,7 @@ struct OrcOpener {
     metrics: ExecutionPlanMetricsSet,
     force_positional_evolution: bool,
     use_microsecond_precision: bool,
-    is_case_sensitive: bool
+    is_case_sensitive: bool,
 }
 
 impl FileOpener for OrcOpener {
@@ -329,7 +329,7 @@ impl SchemaAdapter {
     fn map_schema(
         &self,
         orc_file_meta: &FileMetadata,
-        is_case_sensitive: bool
+        is_case_sensitive: bool,
     ) -> Result<(Arc<dyn SchemaMapper>, Vec<usize>)> {
         let mut projection = Vec::with_capacity(self.projected_schema.fields().len());
         let mut field_mappings = vec![None; self.projected_schema.fields().len()];
