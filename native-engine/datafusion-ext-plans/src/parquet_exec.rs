@@ -23,7 +23,6 @@ use std::{
     collections::BTreeMap,
     fmt::{Debug, Formatter},
     ops::Range,
-    pin::Pin,
     sync::Arc,
 };
 
@@ -37,8 +36,7 @@ use auron_jni_bridge::{
 use bytes::Bytes;
 use datafusion::{
     datasource::physical_plan::{
-        FileMeta, FileOpener, FileScanConfig, FileStream, OnError, ParquetFileMetrics,
-        ParquetFileReaderFactory,
+        FileMeta, FileScanConfig, ParquetFileMetrics, ParquetFileReaderFactory,
     },
     error::{DataFusionError, Result},
     execution::context::TaskContext,
@@ -61,7 +59,7 @@ use datafusion::{
 use datafusion_datasource::{PartitionedFile, file_groups::FileGroup};
 use datafusion_datasource_parquet::opener::ParquetOpener;
 use datafusion_ext_commons::{batch_size, hadoop_fs::FsProvider};
-use futures::{FutureExt, StreamExt, future::BoxFuture};
+use futures::{FutureExt, future::BoxFuture};
 use itertools::Itertools;
 use object_store::ObjectMeta;
 use once_cell::sync::OnceCell;
@@ -69,7 +67,10 @@ use parking_lot::Mutex;
 
 use crate::{
     common::execution_context::ExecutionContext,
-    scan::{AuronSchemaAdapterFactory, internal_file_reader::InternalFileReader},
+    scan::{
+        AuronSchemaAdapterFactory, internal_file_reader::InternalFileReader,
+        parallel::parallel_scan,
+    },
 };
 
 /// Execution plan for scanning one or more Parquet partitions
@@ -213,45 +214,52 @@ impl ExecutionPlan for ParquetExec {
         let resource_id = jni_new_string!(&self.fs_resource_id)?;
         let fs = jni_call_static!(JniBridge.getResource(resource_id.as_obj()) -> JObject)?;
         let fs_provider = Arc::new(FsProvider::new(jni_new_global_ref!(fs.as_obj())?, &io_time));
+        let parquet_file_reader_factory = Arc::new(FsReaderFactory::new(fs_provider));
 
         let schema_adapter_factory = Arc::new(AuronSchemaAdapterFactory);
-        let projection = match self.base_config.file_column_projection_indices() {
-            Some(proj) => proj,
-            None => (0..self.base_config.file_schema.fields().len()).collect(),
+        let projection: Arc<[usize]> = match self.base_config.file_column_projection_indices() {
+            Some(proj) => proj.into(),
+            None => (0..self.base_config.file_schema.fields().len())
+                .collect::<Vec<_>>()
+                .into(),
         };
 
         let page_filtering_enabled = conf::PARQUET_ENABLE_PAGE_FILTERING.value()?;
         let bloom_filter_enabled = conf::PARQUET_ENABLE_BLOOM_FILTER.value()?;
+        let predicate = self.predicate.clone();
+        let metrics = self.metrics.clone();
+        let base_config = self.base_config.clone();
 
-        let opener: Arc<dyn FileOpener> = Arc::new(ParquetOpener {
+        let create_opener_fn = move |file_scan_config: &FileScanConfig| ParquetOpener {
             partition_index: partition,
-            projection: Arc::from(projection),
+            projection: projection.clone(),
             batch_size: batch_size(),
-            limit: self.base_config.limit,
-            predicate: self.predicate.clone(),
-            logical_file_schema: self.base_config.file_schema.clone(),
-            partition_fields: self.base_config.table_partition_cols.to_vec(),
+            limit: file_scan_config.limit,
+            predicate: predicate.clone(),
+            logical_file_schema: file_scan_config.file_schema.clone(),
+            partition_fields: file_scan_config.table_partition_cols.to_vec(),
             metadata_size_hint: None,
-            metrics: self.metrics.clone(),
-            parquet_file_reader_factory: Arc::new(FsReaderFactory::new(fs_provider)),
+            metrics: metrics.clone(),
+            parquet_file_reader_factory: parquet_file_reader_factory.clone(),
             pushdown_filters: page_filtering_enabled,
             reorder_filters: page_filtering_enabled,
             enable_page_index: page_filtering_enabled,
             enable_bloom_filter: bloom_filter_enabled,
-            schema_adapter_factory,
+            schema_adapter_factory: schema_adapter_factory.clone(),
             enable_row_group_stats_pruning: true,
             coerce_int96: Some(TimeUnit::Millisecond),
             file_decryption_properties: None,
             expr_adapter_factory: None,
-        });
+        };
 
-        let mut file_stream = FileStream::new(&self.base_config, partition, opener, &self.metrics)?;
-        if conf::IGNORE_CORRUPTED_FILES.value()? {
-            file_stream = file_stream.with_on_error(OnError::Skip);
-        }
-
-        let timed_stream = execute_parquet_scan(Box::pin(file_stream), exec_ctx.clone())?;
-        Ok(exec_ctx.coalesce_with_default_batch_size(timed_stream))
+        let num_parallel_scan_files = conf::NUM_PARALLEL_SCAN_FILES.value()? as usize;
+        let scan_stream = parallel_scan(
+            exec_ctx.clone(),
+            base_config,
+            create_opener_fn,
+            num_parallel_scan_files,
+        )?;
+        Ok(exec_ctx.coalesce_with_default_batch_size(scan_stream))
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
@@ -261,22 +269,6 @@ impl ExecutionPlan for ParquetExec {
     fn statistics(&self) -> Result<Statistics> {
         Ok(self.projected_statistics.clone())
     }
-}
-
-fn execute_parquet_scan(
-    mut stream: Pin<Box<FileStream>>,
-    exec_ctx: Arc<ExecutionContext>,
-) -> Result<SendableRecordBatchStream> {
-    Ok(exec_ctx
-        .clone()
-        .output_with_sender("ParquetScan", move |sender| async move {
-            sender.exclude_time(exec_ctx.baseline_metrics().elapsed_compute());
-            let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
-            while let Some(batch) = stream.next().await.transpose()? {
-                sender.send(batch).await;
-            }
-            Ok(())
-        }))
 }
 
 #[derive(Clone)]
