@@ -409,7 +409,7 @@ dependencies = [
  "datafusion-ext-functions",
  "datafusion-ext-plans",
  "datafusion-spark",
- "object_store",
+ "object_store 0.13.0",
  "parking_lot",
  "prost 0.14.1",
  "tonic-build",
@@ -904,7 +904,7 @@ dependencies = [
  "hex",
  "itertools 0.14.0",
  "log",
- "object_store",
+ "object_store 0.12.4",
  "parking_lot",
  "parquet",
  "rand",
@@ -938,7 +938,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store",
+ "object_store 0.12.4",
  "parking_lot",
  "tokio",
 ]
@@ -961,7 +961,7 @@ dependencies = [
  "datafusion-session",
  "futures",
  "log",
- "object_store",
+ "object_store 0.12.4",
  "tokio",
 ]
 
@@ -981,7 +981,7 @@ dependencies = [
  "indexmap",
  "libc",
  "log",
- "object_store",
+ "object_store 0.12.4",
  "parquet",
  "paste",
  "recursive",
@@ -1024,7 +1024,7 @@ dependencies = [
  "glob",
  "itertools 0.14.0",
  "log",
- "object_store",
+ "object_store 0.12.4",
  "parquet",
  "rand",
  "tempfile",
@@ -1054,7 +1054,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures",
- "object_store",
+ "object_store 0.12.4",
  "regex",
  "tokio",
 ]
@@ -1078,7 +1078,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures",
- "object_store",
+ "object_store 0.12.4",
  "serde_json",
  "tokio",
 ]
@@ -1108,7 +1108,7 @@ dependencies = [
  "hex",
  "itertools 0.14.0",
  "log",
- "object_store",
+ "object_store 0.12.4",
  "parking_lot",
  "parquet",
  "rand",
@@ -1131,7 +1131,7 @@ dependencies = [
  "datafusion-expr",
  "futures",
  "log",
- "object_store",
+ "object_store 0.12.4",
  "parking_lot",
  "rand",
  "tempfile",
@@ -1259,7 +1259,7 @@ dependencies = [
  "jni",
  "log",
  "num",
- "object_store",
+ "object_store 0.13.0",
  "once_cell",
  "orc-rust",
  "panic-message",
@@ -1543,7 +1543,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store",
+ "object_store 0.12.4",
  "parking_lot",
  "tokio",
 ]
@@ -2786,6 +2786,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "object_store"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d180d5469872facb82dec7e233ff850d615330ea3044a7813550b22ffa4f05ce"
+dependencies = [
+ "async-trait",
+ "bytes 1.11.0",
+ "chrono",
+ "futures",
+ "http",
+ "humantime",
+ "itertools 0.14.0",
+ "parking_lot",
+ "percent-encoding",
+ "thiserror 2.0.14",
+ "tokio",
+ "tracing",
+ "url",
+ "walkdir",
+ "wasm-bindgen-futures",
+ "web-time",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2879,7 +2903,7 @@ dependencies = [
  "lz4_flex 0.11.5",
  "num",
  "num-bigint",
- "object_store",
+ "object_store 0.12.4",
  "paste",
  "ring",
  "seq-macro",
