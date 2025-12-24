@@ -139,7 +139,7 @@ public enum AuronConf {
     // use microsecond precision when reading ORC timestamp columns
     ORC_TIMESTAMP_USE_MICROSECOND("spark.auron.orc.timestamp.use.microsecond", false),
 
-    ORC_SCHEMA_ISCASE_SENSITIVE("spark.auron.orc.schema.iscasesensitive", true),
+    ORC_SCHEMA_ISCASE_SENSITIVE("spark.auron.orc.schema.iscasesensitive", false),
 
     NATIVE_LOG_LEVEL("spark.auron.native.log.level", "info");
 

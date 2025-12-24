@@ -171,7 +171,7 @@ impl ExecutionPlan for OrcExec {
             metrics: self.metrics.clone(),
             force_positional_evolution,
             use_microsecond_precision,
-            is_case_sensitive
+            is_case_sensitive,
         });
 
         let file_stream = Box::pin(FileStream::new(
@@ -370,30 +370,30 @@ impl SchemaAdapter {
             }
         } else {
             if is_case_sensitive {
-                for named_column in file_named_columns {
-                    if let Some((proj_idx, _)) =
-                    self.projected_schema.fields().find(named_column.name())
-                    {
-                        field_mappings[proj_idx] = Some(projection.len());
-                        projection.push(named_column.data_type().column_index());
-                        }
-                    }
-                } else {
-                    for named_column in file_named_columns {
-                    // Case-insensitive field name matching
-                    let named_column_name_lower = named_column.name().to_lowercase();
-                    if let Some((proj_idx, _)) =
-                    self.projected_schema.fields()
-                    .iter()
-                    .enumerate()
-                    .find(|(_, f)| f.name().to_lowercase() == named_column_name_lower)
-                    {
-                        field_mappings[proj_idx] = Some(projection.len());
-                        projection.push(named_column.data_type().column_index());
-                        }
-                    }
-                }
-        }
+               for named_column in file_named_columns {
+                   if let Some((proj_idx, _)) =
+                   self.projected_schema.fields().find(named_column.name())
+                   {
+                       field_mappings[proj_idx] = Some(projection.len());
+                       projection.push(named_column.data_type().column_index());
+                       }
+                   }
+               } else {
+                   for named_column in file_named_columns {
+                       // Case-insensitive field name matching
+                       let named_column_name_lower = named_column.name().to_lowercase();
+                       if let Some((proj_idx, _)) =
+                       self.projected_schema.fields()
+                       .iter()
+                       .enumerate()
+                       .find(|(_, f)| f.name().to_lowercase() == named_column_name_lower)
+                       {
+                           field_mappings[proj_idx] = Some(projection.len());
+                           projection.push(named_column.data_type().column_index());
+                           }
+                       }
+                   }
+               }
 
         Ok((
             create_auron_schema_mapper(&self.projected_schema, &field_mappings),
