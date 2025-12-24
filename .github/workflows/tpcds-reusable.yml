@@ -354,7 +354,7 @@ jobs:
           export SPARK_TPCDS_QUERY=${{ matrix.query }}
 
           cd dev/auron-it
-          ./build/mvn -Ppre -P${{ inputs.sparkver }} -P${{ inputs.scalaver }} -Pjdk-${{ inputs.javaver }} -Dsuites=org.apache.spark.sql.AuronTPCDSV1Suite test
+          ${{ github.workspace }}/build/mvn -Ppre -P${{ inputs.sparkver }} -Pscala-${{ inputs.scalaver }} -Pjdk-${{ inputs.javaver }} -Dsuites=org.apache.spark.sql.AuronTPCDSV1Suite test
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
