@@ -284,13 +284,6 @@ abstract class AuronTPCDSSuite extends QueryTest with SharedSparkSession {
     }.toMap
   }
 
-  def shouldVerifyPlan(): Boolean = {
-    Shims.get.shimVersion match {
-      case "spark-3.5" => true
-      case _ => false // TODO: Support for other Spark versions in the future
-    }
-  }
-
   def shouldVerifyPhysicalPlan(): Boolean = {
     Shims.get.shimVersion match {
       case "spark-3.5" => true

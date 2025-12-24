@@ -348,9 +348,9 @@ fi
 
 BUILD_ARGS=()
 if [[ "$SKIP_TESTS" == true ]]; then
-    BUILD_ARGS+=("package" "-DskipTests")
+    BUILD_ARGS+=("install" "-DskipTests")
 else
-    BUILD_ARGS+=("package")
+    BUILD_ARGS+=("install")
 fi
 
 if [[ "$PRE_PROFILE" == true ]]; then

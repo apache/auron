@@ -83,46 +83,6 @@ env:
   WGET_OPTS: "--tries=3 --timeout=30 -c"
 
 jobs:
-  build-validator:
-    if: false
-    name: Build TPC-DS Validator
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Cache TPC-DS Validator
-        uses: actions/cache@v4
-        id: cache-tpcds-validator
-        with:
-          key: tpcds-validator_${{ inputs.scalaver }}
-          path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
-
-      - name: Checkout TPC-DS Validator
-        uses: actions/checkout@v4
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        with:
-          repository: auron-project/tpcds-validator
-
-      - name: Setup Java and Maven cache
-        uses: actions/setup-java@v4
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        with:
-          distribution: 'adopt-hotspot'
-          java-version: ${{ inputs.javaver }}
-          cache: 'maven'
-
-      - name: Build TPC-DS Validator
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        run: ./build/mvn package -DskipTests -Pscala-${{ inputs.scalaver }}
-
-      - name: Upload TPC-DS Validator
-        uses: actions/upload-artifact@v4
-        with:
-          name: >
-            tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
-            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
-            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
-          path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
-          overwrite: true
-
   build-auron-jar:
     name: Build Auron JAR
     runs-on: ubuntu-24.04
@@ -176,7 +136,7 @@ jobs:
             UNIFFLE_NUMBER="${UNIFFLE_NUMBER#uniffle-}"
           fi
           
-          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }} --skiptests true"
+          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }} --skiptests false"
           if [ -n "${{ inputs.celebornver }}" ]; then
             CMD="$CMD --celeborn $CELEBORN_NUMBER"
           fi
@@ -268,15 +228,6 @@ jobs:
         with:
           name: >
             auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
-            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
-            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
-
-      - name: Download TPC-DS Validator JAR
-        if: false
-        uses: actions/download-artifact@v4
-        with:
-          name: >
-            tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
             }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
@@ -401,22 +352,9 @@ jobs:
           export SPARK_TPCDS_EXTRA_CONF="${{ inputs.extrasparkconf }}"
           export SPARK_TPCDS_DATA=${{ github.workspace }}/dev/tpcds_1g
           export SPARK_TPCDS_QUERY=${{ matrix.query }}
-          
-          if [ -n "${{ inputs.celebornver }}" ]; then
-            RSS_PROFILE="-Pceleborn,${{ inputs.celebornver }}"
-          fi
-          if [ -n "${{ inputs.unifflever }}" ]; then
-            RSS_PROFILE="-Puniffle,${{ inputs.unifflever }}"
-          fi
-          
-          ./build/mvn install -Ppre -P${{ inputs.sparkver }} -P${{ inputs.scalaver }} ${RSS_PROFILE} -DskipTests -Drat.skip=true -Dscalafix.skip=true
-          
+
           cd dev/auron-it
-          ./build/mvn -Ppre -P${{ inputs.sparkver }} -P${{ inputs.scalaver }}  ${RSS_PROFILE} -Dsuites=org.apache.spark.sql.AuronTPCDSV1Suite test
-#          dev/run-tpcds-test \
-#            ${{ inputs.extrasparkconf }} \
-#            --data-location dev/tpcds_1g \
-#            --query-filter ${{ matrix.query }}
+          ./build/mvn -Ppre -P${{ inputs.sparkver }} -P${{ inputs.scalaver }} -Pjdk-${{ inputs.javaver }} -Dsuites=org.apache.spark.sql.AuronTPCDSV1Suite test
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
