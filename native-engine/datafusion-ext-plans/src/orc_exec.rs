@@ -160,7 +160,7 @@ impl ExecutionPlan for OrcExec {
 
         let force_positional_evolution = conf::ORC_FORCE_POSITIONAL_EVOLUTION.value()?;
         let use_microsecond_precision = conf::ORC_TIMESTAMP_USE_MICROSECOND.value()?;
-        let is_case_sensitive = conf::ORC_SCHEMA_ISCASE_SENSITIVE.value()?;
+        let is_case_sensitive = conf::ORC_SCHEMA_CASE_SENSITIVE.value()?;
 
         let opener: Arc<dyn FileOpener> = Arc::new(OrcOpener {
             projection,
