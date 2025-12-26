@@ -41,7 +41,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.auron</groupId>
-      <artifactId>${shimPkg}_${scalaVersion}</artifactId>
+      <artifactId>spark-extension-shims-spark_${scalaVersion}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

@@ -38,7 +38,7 @@
     <module>common</module>
     <module>spark-version-annotation-macros</module>
     <module>spark-extension</module>
-    <module>${shimPkg}</module>
+    <module>spark-extension-shims-spark</module>
     <module>hadoop-shim</module>
     <module>dev/mvn-build-helper/assembly</module>
     <module>dev/mvn-build-helper/proto</module>
@@ -639,7 +639,6 @@
       <id>spark-3.0</id>
       <properties>
         <shimName>spark-3.0</shimName>
-        <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.0.8</scalaTestVersion>
         <sparkVersion>3.0.3</sparkVersion>
         <shortSparkVersion>3.0</shortSparkVersion>
@@ -651,7 +650,6 @@
       <id>spark-3.1</id>
       <properties>
         <shimName>spark-3.1</shimName>
-        <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.1.3</sparkVersion>
         <shortSparkVersion>3.1</shortSparkVersion>
@@ -663,7 +661,6 @@
       <id>spark-3.2</id>
       <properties>
         <shimName>spark-3.2</shimName>
-        <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.2.4</sparkVersion>
         <shortSparkVersion>3.2</shortSparkVersion>
@@ -675,7 +672,6 @@
       <id>spark-3.3</id>
       <properties>
         <shimName>spark-3.3</shimName>
-        <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.3.4</sparkVersion>
         <shortSparkVersion>3.3</shortSparkVersion>
@@ -687,7 +683,6 @@
       <id>spark-3.4</id>
       <properties>
         <shimName>spark-3.4</shimName>
-        <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.4.4</sparkVersion>
         <shortSparkVersion>3.4</shortSparkVersion>
@@ -699,7 +694,6 @@
       <id>spark-3.5</id>
       <properties>
         <shimName>spark-3.5</shimName>
-        <shimPkg>spark-extension-shims-spark</shimPkg>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.5.7</sparkVersion>
         <shortSparkVersion>3.5</shortSparkVersion>
