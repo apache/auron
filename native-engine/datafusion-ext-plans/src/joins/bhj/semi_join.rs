@@ -189,7 +189,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
         let mut hashes_idx = 0;
 
         for row_idx in 0..probed_batch.num_rows() {
-            let key_valid =
+            let key_is_valid =
             probed_valids
                 .as_ref()
                 .map(|nb| nb.is_valid(row_idx))
@@ -198,7 +198,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                 probed_joined.set(row_idx, true);
                 continue;
             }
-            if key_valid {
+            if key_is_valid {
                 let map_value = map_values[hashes_idx];
                 hashes_idx += 1;
 
