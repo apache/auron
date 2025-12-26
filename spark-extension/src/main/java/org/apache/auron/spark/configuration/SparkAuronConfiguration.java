@@ -238,8 +238,8 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .booleanType()
             .defaultValue(false);
     public static final ConfigOption<Boolean> ORC_SCHEMA_ISCASE_SENSITIVE = ConfigOptions.key(
-                    "auron.orc.schema.iscasesensitive")
-            .description("does matching ORC file schema distinguish between uppercase and lowercase ")
+                    "auron.orc.schema.caseSensitive.enable")
+            .description("whether ORC file schema matching distinguishes between uppercase and lowercase. ")
             .booleanType()
             .defaultValue(false);
 
