@@ -189,11 +189,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
         let mut hashes_idx = 0;
 
         for row_idx in 0..probed_batch.num_rows() {
-            let key_is_valid =
-            probed_valids
-                .as_ref()
-                .map(|nb| nb.is_valid(row_idx))
-                .unwrap_or(true);
+            let key_is_valid = probed_valids.as_ref().map(|nb| nb.is_valid(row_idx)).unwrap_or(true);
             if P.mode == Anti && P.probe_is_join_side && !key_is_valid {
                 probed_joined.set(row_idx, true);
                 continue;
