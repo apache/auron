@@ -44,7 +44,7 @@ install_app() {
   local target_dir="${_DIR}/${3%/bin/mvn}"
 
   # setup `curl` and `wget` silent options if we're running on Jenkins
-  local curl_opts="-L"
+  local curl_opts="-L -4"
   local wget_opts=""
   curl_opts="--progress-bar ${curl_opts}"
   wget_opts="--progress=bar:force ${wget_opts}"

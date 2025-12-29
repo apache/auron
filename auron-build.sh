@@ -479,7 +479,7 @@ if [[ "$USE_DOCKER" == true ]]; then
         rm -rf ./target-docker/* || echo "[WARN] Failed to clean target-docker/*"
     fi
 
-    echo "[INFO] Compiling inside Docker container..."
+    echo "[INFO] Compiling inside Docker container...test"
     export AURON_BUILD_ARGS="${BUILD_ARGS[*]}"
     export BUILD_CONTEXT="./${IMAGE_NAME}"
     exec docker-compose -f dev/docker-build/docker-compose.yml up --abort-on-container-exit
