@@ -618,7 +618,9 @@ mod tests {
         )];
 
         for test_type in [BHJLeftProbed, SHJLeftProbed] {
-            let (_, batches) = join_collect(test_type, left.clone(), right.clone(), on.clone(), LeftAnti).await?;
+            let (_, batches) =
+                join_collect(test_type, left.clone(), right.clone(), on.clone(), LeftAnti)
+                    .await?;
             let expected = vec![
                 "+----+----+----+",
                 "| a1 | b1 | c1 |",
@@ -631,7 +633,9 @@ mod tests {
         }
 
         for test_type in [SMJ, BHJRightProbed, SHJRightProbed] {
-            let (_, batches) = join_collect(test_type, left.clone(), right.clone(), on.clone(), LeftAnti).await?;
+            let (_, batches) =
+                join_collect(test_type, left.clone(), right.clone(), on.clone(), LeftAnti)
+                    .await?;
             let expected = vec![
                 "+----+----+----+",
                 "| a1 | b1 | c1 |",
