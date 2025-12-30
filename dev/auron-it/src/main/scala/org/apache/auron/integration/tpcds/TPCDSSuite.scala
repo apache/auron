@@ -20,7 +20,7 @@ import org.apache.auron.integration.{QueryRunner, SingleQueryResult, Suite, Suit
 import org.apache.auron.integration.comparator.{ComparisonResult, PlanStabilityChecker, QueryResultComparator}
 import org.apache.auron.integration.tpcds.TPCDSFeatures
 
-class AuronTPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
+class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
 
   val queryRunner = new QueryRunner(loadQuerySql = (qid: String) => this.loadQuerySql(qid))
 
@@ -97,11 +97,11 @@ class AuronTPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
   }
 
   private def printResultComparison(results: Seq[ComparisonResult]): Unit = {
-    println("\n" + "=" * 120)
+    println("\n" + "=" * 100)
     println("TPC-DS Result Comparison (Vanilla Spark vs Auron)")
-    println("=" * 120)
+    println("=" * 100)
     println("Query | Rows(V/A) | Time(V/A) | Speedup | Result")
-    println("-" * 120)
+    println("-" * 100)
 
     results.foreach { r =>
       val rowsV = r.baselineRows
@@ -127,18 +127,18 @@ class AuronTPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
       if (args.disableResultCheck) total
       else results.count(_.success)
 
-    println("-" * 120)
+    println("-" * 100)
     println(s"Result comparison passed: $resultPass/$total")
   }
 
   private def printPlanStability(results: Seq[ComparisonResult]): Unit = {
     if (!(args.enablePlanCheck || args.regenGoldenFiles)) return
 
-    println("\n" + "=" * 120)
+    println("\n" + "=" * 100)
     println("Auron Plan Stability")
-    println("=" * 120)
+    println("=" * 100)
     println("Query | Stable")
-    println("-" * 120)
+    println("-" * 100)
 
     results.foreach { r =>
       val stableCell =
@@ -152,12 +152,12 @@ class AuronTPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
     if (args.enablePlanCheck) {
       val total = results.length
       val stableCnt = results.count(_.planStable)
-      println("-" * 120)
+      println("-" * 100)
       println(s"Plan stability passed: $stableCnt/$total")
     }
   }
 }
 
-object AuronTPCDSSuite {
-  def apply(args: SuiteArgs): Suite = new AuronTPCDSSuite(args)
+object TPCDSSuite {
+  def apply(args: SuiteArgs): Suite = new TPCDSSuite(args)
 }

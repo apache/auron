@@ -47,7 +47,7 @@ class QueryRunner(loadQuerySql: String => String) {
       val planStr = df.queryExecution.explainString(FormattedMode)
 
       val duration = (System.currentTimeMillis() - startTime) / 1000.0
-      println(s"queryId: $queryId, duration: $duration")
+      println(s"queryId: $queryId, duration: $duration s")
       SingleQueryResult(
         queryId = queryId,
         rowCount = rowCount,

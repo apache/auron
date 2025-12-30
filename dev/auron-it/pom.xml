@@ -32,6 +32,13 @@
   <properties />
 
   <dependencies>
+    <!-- auron spark uber jar -->
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>auron-${shimName}_${scalaVersion}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
     <dependency>
       <groupId>com.github.scopt</groupId>
       <artifactId>scopt_${scalaVersion}</artifactId>
@@ -39,43 +46,26 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.auron</groupId>
-      <artifactId>auron-${shimName}_${scalaVersion}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.scala-lang.modules</groupId>
-      <artifactId>scala-java8-compat_${scalaVersion}</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scalaVersion}</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-hive_${scalaVersion}</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scalaVersion}</artifactId>
       <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scalaVersion}</artifactId>
-      <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-catalyst_${scalaVersion}</artifactId>
-      <type>test-jar</type>
+      <scope>provided</scope>
     </dependency>
+
     <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sql_${scalaVersion}</artifactId>
-      <type>test-jar</type>
+      <groupId>org.scalatest</groupId>
+      <artifactId>scalatest_${scalaVersion}</artifactId>
+      <version>3.2.9</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
@@ -224,7 +214,6 @@
       <properties>
         <shimName>spark-3.0</shimName>
         <sparkVersion>3.0.3</sparkVersion>
-        <scalaTestVersion>3.0.8</scalaTestVersion>
       </properties>
     </profile>
 
@@ -233,7 +222,6 @@
       <properties>
         <shimName>spark-3.1</shimName>
         <sparkVersion>3.1.3</sparkVersion>
-        <scalaTestVersion>3.2.9</scalaTestVersion>
       </properties>
     </profile>
 
@@ -242,7 +230,6 @@
       <properties>
         <shimName>spark-3.2</shimName>
         <sparkVersion>3.2.4</sparkVersion>
-        <scalaTestVersion>3.2.9</scalaTestVersion>
       </properties>
     </profile>
 
@@ -251,7 +238,6 @@
       <properties>
         <shimName>spark-3.3</shimName>
         <sparkVersion>3.3.4</sparkVersion>
-        <scalaTestVersion>3.2.9</scalaTestVersion>
       </properties>
     </profile>
 
@@ -260,7 +246,6 @@
       <properties>
         <shimName>spark-3.4</shimName>
         <sparkVersion>3.4.4</sparkVersion>
-        <scalaTestVersion>3.2.9</scalaTestVersion>
       </properties>
     </profile>
 
@@ -269,59 +254,6 @@
       <properties>
         <shimName>spark-3.5</shimName>
         <sparkVersion>3.5.7</sparkVersion>
-        <scalaTestVersion>3.2.9</scalaTestVersion>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>jdk-8</id>
-      <activation>
-        <jdk>1.8</jdk>
-      </activation>
-      <properties>
-        <javaVersion>8</javaVersion>
-        <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.8</semanticdb.version>
-        <scalafmtVersion>3.0.0</scalafmtVersion>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>jdk-11</id>
-      <activation>
-        <jdk>11</jdk>
-      </activation>
-      <properties>
-        <javaVersion>11</javaVersion>
-        <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.8</semanticdb.version>
-        <scalafmtVersion>3.0.0</scalafmtVersion>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>jdk-17</id>
-      <activation>
-        <jdk>17</jdk>
-      </activation>
-      <properties>
-        <javaVersion>17</javaVersion>
-        <spotless.plugin.version>2.45.0</spotless.plugin.version>
-        <semanticdb.version>4.9.9</semanticdb.version>
-        <scalafmtVersion>3.9.9</scalafmtVersion>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>jdk-21</id>
-      <activation>
-        <jdk>21</jdk>
-      </activation>
-      <properties>
-        <javaVersion>21</javaVersion>
-        <spotless.plugin.version>2.45.0</spotless.plugin.version>
-        <semanticdb.version>4.9.9</semanticdb.version>
-        <scalafmtVersion>3.9.9</scalafmtVersion>
       </properties>
     </profile>
 
@@ -331,28 +263,6 @@
         <scalaVersion>2.12</scalaVersion>
         <scalaLongVersion>2.12.18</scalaLongVersion>
       </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>net.alchim31.maven</groupId>
-            <artifactId>scala-maven-plugin</artifactId>
-            <configuration>
-              <compilerPlugins>
-                <compilerPlugin>
-                  <groupId>org.scalameta</groupId>
-                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
-                  <version>${semanticdb.version}</version>
-                </compilerPlugin>
-                <compilerPlugin>
-                  <groupId>org.scalamacros</groupId>
-                  <artifactId>paradise_${scalaLongVersion}</artifactId>
-                  <version>${scalamacros.paradise.version}</version>
-                </compilerPlugin>
-              </compilerPlugins>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
 
     <profile>
@@ -361,30 +271,6 @@
         <scalaVersion>2.13</scalaVersion>
         <scalaLongVersion>2.13.13</scalaLongVersion>
       </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>net.alchim31.maven</groupId>
-            <artifactId>scala-maven-plugin</artifactId>
-            <configuration>
-              <args>
-                <arg>-Ywarn-unused</arg>
-                <!-- https://github.com/scalamacros/paradise is no longer actively developed. -->
-                <!-- In Scala 2.13, the plugin's functionality has been included in the compiler -->
-                <!-- directly under the -Ymacro-annotations flag.  -->
-                <arg>-Ymacro-annotations</arg>
-              </args>
-              <compilerPlugins>
-                <compilerPlugin>
-                  <groupId>org.scalameta</groupId>
-                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
-                  <version>${semanticdb.version}</version>
-                </compilerPlugin>
-              </compilerPlugins>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
   </profiles>
 </project>

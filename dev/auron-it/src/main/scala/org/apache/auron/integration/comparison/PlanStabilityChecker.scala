@@ -36,13 +36,13 @@ class PlanStabilityChecker(
   def shouldVerifyPhysicalPlan(): Boolean = {
     Shims.get.shimVersion match {
       case "spark-3.5" => true
-      case _ => false // TODO: Support for other Spark versions in the future
+      case _ => false // Support for other Spark versions in the future
     }
   }
 
   def validate(test: SingleQueryResult): Boolean = {
     if (!shouldVerifyPhysicalPlan()) {
-      println(s"Skip validate PhysicalPlan for ${Shims.get.shimVersion}")
+      println(s"Skip validate plan for ${Shims.get.shimVersion}")
     }
 
     if (regenGoldenFiles) {
@@ -62,14 +62,6 @@ class PlanStabilityChecker(
     val expectedPlan = readGoldenPlan(queryId)
     val actualPlan = normalizePlan(rawPlan)
     if (expectedPlan == actualPlan) {
-      println(s"""[DEBUG] comparePlanGolden, queryId: $queryId
-                 |--- Expected ---
-                 |$expectedPlan
-                 |
-                 |--- Actual ---
-                 |$actualPlan
-                 |""".stripMargin)
-
       true
     } else {
       val actualTempFile = new File(FileUtils.getTempDirectory, s"actual.golden.$queryId.txt")
@@ -123,11 +115,9 @@ class PlanStabilityChecker(
     val planIdNormalized =
       replaceWithNormalizedValues(exprIdNormalized, planIdRegex, planIdMap, "plan_id=")
 
-    // QueryStageExec will take its id as argument, replace it with X
     val argumentsNormalized = planIdNormalized
       .replaceAll("Arguments: [0-9]+, [0-9]+", "Arguments: X, X")
       .replaceAll("Arguments: [0-9]+", "Arguments: X")
-      // for unexpected blank
       .replaceAll("Scan parquet ", "Scan parquet")
       .replaceAll("Statistics[(A-Za-z0-9=. ,+)]*", "Statistics(X)")
 

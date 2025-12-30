@@ -23,37 +23,35 @@ set -exo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AURON_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 MVN_CMD="${AURON_DIR}/build/mvn"
 RUST_BACKTRACE=1
 SPARK_VERSION="${SPARK_VERSION:-spark-3.5}"
 SCALA_VERSION="${SCALA_VERSION:-2.12}"
 PROFILES="-P${SPARK_VERSION},scala-${SCALA_VERSION}"
-PROJECT_VERSION=$("${MVN_CMD}" -f "${AURON_DIR}/pom.xml" -q $PROFILES help:evaluate -Dexpression=project.version -DforceStdout)
-AURON_SPARK_JAR="${AURON_SPARK_JAR:-${AURON_DIR}/dev/mvn-build-helper/assembly/target/auron-${SPARK_VERSION}_$SCALA_VERSION-$PROJECT_VERSION.jar}"
+PROJECT_VERSION="$("${MVN_CMD}" -f "${AURON_DIR}/pom.xml" -q ${PROFILES} help:evaluate -Dexpression=project.version -DforceStdout)"
 
-AURON_IT_JAR=$AURON_DIR/dev/auron-it/target/auron-it-$PROJECT_VERSION-jar-with-dependencies.jar
+AURON_SPARK_JAR="${AURON_SPARK_JAR:-${AURON_DIR}/dev/mvn-build-helper/assembly/target/auron-${SPARK_VERSION}_${SCALA_VERSION}-${PROJECT_VERSION}.jar}"
+AURON_IT_JAR="${AURON_DIR}/dev/auron-it/target/auron-it-${PROJECT_VERSION}-jar-with-dependencies.jar"
 
 
 if [[ -z "${SPARK_HOME:-}" ]]; then
-  echo "ERROR: SPARK_HOME must be set"
+  echo "ERROR: SPARK_HOME environment variable must be set"
   exit 1
 fi
 
-if [[ ! -f "$AURON_SPARK_JAR" ]]; then
-  echo "ERROR: auron-spark.jar not found"
-  # ./auron-build.sh --pre --sparkver 3.5 --scalaver 2.12
-  exit 1
+if [[ ! -f "${AURON_SPARK_JAR}" ]]; then
+    echo "ERROR: Aurora Spark JAR not found at: ${AURON_SPARK_JAR}"
+    echo "Hint: Rebuild with: ./auron-build.sh"
+    exit 1
 fi
 
 if [[ ! -f "$AURON_IT_JAR" ]]; then
-  echo "Building Auron it jar..."
+  echo "INFO: Building missing Aurora it jar..."
   pushd "${SCRIPT_DIR}"
-  "${MVN_CMD}" -P${SPARK_VERSION} -Pscala-${SCALA_VERSION} package -DskipTests
+  "${MVN_CMD}" ${PROFILES} package
   popd
 fi
-
-echo "=== Auron Integration Test ==="
-echo "SPARK_HOME: $SPARK_HOME"
 
 # Split input arguments into two parts: Spark confs and args
 SPARK_CONF=()

@@ -25,8 +25,8 @@ case class SuiteArgs(
     enablePlanCheck: Boolean = false,
     regenGoldenFiles: Boolean = false)
 
-abstract class Suite(val args: SuiteArgs, protected val sessions: SessionManager) {
-  def this(args: SuiteArgs) = this(args, new SessionManager(args.extraSparkConf))
+abstract class Suite(val args: SuiteArgs) {
+  protected lazy val sessions: SessionManager = new SessionManager(args.extraSparkConf)
 
   def run(): Int
 

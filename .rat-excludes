@@ -35,8 +35,3 @@ build/apache-maven-*/**
 src/main/resources/auron-build-info.properties
 **/tpcds-plan-stability/**
 **/tpcds-queries/**
-dev/tpcds_1g/**
-spark-bin-spark-*/**
-hadoop-bin-*/**
-uniffle-bin-*/**
-celeborn-bin-*/**

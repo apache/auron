@@ -16,49 +16,51 @@
  */
 package org.apache.auron.integration
 
-import org.apache.spark.sql.{QueryTest, SparkSession}
+import java.nio.file.{Files, Paths}
 
-class MainTest extends QueryTest {
+import org.scalatest.funsuite.AnyFunSuite
 
-  override protected def spark: SparkSession = null
+class MainTest extends AnyFunSuite {
 
   protected val tpcdsDataPath: String =
-    sys.env.getOrElse("SPARK_TPCDS_DATA", "/Users/yew1eb/workspaces/tpcds-validator/tpcds_1g")
+    sys.env.getOrElse("SPARK_TPCDS_DATA", "/tmp/tpcds_1g")
+
+  private def assumePathExists(path: String): Unit = {
+    assume(Files.exists(Paths.get(path)), s"Skip: directory $path does not exist")
+  }
 
   test("parse mainArgs") {
-    val args = Array[String](
+    val mainArgs = Array[String](
       "--type",
       "tpcds",
       "--data-location",
       "dev/tpcds_1g",
       "--query-filter",
-      "q1,q2,a3",
+      "q1,q2,q3",
       "--conf",
       "spark.serializer=org.apache.spark.serializer.KryoSerializer",
       "--conf",
-      "spark.celeborn.client.spark.shuffle.writer=hash")
-    Main.parseArgs(args) match {
-      case Some(conf) =>
-        println(conf)
+      "spark.celeborn.client.spark.shuffle.writer=hash",
+      "--plan-check",
+      "--regen-golden")
+    Main.parseArgs(mainArgs) match {
+      case Some(args) =>
+        assertResult("tpcds")(args.benchType)
+        assertResult("dev/tpcds_1g")(args.dataLocation)
+        assertResult(Seq("q1", "q2", "q3"))(args.queryFilter)
+        assertResult(
+          Map(
+            "spark.serializer" -> "org.apache.spark.serializer.KryoSerializer",
+            "spark.celeborn.client.spark.shuffle.writer" -> "hash"))(args.extraSparkConf)
+        assertResult(true)(args.enablePlanCheck)
+        assertResult(true)(args.regenGoldenFiles)
       case None =>
-        fail(s"failed parse args: ${args.mkString("Array(", ", ", ")")}")
+        fail(s"failed parse mainArgs: ${mainArgs.mkString("Array(", ", ", ")")}")
     }
   }
 
-  test("query result check") {
-    assume(tpcdsDataPath.nonEmpty, "Skip: SPARK_TPCDS_DATA env not set")
-    val args = Array[String](
-      "--type",
-      "tpcds",
-      "--data-location",
-      tpcdsDataPath,
-      "--query-filter",
-      "q1,q2,q3,q4,q5,q6")
-    Main.main(args)
-  }
-
   test("plan check") {
-    assume(tpcdsDataPath.nonEmpty, "Skip: SPARK_TPCDS_DATA env not set")
+    assumePathExists(tpcdsDataPath)
     val args = Array[String](
       "--type",
       "tpcds",
@@ -66,52 +68,22 @@ class MainTest extends QueryTest {
       tpcdsDataPath,
       "--query-filter",
       "q1",
-      "--plan-check")
-    Main.main(args)
-  }
-
-  test("regen golden files") {
-    assume(tpcdsDataPath.nonEmpty, "Skip: SPARK_TPCDS_DATA env not set")
-    val args = Array[String](
-      "--type",
-      "tpcds",
-      "--data-location",
-      tpcdsDataPath,
-      "--regen-golden",
+      "--plan-check",
       "--disable-result-check")
     Main.main(args)
   }
 
-  test("check all") {
-    assume(tpcdsDataPath.nonEmpty, "Skip: SPARK_TPCDS_DATA env not set")
-    val args = Array[String]("--type", "tpcds", "--data-location", tpcdsDataPath)
-    Main.main(args)
-  }
-
-  test("check failed queries") {
-    assume(tpcdsDataPath.nonEmpty, "Skip: SPARK_TPCDS_DATA env not set")
+  test("regen golden files") {
+    assumePathExists(tpcdsDataPath)
     val args = Array[String](
       "--type",
       "tpcds",
       "--data-location",
       tpcdsDataPath,
       "--query-filter",
-      "q1,q17,q22,q27",
-      "--plan-check")
-    Main.main(args)
-  }
-
-  test("q1") {
-    assume(tpcdsDataPath.nonEmpty, "Skip: SPARK_TPCDS_DATA env not set")
-    val args =
-      Array[String](
-        "--type",
-        "tpcds",
-        "--data-location",
-        tpcdsDataPath,
-        "--query-filter",
-        "q1",
-        "--plan-check")
+      "q1",
+      "--regen-golden",
+      "--disable-result-check")
     Main.main(args)
   }
 }

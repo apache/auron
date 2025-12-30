@@ -249,14 +249,6 @@ jobs:
             }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
-      - name: Install Auron JAR
-        run: |
-          ls -la
-          jar=$(ls -1 auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar | head -n1)
-          [ -n "$jar" ] || { echo "No jar matched: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar"; exit 1; }
-          echo "AURON_SPARK_JAR=$jar" >> "$GITHUB_ENV"
-          cp "$jar" spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
-
       - name: Download auron maven artifacts
         uses: actions/download-artifact@v4
         with:
@@ -271,6 +263,14 @@ jobs:
         with:
           repository: auron-project/tpcds_1g
           path: dev/tpcds_1g
+
+      - name: Install Auron JAR
+        run: |
+          ls -la
+          jar=$(ls -1 auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar | head -n1)
+          [ -n "$jar" ] || { echo "No jar matched: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar"; exit 1; }
+          echo "AURON_SPARK_JAR=$jar" >> "$GITHUB_ENV"
+          cp "$jar" spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Setup Java and Maven cache
         uses: actions/setup-java@v4
@@ -380,6 +380,7 @@ jobs:
           SCALA_VERSION: ${{ inputs.scalaver }}
           SPARK_HOME: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
         run: |
+          ls -la
           ls -la ~/.m2/repository/org/apache/auron
           dev/auron-it/run-it.sh  \
             ${{ inputs.extrasparkconf }} \
