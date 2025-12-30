@@ -862,6 +862,14 @@ object NativeConverters extends Logging {
             buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(0L)), e.dataType)
         }
 
+      case e: BRound =>
+        e.scale match {
+          case Literal(n: Int, _) =>
+            buildExtScalarFunction("Spark_BRound", Seq(e.child, Literal(n.toLong)), e.dataType)
+          case _ =>
+            buildExtScalarFunction("Spark_BRound", Seq(e.child, Literal(0L)), e.dataType)
+        }
+
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)
       case e: FindInSet =>
         buildScalarFunction(pb.ScalarFunction.FindInSet, e.children, e.dataType)

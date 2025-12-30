@@ -19,6 +19,7 @@ use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
 use datafusion_ext_commons::df_unimplemented_err;
 
 mod brickhouse;
+mod spark_bround;
 mod spark_check_overflow;
 mod spark_crypto;
 mod spark_dates;
@@ -75,6 +76,7 @@ pub fn create_auron_ext_function(name: &str) -> Result<ScalarFunctionImplementat
         "Spark_Second" => Arc::new(spark_dates::spark_second),
         "Spark_BrickhouseArrayUnion" => Arc::new(brickhouse::array_union::array_union),
         "Spark_Round" => Arc::new(spark_round::spark_round),
+        "Spark_BRound" => Arc::new(spark_bround::spark_bround),
         "Spark_NormalizeNanAndZero" => {
             Arc::new(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
