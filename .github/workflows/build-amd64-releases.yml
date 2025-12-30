@@ -28,7 +28,7 @@ on:
       - master
       - branch-*
     paths:
-      - '.github/workflows/build-ce7-releases.yml'
+      - '.github/workflows/build-amd64-releases.yml'
       - 'auron-build.sh'
 
 jobs:
