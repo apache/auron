@@ -23,6 +23,7 @@ Welcome! We're excited that you're interested in contributing to Apache Auron. T
 
 - [Ways to Contribute](#ways-to-contribute)
 - [Getting Started](#getting-started)
+- [Development Environment Setup](#development-environment-setup)
 - [Building the Project](#building-the-project)
 - [Before Submitting a Pull Request](#before-submitting-a-pull-request)
 - [Pull Request Guidelines](#pull-request-guidelines)
@@ -130,6 +131,8 @@ Run `./auron-build.sh --help` to see all available options, including:
 
 ### Running Tests
 
+By default, the build script skips unit tests (`--skiptests true`). To run them, you must explicitly set `--skiptests false`, as shown in the examples below:
+
 ```bash
 # Run all tests
 ./auron-build.sh --pre --sparkver 3.5 --scalaver 2.12 --skiptests false
@@ -177,6 +180,8 @@ Examples:
 - `[AURON-123] Fix memory leak in shuffle manager`
 - `[AURON-456] Add support for new aggregate function`
 
+Note: Use the dash format `[AURON-<issue-number>]` consistently throughout your PR title and description.
+
 ### PR Size
 
 We strongly prefer smaller, focused PRs over large ones because:
@@ -189,6 +194,13 @@ If you're working on a large feature, consider:
 - Breaking it into multiple PRs
 - Creating a draft PR to show the overall design
 - Discussing the approach in a GitHub issue first
+
+### Merging PRs
+
+- PRs are merged using **squash and merge**
+- At least one committer approval is required
+- For significant changes, two committer approvals may be required
+- Committers will ensure at least 24 hours pass for major changes to allow community review
 
 ## Code Style and Formatting
 
@@ -273,13 +285,6 @@ Use GitHub Discussions for:
 - Questions about using Auron
 - Feature proposals and design discussions
 - General community discussions
-
-### Merging PRs
-
-- PRs are merged using **squash and merge**
-- At least one committer approval is required
-- For significant changes, two committer approvals may be required
-- Committers will ensure at least 24 hours pass for major changes to allow community review
 
 ## License
 
