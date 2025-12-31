@@ -23,7 +23,6 @@ Welcome! We're excited that you're interested in contributing to Apache Auron. T
 
 - [Ways to Contribute](#ways-to-contribute)
 - [Getting Started](#getting-started)
-- [Development Environment Setup](#development-environment-setup)
 - [Building the Project](#building-the-project)
 - [Before Submitting a Pull Request](#before-submitting-a-pull-request)
 - [Pull Request Guidelines](#pull-request-guidelines)
@@ -31,7 +30,6 @@ Welcome! We're excited that you're interested in contributing to Apache Auron. T
 - [Testing](#testing)
 - [Documentation](#documentation)
 - [Communication](#communication)
-- [Code Review Process](#code-review-process)
 - [License](#license)
 
 ## Ways to Contribute
@@ -62,12 +60,12 @@ Before contributing, ensure you have:
 1. Fork the [Apache Auron repository](https://github.com/apache/auron) on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/<your-username>/auron.git
+   git clone git@github.com:<your-username>/auron.git
    cd auron
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/apache/auron.git
+   git remote add upstream git@github.com:apache/auron.git
    ```
 
 ### Stay Synchronized
@@ -94,8 +92,8 @@ rustup show  # Verify the correct toolchain is installed
 
 For the best development experience:
 
-- **IntelliJ IDEA** or **VS Code** for Scala/Java development
-- **RustRover** or **VS Code with rust-analyzer** for Rust development
+- **IntelliJ IDEA** 
+- **RustRover** or **VS Code with rust-analyzer**
 
 ## Building the Project
 
@@ -136,11 +134,8 @@ Run `./auron-build.sh --help` to see all available options, including:
 # Run all tests
 ./auron-build.sh --pre --sparkver 3.5 --scalaver 2.12 --skiptests false
 
-# Run Spark integration tests
+# Run Spark unit tests
 ./auron-build.sh --pre --sparkver 3.5 --scalaver 2.12 --sparktests true
-
-# Run specific test suite
-./build/mvn test -Pspark-3.5 -Pscala-2.12 -Dtest=YourTestSuite
 ```
 
 ## Before Submitting a Pull Request
@@ -148,11 +143,24 @@ Run `./auron-build.sh --help` to see all available options, including:
 Before creating a PR, please:
 
 1. **Search for existing issues**: Check if someone else is already working on this
-2. **File a GitHub issue**: For non-trivial changes, create an issue first to discuss the approach
-3. **Keep changes focused**: Split large changes into multiple smaller PRs when possible
-4. **Write tests**: Add unit tests for bug fixes and new features
-5. **Update documentation**: Update relevant docs if your change affects user-facing behavior
-6. **Format your code**: Run the code formatter (see [Code Style](#code-style-and-formatting))
+
+2. **Create a GitHub issue**: All contributions require a GitHub issue to be created first. This allows the community to discuss the approach and provide feedback before you invest time in implementation.
+
+3. **For major changes, create an AIP**: If your change is substantial (new features, significant architectural changes, or changes affecting the public API), you must:
+   - Create a new GitHub issue describing the problem and proposed solution
+   - Create an **Auron Improvement Plan (AIP)** document 
+   - Share the AIP in the GitHub issue and discuss the high-level approach with the community
+   - Wait for community feedback and consensus before starting implementation
+   
+   Example AIP: [AIP-3: Introduce auron-it for Enhanced CI Integration Testing](https://docs.google.com/document/d/1jR5VZ_uBd6Oe2x2UT_wGFzdX_xVLhORl6ghDs4f3FIw/edit?tab=t.0)
+
+4. **Keep changes focused**: Split large changes into multiple smaller PRs when possible
+
+5. **Write tests**: Add unit tests for bug fixes and new features
+
+6. **Update documentation**: Update relevant docs if your change affects user-facing behavior
+
+7. **Format your code**: Run the code formatter (see [Code Style](#code-style-and-formatting))
 
 ## Pull Request Guidelines
 
@@ -172,18 +180,6 @@ Examples:
 For minor changes without an issue:
 - `[MINOR] Fix typo in README`
 - `[DOC] Update build instructions`
-
-### PR Description
-
-Include in your PR description:
-
-1. **Which issue does this PR close?**: Reference the issue number
-2. **Rationale for this change**: Explain why this change is needed
-3. **What changes are included?**: Summarize the key changes
-4. **Are there any user-facing changes?**: Note any API or behavior changes
-5. **How was this tested?**: Describe your testing approach
-
-Use the provided PR template as a guide.
 
 ### PR Size
 
@@ -214,40 +210,6 @@ Use the `dev/reformat` script to format all code:
 ./dev/reformat --check
 ```
 
-This script will:
-- Format Java code using Spotless (Palantir Java Format)
-- Format Scala code using Scalafmt
-- Format Rust code using `cargo fmt`
-- Apply Scalafix rules
-
-### Java/Scala Style
-
-- **Line length**: Maximum 98 characters
-- **Imports**: Automatically sorted and organized
-- **License header**: Required on all source files
-
-Configuration files:
-- `scalafmt.conf`: Scala formatting rules
-- `scalafix.conf`: Scala linting rules
-- `dev/license-header`: Apache license header template
-
-### Rust Style
-
-- Follow standard Rust conventions
-- Use `cargo fmt` for formatting
-- Use `cargo clippy` for linting
-
-```bash
-# Format Rust code
-cargo fmt
-
-# Check formatting
-cargo fmt --check
-
-# Run clippy
-cargo clippy --all-targets --all-features
-```
-
 ### License Headers
 
 All source files must include the Apache License 2.0 header. The build will fail if headers are missing or incorrect.
@@ -265,14 +227,6 @@ All source files must include the Apache License 2.0 header. The build will fail
 
 # Run Rust tests
 cargo test
-```
-
-### Integration Tests
-
-Auron includes extensive Spark integration tests:
-
-```bash
-./auron-build.sh --pre --sparkver 3.5 --scalaver 2.12 --sparktests true
 ```
 
 ### Test Coverage
@@ -323,27 +277,6 @@ Use GitHub Discussions for:
 - Questions about using Auron
 - Feature proposals and design discussions
 - General community discussions
-
-## Code Review Process
-
-### For Contributors
-
-1. **Ensure CI passes**: All GitHub Actions checks must pass
-2. **Address feedback**: Respond to review comments promptly
-3. **Keep PR updated**: Rebase on master if needed
-4. **Be patient**: Reviews may take time; reviewers are volunteers
-
-### For Reviewers
-
-When reviewing PRs:
-
-1. **Be constructive**: Provide specific, actionable feedback
-2. **Explain rationale**: Don't just say "don't do this" – explain why and suggest alternatives
-3. **Check thoroughly**:
-   - Are tests sufficient?
-   - Is the code clear and maintainable?
-   - Does it follow project conventions?
-   - Are there potential performance implications?
 
 ### Merging PRs
 
