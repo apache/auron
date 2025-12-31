@@ -172,15 +172,15 @@ Before creating a PR, please:
 Use a clear, descriptive title that follows this format:
 
 ```
-[AURON-<issue-number>] Brief description of the change
+[AURON #<issue-number>] Brief description of the change
 ```
 
 Examples:
-- `[AURON-1805] Add contributing guidelines`
-- `[AURON-123] Fix memory leak in shuffle manager`
-- `[AURON-456] Add support for new aggregate function`
+- `[AURON #1805] Add contributing guidelines`
+- `[AURON #123] Fix memory leak in shuffle manager`
+- `[AURON #456] Add support for new aggregate function`
 
-Note: Use the dash format `[AURON-<issue-number>]` consistently throughout your PR title and description.
+Note: Use the hash format `[AURON #<issue-number>]` consistently throughout your PR title and description.
 
 ### PR Size
 
