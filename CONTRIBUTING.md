@@ -177,10 +177,6 @@ Examples:
 - `[AURON-123] Fix memory leak in shuffle manager`
 - `[AURON-456] Add support for new aggregate function`
 
-For minor changes without an issue:
-- `[MINOR] Fix typo in README`
-- `[DOC] Update build instructions`
-
 ### PR Size
 
 We strongly prefer smaller, focused PRs over large ones because:
@@ -288,12 +284,4 @@ Use GitHub Discussions for:
 ## License
 
 By contributing to Apache Auron, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
-
-When you contribute code, you affirm that:
-- The contribution is your original work
-- You license the work to the project under Apache License 2.0
-- You have the legal authority to do so
-
----
-
 Thank you for contributing to Apache Auron! Your efforts help make this project better for everyone. 🚀
