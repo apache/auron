@@ -42,7 +42,7 @@ $SCRIPT_DIR/run-it.sh \
   --type tpcds \
   --data-location /tmp/tpcds_1g \
   --query-filter q1,q2,q3,q4,q5,q6,q7,q8,q9 \
-  --disable-result-check \
+  --auron-only \
   --plan-check
 
 # Regenerate Golden Files for Plan Stability Check
@@ -50,5 +50,5 @@ $SCRIPT_DIR/run-it.sh \
 $SCRIPT_DIR/run-it.sh \
   --type tpcds \
   --data-location /tmp/tpcds_1g \
-  --disable-result-check \
+  --auron-only \
   --regen-golden

@@ -28,7 +28,7 @@ case class SingleQueryResult(
     success: Boolean,
     errorMsg: Option[String] = None)
 
-class QueryRunner(loadQuerySql: String => String) {
+class QueryRunner(readQuery: String => String) {
 
   def runQueries(spark: SparkSession, queries: Seq[String]): Map[String, SingleQueryResult] = {
     queries
@@ -40,7 +40,7 @@ class QueryRunner(loadQuerySql: String => String) {
   def executeSingleQuery(spark: SparkSession, queryId: String): SingleQueryResult = {
     val startTime = System.currentTimeMillis()
     try {
-      val sql = loadQuerySql(queryId)
+      val sql = readQuery(queryId)
       val df = spark.sql(sql)
       val rows = df.collect()
       val rowCount = rows.length

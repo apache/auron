@@ -28,8 +28,8 @@ import org.apache.spark.sql.auron.Shims
 import org.apache.auron.integration.SingleQueryResult
 
 class PlanStabilityChecker(
-    readGoldenPlan: String => String,
-    writeGoldenPlan: (String, String) => Unit,
+    readGolden: String => String,
+    writeGolden: (String, String) => Unit,
     regenGoldenFiles: Boolean = false,
     planCheck: Boolean = false) {
 
@@ -55,11 +55,11 @@ class PlanStabilityChecker(
 
   private def generatePlanGolden(queryId: String, rawPlan: String): Unit = {
     val normalized = normalizePlan(rawPlan)
-    writeGoldenPlan(queryId, normalized)
+    writeGolden(queryId, normalized)
   }
 
   private def comparePlanGolden(queryId: String, rawPlan: String): Boolean = {
-    val expectedPlan = readGoldenPlan(queryId)
+    val expectedPlan = readGolden(queryId)
     val actualPlan = normalizePlan(rawPlan)
     if (expectedPlan == actualPlan) {
       true

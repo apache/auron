@@ -17,8 +17,10 @@
 package org.apache.auron.integration
 
 import java.io.File
+
 import org.apache.spark.sql.auron.Shims
 import scopt.OParser
+
 import org.apache.auron.integration.runner.TPCDSSuite
 
 object Main {
@@ -50,12 +52,12 @@ object Main {
           if (x.contains("=")) Right(()) else Left(s"--conf expects k=v, got: $x")
         }
         .text("Spark configuration, repeatable: --conf k=v --conf a=b"),
+      opt[Unit]("auron-only")
+        .action((_, c) => c.copy(auronOnly = true))
+        .text("run Auron only; skip baseline and result comparison (default: false)"),
       opt[Unit]("result-check")
-        .action((_, c) => c.copy(disableResultCheck = false))
+        .action((_, c) => c.copy(auronOnly = false))
         .text("enable query result check (default: enabled)"),
-      opt[Unit]("disable-result-check")
-        .action((_, c) => c.copy(disableResultCheck = true))
-        .text("disable query result check (default: enabled)"),
       opt[Unit]("plan-check")
         .action((_, c) => c.copy(enablePlanCheck = true))
         .text("enable plan stability check(default: false)"),
@@ -107,8 +109,7 @@ object Main {
 
   private def printConfigurationSummary(args: SuiteArgs): Unit = {
     println("\n" + "=" * 100)
-    println(s"""
-               |Auron Integration Test (type: ${args.benchType})
+    println(s"""|Auron Integration Test (type: ${args.benchType})
                |Spark Version: ${Shims.get.shimVersion}
                |Data: ${args.dataLocation}
                |Queries: [${args.queryFilter.mkString(", ")}] (${if (args.queryFilter.isEmpty)
@@ -116,9 +117,10 @@ object Main {
     else args.queryFilter.length} queries)
                |Extra Spark Conf: ${args.extraSparkConf}""".stripMargin)
 
-    if (args.disableResultCheck) println("Result Check: Disabled")
+    if (args.auronOnly) println("Mode: Auron-only (skip baseline)")
     if (args.enablePlanCheck) println("Plan Check: Enabled")
     if (args.regenGoldenFiles) println("Regenerate golden files: Enabled")
     println("-" * 100)
+    println("")
   }
 }

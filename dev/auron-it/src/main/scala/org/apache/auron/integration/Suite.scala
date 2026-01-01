@@ -21,7 +21,7 @@ case class SuiteArgs(
     dataLocation: String = "",
     queryFilter: Seq[String] = Nil,
     extraSparkConf: Map[String, String] = Map.empty,
-    disableResultCheck: Boolean = false,
+    auronOnly: Boolean = false,
     enablePlanCheck: Boolean = false,
     regenGoldenFiles: Boolean = false)
 

@@ -68,8 +68,8 @@ class MainTest extends AnyFunSuite {
       tpcdsDataPath,
       "--query-filter",
       "q1",
-      "--plan-check",
-      "--disable-result-check")
+      "--auron-only",
+      "--plan-check")
     Main.main(args)
   }
 
@@ -82,8 +82,8 @@ class MainTest extends AnyFunSuite {
       tpcdsDataPath,
       "--query-filter",
       "q1",
-      "--regen-golden",
-      "--disable-result-check")
+      "--auron-only",
+      "--regen-golden")
     Main.main(args)
   }
 }
