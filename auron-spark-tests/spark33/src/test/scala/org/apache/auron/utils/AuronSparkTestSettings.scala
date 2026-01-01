@@ -29,6 +29,11 @@ class AuronSparkTestSettings extends SparkTestSettings {
     .exclude("string / binary substring function")
 
   enableSuite[AuronDataFrameAggregateSuite]
+    .excludeByPrefix("collect functions")
+    .exclude(
+      "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it")
+    .exclude(
+      "SPARK-24788: RelationalGroupedDataset.toString with unresolved exprs should not fail")
 
   enableSuite[AuronDatasetAggregatorSuite]
 

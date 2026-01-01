@@ -16,4 +16,6 @@
  */
 package org.apache.spark.sql
 
-class AuronTypedImperativeAggregateSuite extends TypedImperativeAggregateSuite with SparkQueryTestsBase
+class AuronTypedImperativeAggregateSuite
+    extends TypedImperativeAggregateSuite
+    with SparkQueryTestsBase

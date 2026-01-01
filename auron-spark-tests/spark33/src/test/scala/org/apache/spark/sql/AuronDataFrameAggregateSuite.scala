@@ -16,4 +16,4 @@
  */
 package org.apache.spark.sql
 
-class AuronDataFrameAggregateSuite extends DataFrameAggregateSuite with SparkQueryTestsBase
+class AuronDataFrameAggregateSuite extends DataFrameAggregateSuite with SparkQueryTestsBase {}
