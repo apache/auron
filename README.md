@@ -123,10 +123,6 @@ Contact us through the following mailing list.
 
 Interested in contributing to Auron? Please read our [Contributing Guide](CONTRIBUTING.md) for detailed information on how to get started.
 
-### Report Issues or Submit Pull Request
-
-If you meet any questions, connect us and fix it by submitting a 🔗[Pull Request](https://github.com/apache/auron/pulls).
-
 ## License
 
 Auron is licensed under the Apache 2.0 License. A copy of the license
