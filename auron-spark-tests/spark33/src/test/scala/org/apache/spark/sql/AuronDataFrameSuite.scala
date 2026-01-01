@@ -14,28 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.auron.utils
+package org.apache.spark.sql
 
-import org.apache.spark.sql._
-
-class AuronSparkTestSettings extends SparkTestSettings {
-  {
-    // Use Arrow's unsafe implementation.
-    System.setProperty("arrow.allocation.manager.type", "Unsafe")
-  }
-
-  enableSuite[AuronStringFunctionsSuite]
-    // See https://github.com/apache/auron/issues/1724
-    .exclude("string / binary substring function")
-
-  enableSuite[AuronDataFrameSuite]
-
-  // Will be implemented in the future.
-  override def getSQLQueryTestSettings = new SQLQueryTestSettings {
-    override def getResourceFilePath: String = ???
-
-    override def getSupportedSQLQueryTests: Set[String] = ???
-
-    override def getOverwriteSQLQueryTests: Set[String] = ???
-  }
-}
+class AuronDataFrameSuite extends DataFrameSuite with SparkQueryTestsBase
