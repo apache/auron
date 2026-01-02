@@ -19,91 +19,83 @@ package org.apache.auron.integration
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 
-class SessionManager(val extraSparkConfMap: Map[String, String]) {
+/**
+ * Manages SparkSessions for baseline and auron modes in a single-driver process. Ensures only one
+ * active session at a time, switching by stopping the current before creating a new one.
+ */
+class SessionManager(val extraSparkConf: Map[String, String]) {
 
-  private var _spark: SparkSession = _
-  private var _name: String = ""
+  private var currentSession: Option[SparkSession] = None
+  private var currentMode: Option[String] = None
 
   private def resolveMaster(fallback: String = "local[4]"): String = {
-    val sysProp = sys.props.get("spark.master").filter(_.nonEmpty)
-    sysProp.getOrElse(fallback)
+    sys.props.get("spark.master").filter(_.nonEmpty).getOrElse(fallback)
   }
 
-  private lazy val commonConfMap: Map[String, String] = Map(
+  private lazy val commonConf: Map[String, String] = Map(
     "spark.master" -> resolveMaster(),
     "spark.sql.shuffle.partitions" -> "100",
-    "spark.ui.enabled" -> "true",
+    "spark.ui.enabled" -> "false",
     "spark.sql.sources.useV1SourceList" -> "parquet",
     "spark.sql.autoBroadcastJoinThreshold" -> "-1")
 
-  private lazy val auronConfMap: Map[String, String] =
-    commonConfMap ++ Map(
-      "spark.sql.extensions" -> "org.apache.spark.sql.auron.AuronSparkSessionExtension",
-      "spark.shuffle.manager" -> "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager",
-      "spark.auron.native.log.level" -> "warn",
-      "spark.auron.enable" -> "true") ++ extraSparkConfMap
+  private lazy val auronSpecificConf: Map[String, String] = Map(
+    "spark.sql.extensions" -> "org.apache.spark.sql.auron.AuronSparkSessionExtension",
+    "spark.shuffle.manager" -> "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager",
+    "spark.auron.native.log.level" -> "warn",
+    "spark.auron.enable" -> "true")
 
-  private lazy val confsMap: Map[String, Map[String, String]] =
-    Map("baseline" -> commonConfMap, "auron" -> auronConfMap)
+  private lazy val modeConfigs: Map[String, Map[String, String]] = Map(
+    "baseline" -> (commonConf ++ extraSparkConf),
+    "auron" -> (commonConf ++ extraSparkConf ++ auronSpecificConf))
 
-  def baselineSession: SparkSession = synchronized {
-    getOrCreateSession(name = "baseline", appName = "baseline-app")
-  }
+  def baselineSession: SparkSession = getOrSwitch("baseline", "baseline-app")
 
-  def auronSession: SparkSession = synchronized {
-    getOrCreateSession(name = "auron", appName = "auron-app")
-  }
+  def auronSession: SparkSession = getOrSwitch("auron", "auron-app")
 
-  private def getOrCreateSession(name: String, appName: String): SparkSession = synchronized {
-    if (_name == name && _spark != null) {
-      return _spark
+  private def getOrSwitch(mode: String, appName: String): SparkSession = synchronized {
+    if (currentMode.contains(mode) && currentSession.isDefined) {
+      currentSession.get
+    } else {
+      stopCurrentSession()
+      val conf = new SparkConf()
+      modeConfigs
+        .getOrElse(mode, throw new IllegalArgumentException(s"Unknown mode: $mode"))
+        .foreach { case (k, v) => conf.set(k, v) }
+      val session = createAndConfigureSession(conf, appName)
+      currentSession = Some(session)
+      currentMode = Some(mode)
+      println(s"Switched to SparkSession for mode: $mode")
+      session
     }
-
-    stopActiveSession()
-    val sparkConf = new SparkConf()
-    confsMap(name).foreach { case (k, v) => sparkConf.set(k, v) }
-
-    activateSession(sparkConf, appName)
-    _name = name
-    println(s"Successfully getOrCreateSession $name.")
-    _spark
   }
 
-  private def stopActiveSession(): Unit = synchronized {
-    try {
-      if (_spark != null) {
-        try {
-          _spark.sessionState.catalog.reset()
-        } finally {
-          _spark.stop()
-          _spark = null
-          _name = ""
-        }
+  private def createAndConfigureSession(conf: SparkConf, appName: String): SparkSession = {
+    val session = SparkSession
+      .builder()
+      .appName(appName)
+      .config(conf)
+      .getOrCreate()
+    session.sparkContext.setLogLevel("WARN")
+    session
+  }
+
+  private def stopCurrentSession(): Unit = {
+    currentSession.foreach { session =>
+      try {
+        session.sessionState.catalog.reset()
+      } finally {
+        session.stop()
       }
-    } finally {
-      SparkSession.clearActiveSession()
-      SparkSession.clearDefaultSession()
     }
-  }
-
-  private def activateSession(conf: SparkConf, appName: String): Unit = {
-    if (_spark != null) {
-      stopActiveSession()
-    }
-    createSession(conf, appName = appName)
-    SparkSession.setDefaultSession(_spark)
-    SparkSession.setActiveSession(_spark)
-  }
-
-  private def createSession(conf: SparkConf, appName: String): Unit = {
-    if (_spark != null) {
-      throw new IllegalStateException()
-    }
-    _spark = SparkSession.builder().config(conf).getOrCreate()
-    _spark.sparkContext.setLogLevel("WARN")
+    currentSession = None
+    currentMode = None
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
   }
 
   def close(): Unit = {
-    stopActiveSession()
+    stopCurrentSession()
+    println("SparkSession closed.")
   }
 }

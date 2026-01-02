@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.auron.integration.comparator
+package org.apache.auron.integration.comparison
 
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -25,7 +25,7 @@ import scala.util.matching.Regex
 import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.auron.Shims
 
-import org.apache.auron.integration.SingleQueryResult
+import org.apache.auron.integration.QueryExecutionResult
 
 class PlanStabilityChecker(
     readGolden: String => String,
@@ -33,21 +33,19 @@ class PlanStabilityChecker(
     regenGoldenFiles: Boolean = false,
     planCheck: Boolean = false) {
 
-  def shouldVerifyPhysicalPlan(): Boolean = {
-    Shims.get.shimVersion match {
-      case "spark-3.5" => true
-      case _ => false // Support for other Spark versions in the future
-    }
+  private lazy val isSupported: Boolean = Shims.get.shimVersion match {
+    case "spark-3.5" => true
+    case other =>
+      println(s"[PlanCheck] Unsupported Spark version: $other. Skipping.")
+      false
   }
 
-  def validate(test: SingleQueryResult): Boolean = {
-    if (!shouldVerifyPhysicalPlan()) {
-      println(s"Skip validate plan for ${Shims.get.shimVersion}")
-    }
+  def validate(test: QueryExecutionResult): Boolean = {
+    if (!isSupported) return true
 
     if (regenGoldenFiles) {
       generatePlanGolden(test.queryId, test.plan)
-    } else if (planCheck && shouldVerifyPhysicalPlan) {
+    } else if (planCheck) {
       return comparePlanGolden(test.queryId, test.plan)
     }
     true

@@ -16,8 +16,10 @@
  */
 package org.apache.auron.integration.runner
 
-import org.apache.auron.integration.{QueryRunner, SingleQueryResult, Suite, SuiteArgs}
-import org.apache.auron.integration.comparator.{ComparisonResult, PlanStabilityChecker, QueryResultComparator}
+import org.apache.spark.sql.auron.Shims
+
+import org.apache.auron.integration.{QueryRunner, Suite, SuiteArgs}
+import org.apache.auron.integration.comparison.{ComparisonResult, PlanStabilityChecker, QueryResultComparator}
 import org.apache.auron.integration.tpcds.TPCDSFeatures
 
 class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
@@ -26,7 +28,7 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
 
   val resutComparator = new QueryResultComparator()
 
-  val planStability = new PlanStabilityChecker(
+  val planStabilityChecker = new PlanStabilityChecker(
     readGolden = (qid: String) => this.readGolden(qid),
     writeGolden = (qid: String, plan: String) => this.writeGolden(qid, plan),
     regenGoldenFiles = args.regenGoldenFiles,
@@ -42,7 +44,7 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
     }
 
     val result = executeAndCompare(queries)
-    summarizeAndReport(result)
+    reportResults(result)
   }
 
   private def executeAndCompare(queries: Seq[String]): Seq[ComparisonResult] = {
@@ -62,11 +64,11 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
             testTime = a.durationSec,
             rowMatch = true,
             dataMatch = true,
-            success = true,
+            passed = true,
             planStable = true)
         }
       } else {
-        println("Execute baseline (Vanilla Spark) ...")
+        println("Execute Baseline (Vanilla Spark) ...")
         setupTables(args.dataLocation, sessions.baselineSession)
         val baselineResults = queryRunner.runQueries(sessions.baselineSession, queries)
         queries.map { queryId =>
@@ -74,89 +76,87 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
         }
       }
 
-    if (args.enablePlanCheck || args.regenGoldenFiles) {
+    if (args.enablePlanCheck) {
       baseComparisons.foreach(comparisonResult => {
         val testResult = auronResults(comparisonResult.queryId)
-        val planStable = planStability.validate(testResult)
+        val planStable = planStabilityChecker.validate(testResult)
         comparisonResult.planStable = planStable
       })
     }
     baseComparisons
   }
 
-  private def summarizeAndReport(results: Seq[ComparisonResult]): Int = {
-    if (!args.auronOnly) {
-      printResultComparison(results)
-    }
-    if (args.enablePlanCheck || args.regenGoldenFiles) {
-      printPlanStability(results)
-    }
+  private def reportResults(results: Seq[ComparisonResult]): Int = {
+    if (!args.auronOnly) printResultComparison(results)
+
+    if (args.enablePlanCheck) printPlanStability(results)
+
+    if (args.regenGoldenFiles) printGoldenRegenSummary(results)
 
     val total = results.length
-    val resultOk: ComparisonResult => Boolean =
-      if (args.auronOnly) (_: ComparisonResult) => true
-      else (r: ComparisonResult) => r.success
-
-    val planOk: ComparisonResult => Boolean =
-      if (!args.enablePlanCheck) (_: ComparisonResult) => true
-      else (r: ComparisonResult) => r.planStable
-
-    val failed = results.count(r => !(resultOk(r) && planOk(r)))
-
+    val failed = results.count(r => !r.passed || !r.planStable)
     if (failed > 0) {
-      println(s"\nTPC-DS test FAILED: $failed/$total queries failed")
+      println(s"\nTPC-DS Test FAILED ($failed out of $total queries failed)")
       1
     } else {
-      println(s"\nTPC-DS test PASSED: $total/$total")
+      println(s"\nTPC-DS Test PASSED (All $total queries succeeded)")
       0
     }
   }
 
   private def printResultComparison(results: Seq[ComparisonResult]): Unit = {
-    if (args.auronOnly) return
-    println("\n" + "=" * 100)
-    println("TPC-DS Result Comparison (Vanilla Spark vs Auron)")
-    println("=" * 100)
-    println("Query | Rows(V/A) | Time(V/A) | Speedup | Result")
-    println("-" * 100)
+    println("\n" + "=" * 60)
+    println(s"TPC-DS Result Comparison (Vanilla vs Auron) (${Shims.get.shimVersion})")
+    println("-" * 60)
+    println(
+      f"${"Query"}%-6s ${"Result"}%-8s ${"Vanilla(s)"}%8s ${"Auron(s)"}%8s ${"Speedup(x)"}%8s")
+    println("-" * 60)
 
     results.foreach { r =>
-      val speedup = if (r.testTime > 0) r.baselineTime / r.testTime else 0.0
-      val speedupStr = if (r.testTime <= 0) " inf " else f"${speedup}%6.2fx"
-      val status = if (r.success) "✅" else "❌"
-      val dataCell = if (r.dataMatch) "✓" else "✗"
-      println(
-        f"$status ${r.queryId}%-6s | ${r.baselineRows}%5d/${r.testRows}%5d | " +
-          f"${r.baselineTime}%7.2f/${r.testTime}%7.2f s | $speedupStr | $dataCell")
+      val speedup = if (r.testTime > 0 && r.baselineTime > 0) {
+        r.baselineTime / r.testTime
+      } else 0.0
+
+      val resultStr = if (r.passed) "PASS" else "FAIL"
+
+      val vanillaTime = f"${r.baselineTime}%.2f"
+      val auronTime = f"${r.testTime}%.2f"
+      val speedupStr = f"$speedup%.2f"
+
+      println(f"${r.queryId}%-6s $resultStr%-8s $vanillaTime%8s $auronTime%8s $speedupStr%8s")
     }
 
     val total = results.length
-    val resultPass = results.count(_.success)
-    println("-" * 100)
-    println(s"Result comparison passed: $resultPass/$total")
+    val passedCount = results.count(_.passed)
+    println("-" * 60)
+    println(s"Passed: $passedCount/$total")
   }
 
   private def printPlanStability(results: Seq[ComparisonResult]): Unit = {
-    println("\n" + "=" * 100)
-    println("Auron Plan Stability")
-    println("=" * 100)
-    println("Query | Stable")
-    println("-" * 100)
-
+    println("\n" + "-" * 60)
+    println(s"Auron Plan Stability (${Shims.get.shimVersion})")
+    println("−" * 60)
+    println(f"${"Query"}%-6s ${"Stable"}%-7s")
+    println("-" * 60)
     results.foreach { r =>
-      val stableCell =
-        if (args.enablePlanCheck) { if (r.planStable) "✓" else "✗" }
-        else if (args.regenGoldenFiles) "regenerated"
-        else "-"
-      println(f"${r.queryId}%-6s | $stableCell")
+      val stable = if (r.planStable) "PASS" else "FAIL"
+      println(f"${r.queryId}%-6s $stable%-7s")
     }
+    val total = results.length
+    val stableCount = results.count(_.planStable)
+    println("-" * 60)
+    println(s"Passed: $stableCount/$total")
+  }
 
-    if (args.enablePlanCheck) {
-      val total = results.length
-      val stableCnt = results.count(_.planStable)
-      println("-" * 100)
-      println(s"Plan stability passed: $stableCnt/$total")
-    }
+  private def printGoldenRegenSummary(results: Seq[ComparisonResult]): Unit = {
+    val ids = results.map(_.queryId)
+    val totalUpdated = ids.size
+    println("\n" + "-" * 60)
+    println(s"Auron Golden Files (${Shims.get.shimVersion})")
+    println("−" * 60)
+    println(s"Updated queries: $totalUpdated")
+    println(ids.mkString("- ", ", ", ""))
+    println(s"Output directory: ${goldenOutputDir}")
   }
 }
 

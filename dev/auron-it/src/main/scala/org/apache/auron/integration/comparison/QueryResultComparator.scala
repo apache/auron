@@ -14,12 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.auron.integration.comparator
+package org.apache.auron.integration.comparison
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.DoubleType
 
-import org.apache.auron.integration.SingleQueryResult
+import org.apache.auron.integration.QueryExecutionResult
 
 case class ComparisonResult(
     queryId: String,
@@ -29,29 +29,31 @@ case class ComparisonResult(
     testTime: Double,
     rowMatch: Boolean,
     dataMatch: Boolean,
-    success: Boolean = false,
+    passed: Boolean = false,
     var planStable: Boolean = true)
 
 trait QueryComparator {
-  def compare(baseline: SingleQueryResult, test: SingleQueryResult): ComparisonResult
+  def compare(baseline: QueryExecutionResult, test: QueryExecutionResult): ComparisonResult
 }
 
 class QueryResultComparator extends QueryComparator {
   private val colSep = "<|COL|>"
-  override def compare(baseline: SingleQueryResult, test: SingleQueryResult): ComparisonResult = {
+  override def compare(
+      baseline: QueryExecutionResult,
+      test: QueryExecutionResult): ComparisonResult = {
     val rowMatch = baseline.rowCount == test.rowCount
     val dataMatch = checkQueryResult(baseline.queryId, baseline.rows, test.rows)
-    val success = rowMatch && dataMatch && (baseline.success == test.success)
+    val passed = rowMatch && dataMatch && (baseline.success == test.success)
 
     ComparisonResult(
-      baseline.queryId,
-      baseline.rowCount,
-      test.rowCount,
-      baseline.durationSec,
-      test.durationSec,
-      rowMatch,
-      dataMatch,
-      success)
+      queryId = baseline.queryId,
+      baselineRows = baseline.rowCount,
+      testRows = test.rowCount,
+      baselineTime = baseline.durationSec,
+      testTime = test.durationSec,
+      rowMatch = rowMatch,
+      dataMatch = dataMatch,
+      passed = passed)
   }
 
   protected def checkQueryResult(
@@ -132,7 +134,6 @@ class QueryResultComparator extends QueryComparator {
         }
       }
     }
-
     true
   }
 }

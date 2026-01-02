@@ -25,7 +25,6 @@ import org.apache.spark.sql.auron.Shims
 
 trait TPCDSFeatures {
 
-  // scalastyle:off
   val tpcdsQueries: Seq[String] = Seq(
     "q1",
     "q2",
@@ -156,7 +155,6 @@ trait TPCDSFeatures {
     "income_band",
     "time_dim",
     "web_page")
-  // scalastyle:on
 
   def setupTables(dataLocation: String, spark: SparkSession): Map[String, Long] = {
     println(s"Setting up TPC-DS tables from: $dataLocation")

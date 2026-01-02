@@ -108,7 +108,7 @@ object Main {
   }
 
   private def printConfigurationSummary(args: SuiteArgs): Unit = {
-    println("\n" + "=" * 100)
+    println("\n" + "=" * 60)
     println(s"""|Auron Integration Test (type: ${args.benchType})
                |Spark Version: ${Shims.get.shimVersion}
                |Data: ${args.dataLocation}
@@ -120,7 +120,7 @@ object Main {
     if (args.auronOnly) println("Mode: Auron-only (skip baseline)")
     if (args.enablePlanCheck) println("Plan Check: Enabled")
     if (args.regenGoldenFiles) println("Regenerate golden files: Enabled")
-    println("-" * 100)
+    println("-" * 60)
     println("")
   }
 }

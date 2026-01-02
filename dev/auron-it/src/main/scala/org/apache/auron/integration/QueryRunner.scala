@@ -16,59 +16,64 @@
  */
 package org.apache.auron.integration
 
+import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.execution.FormattedMode
 
-case class SingleQueryResult(
+case class QueryExecutionResult(
     queryId: String,
     rowCount: Long,
     durationSec: Double,
     rows: Array[Row],
-    plan: String,
     success: Boolean,
+    plan: String,
     errorMsg: Option[String] = None)
 
 class QueryRunner(readQuery: String => String) {
 
-  def runQueries(spark: SparkSession, queries: Seq[String]): Map[String, SingleQueryResult] = {
+  def runQueries(spark: SparkSession, queries: Seq[String]): Map[String, QueryExecutionResult] = {
     queries
-      .map { qid => executeSingleQuery(spark, qid) }
+      .map { qid => executeQuery(spark, qid) }
       .map(r => r.queryId -> r)
       .toMap
   }
 
-  def executeSingleQuery(spark: SparkSession, queryId: String): SingleQueryResult = {
+  private def executeQuery(spark: SparkSession, queryId: String): QueryExecutionResult = {
     val startTime = System.currentTimeMillis()
-    try {
+
+    val result = Try {
       val sql = readQuery(queryId)
       val df = spark.sql(sql)
-      val rows = df.collect()
-      val rowCount = rows.length
-      val planStr = df.queryExecution.explainString(FormattedMode)
+      val rows: Array[Row] = df.collect()
+      val rowCount: Long = rows.length
+      val planStr: String = df.queryExecution.explainString(FormattedMode)
+      (rows, rowCount, planStr)
+    }
 
-      val duration = (System.currentTimeMillis() - startTime) / 1000.0
-      println(s"queryId: $queryId, duration: $duration s")
-      SingleQueryResult(
-        queryId = queryId,
-        rowCount = rowCount,
-        durationSec = duration,
-        rows = rows,
-        plan = planStr,
-        success = true,
-        errorMsg = None)
-    } catch {
-      case e: Exception =>
-        println(s"queryId: $queryId, executeSingleQuery failed, Exception: $e")
-        val duration = (System.currentTimeMillis() - startTime) / 1000.0
-        SingleQueryResult(
-          queryId,
-          0L,
-          duration,
-          Array.empty,
-          "",
+    val durationSec = (System.currentTimeMillis() - startTime) / 1000.0
+
+    result match {
+      case Success((rows, rowCount, planStr)) =>
+        println(s"Query $queryId executed successfully in $durationSec seconds.")
+        QueryExecutionResult(
+          queryId = queryId,
+          rowCount = rowCount,
+          durationSec = durationSec,
+          rows = rows,
+          success = true,
+          plan = planStr)
+
+      case Failure(e) =>
+        println(s"Query $queryId failed after $durationSec seconds: ${e.getMessage}")
+        QueryExecutionResult(
+          queryId = queryId,
+          rowCount = 0L,
+          durationSec = durationSec,
+          rows = Array.empty,
           success = false,
-          Some(e.getMessage))
+          plan = "",
+          errorMsg = Some(e.getMessage))
     }
   }
-
 }

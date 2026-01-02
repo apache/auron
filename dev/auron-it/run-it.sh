@@ -25,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AURON_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 MVN_CMD="${AURON_DIR}/build/mvn"
-RUST_BACKTRACE=1
+export RUST_BACKTRACE=1
 SPARK_VERSION="${SPARK_VERSION:-spark-3.5}"
 SCALA_VERSION="${SCALA_VERSION:-2.12}"
 PROFILES="-P${SPARK_VERSION},scala-${SCALA_VERSION}"
@@ -49,7 +49,7 @@ fi
 if [[ ! -f "$AURON_IT_JAR" ]]; then
   echo "INFO: Building missing Aurora it jar..."
   pushd "${SCRIPT_DIR}"
-  "${MVN_CMD}" ${PROFILES} package
+  "${MVN_CMD}" ${PROFILES} package -DskipTests
   popd
 fi
 
