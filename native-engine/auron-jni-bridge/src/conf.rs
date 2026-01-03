@@ -57,6 +57,7 @@ define_conf!(IntConf, SUGGESTED_BATCH_MEM_SIZE);
 define_conf!(IntConf, SUGGESTED_BATCH_MEM_SIZE_KWAY_MERGE);
 define_conf!(BooleanConf, ORC_FORCE_POSITIONAL_EVOLUTION);
 define_conf!(BooleanConf, ORC_TIMESTAMP_USE_MICROSECOND);
+define_conf!(BooleanConf, ORC_SCHEMA_CASE_SENSITIVE);
 define_conf!(IntConf, UDAF_FALLBACK_NUM_UDAFS_TRIGGER_SORT_AGG);
 define_conf!(BooleanConf, PARSE_JSON_ERROR_FALLBACK);
 define_conf!(StringConf, NATIVE_LOG_LEVEL);
