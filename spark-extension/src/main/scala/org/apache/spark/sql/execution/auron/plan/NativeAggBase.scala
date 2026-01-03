@@ -119,15 +119,15 @@ abstract class NativeAggBase(
     case SortAgg => pb.AggExecMode.SORT_AGG
   }
 
-  private def nativeAggrs = nativeAggrInfos.flatMap(_.nativeAggrs)
+  private lazy val nativeAggrs = nativeAggrInfos.flatMap(_.nativeAggrs)
 
-  private def nativeGroupingExprs = groupingExpressions.map(NativeConverters.convertExpr(_))
+  private lazy val nativeGroupingExprs = groupingExpressions.map(NativeConverters.convertExpr(_))
 
-  private def nativeGroupingNames = groupingExpressions.map(Util.getFieldNameByExprId)
+  private lazy val nativeGroupingNames = groupingExpressions.map(Util.getFieldNameByExprId)
 
-  private def nativeAggrNames = nativeAggrInfos.map(_.outputAttr).map(_.name)
+  private lazy val nativeAggrNames = nativeAggrInfos.map(_.outputAttr).map(_.name)
 
-  private def nativeAggrModes = nativeAggrInfos.map(_.mode match {
+  private lazy val nativeAggrModes = nativeAggrInfos.map(_.mode match {
     case Partial => pb.AggMode.PARTIAL
     case PartialMerge => pb.AggMode.PARTIAL_MERGE
     case Final => pb.AggMode.FINAL
@@ -138,8 +138,6 @@ abstract class NativeAggBase(
   // check whether native converting is supported
   nativeAggrs
   nativeGroupingExprs
-  nativeGroupingNames
-  nativeAggrs
   nativeAggrModes
 
   override def output: Seq[Attribute] =
@@ -165,12 +163,6 @@ abstract class NativeAggBase(
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
-    val nativeExecMode = this.nativeExecMode
-    val nativeAggrNames = this.nativeAggrNames
-    val nativeGroupingNames = this.nativeGroupingNames
-    val nativeAggrModes = this.nativeAggrModes
-    val nativeAggrs = this.nativeAggrs
-    val nativeGroupingExprs = this.nativeGroupingExprs
 
     new NativeRDD(
       sparkContext,

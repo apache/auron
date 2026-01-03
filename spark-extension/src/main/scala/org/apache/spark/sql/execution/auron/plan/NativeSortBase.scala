@@ -77,7 +77,7 @@ abstract class NativeSortBase(
       UnspecifiedDistribution :: Nil
     }
 
-  private def nativeSortExprs = sortOrder.map { sortOrder =>
+  private lazy val nativeSortExprs = sortOrder.map { sortOrder =>
     PhysicalExprNode
       .newBuilder()
       .setSort(
@@ -96,7 +96,6 @@ abstract class NativeSortBase(
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
-    val nativeSortExprs = this.nativeSortExprs
 
     new NativeRDD(
       sparkContext,
