@@ -332,7 +332,7 @@ impl AsyncFileReader for ParquetFileReaderRef {
                 continue;
             }
 
-            let last_merged_range = merged_ranges.last_mut().unwrap();
+            let last_merged_range = merged_ranges.last_mut().expect("missing last range");
             if range.start <= last_merged_range.end + max_over_read_size as u64 {
                 last_merged_range.end = range.end.max(last_merged_range.end);
             } else {

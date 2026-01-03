@@ -87,9 +87,13 @@ macro_rules! jni_map_error_with_env {
         match $result {
             Ok(result) => $crate::jni_bridge::datafusion::error::Result::Ok(result),
             Err($crate::jni_bridge::jni::errors::Error::JavaException) => {
-                let ex = $env.exception_occurred().unwrap();
-                $env.exception_describe().unwrap();
-                $env.exception_clear().unwrap();
+                let ex = $env
+                    .exception_occurred()
+                    .expect("failed to obtain pending Java execption object");
+                $env.exception_describe()
+                    .expect("failed to print Java exception to stderr");
+                $env.exception_clear()
+                    .expect("failed to clear pending Java exception");
                 let message_obj = $env
                     .call_method_unchecked(
                         ex,
@@ -102,13 +106,13 @@ macro_rules! jni_map_error_with_env {
                             .clone(),
                         &[],
                     )
-                    .unwrap()
+                    .expect("call Java Throwable.toString() failed")
                     .l()
-                    .unwrap();
+                    .expect("expected object return from Throwable.toString()");
                 let message = $env
                     .get_string(message_obj.into())
                     .map(|s| String::from(s))
-                    .unwrap();
+                    .expect("failed to read Throwable.toString() result as Java string");
 
                 Err(
                     $crate::jni_bridge::datafusion::error::DataFusionError::External(

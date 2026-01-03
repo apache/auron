@@ -55,7 +55,7 @@ fn handle_unwinded(err: Box<dyn Any + Send>) {
 }
 
 fn handle_unwinded_scope<T: Default, E: Debug>(scope: impl FnOnce() -> Result<T, E>) -> T {
-    match std::panic::catch_unwind(AssertUnwindSafe(|| scope().unwrap())) {
+    match std::panic::catch_unwind(AssertUnwindSafe(|| scope().expect("scope failed"))) {
         Ok(v) => v,
         Err(err) => {
             handle_unwinded(err);

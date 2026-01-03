@@ -208,133 +208,134 @@ mod test {
     use crate::expand_exec::ExpandExec;
 
     // build i32 table
-    fn build_table_i32(a: (&str, &Vec<i32>)) -> RecordBatch {
+    fn build_table_i32(a: (&str, &Vec<i32>)) -> Result<RecordBatch> {
         let schema = Schema::new(vec![Field::new(a.0, DataType::Int32, false)]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![Arc::new(Int32Array::from(a.1.clone()))],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
-    fn build_table_int(a: (&str, &Vec<i32>)) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_i32(a);
+    fn build_table_int(a: (&str, &Vec<i32>)) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_i32(a)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     // build f32 table
-    fn build_table_f32(a: (&str, &Vec<f32>)) -> RecordBatch {
+    fn build_table_f32(a: (&str, &Vec<f32>)) -> Result<RecordBatch> {
         let schema = Schema::new(vec![Field::new(a.0, DataType::Float32, false)]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![Arc::new(Float32Array::from(a.1.clone()))],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
-    fn build_table_float(a: (&str, &Vec<f32>)) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_f32(a);
+    fn build_table_float(a: (&str, &Vec<f32>)) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_f32(a)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     // build str table
-    fn build_table_str(a: (&str, &Vec<String>)) -> RecordBatch {
+    fn build_table_str(a: (&str, &Vec<String>)) -> Result<RecordBatch> {
         let schema = Schema::new(vec![Field::new(a.0, DataType::Utf8, false)]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![Arc::new(StringArray::from(a.1.clone()))],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
-    fn build_table_string(a: (&str, &Vec<String>)) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_str(a);
+    fn build_table_string(a: (&str, &Vec<String>)) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_str(a)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     // build boolean table
-    fn build_table_bool(a: (&str, &Vec<bool>)) -> RecordBatch {
+    fn build_table_bool(a: (&str, &Vec<bool>)) -> Result<RecordBatch> {
         let schema = Schema::new(vec![Field::new(a.0, DataType::Boolean, false)]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![Arc::new(BooleanArray::from(a.1.clone()))],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
-    fn build_table_boolean(a: (&str, &Vec<bool>)) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_bool(a);
+    fn build_table_boolean(a: (&str, &Vec<bool>)) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_bool(a)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     #[tokio::test]
     async fn test_expand_exec_i32() -> Result<()> {
         MemManager::init(10000);
 
-        let input = build_table_int(("a", &vec![-1, -2, 0, 3]));
+        let input = build_table_int(("a", &vec![-1, -2, 0, 3]))?;
         let schema = Schema::new(vec![Field::new("test_i32", DataType::Int32, false)]);
 
         let projections = vec![
-            vec![
-                binary(
-                    col("test_i32", &schema).unwrap(),
-                    Operator::Multiply,
-                    lit(ScalarValue::from(2)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
-            vec![
-                binary(
-                    col("test_i32", &schema).unwrap(),
-                    Operator::Plus,
-                    lit(ScalarValue::from(100)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
-            vec![
-                binary(
-                    col("test_i32", &schema).unwrap(),
-                    Operator::Divide,
-                    lit(ScalarValue::from(-2)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
-            vec![
-                binary(
-                    col("test_i32", &schema).unwrap(),
-                    Operator::Modulo,
-                    lit(ScalarValue::from(2)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
-            vec![
-                binary(
-                    col("test_i32", &schema).unwrap(),
-                    Operator::BitwiseShiftLeft,
-                    lit(ScalarValue::from(1)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::Multiply,
+                lit(ScalarValue::from(2)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::Plus,
+                lit(ScalarValue::from(100)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::Divide,
+                lit(ScalarValue::from(-2)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::Modulo,
+                lit(ScalarValue::from(2)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_i32", &schema)?,
+                Operator::BitwiseShiftLeft,
+                lit(ScalarValue::from(1)),
+                &schema,
+            )?],
         ];
 
         let expand_exec = ExpandExec::try_new(input.schema(), projections, input)?;
 
         let session_ctx = SessionContext::new();
         let task_ctx = session_ctx.task_ctx();
-        let output = expand_exec.execute(0, task_ctx).unwrap();
+        let output = expand_exec.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
         let expected = vec![
             "+-----+", "| a   |", "+-----+", "| -2  |", "| -4  |", "| 0   |", "| 6   |", "| 99  |",
@@ -350,53 +351,41 @@ mod test {
     async fn test_expand_exec_f32() -> Result<()> {
         MemManager::init(10000);
 
-        let input = build_table_float(("a", &vec![-1.2, -2.3, 0.0, 3.4]));
+        let input = build_table_float(("a", &vec![-1.2, -2.3, 0.0, 3.4]))?;
         let schema = Schema::new(vec![Field::new("test_f32", DataType::Float32, false)]);
 
         let projections = vec![
-            vec![
-                binary(
-                    col("test_f32", &schema).unwrap(),
-                    Operator::Multiply,
-                    lit(ScalarValue::from(2.1_f32)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
-            vec![
-                binary(
-                    col("test_f32", &schema).unwrap(),
-                    Operator::Plus,
-                    lit(ScalarValue::from(100_f32)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
-            vec![
-                binary(
-                    col("test_f32", &schema).unwrap(),
-                    Operator::Divide,
-                    lit(ScalarValue::from(-2_f32)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
-            vec![
-                binary(
-                    col("test_f32", &schema).unwrap(),
-                    Operator::Modulo,
-                    lit(ScalarValue::from(-2_f32)),
-                    &schema,
-                )
-                .unwrap(),
-            ],
+            vec![binary(
+                col("test_f32", &schema)?,
+                Operator::Multiply,
+                lit(ScalarValue::from(2.1_f32)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_f32", &schema)?,
+                Operator::Plus,
+                lit(ScalarValue::from(100_f32)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_f32", &schema)?,
+                Operator::Divide,
+                lit(ScalarValue::from(-2_f32)),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_f32", &schema)?,
+                Operator::Modulo,
+                lit(ScalarValue::from(-2_f32)),
+                &schema,
+            )?],
         ];
 
         let expand_exec = ExpandExec::try_new(input.schema(), projections, input)?;
 
         let session_ctx = SessionContext::new();
         let task_ctx = session_ctx.task_ctx();
-        let output = expand_exec.execute(0, task_ctx).unwrap();
+        let output = expand_exec.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
         let expected = vec![
             "+-------------+",
@@ -437,24 +426,21 @@ mod test {
                 "rust".to_string(),
                 "!".to_string(),
             ],
-        ));
+        ))?;
         let schema = Schema::new(vec![Field::new("test_str", DataType::Utf8, false)]);
 
-        let projections = vec![vec![
-            binary(
-                col("test_str", &schema).unwrap(),
-                Operator::StringConcat,
-                lit(Some("app").unwrap()),
-                &schema,
-            )
-            .unwrap(),
-        ]];
+        let projections = vec![vec![binary(
+            col("test_str", &schema)?,
+            Operator::StringConcat,
+            lit(Some("app").expect("app")),
+            &schema,
+        )?]];
 
         let expand_exec = ExpandExec::try_new(input.schema(), projections, input)?;
 
         let session_ctx = SessionContext::new();
         let task_ctx = session_ctx.task_ctx();
-        let output = expand_exec.execute(0, task_ctx).unwrap();
+        let output = expand_exec.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
         let expected = vec![
             "+----------+",
@@ -475,35 +461,29 @@ mod test {
     async fn test_expand_exec_bool() -> Result<()> {
         MemManager::init(10000);
 
-        let input = build_table_boolean(("a", &vec![true, false, true, false]));
+        let input = build_table_boolean(("a", &vec![true, false, true, false]))?;
         let schema = Schema::new(vec![Field::new("test_bool", DataType::Boolean, false)]);
 
         let projections = vec![
-            vec![
-                binary(
-                    col("test_bool", &schema).unwrap(),
-                    Operator::And,
-                    lit(ScalarValue::Boolean(Some(true))),
-                    &schema,
-                )
-                .unwrap(),
-            ],
-            vec![
-                binary(
-                    col("test_bool", &schema).unwrap(),
-                    Operator::Or,
-                    lit(ScalarValue::Boolean(Some(true))),
-                    &schema,
-                )
-                .unwrap(),
-            ],
+            vec![binary(
+                col("test_bool", &schema)?,
+                Operator::And,
+                lit(ScalarValue::Boolean(Some(true))),
+                &schema,
+            )?],
+            vec![binary(
+                col("test_bool", &schema)?,
+                Operator::Or,
+                lit(ScalarValue::Boolean(Some(true))),
+                &schema,
+            )?],
         ];
 
         let expand_exec = ExpandExec::try_new(input.schema(), projections, input)?;
 
         let session_ctx = SessionContext::new();
         let task_ctx = session_ctx.task_ctx();
-        let output = expand_exec.execute(0, task_ctx).unwrap();
+        let output = expand_exec.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
         let expected = vec![
             "+-------+",

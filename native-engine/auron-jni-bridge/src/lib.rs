@@ -34,7 +34,9 @@ pub fn ensure_jni_bridge_inited() -> Result<()> {
 
 pub fn is_task_running() -> bool {
     fn is_task_running_impl() -> Result<bool> {
-        if !jni_call_static!(JniBridge.isTaskRunning() -> bool).unwrap() {
+        if !jni_call_static!(JniBridge.isTaskRunning() -> bool)
+            .expect("calling JniBridge.isTaskRunning() error")
+        {
             jni_exception_clear!()?;
             return Ok(false);
         }

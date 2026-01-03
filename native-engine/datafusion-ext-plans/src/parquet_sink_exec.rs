@@ -291,7 +291,7 @@ fn execute_parquet_sink(
 
                         tokio::task::spawn_blocking(move || {
                             let mut part_writer = part_writer.lock();
-                            let w = part_writer.as_mut().unwrap();
+                            let w = part_writer.as_mut().expect("missing partition writer");
                             w.write(&sub_batch)
                         })
                         .await

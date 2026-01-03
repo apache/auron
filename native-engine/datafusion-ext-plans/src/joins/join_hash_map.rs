@@ -146,8 +146,8 @@ impl Table {
                 match len {
                     0 => unreachable!(),
                     1 => {
-                        let single = mapped_indices.pop().unwrap();
-                        let _len = mapped_indices.pop().unwrap();
+                        let single = mapped_indices.pop().expect("missing index");
+                        let _len = mapped_indices.pop().expect("missing length");
                         MapValue::new_single(single)
                     }
                     _ => MapValue::new_range(start),

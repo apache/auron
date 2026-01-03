@@ -42,7 +42,7 @@ pub fn spark_get_json_object(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_strings = json_string_array
         .as_any()
         .downcast_ref::<StringArray>()
-        .unwrap();
+        .expect("Expected a StringArray");
     let path_string = match &args[1] {
         ColumnarValue::Scalar(ScalarValue::Utf8(str)) => match str {
             Some(path) => path,
@@ -87,7 +87,7 @@ pub fn spark_parse_json(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_strings = json_string_array
         .as_any()
         .downcast_ref::<StringArray>()
-        .unwrap();
+        .expect("Expected a StringArray");
     let fallback_enabled = conf::PARSE_JSON_ERROR_FALLBACK.value().unwrap_or(false);
 
     let json_values: Vec<Option<Arc<dyn Any + Send + Sync + 'static>>> = json_strings
@@ -121,7 +121,10 @@ pub fn spark_parse_json(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
 pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let json_array = match &args[0] {
-        ColumnarValue::Array(array) => array.as_any().downcast_ref::<UserDefinedArray>().unwrap(),
+        ColumnarValue::Array(array) => array
+            .as_any()
+            .downcast_ref::<UserDefinedArray>()
+            .expect("Expected a UserDefinedArray"),
         ColumnarValue::Scalar(_) => unreachable!(),
     };
 
@@ -153,7 +156,9 @@ pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarVa
 
     let output = StringArray::from_iter(json_array.iter().map(|value| {
         value.as_ref().and_then(|value| -> Option<Cow<str>> {
-            let json_value = value.downcast_ref::<ParsedJsonValue>().unwrap();
+            let json_value = value
+                .downcast_ref::<ParsedJsonValue>()
+                .expect("Expected a ParsedJsonValue");
             match json_value {
                 ParsedJsonValue::SerdeJson(v) => evaluator
                     .evaluate_with_value_serde_json(v)
@@ -165,9 +170,10 @@ pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarVa
                     .ok()
                     .unwrap_or(None)
                     .map(Cow::from),
-                ParsedJsonValue::Fallback(_) => {
-                    fallback_results_iter.next().unwrap().map(Cow::from)
-                }
+                ParsedJsonValue::Fallback(_) => fallback_results_iter
+                    .next()
+                    .expect("fallback result iterator must have a next element")
+                    .map(Cow::from),
             }
         })
     }));
@@ -186,7 +192,9 @@ pub fn spark_get_parsed_json_simple_field(
 
     let output = StringArray::from_iter(json_array.iter().map(|value| {
         value.as_ref().and_then(|value| {
-            let json_value = value.downcast_ref::<ParsedJsonValue>().unwrap();
+            let json_value = value
+                .downcast_ref::<ParsedJsonValue>()
+                .expect("Expected a ParsedJsonValue");
             match json_value {
                 ParsedJsonValue::SerdeJson(v) => v
                     .as_object()
@@ -198,9 +206,10 @@ pub fn spark_get_parsed_json_simple_field(
                     .and_then(|object| object.get(field))
                     .and_then(|v| sonic_value_to_string(v).unwrap_or_default())
                     .map(Cow::from),
-                ParsedJsonValue::Fallback(_) => {
-                    fallback_results_iter.next().unwrap().map(Cow::from)
-                }
+                ParsedJsonValue::Fallback(_) => fallback_results_iter
+                    .next()
+                    .expect("fallback result iterator must have a next element")
+                    .map(Cow::from),
             }
         })
     }));
@@ -214,7 +223,9 @@ fn parse_fallback(json_path: &str, json_array: &UserDefinedArray) -> Result<Stri
         let mut fallback_jsons_array = StringBuilder::new();
         for json in json_array.iter().flat_map(|value| {
             value.as_ref().and_then(|value| -> Option<&str> {
-                let json_value = value.downcast_ref::<ParsedJsonValue>().unwrap();
+                let json_value = value
+                    .downcast_ref::<ParsedJsonValue>()
+                    .expect("Expected a ParsedJsonValue");
                 if let ParsedJsonValue::Fallback(json) = json_value {
                     return Some(json.as_ref());
                 }
@@ -544,7 +555,9 @@ impl HiveGetJsonObjectMatcher {
                         .flat_map(|r| {
                             // keep consistent with hive UDFJson
                             let iter: Box<dyn Iterator<Item = sonic_rs::Value>> = match r {
-                                v if v.is_array() => Box::new(v.into_array().unwrap().into_iter()),
+                                v if v.is_array() => Box::new(
+                                    v.into_array().expect("expected array value").into_iter(),
+                                ),
                                 other => Box::new(std::iter::once(other)),
                             };
                             iter
@@ -613,108 +626,108 @@ mod test {
         let path = "$.owner";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some("amy".to_owned())
         );
 
         let path = "$.  owner";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some("amy".to_owned())
         );
 
         let path = "$.store.bicycle.price";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some("19.95".to_owned())
         );
 
         let path = "$.  store.  bicycle.  price";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some("19.95".to_owned())
         );
 
         let path = "$.store.fruit[0]";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some(r#"{"weight":8,"type":"apple"}"#.to_owned())
         );
 
         let path = "$. store.  fruit[0]";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some(r#"{"weight":8,"type":"apple"}"#.to_owned())
         );
 
         let path = "$.store.fruit[1].weight";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some("9".to_owned())
         );
 
         let path = "$.store.fruit[*]";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some(r#"[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}]"#.to_owned())
         );
 
         let path = "$. store.  fruit[*]";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some(r#"[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}]"#.to_owned())
         );
 
         let path = "$.store.fruit.[1].type";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some("pear".to_owned())
         );
 
         let path = "$. store.  fruit.  [1]. type";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             Some("pear".to_owned())
         );
 
         let path = "$.non_exist_key";
         assert_eq!(
             HiveGetJsonObjectEvaluator::try_new(path)
-                .unwrap()
+                .expect("failed to create evaluator")
                 .evaluate(input)
-                .unwrap(),
+                .expect("evaluation failed"),
             None
         );
         Ok(())
@@ -748,36 +761,61 @@ mod test {
                 }
             }"#;
         let input_array = Arc::new(StringArray::from(vec![input]));
-        let parsed = spark_parse_json(&[ColumnarValue::Array(input_array)]).unwrap();
+        let parsed = spark_parse_json(&[ColumnarValue::Array(input_array)])?;
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.county"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r
+            .as_string::<i32>()
+            .iter()
+            .next()
+            .expect("missing first element");
         assert_eq!(v, Some(r#"["浦东","西直门"]"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.NOT_EXISTED"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r
+            .as_string::<i32>()
+            .iter()
+            .next()
+            .expect("missing first element");
         assert_eq!(v, None);
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.name"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
-        assert!(v.unwrap().contains("Asher"));
+        let v = r
+            .as_string::<i32>()
+            .iter()
+            .next()
+            .expect("missing first element")
+            .ok_or("value is NULL")?;
+        assert!(v.contains("Asher"));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location.city"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r
+            .as_string::<i32>()
+            .iter()
+            .next()
+            .expect("missing first element");
         assert_eq!(v, Some(r#"["1.234",1.234]"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location[0]"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r
+            .as_string::<i32>()
+            .iter()
+            .next()
+            .expect("missing first element");
         assert_eq!(v, Some(r#"{"city":"1.234","county":"浦东"}"#));
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.message.location[].county"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r
+            .as_string::<i32>()
+            .iter()
+            .next()
+            .expect("missing first element");
         assert_eq!(v, Some(r#"["浦东","西直门"]"#));
         Ok(())
     }
@@ -814,7 +852,11 @@ mod test {
 
         let path = ColumnarValue::Scalar(ScalarValue::from("$.i1.j2"));
         let r = spark_get_parsed_json_object(&[parsed.clone(), path])?.into_array(1)?;
-        let v = r.as_string::<i32>().iter().next().unwrap();
+        let v = r
+            .as_string::<i32>()
+            .iter()
+            .next()
+            .expect("missing first element");
 
         // NOTE:
         // standard jsonpath should output [[200,300],[400, 500],null,"other"]
