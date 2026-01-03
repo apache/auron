@@ -1,0 +1,619 @@
+== Physical Plan ==
+AdaptiveSparkPlan (113)
++- == Final Plan ==
+   NativeTakeOrdered (73)
+   +- NativeProject (72)
+      +- NativeHashAggregate (71)
+         +- InputAdapter (70)
+            +- AQEShuffleRead (69)
+               +- ShuffleQueryStage (68), Statistics(X)
+                  +- NativeShuffleExchange (67)
+                     +- NativeHashAggregate (66)
+                        +- NativeProject (65)
+                           +- NativeProject (64)
+                              +- NativeSortMergeJoin Inner (63)
+                                 :- NativeSort (53)
+                                 :  +- InputAdapter (52)
+                                 :     +- AQEShuffleRead (51)
+                                 :        +- ShuffleQueryStage (50), Statistics(X)
+                                 :           +- NativeShuffleExchange (49)
+                                 :              +- NativeProject (48)
+                                 :                 +- NativeSortMergeJoin Inner (47)
+                                 :                    :- NativeSort (38)
+                                 :                    :  +- InputAdapter (37)
+                                 :                    :     +- AQEShuffleRead (36)
+                                 :                    :        +- ShuffleQueryStage (35), Statistics(X)
+                                 :                    :           +- NativeShuffleExchange (34)
+                                 :                    :              +- NativeProject (33)
+                                 :                    :                 +- NativeSortMergeJoin Inner (32)
+                                 :                    :                    :- NativeSort (23)
+                                 :                    :                    :  +- InputAdapter (22)
+                                 :                    :                    :     +- AQEShuffleRead (21)
+                                 :                    :                    :        +- ShuffleQueryStage (20), Statistics(X)
+                                 :                    :                    :           +- NativeShuffleExchange (19)
+                                 :                    :                    :              +- NativeProject (18)
+                                 :                    :                    :                 +- NativeSortMergeJoin Inner (17)
+                                 :                    :                    :                    :- NativeSort (8)
+                                 :                    :                    :                    :  +- InputAdapter (7)
+                                 :                    :                    :                    :     +- AQEShuffleRead (6)
+                                 :                    :                    :                    :        +- ShuffleQueryStage (5), Statistics(X)
+                                 :                    :                    :                    :           +- NativeShuffleExchange (4)
+                                 :                    :                    :                    :              +- NativeFilter (3)
+                                 :                    :                    :                    :                 +- InputAdapter (2)
+                                 :                    :                    :                    :                    +- NativeParquetScan  (1)
+                                 :                    :                    :                    +- NativeSort (16)
+                                 :                    :                    :                       +- InputAdapter (15)
+                                 :                    :                    :                          +- AQEShuffleRead (14)
+                                 :                    :                    :                             +- ShuffleQueryStage (13), Statistics(X)
+                                 :                    :                    :                                +- NativeShuffleExchange (12)
+                                 :                    :                    :                                   +- NativeFilter (11)
+                                 :                    :                    :                                      +- InputAdapter (10)
+                                 :                    :                    :                                         +- NativeParquetScan  (9)
+                                 :                    :                    +- NativeSort (31)
+                                 :                    :                       +- InputAdapter (30)
+                                 :                    :                          +- AQEShuffleRead (29)
+                                 :                    :                             +- ShuffleQueryStage (28), Statistics(X)
+                                 :                    :                                +- NativeShuffleExchange (27)
+                                 :                    :                                   +- NativeFilter (26)
+                                 :                    :                                      +- InputAdapter (25)
+                                 :                    :                                         +- NativeParquetScan  (24)
+                                 :                    +- NativeSort (46)
+                                 :                       +- InputAdapter (45)
+                                 :                          +- AQEShuffleRead (44)
+                                 :                             +- ShuffleQueryStage (43), Statistics(X)
+                                 :                                +- NativeShuffleExchange (42)
+                                 :                                   +- NativeFilter (41)
+                                 :                                      +- InputAdapter (40)
+                                 :                                         +- NativeParquetScan  (39)
+                                 +- NativeSort (62)
+                                    +- InputAdapter (61)
+                                       +- AQEShuffleRead (60)
+                                          +- ShuffleQueryStage (59), Statistics(X)
+                                             +- NativeShuffleExchange (58)
+                                                +- NativeProject (57)
+                                                   +- NativeFilter (56)
+                                                      +- InputAdapter (55)
+                                                         +- NativeParquetScan  (54)
++- == Initial Plan ==
+   TakeOrderedAndProject (112)
+   +- HashAggregate (111)
+      +- Exchange (110)
+         +- HashAggregate (109)
+            +- Project (108)
+               +- SortMergeJoin Inner (107)
+                  :- Sort (101)
+                  :  +- Exchange (100)
+                  :     +- Project (99)
+                  :        +- SortMergeJoin Inner (98)
+                  :           :- Sort (93)
+                  :           :  +- Exchange (92)
+                  :           :     +- Project (91)
+                  :           :        +- SortMergeJoin Inner (90)
+                  :           :           :- Sort (85)
+                  :           :           :  +- Exchange (84)
+                  :           :           :     +- Project (83)
+                  :           :           :        +- SortMergeJoin Inner (82)
+                  :           :           :           :- Sort (77)
+                  :           :           :           :  +- Exchange (76)
+                  :           :           :           :     +- Filter (75)
+                  :           :           :           :        +- Scan parquet (74)
+                  :           :           :           +- Sort (81)
+                  :           :           :              +- Exchange (80)
+                  :           :           :                 +- Filter (79)
+                  :           :           :                    +- Scan parquet (78)
+                  :           :           +- Sort (89)
+                  :           :              +- Exchange (88)
+                  :           :                 +- Filter (87)
+                  :           :                    +- Scan parquet (86)
+                  :           +- Sort (97)
+                  :              +- Exchange (96)
+                  :                 +- Filter (95)
+                  :                    +- Scan parquet (94)
+                  +- Sort (106)
+                     +- Exchange (105)
+                        +- Project (104)
+                           +- Filter (103)
+                              +- Scan parquet (102)
+
+
+(74) Scan parquet
+Output [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk), IsNotNull(ss_sold_date_sk)]
+ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int>
+
+(2) InputAdapter
+Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Arguments: [#1, #2, #3, #4, #5]
+
+(3) NativeFilter
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Condition : ((((isnotnull(ss_ticket_number#5) AND isnotnull(ss_item_sk#2)) AND isnotnull(ss_customer_sk#3)) AND isnotnull(ss_store_sk#4)) AND isnotnull(ss_sold_date_sk#1))
+
+(4) NativeShuffleExchange
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Arguments: hashpartitioning(ss_ticket_number#5, ss_item_sk#2, ss_customer_sk#3, 100), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(5) ShuffleQueryStage
+Output [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Arguments: X
+
+(6) AQEShuffleRead
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Arguments: coalesced
+
+(7) InputAdapter
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+
+(8) NativeSort
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Arguments: [ss_ticket_number#5 ASC NULLS FIRST, ss_item_sk#2 ASC NULLS FIRST, ss_customer_sk#3 ASC NULLS FIRST], false
+
+(78) Scan parquet
+Output [4]: [sr_returned_date_sk#6, sr_item_sk#7, sr_customer_sk#8, sr_ticket_number#9]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk), IsNotNull(sr_customer_sk), IsNotNull(sr_returned_date_sk)]
+ReadSchema: struct<sr_returned_date_sk:int,sr_item_sk:int,sr_customer_sk:int,sr_ticket_number:int>
+
+(10) InputAdapter
+Input [4]: [sr_returned_date_sk#6, sr_item_sk#7, sr_customer_sk#8, sr_ticket_number#9]
+Arguments: [#6, #7, #8, #9]
+
+(11) NativeFilter
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+Condition : (((isnotnull(sr_ticket_number#9) AND isnotnull(sr_item_sk#7)) AND isnotnull(sr_customer_sk#8)) AND isnotnull(sr_returned_date_sk#6))
+
+(12) NativeShuffleExchange
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+Arguments: hashpartitioning(sr_ticket_number#9, sr_item_sk#7, sr_customer_sk#8, 100), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(13) ShuffleQueryStage
+Output [4]: [#6#6, #7#7, #8#8, #9#9]
+Arguments: X
+
+(14) AQEShuffleRead
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+Arguments: coalesced
+
+(15) InputAdapter
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+
+(16) NativeSort
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+Arguments: [sr_ticket_number#9 ASC NULLS FIRST, sr_item_sk#7 ASC NULLS FIRST, sr_customer_sk#8 ASC NULLS FIRST], false
+
+(17) NativeSortMergeJoin
+Left keys [3]: [ss_ticket_number#5, ss_item_sk#2, ss_customer_sk#3]
+Right keys [3]: [sr_ticket_number#9, sr_item_sk#7, sr_customer_sk#8]
+Join type: Inner
+Join condition: None
+
+(18) NativeProject
+Output [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+Input [9]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7, #8#8, #9#9]
+
+(19) NativeShuffleExchange
+Input [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+Arguments: hashpartitioning(ss_store_sk#4, 100), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(20) ShuffleQueryStage
+Output [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+Arguments: X
+
+(21) AQEShuffleRead
+Input [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+Arguments: coalesced
+
+(22) InputAdapter
+Input [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+
+(23) NativeSort
+Input [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+Arguments: [ss_store_sk#4 ASC NULLS FIRST], false
+
+(86) Scan parquet
+Output [11]: [s_store_sk#10, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_id:int,s_street_number:string,s_street_name:string,s_street_type:string,s_suite_number:string,s_city:string,s_county:string,s_state:string,s_zip:string>
+
+(25) InputAdapter
+Input [11]: [s_store_sk#10, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: [#10, #11, #12, #13, #14, #15, #16, #17, #18, #19, #20]
+
+(26) NativeFilter
+Input [11]: [#10#10, #11#11, #12#12, #13#13, #14#14, #15#15, #16#16, #17#17, #18#18, #19#19, #20#20]
+Condition : isnotnull(s_store_sk#10)
+
+(27) NativeShuffleExchange
+Input [11]: [#10#10, #11#11, #12#12, #13#13, #14#14, #15#15, #16#16, #17#17, #18#18, #19#19, #20#20]
+Arguments: hashpartitioning(s_store_sk#10, 100), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(28) ShuffleQueryStage
+Output [11]: [#10#10, #11#11, #12#12, #13#13, #14#14, #15#15, #16#16, #17#17, #18#18, #19#19, #20#20]
+Arguments: X
+
+(29) AQEShuffleRead
+Input [11]: [#10#10, #11#11, #12#12, #13#13, #14#14, #15#15, #16#16, #17#17, #18#18, #19#19, #20#20]
+Arguments: coalesced
+
+(30) InputAdapter
+Input [11]: [#10#10, #11#11, #12#12, #13#13, #14#14, #15#15, #16#16, #17#17, #18#18, #19#19, #20#20]
+
+(31) NativeSort
+Input [11]: [#10#10, #11#11, #12#12, #13#13, #14#14, #15#15, #16#16, #17#17, #18#18, #19#19, #20#20]
+Arguments: [s_store_sk#10 ASC NULLS FIRST], false
+
+(32) NativeSortMergeJoin
+Left keys [1]: [ss_store_sk#4]
+Right keys [1]: [s_store_sk#10]
+Join type: Inner
+Join condition: None
+
+(33) NativeProject
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Input [14]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6, #10#10, #11#11, #12#12, #13#13, #14#14, #15#15, #16#16, #17#17, #18#18, #19#19, #20#20]
+
+(34) NativeShuffleExchange
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: hashpartitioning(ss_sold_date_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(35) ShuffleQueryStage
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: X
+
+(36) AQEShuffleRead
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: coalesced
+
+(37) InputAdapter
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+
+(38) NativeSort
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: [ss_sold_date_sk#1 ASC NULLS FIRST], false
+
+(94) Scan parquet
+Output [1]: [d_date_sk#21]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int>
+
+(40) InputAdapter
+Input [1]: [d_date_sk#21]
+Arguments: [#21]
+
+(41) NativeFilter
+Input [1]: [#21#21]
+Condition : isnotnull(d_date_sk#21)
+
+(42) NativeShuffleExchange
+Input [1]: [#21#21]
+Arguments: hashpartitioning(d_date_sk#21, 100), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(43) ShuffleQueryStage
+Output [1]: [#21#21]
+Arguments: X
+
+(44) AQEShuffleRead
+Input [1]: [#21#21]
+Arguments: coalesced
+
+(45) InputAdapter
+Input [1]: [#21#21]
+
+(46) NativeSort
+Input [1]: [#21#21]
+Arguments: [d_date_sk#21 ASC NULLS FIRST], false
+
+(47) NativeSortMergeJoin
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#21]
+Join type: Inner
+Join condition: None
+
+(48) NativeProject
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Input [13]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #21#21]
+
+(49) NativeShuffleExchange
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: hashpartitioning(sr_returned_date_sk#6, 100), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(50) ShuffleQueryStage
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: X
+
+(51) AQEShuffleRead
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: coalesced
+
+(52) InputAdapter
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+
+(53) NativeSort
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: [sr_returned_date_sk#6 ASC NULLS FIRST], false
+
+(102) Scan parquet
+Output [3]: [d_date_sk#22, d_year#23, d_moy#24]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,8), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(55) InputAdapter
+Input [3]: [d_date_sk#22, d_year#23, d_moy#24]
+Arguments: [#22, #23, #24]
+
+(56) NativeFilter
+Input [3]: [#22#22, #23#23, #24#24]
+Condition : ((((isnotnull(d_year#23) AND isnotnull(d_moy#24)) AND (d_year#23 = 2001)) AND (d_moy#24 = 8)) AND isnotnull(d_date_sk#22))
+
+(57) NativeProject
+Output [1]: [d_date_sk#22]
+Input [3]: [#22#22, #23#23, #24#24]
+
+(58) NativeShuffleExchange
+Input [1]: [d_date_sk#22]
+Arguments: hashpartitioning(d_date_sk#22, 100), ENSURE_REQUIREMENTS, [plan_id=8]
+
+(59) ShuffleQueryStage
+Output [1]: [d_date_sk#22]
+Arguments: X
+
+(60) AQEShuffleRead
+Input [1]: [d_date_sk#22]
+Arguments: coalesced
+
+(61) InputAdapter
+Input [1]: [d_date_sk#22]
+
+(62) NativeSort
+Input [1]: [d_date_sk#22]
+Arguments: [d_date_sk#22 ASC NULLS FIRST], false
+
+(63) NativeSortMergeJoin
+Left keys [1]: [sr_returned_date_sk#6]
+Right keys [1]: [d_date_sk#22]
+Join type: Inner
+Join condition: None
+
+(64) NativeProject
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Input [13]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, d_date_sk#22]
+
+(65) NativeProject
+Output [15]: [s_store_name#11 AS s_store_name#11, s_company_id#12 AS s_company_id#12, s_street_number#13 AS s_street_number#13, s_street_name#14 AS s_street_name#14, s_street_type#15 AS s_street_type#15, s_suite_number#16 AS s_suite_number#16, s_city#17 AS s_city#17, s_county#18 AS s_county#18, s_state#19 AS s_state#19, s_zip#20 AS s_zip#20, CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END AS _c10#25, CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END AS _c11#26, CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END AS _c12#27, CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END AS _c13#28, CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END AS _c14#29]
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+
+(66) NativeHashAggregate
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, _c10#25, _c11#26, _c12#27, _c13#28, _c14#29]
+Keys [10]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Functions [5]: [partial_sum(_c10#25), partial_sum(_c11#26), partial_sum(_c12#27), partial_sum(_c13#28), partial_sum(_c14#29)]
+Aggregate Attributes [5]: [sum#30, sum#31, sum#32, sum#33, sum#34]
+Results [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+
+(67) NativeShuffleExchange
+Input [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Arguments: hashpartitioning(s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, 100), ENSURE_REQUIREMENTS, [plan_id=9]
+
+(68) ShuffleQueryStage
+Output [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Arguments: X
+
+(69) AQEShuffleRead
+Input [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Arguments: coalesced
+
+(70) InputAdapter
+Input [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+
+(71) NativeHashAggregate
+Input [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Keys [10]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Functions [5]: [sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END), sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)]
+Aggregate Attributes [5]: [sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END)#36, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END)#37, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END)#38, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END)#39, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)#40]
+Results [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END)#36, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END)#37, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END)#38, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END)#39, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)#40]
+
+(72) NativeProject
+Output [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END)#36 AS 30 days #41, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END)#37 AS 31 - 60 days #42, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END)#38 AS 61 - 90 days #43, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END)#39 AS 91 - 120 days #44, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)#40 AS >120 days #45]
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END)#36, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END)#37, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END)#38, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END)#39, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)#40]
+
+(73) NativeTakeOrdered
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, 30 days #41, 31 - 60 days #42, 61 - 90 days #43, 91 - 120 days #44, >120 days #45]
+Arguments: X, [s_store_name#11 ASC NULLS FIRST, s_company_id#12 ASC NULLS FIRST, s_street_number#13 ASC NULLS FIRST, s_street_name#14 ASC NULLS FIRST, s_street_type#15 ASC NULLS FIRST, s_suite_number#16 ASC NULLS FIRST, s_city#17 ASC NULLS FIRST, s_county#18 ASC NULLS FIRST, s_state#19 ASC NULLS FIRST, s_zip#20 ASC NULLS FIRST]
+
+(74) Scan parquet
+Output [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk), IsNotNull(ss_sold_date_sk)]
+ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int>
+
+(75) Filter
+Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Condition : ((((isnotnull(ss_ticket_number#5) AND isnotnull(ss_item_sk#2)) AND isnotnull(ss_customer_sk#3)) AND isnotnull(ss_store_sk#4)) AND isnotnull(ss_sold_date_sk#1))
+
+(76) Exchange
+Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Arguments: hashpartitioning(ss_ticket_number#5, ss_item_sk#2, ss_customer_sk#3, 100), ENSURE_REQUIREMENTS, [plan_id=10]
+
+(77) Sort
+Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Arguments: [ss_ticket_number#5 ASC NULLS FIRST, ss_item_sk#2 ASC NULLS FIRST, ss_customer_sk#3 ASC NULLS FIRST], false, 0
+
+(78) Scan parquet
+Output [4]: [sr_returned_date_sk#6, sr_item_sk#7, sr_customer_sk#8, sr_ticket_number#9]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk), IsNotNull(sr_customer_sk), IsNotNull(sr_returned_date_sk)]
+ReadSchema: struct<sr_returned_date_sk:int,sr_item_sk:int,sr_customer_sk:int,sr_ticket_number:int>
+
+(79) Filter
+Input [4]: [sr_returned_date_sk#6, sr_item_sk#7, sr_customer_sk#8, sr_ticket_number#9]
+Condition : (((isnotnull(sr_ticket_number#9) AND isnotnull(sr_item_sk#7)) AND isnotnull(sr_customer_sk#8)) AND isnotnull(sr_returned_date_sk#6))
+
+(80) Exchange
+Input [4]: [sr_returned_date_sk#6, sr_item_sk#7, sr_customer_sk#8, sr_ticket_number#9]
+Arguments: hashpartitioning(sr_ticket_number#9, sr_item_sk#7, sr_customer_sk#8, 100), ENSURE_REQUIREMENTS, [plan_id=11]
+
+(81) Sort
+Input [4]: [sr_returned_date_sk#6, sr_item_sk#7, sr_customer_sk#8, sr_ticket_number#9]
+Arguments: [sr_ticket_number#9 ASC NULLS FIRST, sr_item_sk#7 ASC NULLS FIRST, sr_customer_sk#8 ASC NULLS FIRST], false, 0
+
+(82) SortMergeJoin
+Left keys [3]: [ss_ticket_number#5, ss_item_sk#2, ss_customer_sk#3]
+Right keys [3]: [sr_ticket_number#9, sr_item_sk#7, sr_customer_sk#8]
+Join type: Inner
+Join condition: None
+
+(83) Project
+Output [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+Input [9]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5, sr_returned_date_sk#6, sr_item_sk#7, sr_customer_sk#8, sr_ticket_number#9]
+
+(84) Exchange
+Input [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+Arguments: hashpartitioning(ss_store_sk#4, 100), ENSURE_REQUIREMENTS, [plan_id=12]
+
+(85) Sort
+Input [3]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6]
+Arguments: [ss_store_sk#4 ASC NULLS FIRST], false, 0
+
+(86) Scan parquet
+Output [11]: [s_store_sk#10, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_id:int,s_street_number:string,s_street_name:string,s_street_type:string,s_suite_number:string,s_city:string,s_county:string,s_state:string,s_zip:string>
+
+(87) Filter
+Input [11]: [s_store_sk#10, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Condition : isnotnull(s_store_sk#10)
+
+(88) Exchange
+Input [11]: [s_store_sk#10, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: hashpartitioning(s_store_sk#10, 100), ENSURE_REQUIREMENTS, [plan_id=13]
+
+(89) Sort
+Input [11]: [s_store_sk#10, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: [s_store_sk#10 ASC NULLS FIRST], false, 0
+
+(90) SortMergeJoin
+Left keys [1]: [ss_store_sk#4]
+Right keys [1]: [s_store_sk#10]
+Join type: Inner
+Join condition: None
+
+(91) Project
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Input [14]: [ss_sold_date_sk#1, ss_store_sk#4, sr_returned_date_sk#6, s_store_sk#10, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+
+(92) Exchange
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: hashpartitioning(ss_sold_date_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=14]
+
+(93) Sort
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: [ss_sold_date_sk#1 ASC NULLS FIRST], false, 0
+
+(94) Scan parquet
+Output [1]: [d_date_sk#21]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int>
+
+(95) Filter
+Input [1]: [d_date_sk#21]
+Condition : isnotnull(d_date_sk#21)
+
+(96) Exchange
+Input [1]: [d_date_sk#21]
+Arguments: hashpartitioning(d_date_sk#21, 100), ENSURE_REQUIREMENTS, [plan_id=15]
+
+(97) Sort
+Input [1]: [d_date_sk#21]
+Arguments: [d_date_sk#21 ASC NULLS FIRST], false, 0
+
+(98) SortMergeJoin
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#21]
+Join type: Inner
+Join condition: None
+
+(99) Project
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Input [13]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, d_date_sk#21]
+
+(100) Exchange
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: hashpartitioning(sr_returned_date_sk#6, 100), ENSURE_REQUIREMENTS, [plan_id=16]
+
+(101) Sort
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Arguments: [sr_returned_date_sk#6 ASC NULLS FIRST], false, 0
+
+(102) Scan parquet
+Output [3]: [d_date_sk#22, d_year#23, d_moy#24]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,8), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(103) Filter
+Input [3]: [d_date_sk#22, d_year#23, d_moy#24]
+Condition : ((((isnotnull(d_year#23) AND isnotnull(d_moy#24)) AND (d_year#23 = 2001)) AND (d_moy#24 = 8)) AND isnotnull(d_date_sk#22))
+
+(104) Project
+Output [1]: [d_date_sk#22]
+Input [3]: [d_date_sk#22, d_year#23, d_moy#24]
+
+(105) Exchange
+Input [1]: [d_date_sk#22]
+Arguments: hashpartitioning(d_date_sk#22, 100), ENSURE_REQUIREMENTS, [plan_id=17]
+
+(106) Sort
+Input [1]: [d_date_sk#22]
+Arguments: [d_date_sk#22 ASC NULLS FIRST], false, 0
+
+(107) SortMergeJoin
+Left keys [1]: [sr_returned_date_sk#6]
+Right keys [1]: [d_date_sk#22]
+Join type: Inner
+Join condition: None
+
+(108) Project
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Input [13]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, d_date_sk#22]
+
+(109) HashAggregate
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#6, s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Keys [10]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Functions [5]: [partial_sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)]
+Aggregate Attributes [5]: [sum#30, sum#31, sum#32, sum#33, sum#34]
+Results [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, sum#46, sum#47, sum#48, sum#49, sum#50]
+
+(110) Exchange
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, sum#46, sum#47, sum#48, sum#49, sum#50]
+Arguments: hashpartitioning(s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, 100), ENSURE_REQUIREMENTS, [plan_id=18]
+
+(111) HashAggregate
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, sum#46, sum#47, sum#48, sum#49, sum#50]
+Keys [10]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
+Functions [5]: [sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END), sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)]
+Aggregate Attributes [5]: [sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END)#36, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END)#37, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END)#38, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END)#39, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)#40]
+Results [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END)#36 AS 30 days #41, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END)#37 AS 31 - 60 days #42, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END)#38 AS 61 - 90 days #43, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END)#39 AS 91 - 120 days #44, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)#40 AS >120 days #45]
+
+(112) TakeOrderedAndProject
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, 30 days #41, 31 - 60 days #42, 61 - 90 days #43, 91 - 120 days #44, >120 days #45]
+Arguments: X, [s_store_name#11 ASC NULLS FIRST, s_company_id#12 ASC NULLS FIRST, s_street_number#13 ASC NULLS FIRST, s_street_name#14 ASC NULLS FIRST, s_street_type#15 ASC NULLS FIRST, s_suite_number#16 ASC NULLS FIRST, s_city#17 ASC NULLS FIRST, s_county#18 ASC NULLS FIRST, s_state#19 ASC NULLS FIRST, s_zip#20 ASC NULLS FIRST], [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, 30 days #41, 31 - 60 days #42, 61 - 90 days #43, 91 - 120 days #44, >120 days #45]
+
+(113) AdaptiveSparkPlan
+Output [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, 30 days #41, 31 - 60 days #42, 61 - 90 days #43, 91 - 120 days #44, >120 days #45]
+Arguments: isFinalPlan=true
+

@@ -1,0 +1,1250 @@
+== Physical Plan ==
+AdaptiveSparkPlan (231)
++- == Final Plan ==
+   NativeTakeOrdered (147)
+   +- NativeProject (146)
+      +- NativeHashAggregate (145)
+         +- InputAdapter (144)
+            +- AQEShuffleRead (143)
+               +- ShuffleQueryStage (142), Statistics(X)
+                  +- NativeShuffleExchange (141)
+                     +- NativeHashAggregate (140)
+                        +- NativeProject (139)
+                           +- InputAdapter (138)
+                              +- NativeUnion (137)
+                                 :- NativeProject (73)
+                                 :  +- NativeHashAggregate (72)
+                                 :     +- InputAdapter (71)
+                                 :        +- AQEShuffleRead (70)
+                                 :           +- ShuffleQueryStage (69), Statistics(X)
+                                 :              +- NativeShuffleExchange (68)
+                                 :                 +- NativeHashAggregate (67)
+                                 :                    +- NativeProject (66)
+                                 :                       +- NativeProject (65)
+                                 :                          +- NativeSortMergeJoin Inner (64)
+                                 :                             :- NativeSort (54)
+                                 :                             :  +- InputAdapter (53)
+                                 :                             :     +- AQEShuffleRead (52)
+                                 :                             :        +- ShuffleQueryStage (51), Statistics(X)
+                                 :                             :           +- NativeShuffleExchange (50)
+                                 :                             :              +- NativeProject (49)
+                                 :                             :                 +- NativeSortMergeJoin Inner (48)
+                                 :                             :                    :- NativeSort (38)
+                                 :                             :                    :  +- InputAdapter (37)
+                                 :                             :                    :     +- AQEShuffleRead (36)
+                                 :                             :                    :        +- ShuffleQueryStage (35), Statistics(X)
+                                 :                             :                    :           +- NativeShuffleExchange (34)
+                                 :                             :                    :              +- NativeProject (33)
+                                 :                             :                    :                 +- NativeSortMergeJoin Inner (32)
+                                 :                             :                    :                    :- NativeSort (23)
+                                 :                             :                    :                    :  +- InputAdapter (22)
+                                 :                             :                    :                    :     +- AQEShuffleRead (21)
+                                 :                             :                    :                    :        +- ShuffleQueryStage (20), Statistics(X)
+                                 :                             :                    :                    :           +- NativeShuffleExchange (19)
+                                 :                             :                    :                    :              +- NativeProject (18)
+                                 :                             :                    :                    :                 +- NativeSortMergeJoin Inner (17)
+                                 :                             :                    :                    :                    :- NativeSort (8)
+                                 :                             :                    :                    :                    :  +- InputAdapter (7)
+                                 :                             :                    :                    :                    :     +- AQEShuffleRead (6)
+                                 :                             :                    :                    :                    :        +- ShuffleQueryStage (5), Statistics(X)
+                                 :                             :                    :                    :                    :           +- NativeShuffleExchange (4)
+                                 :                             :                    :                    :                    :              +- NativeFilter (3)
+                                 :                             :                    :                    :                    :                 +- InputAdapter (2)
+                                 :                             :                    :                    :                    :                    +- NativeParquetScan  (1)
+                                 :                             :                    :                    :                    +- NativeSort (16)
+                                 :                             :                    :                    :                       +- InputAdapter (15)
+                                 :                             :                    :                    :                          +- AQEShuffleRead (14)
+                                 :                             :                    :                    :                             +- ShuffleQueryStage (13), Statistics(X)
+                                 :                             :                    :                    :                                +- NativeShuffleExchange (12)
+                                 :                             :                    :                    :                                   +- NativeFilter (11)
+                                 :                             :                    :                    :                                      +- InputAdapter (10)
+                                 :                             :                    :                    :                                         +- NativeParquetScan  (9)
+                                 :                             :                    :                    +- NativeSort (31)
+                                 :                             :                    :                       +- InputAdapter (30)
+                                 :                             :                    :                          +- AQEShuffleRead (29)
+                                 :                             :                    :                             +- ShuffleQueryStage (28), Statistics(X)
+                                 :                             :                    :                                +- NativeShuffleExchange (27)
+                                 :                             :                    :                                   +- NativeFilter (26)
+                                 :                             :                    :                                      +- InputAdapter (25)
+                                 :                             :                    :                                         +- NativeParquetScan  (24)
+                                 :                             :                    +- NativeSort (47)
+                                 :                             :                       +- InputAdapter (46)
+                                 :                             :                          +- AQEShuffleRead (45)
+                                 :                             :                             +- ShuffleQueryStage (44), Statistics(X)
+                                 :                             :                                +- NativeShuffleExchange (43)
+                                 :                             :                                   +- NativeProject (42)
+                                 :                             :                                      +- NativeFilter (41)
+                                 :                             :                                         +- InputAdapter (40)
+                                 :                             :                                            +- NativeParquetScan  (39)
+                                 :                             +- NativeSort (63)
+                                 :                                +- InputAdapter (62)
+                                 :                                   +- AQEShuffleRead (61)
+                                 :                                      +- ShuffleQueryStage (60), Statistics(X)
+                                 :                                         +- NativeShuffleExchange (59)
+                                 :                                            +- NativeProject (58)
+                                 :                                               +- NativeFilter (57)
+                                 :                                                  +- InputAdapter (56)
+                                 :                                                     +- NativeParquetScan  (55)
+                                 +- NativeProject (136)
+                                    +- NativeHashAggregate (135)
+                                       +- InputAdapter (134)
+                                          +- AQEShuffleRead (133)
+                                             +- ShuffleQueryStage (132), Statistics(X)
+                                                +- NativeShuffleExchange (131)
+                                                   +- NativeHashAggregate (130)
+                                                      +- NativeProject (129)
+                                                         +- NativeProject (128)
+                                                            +- NativeSortMergeJoin Inner (127)
+                                                               :- NativeSort (120)
+                                                               :  +- InputAdapter (119)
+                                                               :     +- AQEShuffleRead (118)
+                                                               :        +- ShuffleQueryStage (117), Statistics(X)
+                                                               :           +- NativeShuffleExchange (116)
+                                                               :              +- NativeProject (115)
+                                                               :                 +- NativeSortMergeJoin Inner (114)
+                                                               :                    :- NativeSort (107)
+                                                               :                    :  +- InputAdapter (106)
+                                                               :                    :     +- AQEShuffleRead (105)
+                                                               :                    :        +- ShuffleQueryStage (104), Statistics(X)
+                                                               :                    :           +- NativeShuffleExchange (103)
+                                                               :                    :              +- NativeProject (102)
+                                                               :                    :                 +- NativeSortMergeJoin Inner (101)
+                                                               :                    :                    :- NativeSort (94)
+                                                               :                    :                    :  +- InputAdapter (93)
+                                                               :                    :                    :     +- AQEShuffleRead (92)
+                                                               :                    :                    :        +- ShuffleQueryStage (91), Statistics(X)
+                                                               :                    :                    :           +- NativeShuffleExchange (90)
+                                                               :                    :                    :              +- NativeProject (89)
+                                                               :                    :                    :                 +- NativeSortMergeJoin Inner (88)
+                                                               :                    :                    :                    :- NativeSort (81)
+                                                               :                    :                    :                    :  +- InputAdapter (80)
+                                                               :                    :                    :                    :     +- AQEShuffleRead (79)
+                                                               :                    :                    :                    :        +- ShuffleQueryStage (78), Statistics(X)
+                                                               :                    :                    :                    :           +- NativeShuffleExchange (77)
+                                                               :                    :                    :                    :              +- NativeFilter (76)
+                                                               :                    :                    :                    :                 +- InputAdapter (75)
+                                                               :                    :                    :                    :                    +- NativeParquetScan  (74)
+                                                               :                    :                    :                    +- NativeSort (87)
+                                                               :                    :                    :                       +- InputAdapter (86)
+                                                               :                    :                    :                          +- InputAdapter (85)
+                                                               :                    :                    :                             +- AQEShuffleRead (84)
+                                                               :                    :                    :                                +- ShuffleQueryStage (83), Statistics(X)
+                                                               :                    :                    :                                   +- ReusedExchange (82)
+                                                               :                    :                    +- NativeSort (100)
+                                                               :                    :                       +- InputAdapter (99)
+                                                               :                    :                          +- InputAdapter (98)
+                                                               :                    :                             +- AQEShuffleRead (97)
+                                                               :                    :                                +- ShuffleQueryStage (96), Statistics(X)
+                                                               :                    :                                   +- ReusedExchange (95)
+                                                               :                    +- NativeSort (113)
+                                                               :                       +- InputAdapter (112)
+                                                               :                          +- InputAdapter (111)
+                                                               :                             +- AQEShuffleRead (110)
+                                                               :                                +- ShuffleQueryStage (109), Statistics(X)
+                                                               :                                   +- ReusedExchange (108)
+                                                               +- NativeSort (126)
+                                                                  +- InputAdapter (125)
+                                                                     +- InputAdapter (124)
+                                                                        +- AQEShuffleRead (123)
+                                                                           +- ShuffleQueryStage (122), Statistics(X)
+                                                                              +- ReusedExchange (121)
++- == Initial Plan ==
+   TakeOrderedAndProject (230)
+   +- HashAggregate (229)
+      +- Exchange (228)
+         +- HashAggregate (227)
+            +- Union (226)
+               :- HashAggregate (186)
+               :  +- Exchange (185)
+               :     +- HashAggregate (184)
+               :        +- Project (183)
+               :           +- SortMergeJoin Inner (182)
+               :              :- Sort (176)
+               :              :  +- Exchange (175)
+               :              :     +- Project (174)
+               :              :        +- SortMergeJoin Inner (173)
+               :              :           :- Sort (167)
+               :              :           :  +- Exchange (166)
+               :              :           :     +- Project (165)
+               :              :           :        +- SortMergeJoin Inner (164)
+               :              :           :           :- Sort (159)
+               :              :           :           :  +- Exchange (158)
+               :              :           :           :     +- Project (157)
+               :              :           :           :        +- SortMergeJoin Inner (156)
+               :              :           :           :           :- Sort (151)
+               :              :           :           :           :  +- Exchange (150)
+               :              :           :           :           :     +- Filter (149)
+               :              :           :           :           :        +- Scan parquet (148)
+               :              :           :           :           +- Sort (155)
+               :              :           :           :              +- Exchange (154)
+               :              :           :           :                 +- Filter (153)
+               :              :           :           :                    +- Scan parquet (152)
+               :              :           :           +- Sort (163)
+               :              :           :              +- Exchange (162)
+               :              :           :                 +- Filter (161)
+               :              :           :                    +- Scan parquet (160)
+               :              :           +- Sort (172)
+               :              :              +- Exchange (171)
+               :              :                 +- Project (170)
+               :              :                    +- Filter (169)
+               :              :                       +- Scan parquet (168)
+               :              +- Sort (181)
+               :                 +- Exchange (180)
+               :                    +- Project (179)
+               :                       +- Filter (178)
+               :                          +- Scan parquet (177)
+               +- HashAggregate (225)
+                  +- Exchange (224)
+                     +- HashAggregate (223)
+                        +- Project (222)
+                           +- SortMergeJoin Inner (221)
+                              :- Sort (215)
+                              :  +- Exchange (214)
+                              :     +- Project (213)
+                              :        +- SortMergeJoin Inner (212)
+                              :           :- Sort (206)
+                              :           :  +- Exchange (205)
+                              :           :     +- Project (204)
+                              :           :        +- SortMergeJoin Inner (203)
+                              :           :           :- Sort (198)
+                              :           :           :  +- Exchange (197)
+                              :           :           :     +- Project (196)
+                              :           :           :        +- SortMergeJoin Inner (195)
+                              :           :           :           :- Sort (190)
+                              :           :           :           :  +- Exchange (189)
+                              :           :           :           :     +- Filter (188)
+                              :           :           :           :        +- Scan parquet (187)
+                              :           :           :           +- Sort (194)
+                              :           :           :              +- Exchange (193)
+                              :           :           :                 +- Filter (192)
+                              :           :           :                    +- Scan parquet (191)
+                              :           :           +- Sort (202)
+                              :           :              +- Exchange (201)
+                              :           :                 +- Filter (200)
+                              :           :                    +- Scan parquet (199)
+                              :           +- Sort (211)
+                              :              +- Exchange (210)
+                              :                 +- Project (209)
+                              :                    +- Filter (208)
+                              :                       +- Scan parquet (207)
+                              +- Sort (220)
+                                 +- Exchange (219)
+                                    +- Project (218)
+                                       +- Filter (217)
+                                          +- Scan parquet (216)
+
+
+(148) Scan parquet
+Output [7]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ws_warehouse_sk), IsNotNull(ws_sold_date_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_ship_mode_sk)]
+ReadSchema: struct<ws_sold_date_sk:int,ws_sold_time_sk:int,ws_ship_mode_sk:int,ws_warehouse_sk:int,ws_quantity:int,ws_ext_sales_price:decimal(7,2),ws_net_paid:decimal(7,2)>
+
+(2) InputAdapter
+Input [7]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7]
+Arguments: [#1, #2, #3, #4, #5, #6, #7]
+
+(3) NativeFilter
+Input [7]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7]
+Condition : (((isnotnull(ws_warehouse_sk#4) AND isnotnull(ws_sold_date_sk#1)) AND isnotnull(ws_sold_time_sk#2)) AND isnotnull(ws_ship_mode_sk#3))
+
+(4) NativeShuffleExchange
+Input [7]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7]
+Arguments: hashpartitioning(ws_warehouse_sk#4, 100), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(5) ShuffleQueryStage
+Output [7]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7]
+Arguments: X
+
+(6) AQEShuffleRead
+Input [7]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7]
+Arguments: coalesced
+
+(7) InputAdapter
+Input [7]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7]
+
+(8) NativeSort
+Input [7]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7]
+Arguments: [ws_warehouse_sk#4 ASC NULLS FIRST], false
+
+(152) Scan parquet
+Output [7]: [w_warehouse_sk#8, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(w_warehouse_sk)]
+ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string,w_warehouse_sq_ft:int,w_city:string,w_county:string,w_state:string,w_country:string>
+
+(10) InputAdapter
+Input [7]: [w_warehouse_sk#8, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: [#8, #9, #10, #11, #12, #13, #14]
+
+(11) NativeFilter
+Input [7]: [#8#8, #9#9, #10#10, #11#11, #12#12, #13#13, #14#14]
+Condition : isnotnull(w_warehouse_sk#8)
+
+(12) NativeShuffleExchange
+Input [7]: [#8#8, #9#9, #10#10, #11#11, #12#12, #13#13, #14#14]
+Arguments: hashpartitioning(w_warehouse_sk#8, 100), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(13) ShuffleQueryStage
+Output [7]: [#8#8, #9#9, #10#10, #11#11, #12#12, #13#13, #14#14]
+Arguments: X
+
+(14) AQEShuffleRead
+Input [7]: [#8#8, #9#9, #10#10, #11#11, #12#12, #13#13, #14#14]
+Arguments: coalesced
+
+(15) InputAdapter
+Input [7]: [#8#8, #9#9, #10#10, #11#11, #12#12, #13#13, #14#14]
+
+(16) NativeSort
+Input [7]: [#8#8, #9#9, #10#10, #11#11, #12#12, #13#13, #14#14]
+Arguments: [w_warehouse_sk#8 ASC NULLS FIRST], false
+
+(17) NativeSortMergeJoin
+Left keys [1]: [ws_warehouse_sk#4]
+Right keys [1]: [w_warehouse_sk#8]
+Join type: Inner
+Join condition: None
+
+(18) NativeProject
+Output [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Input [14]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7, #8#8, #9#9, #10#10, #11#11, #12#12, #13#13, #14#14]
+
+(19) NativeShuffleExchange
+Input [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: hashpartitioning(ws_sold_date_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(20) ShuffleQueryStage
+Output [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: X
+
+(21) AQEShuffleRead
+Input [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: coalesced
+
+(22) InputAdapter
+Input [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+
+(23) NativeSort
+Input [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: [ws_sold_date_sk#1 ASC NULLS FIRST], false
+
+(160) Scan parquet
+Output [3]: [d_date_sk#15, d_year#16, d_moy#17]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(25) InputAdapter
+Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
+Arguments: [#15, #16, #17]
+
+(26) NativeFilter
+Input [3]: [#15#15, #16#16, #17#17]
+Condition : ((isnotnull(d_year#16) AND (d_year#16 = 2001)) AND isnotnull(d_date_sk#15))
+
+(27) NativeShuffleExchange
+Input [3]: [#15#15, #16#16, #17#17]
+Arguments: hashpartitioning(d_date_sk#15, 100), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(28) ShuffleQueryStage
+Output [3]: [#15#15, #16#16, #17#17]
+Arguments: X
+
+(29) AQEShuffleRead
+Input [3]: [#15#15, #16#16, #17#17]
+Arguments: coalesced
+
+(30) InputAdapter
+Input [3]: [#15#15, #16#16, #17#17]
+
+(31) NativeSort
+Input [3]: [#15#15, #16#16, #17#17]
+Arguments: [d_date_sk#15 ASC NULLS FIRST], false
+
+(32) NativeSortMergeJoin
+Left keys [1]: [ws_sold_date_sk#1]
+Right keys [1]: [d_date_sk#15]
+Join type: Inner
+Join condition: None
+
+(33) NativeProject
+Output [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Input [15]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, #15#15, #16#16, #17#17]
+
+(34) NativeShuffleExchange
+Input [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: hashpartitioning(ws_sold_time_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(35) ShuffleQueryStage
+Output [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: X
+
+(36) AQEShuffleRead
+Input [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: coalesced
+
+(37) InputAdapter
+Input [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+
+(38) NativeSort
+Input [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: [ws_sold_time_sk#2 ASC NULLS FIRST], false
+
+(168) Scan parquet
+Output [2]: [t_time_sk#18, t_time#19]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(t_time), GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_time:int>
+
+(40) InputAdapter
+Input [2]: [t_time_sk#18, t_time#19]
+Arguments: [#18, #19]
+
+(41) NativeFilter
+Input [2]: [#18#18, #19#19]
+Condition : (((isnotnull(t_time#19) AND (t_time#19 >= 30838)) AND (t_time#19 <= 59638)) AND isnotnull(t_time_sk#18))
+
+(42) NativeProject
+Output [1]: [t_time_sk#18]
+Input [2]: [#18#18, #19#19]
+
+(43) NativeShuffleExchange
+Input [1]: [t_time_sk#18]
+Arguments: hashpartitioning(t_time_sk#18, 100), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(44) ShuffleQueryStage
+Output [1]: [t_time_sk#18]
+Arguments: X
+
+(45) AQEShuffleRead
+Input [1]: [t_time_sk#18]
+Arguments: coalesced
+
+(46) InputAdapter
+Input [1]: [t_time_sk#18]
+
+(47) NativeSort
+Input [1]: [t_time_sk#18]
+Arguments: [t_time_sk#18 ASC NULLS FIRST], false
+
+(48) NativeSortMergeJoin
+Left keys [1]: [ws_sold_time_sk#2]
+Right keys [1]: [t_time_sk#18]
+Join type: Inner
+Join condition: None
+
+(49) NativeProject
+Output [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Input [14]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17, t_time_sk#18]
+
+(50) NativeShuffleExchange
+Input [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: hashpartitioning(ws_ship_mode_sk#3, 100), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(51) ShuffleQueryStage
+Output [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: X
+
+(52) AQEShuffleRead
+Input [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: coalesced
+
+(53) InputAdapter
+Input [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+
+(54) NativeSort
+Input [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: [ws_ship_mode_sk#3 ASC NULLS FIRST], false
+
+(177) Scan parquet
+Output [2]: [sm_ship_mode_sk#20, sm_carrier#21]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [In(sm_carrier, [BARIAN,DHL]), IsNotNull(sm_ship_mode_sk)]
+ReadSchema: struct<sm_ship_mode_sk:int,sm_carrier:string>
+
+(56) InputAdapter
+Input [2]: [sm_ship_mode_sk#20, sm_carrier#21]
+Arguments: [#20, #21]
+
+(57) NativeFilter
+Input [2]: [#20#20, #21#21]
+Condition : (sm_carrier#21 IN (DHL,BARIAN) AND isnotnull(sm_ship_mode_sk#20))
+
+(58) NativeProject
+Output [1]: [sm_ship_mode_sk#20]
+Input [2]: [#20#20, #21#21]
+
+(59) NativeShuffleExchange
+Input [1]: [sm_ship_mode_sk#20]
+Arguments: hashpartitioning(sm_ship_mode_sk#20, 100), ENSURE_REQUIREMENTS, [plan_id=8]
+
+(60) ShuffleQueryStage
+Output [1]: [sm_ship_mode_sk#20]
+Arguments: X
+
+(61) AQEShuffleRead
+Input [1]: [sm_ship_mode_sk#20]
+Arguments: coalesced
+
+(62) InputAdapter
+Input [1]: [sm_ship_mode_sk#20]
+
+(63) NativeSort
+Input [1]: [sm_ship_mode_sk#20]
+Arguments: [sm_ship_mode_sk#20 ASC NULLS FIRST], false
+
+(64) NativeSortMergeJoin
+Left keys [1]: [ws_ship_mode_sk#3]
+Right keys [1]: [sm_ship_mode_sk#20]
+Join type: Inner
+Join condition: None
+
+(65) NativeProject
+Output [11]: [ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Input [13]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17, sm_ship_mode_sk#20]
+
+(66) NativeProject
+Output [31]: [w_warehouse_name#9 AS w_warehouse_name#9, w_warehouse_sq_ft#10 AS w_warehouse_sq_ft#10, w_city#11 AS w_city#11, w_county#12 AS w_county#12, w_state#13 AS w_state#13, w_country#14 AS w_country#14, d_year#16 AS d_year#16, CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c7#22, CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c8#23, CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c9#24, CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c10#25, CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c11#26, CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c12#27, CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c13#28, CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c14#29, CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c15#30, CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c16#31, CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c17#32, CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c18#33, CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c19#34, CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c20#35, CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c21#36, CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c22#37, CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c23#38, CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c24#39, CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c25#40, CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c26#41, CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c27#42, CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c28#43, CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c29#44, CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END AS _c30#45]
+Input [11]: [ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+
+(67) NativeHashAggregate
+Input [31]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, _c7#22, _c8#23, _c9#24, _c10#25, _c11#26, _c12#27, _c13#28, _c14#29, _c15#30, _c16#31, _c17#32, _c18#33, _c19#34, _c20#35, _c21#36, _c22#37, _c23#38, _c24#39, _c25#40, _c26#41, _c27#42, _c28#43, _c29#44, _c30#45]
+Keys [7]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16]
+Functions [24]: [partial_sum(_c7#22), partial_sum(_c8#23), partial_sum(_c9#24), partial_sum(_c10#25), partial_sum(_c11#26), partial_sum(_c12#27), partial_sum(_c13#28), partial_sum(_c14#29), partial_sum(_c15#30), partial_sum(_c16#31), partial_sum(_c17#32), partial_sum(_c18#33), partial_sum(_c19#34), partial_sum(_c20#35), partial_sum(_c21#36), partial_sum(_c22#37), partial_sum(_c23#38), partial_sum(_c24#39), partial_sum(_c25#40), partial_sum(_c26#41), partial_sum(_c27#42), partial_sum(_c28#43), partial_sum(_c29#44), partial_sum(_c30#45)]
+Aggregate Attributes [48]: [sum#46, isEmpty#47, sum#48, isEmpty#49, sum#50, isEmpty#51, sum#52, isEmpty#53, sum#54, isEmpty#55, sum#56, isEmpty#57, sum#58, isEmpty#59, sum#60, isEmpty#61, sum#62, isEmpty#63, sum#64, isEmpty#65, sum#66, isEmpty#67, sum#68, isEmpty#69, sum#70, isEmpty#71, sum#72, isEmpty#73, sum#74, isEmpty#75, sum#76, isEmpty#77, sum#78, isEmpty#79, sum#80, isEmpty#81, sum#82, isEmpty#83, sum#84, isEmpty#85, sum#86, isEmpty#87, sum#88, isEmpty#89, sum#90, isEmpty#91, sum#92, isEmpty#93]
+Results [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, #94#94]
+
+(68) NativeShuffleExchange
+Input [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, #94#94]
+Arguments: hashpartitioning(w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, 100), ENSURE_REQUIREMENTS, [plan_id=9]
+
+(69) ShuffleQueryStage
+Output [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, #94#94]
+Arguments: X
+
+(70) AQEShuffleRead
+Input [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, #94#94]
+Arguments: coalesced
+
+(71) InputAdapter
+Input [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, #94#94]
+
+(72) NativeHashAggregate
+Input [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, #94#94]
+Keys [7]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16]
+Functions [24]: [sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)]
+Aggregate Attributes [24]: [sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#95, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#96, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#97, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#98, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#99, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#100, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#101, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#102, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#103, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#104, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#105, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#106, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#107, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#108, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#109, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#110, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#111, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#112, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#113, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#114, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#115, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#116, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#117, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#118]
+Results [31]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#95, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#96, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#97, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#98, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#99, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#100, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#101, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#102, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#103, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#104, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#105, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#106, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#107, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#108, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#109, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#110, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#111, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#112, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#113, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#114, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#115, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#116, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#117, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#118]
+
+(73) NativeProject
+Output [32]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, DHL,BARIAN AS ship_carriers#119, d_year#16 AS year#120, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#95 AS jan_sales#121, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#96 AS feb_sales#122, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#97 AS mar_sales#123, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#98 AS apr_sales#124, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#99 AS may_sales#125, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#100 AS jun_sales#126, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#101 AS jul_sales#127, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#102 AS aug_sales#128, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#103 AS sep_sales#129, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#104 AS oct_sales#130, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#105 AS nov_sales#131, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#106 AS dec_sales#132, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#107 AS jan_net#133, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#108 AS feb_net#134, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#109 AS mar_net#135, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#110 AS apr_net#136, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#111 AS may_net#137, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#112 AS jun_net#138, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#113 AS jul_net#139, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#114 AS aug_net#140, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#115 AS sep_net#141, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#116 AS oct_net#142, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#117 AS nov_net#143, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#118 AS dec_net#144]
+Input [31]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#95, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#96, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#97, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#98, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#99, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#100, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#101, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#102, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#103, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#104, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#105, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#106, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#107, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#108, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#109, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#110, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#111, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#112, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#113, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#114, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#115, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#116, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#117, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#118]
+
+(187) Scan parquet
+Output [7]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_warehouse_sk#148, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_sold_date_sk), IsNotNull(cs_sold_time_sk), IsNotNull(cs_ship_mode_sk)]
+ReadSchema: struct<cs_sold_date_sk:int,cs_sold_time_sk:int,cs_ship_mode_sk:int,cs_warehouse_sk:int,cs_quantity:int,cs_sales_price:decimal(7,2),cs_net_paid_inc_tax:decimal(7,2)>
+
+(75) InputAdapter
+Input [7]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_warehouse_sk#148, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151]
+Arguments: [#145, #146, #147, #148, #149, #150, #151]
+
+(76) NativeFilter
+Input [7]: [#145#145, #146#146, #147#147, #148#148, #149#149, #150#150, #151#151]
+Condition : (((isnotnull(cs_warehouse_sk#148) AND isnotnull(cs_sold_date_sk#145)) AND isnotnull(cs_sold_time_sk#146)) AND isnotnull(cs_ship_mode_sk#147))
+
+(77) NativeShuffleExchange
+Input [7]: [#145#145, #146#146, #147#147, #148#148, #149#149, #150#150, #151#151]
+Arguments: hashpartitioning(cs_warehouse_sk#148, 100), ENSURE_REQUIREMENTS, [plan_id=10]
+
+(78) ShuffleQueryStage
+Output [7]: [#145#145, #146#146, #147#147, #148#148, #149#149, #150#150, #151#151]
+Arguments: X
+
+(79) AQEShuffleRead
+Input [7]: [#145#145, #146#146, #147#147, #148#148, #149#149, #150#150, #151#151]
+Arguments: coalesced
+
+(80) InputAdapter
+Input [7]: [#145#145, #146#146, #147#147, #148#148, #149#149, #150#150, #151#151]
+
+(81) NativeSort
+Input [7]: [#145#145, #146#146, #147#147, #148#148, #149#149, #150#150, #151#151]
+Arguments: [cs_warehouse_sk#148 ASC NULLS FIRST], false
+
+(82) ReusedExchange [Reuses operator id: 12]
+Output [7]: [w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+
+(83) ShuffleQueryStage
+Output [7]: [w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: X
+
+(84) AQEShuffleRead
+Input [7]: [w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: coalesced
+
+(85) InputAdapter
+Input [7]: [w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: [#152, #153, #154, #155, #156, #157, #158]
+
+(86) InputAdapter
+Input [7]: [#152#152, #153#153, #154#154, #155#155, #156#156, #157#157, #158#158]
+
+(87) NativeSort
+Input [7]: [#152#152, #153#153, #154#154, #155#155, #156#156, #157#157, #158#158]
+Arguments: [w_warehouse_sk#152 ASC NULLS FIRST], false
+
+(88) NativeSortMergeJoin
+Left keys [1]: [cs_warehouse_sk#148]
+Right keys [1]: [w_warehouse_sk#152]
+Join type: Inner
+Join condition: None
+
+(89) NativeProject
+Output [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Input [14]: [#145#145, #146#146, #147#147, #148#148, #149#149, #150#150, #151#151, #152#152, #153#153, #154#154, #155#155, #156#156, #157#157, #158#158]
+
+(90) NativeShuffleExchange
+Input [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: hashpartitioning(cs_sold_date_sk#145, 100), ENSURE_REQUIREMENTS, [plan_id=11]
+
+(91) ShuffleQueryStage
+Output [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: X
+
+(92) AQEShuffleRead
+Input [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: coalesced
+
+(93) InputAdapter
+Input [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+
+(94) NativeSort
+Input [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: [cs_sold_date_sk#145 ASC NULLS FIRST], false
+
+(95) ReusedExchange [Reuses operator id: 27]
+Output [3]: [d_date_sk#159, d_year#160, d_moy#161]
+
+(96) ShuffleQueryStage
+Output [3]: [d_date_sk#159, d_year#160, d_moy#161]
+Arguments: X
+
+(97) AQEShuffleRead
+Input [3]: [d_date_sk#159, d_year#160, d_moy#161]
+Arguments: coalesced
+
+(98) InputAdapter
+Input [3]: [d_date_sk#159, d_year#160, d_moy#161]
+Arguments: [#159, #160, #161]
+
+(99) InputAdapter
+Input [3]: [#159#159, #160#160, #161#161]
+
+(100) NativeSort
+Input [3]: [#159#159, #160#160, #161#161]
+Arguments: [d_date_sk#159 ASC NULLS FIRST], false
+
+(101) NativeSortMergeJoin
+Left keys [1]: [cs_sold_date_sk#145]
+Right keys [1]: [d_date_sk#159]
+Join type: Inner
+Join condition: None
+
+(102) NativeProject
+Output [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Input [15]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, #159#159, #160#160, #161#161]
+
+(103) NativeShuffleExchange
+Input [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: hashpartitioning(cs_sold_time_sk#146, 100), ENSURE_REQUIREMENTS, [plan_id=12]
+
+(104) ShuffleQueryStage
+Output [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: X
+
+(105) AQEShuffleRead
+Input [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: coalesced
+
+(106) InputAdapter
+Input [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+
+(107) NativeSort
+Input [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: [cs_sold_time_sk#146 ASC NULLS FIRST], false
+
+(108) ReusedExchange [Reuses operator id: 43]
+Output [1]: [t_time_sk#162]
+
+(109) ShuffleQueryStage
+Output [1]: [t_time_sk#162]
+Arguments: X
+
+(110) AQEShuffleRead
+Input [1]: [t_time_sk#162]
+Arguments: coalesced
+
+(111) InputAdapter
+Input [1]: [t_time_sk#162]
+Arguments: [#162]
+
+(112) InputAdapter
+Input [1]: [#162#162]
+
+(113) NativeSort
+Input [1]: [#162#162]
+Arguments: [t_time_sk#162 ASC NULLS FIRST], false
+
+(114) NativeSortMergeJoin
+Left keys [1]: [cs_sold_time_sk#146]
+Right keys [1]: [t_time_sk#162]
+Join type: Inner
+Join condition: None
+
+(115) NativeProject
+Output [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Input [14]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161, #162#162]
+
+(116) NativeShuffleExchange
+Input [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: hashpartitioning(cs_ship_mode_sk#147, 100), ENSURE_REQUIREMENTS, [plan_id=13]
+
+(117) ShuffleQueryStage
+Output [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: X
+
+(118) AQEShuffleRead
+Input [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: coalesced
+
+(119) InputAdapter
+Input [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+
+(120) NativeSort
+Input [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: [cs_ship_mode_sk#147 ASC NULLS FIRST], false
+
+(121) ReusedExchange [Reuses operator id: 59]
+Output [1]: [sm_ship_mode_sk#163]
+
+(122) ShuffleQueryStage
+Output [1]: [sm_ship_mode_sk#163]
+Arguments: X
+
+(123) AQEShuffleRead
+Input [1]: [sm_ship_mode_sk#163]
+Arguments: coalesced
+
+(124) InputAdapter
+Input [1]: [sm_ship_mode_sk#163]
+Arguments: [#163]
+
+(125) InputAdapter
+Input [1]: [#163#163]
+
+(126) NativeSort
+Input [1]: [#163#163]
+Arguments: [sm_ship_mode_sk#163 ASC NULLS FIRST], false
+
+(127) NativeSortMergeJoin
+Left keys [1]: [cs_ship_mode_sk#147]
+Right keys [1]: [sm_ship_mode_sk#163]
+Join type: Inner
+Join condition: None
+
+(128) NativeProject
+Output [11]: [cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Input [13]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161, #163#163]
+
+(129) NativeProject
+Output [31]: [w_warehouse_name#153 AS w_warehouse_name#153, w_warehouse_sq_ft#154 AS w_warehouse_sq_ft#154, w_city#155 AS w_city#155, w_county#156 AS w_county#156, w_state#157 AS w_state#157, w_country#158 AS w_country#158, d_year#160 AS d_year#160, CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c7#164, CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c8#165, CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c9#166, CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c10#167, CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c11#168, CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c12#169, CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c13#170, CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c14#171, CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c15#172, CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c16#173, CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c17#174, CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c18#175, CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c19#176, CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c20#177, CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c21#178, CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c22#179, CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c23#180, CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c24#181, CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c25#182, CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c26#183, CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c27#184, CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c28#185, CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c29#186, CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END AS _c30#187]
+Input [11]: [cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+
+(130) NativeHashAggregate
+Input [31]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, _c7#164, _c8#165, _c9#166, _c10#167, _c11#168, _c12#169, _c13#170, _c14#171, _c15#172, _c16#173, _c17#174, _c18#175, _c19#176, _c20#177, _c21#178, _c22#179, _c23#180, _c24#181, _c25#182, _c26#183, _c27#184, _c28#185, _c29#186, _c30#187]
+Keys [7]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160]
+Functions [24]: [partial_sum(_c7#164), partial_sum(_c8#165), partial_sum(_c9#166), partial_sum(_c10#167), partial_sum(_c11#168), partial_sum(_c12#169), partial_sum(_c13#170), partial_sum(_c14#171), partial_sum(_c15#172), partial_sum(_c16#173), partial_sum(_c17#174), partial_sum(_c18#175), partial_sum(_c19#176), partial_sum(_c20#177), partial_sum(_c21#178), partial_sum(_c22#179), partial_sum(_c23#180), partial_sum(_c24#181), partial_sum(_c25#182), partial_sum(_c26#183), partial_sum(_c27#184), partial_sum(_c28#185), partial_sum(_c29#186), partial_sum(_c30#187)]
+Aggregate Attributes [48]: [sum#188, isEmpty#189, sum#190, isEmpty#191, sum#192, isEmpty#193, sum#194, isEmpty#195, sum#196, isEmpty#197, sum#198, isEmpty#199, sum#200, isEmpty#201, sum#202, isEmpty#203, sum#204, isEmpty#205, sum#206, isEmpty#207, sum#208, isEmpty#209, sum#210, isEmpty#211, sum#212, isEmpty#213, sum#214, isEmpty#215, sum#216, isEmpty#217, sum#218, isEmpty#219, sum#220, isEmpty#221, sum#222, isEmpty#223, sum#224, isEmpty#225, sum#226, isEmpty#227, sum#228, isEmpty#229, sum#230, isEmpty#231, sum#232, isEmpty#233, sum#234, isEmpty#235]
+Results [8]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, #94#94]
+
+(131) NativeShuffleExchange
+Input [8]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, #94#94]
+Arguments: hashpartitioning(w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, 100), ENSURE_REQUIREMENTS, [plan_id=14]
+
+(132) ShuffleQueryStage
+Output [8]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, #94#94]
+Arguments: X
+
+(133) AQEShuffleRead
+Input [8]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, #94#94]
+Arguments: coalesced
+
+(134) InputAdapter
+Input [8]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, #94#94]
+
+(135) NativeHashAggregate
+Input [8]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, #94#94]
+Keys [7]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160]
+Functions [24]: [sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)]
+Aggregate Attributes [24]: [sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#236, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#237, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#238, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#239, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#240, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#241, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#242, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#243, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#244, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#245, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#246, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#247, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#248, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#249, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#250, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#251, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#252, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#253, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#254, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#255, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#256, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#257, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#258, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#259]
+Results [31]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#236, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#237, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#238, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#239, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#240, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#241, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#242, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#243, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#244, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#245, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#246, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#247, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#248, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#249, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#250, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#251, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#252, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#253, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#254, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#255, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#256, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#257, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#258, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#259]
+
+(136) NativeProject
+Output [32]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, DHL,BARIAN AS ship_carriers#260, d_year#160 AS year#261, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#236 AS jan_sales#262, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#237 AS feb_sales#263, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#238 AS mar_sales#264, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#239 AS apr_sales#265, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#240 AS may_sales#266, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#241 AS jun_sales#267, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#242 AS jul_sales#268, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#243 AS aug_sales#269, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#244 AS sep_sales#270, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#245 AS oct_sales#271, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#246 AS nov_sales#272, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#247 AS dec_sales#273, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#248 AS jan_net#274, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#249 AS feb_net#275, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#250 AS mar_net#276, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#251 AS apr_net#277, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#252 AS may_net#278, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#253 AS jun_net#279, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#254 AS jul_net#280, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#255 AS aug_net#281, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#256 AS sep_net#282, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#257 AS oct_net#283, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#258 AS nov_net#284, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#259 AS dec_net#285]
+Input [31]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#236, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#237, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#238, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#239, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#240, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#241, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#242, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#243, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#244, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#245, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#246, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#247, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#248, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#249, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#250, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#251, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#252, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#253, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#254, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#255, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#256, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#257, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#258, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#259]
+
+(137) NativeUnion
+Arguments: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, jan_sales#121, feb_sales#122, mar_sales#123, apr_sales#124, may_sales#125, jun_sales#126, jul_sales#127, aug_sales#128, sep_sales#129, oct_sales#130, nov_sales#131, dec_sales#132, jan_net#133, feb_net#134, mar_net#135, apr_net#136, ... 8 more fields]
+
+(138) InputAdapter
+Input [32]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, jan_sales#121, feb_sales#122, mar_sales#123, apr_sales#124, may_sales#125, jun_sales#126, jul_sales#127, aug_sales#128, sep_sales#129, oct_sales#130, nov_sales#131, dec_sales#132, jan_net#133, feb_net#134, mar_net#135, apr_net#136, may_net#137, jun_net#138, jul_net#139, aug_net#140, sep_net#141, oct_net#142, nov_net#143, dec_net#144]
+Arguments: [#9, #10, #11, #12, #13, #14, #119, #120, #121, #122, #123, #124, #125, #126, #127, #128, #129, #130, #131, #132, #133, #134, #135, #136, ... 8 more fields]
+
+(139) NativeProject
+Output [44]: [w_warehouse_name#9 AS w_warehouse_name#9, w_warehouse_sq_ft#10 AS w_warehouse_sq_ft#10, w_city#11 AS w_city#11, w_county#12 AS w_county#12, w_state#13 AS w_state#13, w_country#14 AS w_country#14, ship_carriers#119 AS ship_carriers#119, year#120 AS year#120, jan_sales#121 AS _c8#286, feb_sales#122 AS _c9#287, mar_sales#123 AS _c10#288, apr_sales#124 AS _c11#289, may_sales#125 AS _c12#290, jun_sales#126 AS _c13#291, jul_sales#127 AS _c14#292, aug_sales#128 AS _c15#293, sep_sales#129 AS _c16#294, oct_sales#130 AS _c17#295, nov_sales#131 AS _c18#296, dec_sales#132 AS _c19#297, (jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c20#298, (feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c21#299, (mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c22#300, (apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c23#301, (may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c24#302, (jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c25#303, (jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c26#304, (aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c27#305, (sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c28#306, (oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c29#307, (nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c30#308, (dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0))) AS _c31#309, jan_net#133 AS _c32#310, feb_net#134 AS _c33#311, mar_net#135 AS _c34#312, apr_net#136 AS _c35#313, may_net#137 AS _c36#314, jun_net#138 AS _c37#315, jul_net#139 AS _c38#316, aug_net#140 AS _c39#317, sep_net#141 AS _c40#318, oct_net#142 AS _c41#319, nov_net#143 AS _c42#320, dec_net#144 AS _c43#321]
+Input [32]: [#9#9, #10#10, #11#11, #12#12, #13#13, #14#14, #119#119, #120#120, #121#121, #122#122, #123#123, #124#124, #125#125, #126#126, #127#127, #128#128, #129#129, #130#130, #131#131, #132#132, #133#133, #134#134, #135#135, #136#136, #137#137, #138#138, #139#139, #140#140, #141#141, #142#142, #143#143, #144#144]
+
+(140) NativeHashAggregate
+Input [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, _c8#286, _c9#287, _c10#288, _c11#289, _c12#290, _c13#291, _c14#292, _c15#293, _c16#294, _c17#295, _c18#296, _c19#297, _c20#298, _c21#299, _c22#300, _c23#301, _c24#302, _c25#303, _c26#304, _c27#305, _c28#306, _c29#307, _c30#308, _c31#309, _c32#310, _c33#311, _c34#312, _c35#313, _c36#314, _c37#315, _c38#316, _c39#317, _c40#318, _c41#319, _c42#320, _c43#321]
+Keys [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120]
+Functions [36]: [partial_sum(_c8#286), partial_sum(_c9#287), partial_sum(_c10#288), partial_sum(_c11#289), partial_sum(_c12#290), partial_sum(_c13#291), partial_sum(_c14#292), partial_sum(_c15#293), partial_sum(_c16#294), partial_sum(_c17#295), partial_sum(_c18#296), partial_sum(_c19#297), partial_sum(_c20#298), partial_sum(_c21#299), partial_sum(_c22#300), partial_sum(_c23#301), partial_sum(_c24#302), partial_sum(_c25#303), partial_sum(_c26#304), partial_sum(_c27#305), partial_sum(_c28#306), partial_sum(_c29#307), partial_sum(_c30#308), partial_sum(_c31#309), partial_sum(_c32#310), partial_sum(_c33#311), partial_sum(_c34#312), partial_sum(_c35#313), partial_sum(_c36#314), partial_sum(_c37#315), partial_sum(_c38#316), partial_sum(_c39#317), partial_sum(_c40#318), partial_sum(_c41#319), partial_sum(_c42#320), partial_sum(_c43#321)]
+Aggregate Attributes [72]: [sum#322, isEmpty#323, sum#324, isEmpty#325, sum#326, isEmpty#327, sum#328, isEmpty#329, sum#330, isEmpty#331, sum#332, isEmpty#333, sum#334, isEmpty#335, sum#336, isEmpty#337, sum#338, isEmpty#339, sum#340, isEmpty#341, sum#342, isEmpty#343, sum#344, isEmpty#345, sum#346, isEmpty#347, sum#348, isEmpty#349, sum#350, isEmpty#351, sum#352, isEmpty#353, sum#354, isEmpty#355, sum#356, isEmpty#357, sum#358, isEmpty#359, sum#360, isEmpty#361, sum#362, isEmpty#363, sum#364, isEmpty#365, sum#366, isEmpty#367, sum#368, isEmpty#369, sum#370, isEmpty#371, sum#372, isEmpty#373, sum#374, isEmpty#375, sum#376, isEmpty#377, sum#378, isEmpty#379, sum#380, isEmpty#381, sum#382, isEmpty#383, sum#384, isEmpty#385, sum#386, isEmpty#387, sum#388, isEmpty#389, sum#390, isEmpty#391, sum#392, isEmpty#393]
+Results [9]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, #94#94]
+
+(141) NativeShuffleExchange
+Input [9]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, #94#94]
+Arguments: hashpartitioning(w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, 100), ENSURE_REQUIREMENTS, [plan_id=15]
+
+(142) ShuffleQueryStage
+Output [9]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, #94#94]
+Arguments: X
+
+(143) AQEShuffleRead
+Input [9]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, #94#94]
+Arguments: coalesced
+
+(144) InputAdapter
+Input [9]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, #94#94]
+
+(145) NativeHashAggregate
+Input [9]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, #94#94]
+Keys [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120]
+Functions [36]: [sum(jan_sales#121), sum(feb_sales#122), sum(mar_sales#123), sum(apr_sales#124), sum(may_sales#125), sum(jun_sales#126), sum(jul_sales#127), sum(aug_sales#128), sum(sep_sales#129), sum(oct_sales#130), sum(nov_sales#131), sum(dec_sales#132), sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum(jan_net#133), sum(feb_net#134), sum(mar_net#135), sum(apr_net#136), sum(may_net#137), sum(jun_net#138), sum(jul_net#139), sum(aug_net#140), sum(sep_net#141), sum(oct_net#142), sum(nov_net#143), sum(dec_net#144)]
+Aggregate Attributes [36]: [sum(jan_sales#121)#394, sum(feb_sales#122)#395, sum(mar_sales#123)#396, sum(apr_sales#124)#397, sum(may_sales#125)#398, sum(jun_sales#126)#399, sum(jul_sales#127)#400, sum(aug_sales#128)#401, sum(sep_sales#129)#402, sum(oct_sales#130)#403, sum(nov_sales#131)#404, sum(dec_sales#132)#405, sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#406, sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#407, sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#408, sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#409, sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#410, sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#411, sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#412, sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#413, sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#414, sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#415, sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#416, sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#417, sum(jan_net#133)#418, sum(feb_net#134)#419, sum(mar_net#135)#420, sum(apr_net#136)#421, sum(may_net#137)#422, sum(jun_net#138)#423, sum(jul_net#139)#424, sum(aug_net#140)#425, sum(sep_net#141)#426, sum(oct_net#142)#427, sum(nov_net#143)#428, sum(dec_net#144)#429]
+Results [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, sum(jan_sales#121)#394, sum(feb_sales#122)#395, sum(mar_sales#123)#396, sum(apr_sales#124)#397, sum(may_sales#125)#398, sum(jun_sales#126)#399, sum(jul_sales#127)#400, sum(aug_sales#128)#401, sum(sep_sales#129)#402, sum(oct_sales#130)#403, sum(nov_sales#131)#404, sum(dec_sales#132)#405, sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#406, sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#407, sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#408, sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#409, sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#410, sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#411, sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#412, sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#413, sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#414, sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#415, sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#416, sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#417, sum(jan_net#133)#418, sum(feb_net#134)#419, sum(mar_net#135)#420, sum(apr_net#136)#421, sum(may_net#137)#422, sum(jun_net#138)#423, sum(jul_net#139)#424, sum(aug_net#140)#425, sum(sep_net#141)#426, sum(oct_net#142)#427, sum(nov_net#143)#428, sum(dec_net#144)#429]
+
+(146) NativeProject
+Output [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, sum(jan_sales#121)#394 AS jan_sales#430, sum(feb_sales#122)#395 AS feb_sales#431, sum(mar_sales#123)#396 AS mar_sales#432, sum(apr_sales#124)#397 AS apr_sales#433, sum(may_sales#125)#398 AS may_sales#434, sum(jun_sales#126)#399 AS jun_sales#435, sum(jul_sales#127)#400 AS jul_sales#436, sum(aug_sales#128)#401 AS aug_sales#437, sum(sep_sales#129)#402 AS sep_sales#438, sum(oct_sales#130)#403 AS oct_sales#439, sum(nov_sales#131)#404 AS nov_sales#440, sum(dec_sales#132)#405 AS dec_sales#441, sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#406 AS jan_sales_per_sq_foot#442, sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#407 AS feb_sales_per_sq_foot#443, sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#408 AS mar_sales_per_sq_foot#444, sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#409 AS apr_sales_per_sq_foot#445, sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#410 AS may_sales_per_sq_foot#446, sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#411 AS jun_sales_per_sq_foot#447, sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#412 AS jul_sales_per_sq_foot#448, sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#413 AS aug_sales_per_sq_foot#449, sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#414 AS sep_sales_per_sq_foot#450, sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#415 AS oct_sales_per_sq_foot#451, sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#416 AS nov_sales_per_sq_foot#452, sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#417 AS dec_sales_per_sq_foot#453, sum(jan_net#133)#418 AS jan_net#454, sum(feb_net#134)#419 AS feb_net#455, sum(mar_net#135)#420 AS mar_net#456, sum(apr_net#136)#421 AS apr_net#457, sum(may_net#137)#422 AS may_net#458, sum(jun_net#138)#423 AS jun_net#459, sum(jul_net#139)#424 AS jul_net#460, sum(aug_net#140)#425 AS aug_net#461, sum(sep_net#141)#426 AS sep_net#462, sum(oct_net#142)#427 AS oct_net#463, sum(nov_net#143)#428 AS nov_net#464, sum(dec_net#144)#429 AS dec_net#465]
+Input [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, sum(jan_sales#121)#394, sum(feb_sales#122)#395, sum(mar_sales#123)#396, sum(apr_sales#124)#397, sum(may_sales#125)#398, sum(jun_sales#126)#399, sum(jul_sales#127)#400, sum(aug_sales#128)#401, sum(sep_sales#129)#402, sum(oct_sales#130)#403, sum(nov_sales#131)#404, sum(dec_sales#132)#405, sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#406, sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#407, sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#408, sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#409, sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#410, sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#411, sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#412, sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#413, sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#414, sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#415, sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#416, sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#417, sum(jan_net#133)#418, sum(feb_net#134)#419, sum(mar_net#135)#420, sum(apr_net#136)#421, sum(may_net#137)#422, sum(jun_net#138)#423, sum(jul_net#139)#424, sum(aug_net#140)#425, sum(sep_net#141)#426, sum(oct_net#142)#427, sum(nov_net#143)#428, sum(dec_net#144)#429]
+
+(147) NativeTakeOrdered
+Input [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, jan_sales#430, feb_sales#431, mar_sales#432, apr_sales#433, may_sales#434, jun_sales#435, jul_sales#436, aug_sales#437, sep_sales#438, oct_sales#439, nov_sales#440, dec_sales#441, jan_sales_per_sq_foot#442, feb_sales_per_sq_foot#443, mar_sales_per_sq_foot#444, apr_sales_per_sq_foot#445, may_sales_per_sq_foot#446, jun_sales_per_sq_foot#447, jul_sales_per_sq_foot#448, aug_sales_per_sq_foot#449, sep_sales_per_sq_foot#450, oct_sales_per_sq_foot#451, nov_sales_per_sq_foot#452, dec_sales_per_sq_foot#453, jan_net#454, feb_net#455, mar_net#456, apr_net#457, may_net#458, jun_net#459, jul_net#460, aug_net#461, sep_net#462, oct_net#463, nov_net#464, dec_net#465]
+Arguments: X, [w_warehouse_name#9 ASC NULLS FIRST]
+
+(148) Scan parquet
+Output [7]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ws_warehouse_sk), IsNotNull(ws_sold_date_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_ship_mode_sk)]
+ReadSchema: struct<ws_sold_date_sk:int,ws_sold_time_sk:int,ws_ship_mode_sk:int,ws_warehouse_sk:int,ws_quantity:int,ws_ext_sales_price:decimal(7,2),ws_net_paid:decimal(7,2)>
+
+(149) Filter
+Input [7]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7]
+Condition : (((isnotnull(ws_warehouse_sk#4) AND isnotnull(ws_sold_date_sk#1)) AND isnotnull(ws_sold_time_sk#2)) AND isnotnull(ws_ship_mode_sk#3))
+
+(150) Exchange
+Input [7]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7]
+Arguments: hashpartitioning(ws_warehouse_sk#4, 100), ENSURE_REQUIREMENTS, [plan_id=16]
+
+(151) Sort
+Input [7]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7]
+Arguments: [ws_warehouse_sk#4 ASC NULLS FIRST], false, 0
+
+(152) Scan parquet
+Output [7]: [w_warehouse_sk#8, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(w_warehouse_sk)]
+ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string,w_warehouse_sq_ft:int,w_city:string,w_county:string,w_state:string,w_country:string>
+
+(153) Filter
+Input [7]: [w_warehouse_sk#8, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Condition : isnotnull(w_warehouse_sk#8)
+
+(154) Exchange
+Input [7]: [w_warehouse_sk#8, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: hashpartitioning(w_warehouse_sk#8, 100), ENSURE_REQUIREMENTS, [plan_id=17]
+
+(155) Sort
+Input [7]: [w_warehouse_sk#8, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: [w_warehouse_sk#8 ASC NULLS FIRST], false, 0
+
+(156) SortMergeJoin
+Left keys [1]: [ws_warehouse_sk#4]
+Right keys [1]: [w_warehouse_sk#8]
+Join type: Inner
+Join condition: None
+
+(157) Project
+Output [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Input [14]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_sk#8, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+
+(158) Exchange
+Input [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: hashpartitioning(ws_sold_date_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=18]
+
+(159) Sort
+Input [12]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
+Arguments: [ws_sold_date_sk#1 ASC NULLS FIRST], false, 0
+
+(160) Scan parquet
+Output [3]: [d_date_sk#15, d_year#16, d_moy#17]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(161) Filter
+Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
+Condition : ((isnotnull(d_year#16) AND (d_year#16 = 2001)) AND isnotnull(d_date_sk#15))
+
+(162) Exchange
+Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
+Arguments: hashpartitioning(d_date_sk#15, 100), ENSURE_REQUIREMENTS, [plan_id=19]
+
+(163) Sort
+Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
+Arguments: [d_date_sk#15 ASC NULLS FIRST], false, 0
+
+(164) SortMergeJoin
+Left keys [1]: [ws_sold_date_sk#1]
+Right keys [1]: [d_date_sk#15]
+Join type: Inner
+Join condition: None
+
+(165) Project
+Output [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Input [15]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_date_sk#15, d_year#16, d_moy#17]
+
+(166) Exchange
+Input [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: hashpartitioning(ws_sold_time_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=20]
+
+(167) Sort
+Input [13]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: [ws_sold_time_sk#2 ASC NULLS FIRST], false, 0
+
+(168) Scan parquet
+Output [2]: [t_time_sk#18, t_time#19]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(t_time), GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_time:int>
+
+(169) Filter
+Input [2]: [t_time_sk#18, t_time#19]
+Condition : (((isnotnull(t_time#19) AND (t_time#19 >= 30838)) AND (t_time#19 <= 59638)) AND isnotnull(t_time_sk#18))
+
+(170) Project
+Output [1]: [t_time_sk#18]
+Input [2]: [t_time_sk#18, t_time#19]
+
+(171) Exchange
+Input [1]: [t_time_sk#18]
+Arguments: hashpartitioning(t_time_sk#18, 100), ENSURE_REQUIREMENTS, [plan_id=21]
+
+(172) Sort
+Input [1]: [t_time_sk#18]
+Arguments: [t_time_sk#18 ASC NULLS FIRST], false, 0
+
+(173) SortMergeJoin
+Left keys [1]: [ws_sold_time_sk#2]
+Right keys [1]: [t_time_sk#18]
+Join type: Inner
+Join condition: None
+
+(174) Project
+Output [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Input [14]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17, t_time_sk#18]
+
+(175) Exchange
+Input [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: hashpartitioning(ws_ship_mode_sk#3, 100), ENSURE_REQUIREMENTS, [plan_id=22]
+
+(176) Sort
+Input [12]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Arguments: [ws_ship_mode_sk#3 ASC NULLS FIRST], false, 0
+
+(177) Scan parquet
+Output [2]: [sm_ship_mode_sk#20, sm_carrier#21]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [In(sm_carrier, [BARIAN,DHL]), IsNotNull(sm_ship_mode_sk)]
+ReadSchema: struct<sm_ship_mode_sk:int,sm_carrier:string>
+
+(178) Filter
+Input [2]: [sm_ship_mode_sk#20, sm_carrier#21]
+Condition : (sm_carrier#21 IN (DHL,BARIAN) AND isnotnull(sm_ship_mode_sk#20))
+
+(179) Project
+Output [1]: [sm_ship_mode_sk#20]
+Input [2]: [sm_ship_mode_sk#20, sm_carrier#21]
+
+(180) Exchange
+Input [1]: [sm_ship_mode_sk#20]
+Arguments: hashpartitioning(sm_ship_mode_sk#20, 100), ENSURE_REQUIREMENTS, [plan_id=23]
+
+(181) Sort
+Input [1]: [sm_ship_mode_sk#20]
+Arguments: [sm_ship_mode_sk#20 ASC NULLS FIRST], false, 0
+
+(182) SortMergeJoin
+Left keys [1]: [ws_ship_mode_sk#3]
+Right keys [1]: [sm_ship_mode_sk#20]
+Join type: Inner
+Join condition: None
+
+(183) Project
+Output [11]: [ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Input [13]: [ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17, sm_ship_mode_sk#20]
+
+(184) HashAggregate
+Input [11]: [ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, d_moy#17]
+Keys [7]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16]
+Functions [24]: [partial_sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)]
+Aggregate Attributes [48]: [sum#46, isEmpty#47, sum#48, isEmpty#49, sum#50, isEmpty#51, sum#52, isEmpty#53, sum#54, isEmpty#55, sum#56, isEmpty#57, sum#58, isEmpty#59, sum#60, isEmpty#61, sum#62, isEmpty#63, sum#64, isEmpty#65, sum#66, isEmpty#67, sum#68, isEmpty#69, sum#70, isEmpty#71, sum#72, isEmpty#73, sum#74, isEmpty#75, sum#76, isEmpty#77, sum#78, isEmpty#79, sum#80, isEmpty#81, sum#82, isEmpty#83, sum#84, isEmpty#85, sum#86, isEmpty#87, sum#88, isEmpty#89, sum#90, isEmpty#91, sum#92, isEmpty#93]
+Results [55]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, sum#466, isEmpty#467, sum#468, isEmpty#469, sum#470, isEmpty#471, sum#472, isEmpty#473, sum#474, isEmpty#475, sum#476, isEmpty#477, sum#478, isEmpty#479, sum#480, isEmpty#481, sum#482, isEmpty#483, sum#484, isEmpty#485, sum#486, isEmpty#487, sum#488, isEmpty#489, sum#490, isEmpty#491, sum#492, isEmpty#493, sum#494, isEmpty#495, sum#496, isEmpty#497, sum#498, isEmpty#499, sum#500, isEmpty#501, sum#502, isEmpty#503, sum#504, isEmpty#505, sum#506, isEmpty#507, sum#508, isEmpty#509, sum#510, isEmpty#511, sum#512, isEmpty#513]
+
+(185) Exchange
+Input [55]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, sum#466, isEmpty#467, sum#468, isEmpty#469, sum#470, isEmpty#471, sum#472, isEmpty#473, sum#474, isEmpty#475, sum#476, isEmpty#477, sum#478, isEmpty#479, sum#480, isEmpty#481, sum#482, isEmpty#483, sum#484, isEmpty#485, sum#486, isEmpty#487, sum#488, isEmpty#489, sum#490, isEmpty#491, sum#492, isEmpty#493, sum#494, isEmpty#495, sum#496, isEmpty#497, sum#498, isEmpty#499, sum#500, isEmpty#501, sum#502, isEmpty#503, sum#504, isEmpty#505, sum#506, isEmpty#507, sum#508, isEmpty#509, sum#510, isEmpty#511, sum#512, isEmpty#513]
+Arguments: hashpartitioning(w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, 100), ENSURE_REQUIREMENTS, [plan_id=24]
+
+(186) HashAggregate
+Input [55]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16, sum#466, isEmpty#467, sum#468, isEmpty#469, sum#470, isEmpty#471, sum#472, isEmpty#473, sum#474, isEmpty#475, sum#476, isEmpty#477, sum#478, isEmpty#479, sum#480, isEmpty#481, sum#482, isEmpty#483, sum#484, isEmpty#485, sum#486, isEmpty#487, sum#488, isEmpty#489, sum#490, isEmpty#491, sum#492, isEmpty#493, sum#494, isEmpty#495, sum#496, isEmpty#497, sum#498, isEmpty#499, sum#500, isEmpty#501, sum#502, isEmpty#503, sum#504, isEmpty#505, sum#506, isEmpty#507, sum#508, isEmpty#509, sum#510, isEmpty#511, sum#512, isEmpty#513]
+Keys [7]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, d_year#16]
+Functions [24]: [sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)]
+Aggregate Attributes [24]: [sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#95, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#96, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#97, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#98, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#99, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#100, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#101, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#102, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#103, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#104, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#105, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#106, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#107, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#108, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#109, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#110, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#111, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#112, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#113, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#114, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#115, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#116, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#117, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#118]
+Results [32]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, DHL,BARIAN AS ship_carriers#119, d_year#16 AS year#120, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#95 AS jan_sales#121, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#96 AS feb_sales#122, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#97 AS mar_sales#123, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#98 AS apr_sales#124, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#99 AS may_sales#125, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#100 AS jun_sales#126, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#101 AS jul_sales#127, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#102 AS aug_sales#128, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#103 AS sep_sales#129, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#104 AS oct_sales#130, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#105 AS nov_sales#131, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_ext_sales_price#6 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#106 AS dec_sales#132, sum(CASE WHEN (d_moy#17 = 1) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#107 AS jan_net#133, sum(CASE WHEN (d_moy#17 = 2) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#108 AS feb_net#134, sum(CASE WHEN (d_moy#17 = 3) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#109 AS mar_net#135, sum(CASE WHEN (d_moy#17 = 4) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#110 AS apr_net#136, sum(CASE WHEN (d_moy#17 = 5) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#111 AS may_net#137, sum(CASE WHEN (d_moy#17 = 6) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#112 AS jun_net#138, sum(CASE WHEN (d_moy#17 = 7) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#113 AS jul_net#139, sum(CASE WHEN (d_moy#17 = 8) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#114 AS aug_net#140, sum(CASE WHEN (d_moy#17 = 9) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#115 AS sep_net#141, sum(CASE WHEN (d_moy#17 = 10) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#116 AS oct_net#142, sum(CASE WHEN (d_moy#17 = 11) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#117 AS nov_net#143, sum(CASE WHEN (d_moy#17 = 12) THEN (ws_net_paid#7 * cast(ws_quantity#5 as decimal(10,0))) ELSE 0.00 END)#118 AS dec_net#144]
+
+(187) Scan parquet
+Output [7]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_warehouse_sk#148, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_sold_date_sk), IsNotNull(cs_sold_time_sk), IsNotNull(cs_ship_mode_sk)]
+ReadSchema: struct<cs_sold_date_sk:int,cs_sold_time_sk:int,cs_ship_mode_sk:int,cs_warehouse_sk:int,cs_quantity:int,cs_sales_price:decimal(7,2),cs_net_paid_inc_tax:decimal(7,2)>
+
+(188) Filter
+Input [7]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_warehouse_sk#148, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151]
+Condition : (((isnotnull(cs_warehouse_sk#148) AND isnotnull(cs_sold_date_sk#145)) AND isnotnull(cs_sold_time_sk#146)) AND isnotnull(cs_ship_mode_sk#147))
+
+(189) Exchange
+Input [7]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_warehouse_sk#148, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151]
+Arguments: hashpartitioning(cs_warehouse_sk#148, 100), ENSURE_REQUIREMENTS, [plan_id=25]
+
+(190) Sort
+Input [7]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_warehouse_sk#148, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151]
+Arguments: [cs_warehouse_sk#148 ASC NULLS FIRST], false, 0
+
+(191) Scan parquet
+Output [7]: [w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(w_warehouse_sk)]
+ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string,w_warehouse_sq_ft:int,w_city:string,w_county:string,w_state:string,w_country:string>
+
+(192) Filter
+Input [7]: [w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Condition : isnotnull(w_warehouse_sk#152)
+
+(193) Exchange
+Input [7]: [w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: hashpartitioning(w_warehouse_sk#152, 100), ENSURE_REQUIREMENTS, [plan_id=26]
+
+(194) Sort
+Input [7]: [w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: [w_warehouse_sk#152 ASC NULLS FIRST], false, 0
+
+(195) SortMergeJoin
+Left keys [1]: [cs_warehouse_sk#148]
+Right keys [1]: [w_warehouse_sk#152]
+Join type: Inner
+Join condition: None
+
+(196) Project
+Output [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Input [14]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_warehouse_sk#148, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_sk#152, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+
+(197) Exchange
+Input [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: hashpartitioning(cs_sold_date_sk#145, 100), ENSURE_REQUIREMENTS, [plan_id=27]
+
+(198) Sort
+Input [12]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158]
+Arguments: [cs_sold_date_sk#145 ASC NULLS FIRST], false, 0
+
+(199) Scan parquet
+Output [3]: [d_date_sk#159, d_year#160, d_moy#161]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(200) Filter
+Input [3]: [d_date_sk#159, d_year#160, d_moy#161]
+Condition : ((isnotnull(d_year#160) AND (d_year#160 = 2001)) AND isnotnull(d_date_sk#159))
+
+(201) Exchange
+Input [3]: [d_date_sk#159, d_year#160, d_moy#161]
+Arguments: hashpartitioning(d_date_sk#159, 100), ENSURE_REQUIREMENTS, [plan_id=28]
+
+(202) Sort
+Input [3]: [d_date_sk#159, d_year#160, d_moy#161]
+Arguments: [d_date_sk#159 ASC NULLS FIRST], false, 0
+
+(203) SortMergeJoin
+Left keys [1]: [cs_sold_date_sk#145]
+Right keys [1]: [d_date_sk#159]
+Join type: Inner
+Join condition: None
+
+(204) Project
+Output [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Input [15]: [cs_sold_date_sk#145, cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_date_sk#159, d_year#160, d_moy#161]
+
+(205) Exchange
+Input [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: hashpartitioning(cs_sold_time_sk#146, 100), ENSURE_REQUIREMENTS, [plan_id=29]
+
+(206) Sort
+Input [13]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: [cs_sold_time_sk#146 ASC NULLS FIRST], false, 0
+
+(207) Scan parquet
+Output [2]: [t_time_sk#162, t_time#514]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(t_time), GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_time:int>
+
+(208) Filter
+Input [2]: [t_time_sk#162, t_time#514]
+Condition : (((isnotnull(t_time#514) AND (t_time#514 >= 30838)) AND (t_time#514 <= 59638)) AND isnotnull(t_time_sk#162))
+
+(209) Project
+Output [1]: [t_time_sk#162]
+Input [2]: [t_time_sk#162, t_time#514]
+
+(210) Exchange
+Input [1]: [t_time_sk#162]
+Arguments: hashpartitioning(t_time_sk#162, 100), ENSURE_REQUIREMENTS, [plan_id=30]
+
+(211) Sort
+Input [1]: [t_time_sk#162]
+Arguments: [t_time_sk#162 ASC NULLS FIRST], false, 0
+
+(212) SortMergeJoin
+Left keys [1]: [cs_sold_time_sk#146]
+Right keys [1]: [t_time_sk#162]
+Join type: Inner
+Join condition: None
+
+(213) Project
+Output [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Input [14]: [cs_sold_time_sk#146, cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161, t_time_sk#162]
+
+(214) Exchange
+Input [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: hashpartitioning(cs_ship_mode_sk#147, 100), ENSURE_REQUIREMENTS, [plan_id=31]
+
+(215) Sort
+Input [12]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Arguments: [cs_ship_mode_sk#147 ASC NULLS FIRST], false, 0
+
+(216) Scan parquet
+Output [2]: [sm_ship_mode_sk#163, sm_carrier#515]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [In(sm_carrier, [BARIAN,DHL]), IsNotNull(sm_ship_mode_sk)]
+ReadSchema: struct<sm_ship_mode_sk:int,sm_carrier:string>
+
+(217) Filter
+Input [2]: [sm_ship_mode_sk#163, sm_carrier#515]
+Condition : (sm_carrier#515 IN (DHL,BARIAN) AND isnotnull(sm_ship_mode_sk#163))
+
+(218) Project
+Output [1]: [sm_ship_mode_sk#163]
+Input [2]: [sm_ship_mode_sk#163, sm_carrier#515]
+
+(219) Exchange
+Input [1]: [sm_ship_mode_sk#163]
+Arguments: hashpartitioning(sm_ship_mode_sk#163, 100), ENSURE_REQUIREMENTS, [plan_id=32]
+
+(220) Sort
+Input [1]: [sm_ship_mode_sk#163]
+Arguments: [sm_ship_mode_sk#163 ASC NULLS FIRST], false, 0
+
+(221) SortMergeJoin
+Left keys [1]: [cs_ship_mode_sk#147]
+Right keys [1]: [sm_ship_mode_sk#163]
+Join type: Inner
+Join condition: None
+
+(222) Project
+Output [11]: [cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Input [13]: [cs_ship_mode_sk#147, cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161, sm_ship_mode_sk#163]
+
+(223) HashAggregate
+Input [11]: [cs_quantity#149, cs_sales_price#150, cs_net_paid_inc_tax#151, w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, d_moy#161]
+Keys [7]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160]
+Functions [24]: [partial_sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), partial_sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)]
+Aggregate Attributes [48]: [sum#188, isEmpty#189, sum#190, isEmpty#191, sum#192, isEmpty#193, sum#194, isEmpty#195, sum#196, isEmpty#197, sum#198, isEmpty#199, sum#200, isEmpty#201, sum#202, isEmpty#203, sum#204, isEmpty#205, sum#206, isEmpty#207, sum#208, isEmpty#209, sum#210, isEmpty#211, sum#212, isEmpty#213, sum#214, isEmpty#215, sum#216, isEmpty#217, sum#218, isEmpty#219, sum#220, isEmpty#221, sum#222, isEmpty#223, sum#224, isEmpty#225, sum#226, isEmpty#227, sum#228, isEmpty#229, sum#230, isEmpty#231, sum#232, isEmpty#233, sum#234, isEmpty#235]
+Results [55]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, sum#516, isEmpty#517, sum#518, isEmpty#519, sum#520, isEmpty#521, sum#522, isEmpty#523, sum#524, isEmpty#525, sum#526, isEmpty#527, sum#528, isEmpty#529, sum#530, isEmpty#531, sum#532, isEmpty#533, sum#534, isEmpty#535, sum#536, isEmpty#537, sum#538, isEmpty#539, sum#540, isEmpty#541, sum#542, isEmpty#543, sum#544, isEmpty#545, sum#546, isEmpty#547, sum#548, isEmpty#549, sum#550, isEmpty#551, sum#552, isEmpty#553, sum#554, isEmpty#555, sum#556, isEmpty#557, sum#558, isEmpty#559, sum#560, isEmpty#561, sum#562, isEmpty#563]
+
+(224) Exchange
+Input [55]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, sum#516, isEmpty#517, sum#518, isEmpty#519, sum#520, isEmpty#521, sum#522, isEmpty#523, sum#524, isEmpty#525, sum#526, isEmpty#527, sum#528, isEmpty#529, sum#530, isEmpty#531, sum#532, isEmpty#533, sum#534, isEmpty#535, sum#536, isEmpty#537, sum#538, isEmpty#539, sum#540, isEmpty#541, sum#542, isEmpty#543, sum#544, isEmpty#545, sum#546, isEmpty#547, sum#548, isEmpty#549, sum#550, isEmpty#551, sum#552, isEmpty#553, sum#554, isEmpty#555, sum#556, isEmpty#557, sum#558, isEmpty#559, sum#560, isEmpty#561, sum#562, isEmpty#563]
+Arguments: hashpartitioning(w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, 100), ENSURE_REQUIREMENTS, [plan_id=33]
+
+(225) HashAggregate
+Input [55]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160, sum#516, isEmpty#517, sum#518, isEmpty#519, sum#520, isEmpty#521, sum#522, isEmpty#523, sum#524, isEmpty#525, sum#526, isEmpty#527, sum#528, isEmpty#529, sum#530, isEmpty#531, sum#532, isEmpty#533, sum#534, isEmpty#535, sum#536, isEmpty#537, sum#538, isEmpty#539, sum#540, isEmpty#541, sum#542, isEmpty#543, sum#544, isEmpty#545, sum#546, isEmpty#547, sum#548, isEmpty#549, sum#550, isEmpty#551, sum#552, isEmpty#553, sum#554, isEmpty#555, sum#556, isEmpty#557, sum#558, isEmpty#559, sum#560, isEmpty#561, sum#562, isEmpty#563]
+Keys [7]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, d_year#160]
+Functions [24]: [sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END), sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)]
+Aggregate Attributes [24]: [sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#236, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#237, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#238, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#239, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#240, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#241, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#242, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#243, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#244, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#245, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#246, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#247, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#248, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#249, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#250, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#251, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#252, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#253, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#254, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#255, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#256, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#257, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#258, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#259]
+Results [32]: [w_warehouse_name#153, w_warehouse_sq_ft#154, w_city#155, w_county#156, w_state#157, w_country#158, DHL,BARIAN AS ship_carriers#260, d_year#160 AS year#261, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#236 AS jan_sales#262, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#237 AS feb_sales#263, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#238 AS mar_sales#264, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#239 AS apr_sales#265, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#240 AS may_sales#266, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#241 AS jun_sales#267, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#242 AS jul_sales#268, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#243 AS aug_sales#269, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#244 AS sep_sales#270, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#245 AS oct_sales#271, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#246 AS nov_sales#272, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_sales_price#150 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#247 AS dec_sales#273, sum(CASE WHEN (d_moy#161 = 1) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#248 AS jan_net#274, sum(CASE WHEN (d_moy#161 = 2) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#249 AS feb_net#275, sum(CASE WHEN (d_moy#161 = 3) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#250 AS mar_net#276, sum(CASE WHEN (d_moy#161 = 4) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#251 AS apr_net#277, sum(CASE WHEN (d_moy#161 = 5) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#252 AS may_net#278, sum(CASE WHEN (d_moy#161 = 6) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#253 AS jun_net#279, sum(CASE WHEN (d_moy#161 = 7) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#254 AS jul_net#280, sum(CASE WHEN (d_moy#161 = 8) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#255 AS aug_net#281, sum(CASE WHEN (d_moy#161 = 9) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#256 AS sep_net#282, sum(CASE WHEN (d_moy#161 = 10) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#257 AS oct_net#283, sum(CASE WHEN (d_moy#161 = 11) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#258 AS nov_net#284, sum(CASE WHEN (d_moy#161 = 12) THEN (cs_net_paid_inc_tax#151 * cast(cs_quantity#149 as decimal(10,0))) ELSE 0.00 END)#259 AS dec_net#285]
+
+(226) Union
+
+(227) HashAggregate
+Input [32]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, jan_sales#121, feb_sales#122, mar_sales#123, apr_sales#124, may_sales#125, jun_sales#126, jul_sales#127, aug_sales#128, sep_sales#129, oct_sales#130, nov_sales#131, dec_sales#132, jan_net#133, feb_net#134, mar_net#135, apr_net#136, may_net#137, jun_net#138, jul_net#139, aug_net#140, sep_net#141, oct_net#142, nov_net#143, dec_net#144]
+Keys [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120]
+Functions [36]: [partial_sum(jan_sales#121), partial_sum(feb_sales#122), partial_sum(mar_sales#123), partial_sum(apr_sales#124), partial_sum(may_sales#125), partial_sum(jun_sales#126), partial_sum(jul_sales#127), partial_sum(aug_sales#128), partial_sum(sep_sales#129), partial_sum(oct_sales#130), partial_sum(nov_sales#131), partial_sum(dec_sales#132), partial_sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), partial_sum(jan_net#133), partial_sum(feb_net#134), partial_sum(mar_net#135), partial_sum(apr_net#136), partial_sum(may_net#137), partial_sum(jun_net#138), partial_sum(jul_net#139), partial_sum(aug_net#140), partial_sum(sep_net#141), partial_sum(oct_net#142), partial_sum(nov_net#143), partial_sum(dec_net#144)]
+Aggregate Attributes [72]: [sum#322, isEmpty#323, sum#324, isEmpty#325, sum#326, isEmpty#327, sum#328, isEmpty#329, sum#330, isEmpty#331, sum#332, isEmpty#333, sum#334, isEmpty#335, sum#336, isEmpty#337, sum#338, isEmpty#339, sum#340, isEmpty#341, sum#342, isEmpty#343, sum#344, isEmpty#345, sum#346, isEmpty#347, sum#348, isEmpty#349, sum#350, isEmpty#351, sum#352, isEmpty#353, sum#354, isEmpty#355, sum#356, isEmpty#357, sum#358, isEmpty#359, sum#360, isEmpty#361, sum#362, isEmpty#363, sum#364, isEmpty#365, sum#366, isEmpty#367, sum#368, isEmpty#369, sum#370, isEmpty#371, sum#372, isEmpty#373, sum#374, isEmpty#375, sum#376, isEmpty#377, sum#378, isEmpty#379, sum#380, isEmpty#381, sum#382, isEmpty#383, sum#384, isEmpty#385, sum#386, isEmpty#387, sum#388, isEmpty#389, sum#390, isEmpty#391, sum#392, isEmpty#393]
+Results [80]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, sum#564, isEmpty#565, sum#566, isEmpty#567, sum#568, isEmpty#569, sum#570, isEmpty#571, sum#572, isEmpty#573, sum#574, isEmpty#575, sum#576, isEmpty#577, sum#578, isEmpty#579, sum#580, isEmpty#581, sum#582, isEmpty#583, sum#584, isEmpty#585, sum#586, isEmpty#587, sum#588, isEmpty#589, sum#590, isEmpty#591, sum#592, isEmpty#593, sum#594, isEmpty#595, sum#596, isEmpty#597, sum#598, isEmpty#599, sum#600, isEmpty#601, sum#602, isEmpty#603, sum#604, isEmpty#605, sum#606, isEmpty#607, sum#608, isEmpty#609, sum#610, isEmpty#611, sum#612, isEmpty#613, sum#614, isEmpty#615, sum#616, isEmpty#617, sum#618, isEmpty#619, sum#620, isEmpty#621, sum#622, isEmpty#623, sum#624, isEmpty#625, sum#626, isEmpty#627, sum#628, isEmpty#629, sum#630, isEmpty#631, sum#632, isEmpty#633, sum#634, isEmpty#635]
+
+(228) Exchange
+Input [80]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, sum#564, isEmpty#565, sum#566, isEmpty#567, sum#568, isEmpty#569, sum#570, isEmpty#571, sum#572, isEmpty#573, sum#574, isEmpty#575, sum#576, isEmpty#577, sum#578, isEmpty#579, sum#580, isEmpty#581, sum#582, isEmpty#583, sum#584, isEmpty#585, sum#586, isEmpty#587, sum#588, isEmpty#589, sum#590, isEmpty#591, sum#592, isEmpty#593, sum#594, isEmpty#595, sum#596, isEmpty#597, sum#598, isEmpty#599, sum#600, isEmpty#601, sum#602, isEmpty#603, sum#604, isEmpty#605, sum#606, isEmpty#607, sum#608, isEmpty#609, sum#610, isEmpty#611, sum#612, isEmpty#613, sum#614, isEmpty#615, sum#616, isEmpty#617, sum#618, isEmpty#619, sum#620, isEmpty#621, sum#622, isEmpty#623, sum#624, isEmpty#625, sum#626, isEmpty#627, sum#628, isEmpty#629, sum#630, isEmpty#631, sum#632, isEmpty#633, sum#634, isEmpty#635]
+Arguments: hashpartitioning(w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, 100), ENSURE_REQUIREMENTS, [plan_id=34]
+
+(229) HashAggregate
+Input [80]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, sum#564, isEmpty#565, sum#566, isEmpty#567, sum#568, isEmpty#569, sum#570, isEmpty#571, sum#572, isEmpty#573, sum#574, isEmpty#575, sum#576, isEmpty#577, sum#578, isEmpty#579, sum#580, isEmpty#581, sum#582, isEmpty#583, sum#584, isEmpty#585, sum#586, isEmpty#587, sum#588, isEmpty#589, sum#590, isEmpty#591, sum#592, isEmpty#593, sum#594, isEmpty#595, sum#596, isEmpty#597, sum#598, isEmpty#599, sum#600, isEmpty#601, sum#602, isEmpty#603, sum#604, isEmpty#605, sum#606, isEmpty#607, sum#608, isEmpty#609, sum#610, isEmpty#611, sum#612, isEmpty#613, sum#614, isEmpty#615, sum#616, isEmpty#617, sum#618, isEmpty#619, sum#620, isEmpty#621, sum#622, isEmpty#623, sum#624, isEmpty#625, sum#626, isEmpty#627, sum#628, isEmpty#629, sum#630, isEmpty#631, sum#632, isEmpty#633, sum#634, isEmpty#635]
+Keys [8]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120]
+Functions [36]: [sum(jan_sales#121), sum(feb_sales#122), sum(mar_sales#123), sum(apr_sales#124), sum(may_sales#125), sum(jun_sales#126), sum(jul_sales#127), sum(aug_sales#128), sum(sep_sales#129), sum(oct_sales#130), sum(nov_sales#131), sum(dec_sales#132), sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0)))), sum(jan_net#133), sum(feb_net#134), sum(mar_net#135), sum(apr_net#136), sum(may_net#137), sum(jun_net#138), sum(jul_net#139), sum(aug_net#140), sum(sep_net#141), sum(oct_net#142), sum(nov_net#143), sum(dec_net#144)]
+Aggregate Attributes [36]: [sum(jan_sales#121)#394, sum(feb_sales#122)#395, sum(mar_sales#123)#396, sum(apr_sales#124)#397, sum(may_sales#125)#398, sum(jun_sales#126)#399, sum(jul_sales#127)#400, sum(aug_sales#128)#401, sum(sep_sales#129)#402, sum(oct_sales#130)#403, sum(nov_sales#131)#404, sum(dec_sales#132)#405, sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#406, sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#407, sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#408, sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#409, sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#410, sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#411, sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#412, sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#413, sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#414, sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#415, sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#416, sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#417, sum(jan_net#133)#418, sum(feb_net#134)#419, sum(mar_net#135)#420, sum(apr_net#136)#421, sum(may_net#137)#422, sum(jun_net#138)#423, sum(jul_net#139)#424, sum(aug_net#140)#425, sum(sep_net#141)#426, sum(oct_net#142)#427, sum(nov_net#143)#428, sum(dec_net#144)#429]
+Results [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, sum(jan_sales#121)#394 AS jan_sales#430, sum(feb_sales#122)#395 AS feb_sales#431, sum(mar_sales#123)#396 AS mar_sales#432, sum(apr_sales#124)#397 AS apr_sales#433, sum(may_sales#125)#398 AS may_sales#434, sum(jun_sales#126)#399 AS jun_sales#435, sum(jul_sales#127)#400 AS jul_sales#436, sum(aug_sales#128)#401 AS aug_sales#437, sum(sep_sales#129)#402 AS sep_sales#438, sum(oct_sales#130)#403 AS oct_sales#439, sum(nov_sales#131)#404 AS nov_sales#440, sum(dec_sales#132)#405 AS dec_sales#441, sum((jan_sales#121 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#406 AS jan_sales_per_sq_foot#442, sum((feb_sales#122 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#407 AS feb_sales_per_sq_foot#443, sum((mar_sales#123 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#408 AS mar_sales_per_sq_foot#444, sum((apr_sales#124 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#409 AS apr_sales_per_sq_foot#445, sum((may_sales#125 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#410 AS may_sales_per_sq_foot#446, sum((jun_sales#126 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#411 AS jun_sales_per_sq_foot#447, sum((jul_sales#127 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#412 AS jul_sales_per_sq_foot#448, sum((aug_sales#128 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#413 AS aug_sales_per_sq_foot#449, sum((sep_sales#129 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#414 AS sep_sales_per_sq_foot#450, sum((oct_sales#130 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#415 AS oct_sales_per_sq_foot#451, sum((nov_sales#131 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#416 AS nov_sales_per_sq_foot#452, sum((dec_sales#132 / cast(w_warehouse_sq_ft#10 as decimal(10,0))))#417 AS dec_sales_per_sq_foot#453, sum(jan_net#133)#418 AS jan_net#454, sum(feb_net#134)#419 AS feb_net#455, sum(mar_net#135)#420 AS mar_net#456, sum(apr_net#136)#421 AS apr_net#457, sum(may_net#137)#422 AS may_net#458, sum(jun_net#138)#423 AS jun_net#459, sum(jul_net#139)#424 AS jul_net#460, sum(aug_net#140)#425 AS aug_net#461, sum(sep_net#141)#426 AS sep_net#462, sum(oct_net#142)#427 AS oct_net#463, sum(nov_net#143)#428 AS nov_net#464, sum(dec_net#144)#429 AS dec_net#465]
+
+(230) TakeOrderedAndProject
+Input [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, jan_sales#430, feb_sales#431, mar_sales#432, apr_sales#433, may_sales#434, jun_sales#435, jul_sales#436, aug_sales#437, sep_sales#438, oct_sales#439, nov_sales#440, dec_sales#441, jan_sales_per_sq_foot#442, feb_sales_per_sq_foot#443, mar_sales_per_sq_foot#444, apr_sales_per_sq_foot#445, may_sales_per_sq_foot#446, jun_sales_per_sq_foot#447, jul_sales_per_sq_foot#448, aug_sales_per_sq_foot#449, sep_sales_per_sq_foot#450, oct_sales_per_sq_foot#451, nov_sales_per_sq_foot#452, dec_sales_per_sq_foot#453, jan_net#454, feb_net#455, mar_net#456, apr_net#457, may_net#458, jun_net#459, jul_net#460, aug_net#461, sep_net#462, oct_net#463, nov_net#464, dec_net#465]
+Arguments: X, [w_warehouse_name#9 ASC NULLS FIRST], [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, jan_sales#430, feb_sales#431, mar_sales#432, apr_sales#433, may_sales#434, jun_sales#435, jul_sales#436, aug_sales#437, sep_sales#438, oct_sales#439, nov_sales#440, dec_sales#441, jan_sales_per_sq_foot#442, feb_sales_per_sq_foot#443, mar_sales_per_sq_foot#444, apr_sales_per_sq_foot#445, ... 20 more fields]
+
+(231) AdaptiveSparkPlan
+Output [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, jan_sales#430, feb_sales#431, mar_sales#432, apr_sales#433, may_sales#434, jun_sales#435, jul_sales#436, aug_sales#437, sep_sales#438, oct_sales#439, nov_sales#440, dec_sales#441, jan_sales_per_sq_foot#442, feb_sales_per_sq_foot#443, mar_sales_per_sq_foot#444, apr_sales_per_sq_foot#445, may_sales_per_sq_foot#446, jun_sales_per_sq_foot#447, jul_sales_per_sq_foot#448, aug_sales_per_sq_foot#449, sep_sales_per_sq_foot#450, oct_sales_per_sq_foot#451, nov_sales_per_sq_foot#452, dec_sales_per_sq_foot#453, jan_net#454, feb_net#455, mar_net#456, apr_net#457, may_net#458, jun_net#459, jul_net#460, aug_net#461, sep_net#462, oct_net#463, nov_net#464, dec_net#465]
+Arguments: isFinalPlan=true
+

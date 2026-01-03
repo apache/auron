@@ -1,0 +1,984 @@
+== Physical Plan ==
+AdaptiveSparkPlan (161)
++- == Final Plan ==
+   CartesianProduct Inner (101)
+   :- CartesianProduct Inner (84)
+   :  :- CartesianProduct Inner (67)
+   :  :  :- CartesianProduct Inner (50)
+   :  :  :  :- CartesianProduct Inner (33)
+   :  :  :  :  :- NativeProject (16)
+   :  :  :  :  :  +- NativeHashAggregate (15)
+   :  :  :  :  :     +- ShuffleQueryStage (14), Statistics(X)
+   :  :  :  :  :        +- NativeShuffleExchange (13)
+   :  :  :  :  :           +- NativeHashAggregate (12)
+   :  :  :  :  :              +- NativeHashAggregate (11)
+   :  :  :  :  :                 +- InputAdapter (10)
+   :  :  :  :  :                    +- AQEShuffleRead (9)
+   :  :  :  :  :                       +- ShuffleQueryStage (8), Statistics(X)
+   :  :  :  :  :                          +- NativeShuffleExchange (7)
+   :  :  :  :  :                             +- NativeHashAggregate (6)
+   :  :  :  :  :                                +- NativeProject (5)
+   :  :  :  :  :                                   +- NativeProject (4)
+   :  :  :  :  :                                      +- NativeFilter (3)
+   :  :  :  :  :                                         +- InputAdapter (2)
+   :  :  :  :  :                                            +- NativeParquetScan  (1)
+   :  :  :  :  +- NativeProject (32)
+   :  :  :  :     +- NativeHashAggregate (31)
+   :  :  :  :        +- ShuffleQueryStage (30), Statistics(X)
+   :  :  :  :           +- NativeShuffleExchange (29)
+   :  :  :  :              +- NativeHashAggregate (28)
+   :  :  :  :                 +- NativeHashAggregate (27)
+   :  :  :  :                    +- InputAdapter (26)
+   :  :  :  :                       +- AQEShuffleRead (25)
+   :  :  :  :                          +- ShuffleQueryStage (24), Statistics(X)
+   :  :  :  :                             +- NativeShuffleExchange (23)
+   :  :  :  :                                +- NativeHashAggregate (22)
+   :  :  :  :                                   +- NativeProject (21)
+   :  :  :  :                                      +- NativeProject (20)
+   :  :  :  :                                         +- NativeFilter (19)
+   :  :  :  :                                            +- InputAdapter (18)
+   :  :  :  :                                               +- NativeParquetScan  (17)
+   :  :  :  +- NativeProject (49)
+   :  :  :     +- NativeHashAggregate (48)
+   :  :  :        +- ShuffleQueryStage (47), Statistics(X)
+   :  :  :           +- NativeShuffleExchange (46)
+   :  :  :              +- NativeHashAggregate (45)
+   :  :  :                 +- NativeHashAggregate (44)
+   :  :  :                    +- InputAdapter (43)
+   :  :  :                       +- AQEShuffleRead (42)
+   :  :  :                          +- ShuffleQueryStage (41), Statistics(X)
+   :  :  :                             +- NativeShuffleExchange (40)
+   :  :  :                                +- NativeHashAggregate (39)
+   :  :  :                                   +- NativeProject (38)
+   :  :  :                                      +- NativeProject (37)
+   :  :  :                                         +- NativeFilter (36)
+   :  :  :                                            +- InputAdapter (35)
+   :  :  :                                               +- NativeParquetScan  (34)
+   :  :  +- NativeProject (66)
+   :  :     +- NativeHashAggregate (65)
+   :  :        +- ShuffleQueryStage (64), Statistics(X)
+   :  :           +- NativeShuffleExchange (63)
+   :  :              +- NativeHashAggregate (62)
+   :  :                 +- NativeHashAggregate (61)
+   :  :                    +- InputAdapter (60)
+   :  :                       +- AQEShuffleRead (59)
+   :  :                          +- ShuffleQueryStage (58), Statistics(X)
+   :  :                             +- NativeShuffleExchange (57)
+   :  :                                +- NativeHashAggregate (56)
+   :  :                                   +- NativeProject (55)
+   :  :                                      +- NativeProject (54)
+   :  :                                         +- NativeFilter (53)
+   :  :                                            +- InputAdapter (52)
+   :  :                                               +- NativeParquetScan  (51)
+   :  +- NativeProject (83)
+   :     +- NativeHashAggregate (82)
+   :        +- ShuffleQueryStage (81), Statistics(X)
+   :           +- NativeShuffleExchange (80)
+   :              +- NativeHashAggregate (79)
+   :                 +- NativeHashAggregate (78)
+   :                    +- InputAdapter (77)
+   :                       +- AQEShuffleRead (76)
+   :                          +- ShuffleQueryStage (75), Statistics(X)
+   :                             +- NativeShuffleExchange (74)
+   :                                +- NativeHashAggregate (73)
+   :                                   +- NativeProject (72)
+   :                                      +- NativeProject (71)
+   :                                         +- NativeFilter (70)
+   :                                            +- InputAdapter (69)
+   :                                               +- NativeParquetScan  (68)
+   +- NativeProject (100)
+      +- NativeHashAggregate (99)
+         +- ShuffleQueryStage (98), Statistics(X)
+            +- NativeShuffleExchange (97)
+               +- NativeHashAggregate (96)
+                  +- NativeHashAggregate (95)
+                     +- InputAdapter (94)
+                        +- AQEShuffleRead (93)
+                           +- ShuffleQueryStage (92), Statistics(X)
+                              +- NativeShuffleExchange (91)
+                                 +- NativeHashAggregate (90)
+                                    +- NativeProject (89)
+                                       +- NativeProject (88)
+                                          +- NativeFilter (87)
+                                             +- InputAdapter (86)
+                                                +- NativeParquetScan  (85)
++- == Initial Plan ==
+   CartesianProduct Inner (160)
+   :- CartesianProduct Inner (150)
+   :  :- CartesianProduct Inner (140)
+   :  :  :- CartesianProduct Inner (130)
+   :  :  :  :- CartesianProduct Inner (120)
+   :  :  :  :  :- HashAggregate (110)
+   :  :  :  :  :  +- Exchange (109)
+   :  :  :  :  :     +- HashAggregate (108)
+   :  :  :  :  :        +- HashAggregate (107)
+   :  :  :  :  :           +- Exchange (106)
+   :  :  :  :  :              +- HashAggregate (105)
+   :  :  :  :  :                 +- Project (104)
+   :  :  :  :  :                    +- Filter (103)
+   :  :  :  :  :                       +- Scan parquet (102)
+   :  :  :  :  +- HashAggregate (119)
+   :  :  :  :     +- Exchange (118)
+   :  :  :  :        +- HashAggregate (117)
+   :  :  :  :           +- HashAggregate (116)
+   :  :  :  :              +- Exchange (115)
+   :  :  :  :                 +- HashAggregate (114)
+   :  :  :  :                    +- Project (113)
+   :  :  :  :                       +- Filter (112)
+   :  :  :  :                          +- Scan parquet (111)
+   :  :  :  +- HashAggregate (129)
+   :  :  :     +- Exchange (128)
+   :  :  :        +- HashAggregate (127)
+   :  :  :           +- HashAggregate (126)
+   :  :  :              +- Exchange (125)
+   :  :  :                 +- HashAggregate (124)
+   :  :  :                    +- Project (123)
+   :  :  :                       +- Filter (122)
+   :  :  :                          +- Scan parquet (121)
+   :  :  +- HashAggregate (139)
+   :  :     +- Exchange (138)
+   :  :        +- HashAggregate (137)
+   :  :           +- HashAggregate (136)
+   :  :              +- Exchange (135)
+   :  :                 +- HashAggregate (134)
+   :  :                    +- Project (133)
+   :  :                       +- Filter (132)
+   :  :                          +- Scan parquet (131)
+   :  +- HashAggregate (149)
+   :     +- Exchange (148)
+   :        +- HashAggregate (147)
+   :           +- HashAggregate (146)
+   :              +- Exchange (145)
+   :                 +- HashAggregate (144)
+   :                    +- Project (143)
+   :                       +- Filter (142)
+   :                          +- Scan parquet (141)
+   +- HashAggregate (159)
+      +- Exchange (158)
+         +- HashAggregate (157)
+            +- HashAggregate (156)
+               +- Exchange (155)
+                  +- HashAggregate (154)
+                     +- Project (153)
+                        +- Filter (152)
+                           +- Scan parquet (151)
+
+
+(102) Scan parquet
+Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,0), LessThanOrEqual(ss_quantity,5), Or(Or(And(GreaterThanOrEqual(ss_list_price,8.00),LessThanOrEqual(ss_list_price,18.00)),And(GreaterThanOrEqual(ss_coupon_amt,459.00),LessThanOrEqual(ss_coupon_amt,1459.00))),And(GreaterThanOrEqual(ss_wholesale_cost,57.00),LessThanOrEqual(ss_wholesale_cost,77.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(2) InputAdapter
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Arguments: [#1, #2, #3, #4]
+
+(3) NativeFilter
+Input [4]: [#1#1, #2#2, #3#3, #4#4]
+Condition : (((isnotnull(ss_quantity#1) AND (ss_quantity#1 >= 0)) AND (ss_quantity#1 <= 5)) AND ((((ss_list_price#3 >= 8.00) AND (ss_list_price#3 <= 18.00)) OR ((ss_coupon_amt#4 >= 459.00) AND (ss_coupon_amt#4 <= 1459.00))) OR ((ss_wholesale_cost#2 >= 57.00) AND (ss_wholesale_cost#2 <= 77.00))))
+
+(4) NativeProject
+Output [1]: [ss_list_price#3]
+Input [4]: [#1#1, #2#2, #3#3, #4#4]
+
+(5) NativeProject
+Output [2]: [ss_list_price#3 AS ss_list_price#3, UnscaledValue(ss_list_price#3) AS _c1#5]
+Input [1]: [ss_list_price#3]
+
+(6) NativeHashAggregate
+Input [2]: [ss_list_price#3, _c1#5]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [partial_avg(_c1#5), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7]
+Results [2]: [ss_list_price#3, #8#8]
+
+(7) NativeShuffleExchange
+Input [2]: [ss_list_price#3, #8#8]
+Arguments: hashpartitioning(ss_list_price#3, 100), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(8) ShuffleQueryStage
+Output [2]: [ss_list_price#3, #8#8]
+Arguments: X
+
+(9) AQEShuffleRead
+Input [2]: [ss_list_price#3, #8#8]
+Arguments: coalesced
+
+(10) InputAdapter
+Input [2]: [ss_list_price#3, #8#8]
+
+(11) NativeHashAggregate
+Input [2]: [ss_list_price#3, #8#8]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7]
+Results [2]: [ss_list_price#3, #8#8]
+
+(12) NativeHashAggregate
+Input [2]: [ss_list_price#3, #8#8]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#9]
+Results [1]: [#8#8]
+
+(13) NativeShuffleExchange
+Input [1]: [#8#8]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
+
+(14) ShuffleQueryStage
+Output [1]: [#8#8]
+Arguments: X
+
+(15) NativeHashAggregate
+Input [1]: [#8#8]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#9]
+Results [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#9]
+
+(16) NativeProject
+Output [3]: [cast((avg(UnscaledValue(ss_list_price#3))#6 / 100.0) as decimal(11,6)) AS B1_LP#10, count(ss_list_price#3)#7 AS B1_CNT#11, count(ss_list_price#3)#9 AS B1_CNTD#12]
+Input [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#9]
+
+(111) Scan parquet
+Output [4]: [ss_quantity#13, ss_wholesale_cost#14, ss_list_price#15, ss_coupon_amt#16]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,6), LessThanOrEqual(ss_quantity,10), Or(Or(And(GreaterThanOrEqual(ss_list_price,90.00),LessThanOrEqual(ss_list_price,100.00)),And(GreaterThanOrEqual(ss_coupon_amt,2323.00),LessThanOrEqual(ss_coupon_amt,3323.00))),And(GreaterThanOrEqual(ss_wholesale_cost,31.00),LessThanOrEqual(ss_wholesale_cost,51.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(18) InputAdapter
+Input [4]: [ss_quantity#13, ss_wholesale_cost#14, ss_list_price#15, ss_coupon_amt#16]
+Arguments: [#13, #14, #15, #16]
+
+(19) NativeFilter
+Input [4]: [#13#13, #14#14, #15#15, #16#16]
+Condition : (((isnotnull(ss_quantity#13) AND (ss_quantity#13 >= 6)) AND (ss_quantity#13 <= 10)) AND ((((ss_list_price#15 >= 90.00) AND (ss_list_price#15 <= 100.00)) OR ((ss_coupon_amt#16 >= 2323.00) AND (ss_coupon_amt#16 <= 3323.00))) OR ((ss_wholesale_cost#14 >= 31.00) AND (ss_wholesale_cost#14 <= 51.00))))
+
+(20) NativeProject
+Output [1]: [ss_list_price#15]
+Input [4]: [#13#13, #14#14, #15#15, #16#16]
+
+(21) NativeProject
+Output [2]: [ss_list_price#15 AS ss_list_price#15, UnscaledValue(ss_list_price#15) AS _c1#17]
+Input [1]: [ss_list_price#15]
+
+(22) NativeHashAggregate
+Input [2]: [ss_list_price#15, _c1#17]
+Keys [1]: [ss_list_price#15]
+Functions [2]: [partial_avg(_c1#17), partial_count(ss_list_price#15)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19]
+Results [2]: [ss_list_price#15, #8#8]
+
+(23) NativeShuffleExchange
+Input [2]: [ss_list_price#15, #8#8]
+Arguments: hashpartitioning(ss_list_price#15, 100), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(24) ShuffleQueryStage
+Output [2]: [ss_list_price#15, #8#8]
+Arguments: X
+
+(25) AQEShuffleRead
+Input [2]: [ss_list_price#15, #8#8]
+Arguments: coalesced
+
+(26) InputAdapter
+Input [2]: [ss_list_price#15, #8#8]
+
+(27) NativeHashAggregate
+Input [2]: [ss_list_price#15, #8#8]
+Keys [1]: [ss_list_price#15]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#15)), merge_count(ss_list_price#15)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19]
+Results [2]: [ss_list_price#15, #8#8]
+
+(28) NativeHashAggregate
+Input [2]: [ss_list_price#15, #8#8]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#15)), merge_count(ss_list_price#15), partial_count(distinct ss_list_price#15)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19, count(ss_list_price#15)#20]
+Results [1]: [#8#8]
+
+(29) NativeShuffleExchange
+Input [1]: [#8#8]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
+
+(30) ShuffleQueryStage
+Output [1]: [#8#8]
+Arguments: X
+
+(31) NativeHashAggregate
+Input [1]: [#8#8]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#15)), count(ss_list_price#15), count(distinct ss_list_price#15)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19, count(ss_list_price#15)#20]
+Results [3]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19, count(ss_list_price#15)#20]
+
+(32) NativeProject
+Output [3]: [cast((avg(UnscaledValue(ss_list_price#15))#18 / 100.0) as decimal(11,6)) AS B2_LP#21, count(ss_list_price#15)#19 AS B2_CNT#22, count(ss_list_price#15)#20 AS B2_CNTD#23]
+Input [3]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19, count(ss_list_price#15)#20]
+
+(33) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(121) Scan parquet
+Output [4]: [ss_quantity#24, ss_wholesale_cost#25, ss_list_price#26, ss_coupon_amt#27]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,11), LessThanOrEqual(ss_quantity,15), Or(Or(And(GreaterThanOrEqual(ss_list_price,142.00),LessThanOrEqual(ss_list_price,152.00)),And(GreaterThanOrEqual(ss_coupon_amt,12214.00),LessThanOrEqual(ss_coupon_amt,13214.00))),And(GreaterThanOrEqual(ss_wholesale_cost,79.00),LessThanOrEqual(ss_wholesale_cost,99.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(35) InputAdapter
+Input [4]: [ss_quantity#24, ss_wholesale_cost#25, ss_list_price#26, ss_coupon_amt#27]
+Arguments: [#24, #25, #26, #27]
+
+(36) NativeFilter
+Input [4]: [#24#24, #25#25, #26#26, #27#27]
+Condition : (((isnotnull(ss_quantity#24) AND (ss_quantity#24 >= 11)) AND (ss_quantity#24 <= 15)) AND ((((ss_list_price#26 >= 142.00) AND (ss_list_price#26 <= 152.00)) OR ((ss_coupon_amt#27 >= 12214.00) AND (ss_coupon_amt#27 <= 13214.00))) OR ((ss_wholesale_cost#25 >= 79.00) AND (ss_wholesale_cost#25 <= 99.00))))
+
+(37) NativeProject
+Output [1]: [ss_list_price#26]
+Input [4]: [#24#24, #25#25, #26#26, #27#27]
+
+(38) NativeProject
+Output [2]: [ss_list_price#26 AS ss_list_price#26, UnscaledValue(ss_list_price#26) AS _c1#28]
+Input [1]: [ss_list_price#26]
+
+(39) NativeHashAggregate
+Input [2]: [ss_list_price#26, _c1#28]
+Keys [1]: [ss_list_price#26]
+Functions [2]: [partial_avg(_c1#28), partial_count(ss_list_price#26)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30]
+Results [2]: [ss_list_price#26, #8#8]
+
+(40) NativeShuffleExchange
+Input [2]: [ss_list_price#26, #8#8]
+Arguments: hashpartitioning(ss_list_price#26, 100), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(41) ShuffleQueryStage
+Output [2]: [ss_list_price#26, #8#8]
+Arguments: X
+
+(42) AQEShuffleRead
+Input [2]: [ss_list_price#26, #8#8]
+Arguments: coalesced
+
+(43) InputAdapter
+Input [2]: [ss_list_price#26, #8#8]
+
+(44) NativeHashAggregate
+Input [2]: [ss_list_price#26, #8#8]
+Keys [1]: [ss_list_price#26]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#26)), merge_count(ss_list_price#26)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30]
+Results [2]: [ss_list_price#26, #8#8]
+
+(45) NativeHashAggregate
+Input [2]: [ss_list_price#26, #8#8]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#26)), merge_count(ss_list_price#26), partial_count(distinct ss_list_price#26)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30, count(ss_list_price#26)#31]
+Results [1]: [#8#8]
+
+(46) NativeShuffleExchange
+Input [1]: [#8#8]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
+
+(47) ShuffleQueryStage
+Output [1]: [#8#8]
+Arguments: X
+
+(48) NativeHashAggregate
+Input [1]: [#8#8]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#26)), count(ss_list_price#26), count(distinct ss_list_price#26)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30, count(ss_list_price#26)#31]
+Results [3]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30, count(ss_list_price#26)#31]
+
+(49) NativeProject
+Output [3]: [cast((avg(UnscaledValue(ss_list_price#26))#29 / 100.0) as decimal(11,6)) AS B3_LP#32, count(ss_list_price#26)#30 AS B3_CNT#33, count(ss_list_price#26)#31 AS B3_CNTD#34]
+Input [3]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30, count(ss_list_price#26)#31]
+
+(50) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(131) Scan parquet
+Output [4]: [ss_quantity#35, ss_wholesale_cost#36, ss_list_price#37, ss_coupon_amt#38]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,16), LessThanOrEqual(ss_quantity,20), Or(Or(And(GreaterThanOrEqual(ss_list_price,135.00),LessThanOrEqual(ss_list_price,145.00)),And(GreaterThanOrEqual(ss_coupon_amt,6071.00),LessThanOrEqual(ss_coupon_amt,7071.00))),And(GreaterThanOrEqual(ss_wholesale_cost,38.00),LessThanOrEqual(ss_wholesale_cost,58.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(52) InputAdapter
+Input [4]: [ss_quantity#35, ss_wholesale_cost#36, ss_list_price#37, ss_coupon_amt#38]
+Arguments: [#35, #36, #37, #38]
+
+(53) NativeFilter
+Input [4]: [#35#35, #36#36, #37#37, #38#38]
+Condition : (((isnotnull(ss_quantity#35) AND (ss_quantity#35 >= 16)) AND (ss_quantity#35 <= 20)) AND ((((ss_list_price#37 >= 135.00) AND (ss_list_price#37 <= 145.00)) OR ((ss_coupon_amt#38 >= 6071.00) AND (ss_coupon_amt#38 <= 7071.00))) OR ((ss_wholesale_cost#36 >= 38.00) AND (ss_wholesale_cost#36 <= 58.00))))
+
+(54) NativeProject
+Output [1]: [ss_list_price#37]
+Input [4]: [#35#35, #36#36, #37#37, #38#38]
+
+(55) NativeProject
+Output [2]: [ss_list_price#37 AS ss_list_price#37, UnscaledValue(ss_list_price#37) AS _c1#39]
+Input [1]: [ss_list_price#37]
+
+(56) NativeHashAggregate
+Input [2]: [ss_list_price#37, _c1#39]
+Keys [1]: [ss_list_price#37]
+Functions [2]: [partial_avg(_c1#39), partial_count(ss_list_price#37)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41]
+Results [2]: [ss_list_price#37, #8#8]
+
+(57) NativeShuffleExchange
+Input [2]: [ss_list_price#37, #8#8]
+Arguments: hashpartitioning(ss_list_price#37, 100), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(58) ShuffleQueryStage
+Output [2]: [ss_list_price#37, #8#8]
+Arguments: X
+
+(59) AQEShuffleRead
+Input [2]: [ss_list_price#37, #8#8]
+Arguments: coalesced
+
+(60) InputAdapter
+Input [2]: [ss_list_price#37, #8#8]
+
+(61) NativeHashAggregate
+Input [2]: [ss_list_price#37, #8#8]
+Keys [1]: [ss_list_price#37]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#37)), merge_count(ss_list_price#37)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41]
+Results [2]: [ss_list_price#37, #8#8]
+
+(62) NativeHashAggregate
+Input [2]: [ss_list_price#37, #8#8]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#37)), merge_count(ss_list_price#37), partial_count(distinct ss_list_price#37)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41, count(ss_list_price#37)#42]
+Results [1]: [#8#8]
+
+(63) NativeShuffleExchange
+Input [1]: [#8#8]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
+
+(64) ShuffleQueryStage
+Output [1]: [#8#8]
+Arguments: X
+
+(65) NativeHashAggregate
+Input [1]: [#8#8]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#37)), count(ss_list_price#37), count(distinct ss_list_price#37)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41, count(ss_list_price#37)#42]
+Results [3]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41, count(ss_list_price#37)#42]
+
+(66) NativeProject
+Output [3]: [cast((avg(UnscaledValue(ss_list_price#37))#40 / 100.0) as decimal(11,6)) AS B4_LP#43, count(ss_list_price#37)#41 AS B4_CNT#44, count(ss_list_price#37)#42 AS B4_CNTD#45]
+Input [3]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41, count(ss_list_price#37)#42]
+
+(67) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(141) Scan parquet
+Output [4]: [ss_quantity#46, ss_wholesale_cost#47, ss_list_price#48, ss_coupon_amt#49]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,25), Or(Or(And(GreaterThanOrEqual(ss_list_price,122.00),LessThanOrEqual(ss_list_price,132.00)),And(GreaterThanOrEqual(ss_coupon_amt,836.00),LessThanOrEqual(ss_coupon_amt,1836.00))),And(GreaterThanOrEqual(ss_wholesale_cost,17.00),LessThanOrEqual(ss_wholesale_cost,37.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(69) InputAdapter
+Input [4]: [ss_quantity#46, ss_wholesale_cost#47, ss_list_price#48, ss_coupon_amt#49]
+Arguments: [#46, #47, #48, #49]
+
+(70) NativeFilter
+Input [4]: [#46#46, #47#47, #48#48, #49#49]
+Condition : (((isnotnull(ss_quantity#46) AND (ss_quantity#46 >= 21)) AND (ss_quantity#46 <= 25)) AND ((((ss_list_price#48 >= 122.00) AND (ss_list_price#48 <= 132.00)) OR ((ss_coupon_amt#49 >= 836.00) AND (ss_coupon_amt#49 <= 1836.00))) OR ((ss_wholesale_cost#47 >= 17.00) AND (ss_wholesale_cost#47 <= 37.00))))
+
+(71) NativeProject
+Output [1]: [ss_list_price#48]
+Input [4]: [#46#46, #47#47, #48#48, #49#49]
+
+(72) NativeProject
+Output [2]: [ss_list_price#48 AS ss_list_price#48, UnscaledValue(ss_list_price#48) AS _c1#50]
+Input [1]: [ss_list_price#48]
+
+(73) NativeHashAggregate
+Input [2]: [ss_list_price#48, _c1#50]
+Keys [1]: [ss_list_price#48]
+Functions [2]: [partial_avg(_c1#50), partial_count(ss_list_price#48)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52]
+Results [2]: [ss_list_price#48, #8#8]
+
+(74) NativeShuffleExchange
+Input [2]: [ss_list_price#48, #8#8]
+Arguments: hashpartitioning(ss_list_price#48, 100), ENSURE_REQUIREMENTS, [plan_id=9]
+
+(75) ShuffleQueryStage
+Output [2]: [ss_list_price#48, #8#8]
+Arguments: X
+
+(76) AQEShuffleRead
+Input [2]: [ss_list_price#48, #8#8]
+Arguments: coalesced
+
+(77) InputAdapter
+Input [2]: [ss_list_price#48, #8#8]
+
+(78) NativeHashAggregate
+Input [2]: [ss_list_price#48, #8#8]
+Keys [1]: [ss_list_price#48]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#48)), merge_count(ss_list_price#48)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52]
+Results [2]: [ss_list_price#48, #8#8]
+
+(79) NativeHashAggregate
+Input [2]: [ss_list_price#48, #8#8]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#48)), merge_count(ss_list_price#48), partial_count(distinct ss_list_price#48)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#53]
+Results [1]: [#8#8]
+
+(80) NativeShuffleExchange
+Input [1]: [#8#8]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+
+(81) ShuffleQueryStage
+Output [1]: [#8#8]
+Arguments: X
+
+(82) NativeHashAggregate
+Input [1]: [#8#8]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#48)), count(ss_list_price#48), count(distinct ss_list_price#48)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#53]
+Results [3]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#53]
+
+(83) NativeProject
+Output [3]: [cast((avg(UnscaledValue(ss_list_price#48))#51 / 100.0) as decimal(11,6)) AS B5_LP#54, count(ss_list_price#48)#52 AS B5_CNT#55, count(ss_list_price#48)#53 AS B5_CNTD#56]
+Input [3]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#53]
+
+(84) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(151) Scan parquet
+Output [4]: [ss_quantity#57, ss_wholesale_cost#58, ss_list_price#59, ss_coupon_amt#60]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,26), LessThanOrEqual(ss_quantity,30), Or(Or(And(GreaterThanOrEqual(ss_list_price,154.00),LessThanOrEqual(ss_list_price,164.00)),And(GreaterThanOrEqual(ss_coupon_amt,7326.00),LessThanOrEqual(ss_coupon_amt,8326.00))),And(GreaterThanOrEqual(ss_wholesale_cost,7.00),LessThanOrEqual(ss_wholesale_cost,27.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(86) InputAdapter
+Input [4]: [ss_quantity#57, ss_wholesale_cost#58, ss_list_price#59, ss_coupon_amt#60]
+Arguments: [#57, #58, #59, #60]
+
+(87) NativeFilter
+Input [4]: [#57#57, #58#58, #59#59, #60#60]
+Condition : (((isnotnull(ss_quantity#57) AND (ss_quantity#57 >= 26)) AND (ss_quantity#57 <= 30)) AND ((((ss_list_price#59 >= 154.00) AND (ss_list_price#59 <= 164.00)) OR ((ss_coupon_amt#60 >= 7326.00) AND (ss_coupon_amt#60 <= 8326.00))) OR ((ss_wholesale_cost#58 >= 7.00) AND (ss_wholesale_cost#58 <= 27.00))))
+
+(88) NativeProject
+Output [1]: [ss_list_price#59]
+Input [4]: [#57#57, #58#58, #59#59, #60#60]
+
+(89) NativeProject
+Output [2]: [ss_list_price#59 AS ss_list_price#59, UnscaledValue(ss_list_price#59) AS _c1#61]
+Input [1]: [ss_list_price#59]
+
+(90) NativeHashAggregate
+Input [2]: [ss_list_price#59, _c1#61]
+Keys [1]: [ss_list_price#59]
+Functions [2]: [partial_avg(_c1#61), partial_count(ss_list_price#59)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63]
+Results [2]: [ss_list_price#59, #8#8]
+
+(91) NativeShuffleExchange
+Input [2]: [ss_list_price#59, #8#8]
+Arguments: hashpartitioning(ss_list_price#59, 100), ENSURE_REQUIREMENTS, [plan_id=11]
+
+(92) ShuffleQueryStage
+Output [2]: [ss_list_price#59, #8#8]
+Arguments: X
+
+(93) AQEShuffleRead
+Input [2]: [ss_list_price#59, #8#8]
+Arguments: coalesced
+
+(94) InputAdapter
+Input [2]: [ss_list_price#59, #8#8]
+
+(95) NativeHashAggregate
+Input [2]: [ss_list_price#59, #8#8]
+Keys [1]: [ss_list_price#59]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#59)), merge_count(ss_list_price#59)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63]
+Results [2]: [ss_list_price#59, #8#8]
+
+(96) NativeHashAggregate
+Input [2]: [ss_list_price#59, #8#8]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#59)), merge_count(ss_list_price#59), partial_count(distinct ss_list_price#59)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63, count(ss_list_price#59)#64]
+Results [1]: [#8#8]
+
+(97) NativeShuffleExchange
+Input [1]: [#8#8]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=12]
+
+(98) ShuffleQueryStage
+Output [1]: [#8#8]
+Arguments: X
+
+(99) NativeHashAggregate
+Input [1]: [#8#8]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#59)), count(ss_list_price#59), count(distinct ss_list_price#59)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63, count(ss_list_price#59)#64]
+Results [3]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63, count(ss_list_price#59)#64]
+
+(100) NativeProject
+Output [3]: [cast((avg(UnscaledValue(ss_list_price#59))#62 / 100.0) as decimal(11,6)) AS B6_LP#65, count(ss_list_price#59)#63 AS B6_CNT#66, count(ss_list_price#59)#64 AS B6_CNTD#67]
+Input [3]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63, count(ss_list_price#59)#64]
+
+(101) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(102) Scan parquet
+Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,0), LessThanOrEqual(ss_quantity,5), Or(Or(And(GreaterThanOrEqual(ss_list_price,8.00),LessThanOrEqual(ss_list_price,18.00)),And(GreaterThanOrEqual(ss_coupon_amt,459.00),LessThanOrEqual(ss_coupon_amt,1459.00))),And(GreaterThanOrEqual(ss_wholesale_cost,57.00),LessThanOrEqual(ss_wholesale_cost,77.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(103) Filter
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Condition : (((isnotnull(ss_quantity#1) AND (ss_quantity#1 >= 0)) AND (ss_quantity#1 <= 5)) AND ((((ss_list_price#3 >= 8.00) AND (ss_list_price#3 <= 18.00)) OR ((ss_coupon_amt#4 >= 459.00) AND (ss_coupon_amt#4 <= 1459.00))) OR ((ss_wholesale_cost#2 >= 57.00) AND (ss_wholesale_cost#2 <= 77.00))))
+
+(104) Project
+Output [1]: [ss_list_price#3]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(105) HashAggregate
+Input [1]: [ss_list_price#3]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7]
+Results [4]: [ss_list_price#3, sum#68, count#69, count#70]
+
+(106) Exchange
+Input [4]: [ss_list_price#3, sum#68, count#69, count#70]
+Arguments: hashpartitioning(ss_list_price#3, 100), ENSURE_REQUIREMENTS, [plan_id=13]
+
+(107) HashAggregate
+Input [4]: [ss_list_price#3, sum#68, count#69, count#70]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7]
+Results [4]: [ss_list_price#3, sum#68, count#69, count#70]
+
+(108) HashAggregate
+Input [4]: [ss_list_price#3, sum#68, count#69, count#70]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#9]
+Results [4]: [sum#68, count#69, count#70, count#71]
+
+(109) Exchange
+Input [4]: [sum#68, count#69, count#70, count#71]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=14]
+
+(110) HashAggregate
+Input [4]: [sum#68, count#69, count#70, count#71]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#9]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#6 / 100.0) as decimal(11,6)) AS B1_LP#10, count(ss_list_price#3)#7 AS B1_CNT#11, count(ss_list_price#3)#9 AS B1_CNTD#12]
+
+(111) Scan parquet
+Output [4]: [ss_quantity#13, ss_wholesale_cost#14, ss_list_price#15, ss_coupon_amt#16]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,6), LessThanOrEqual(ss_quantity,10), Or(Or(And(GreaterThanOrEqual(ss_list_price,90.00),LessThanOrEqual(ss_list_price,100.00)),And(GreaterThanOrEqual(ss_coupon_amt,2323.00),LessThanOrEqual(ss_coupon_amt,3323.00))),And(GreaterThanOrEqual(ss_wholesale_cost,31.00),LessThanOrEqual(ss_wholesale_cost,51.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(112) Filter
+Input [4]: [ss_quantity#13, ss_wholesale_cost#14, ss_list_price#15, ss_coupon_amt#16]
+Condition : (((isnotnull(ss_quantity#13) AND (ss_quantity#13 >= 6)) AND (ss_quantity#13 <= 10)) AND ((((ss_list_price#15 >= 90.00) AND (ss_list_price#15 <= 100.00)) OR ((ss_coupon_amt#16 >= 2323.00) AND (ss_coupon_amt#16 <= 3323.00))) OR ((ss_wholesale_cost#14 >= 31.00) AND (ss_wholesale_cost#14 <= 51.00))))
+
+(113) Project
+Output [1]: [ss_list_price#15]
+Input [4]: [ss_quantity#13, ss_wholesale_cost#14, ss_list_price#15, ss_coupon_amt#16]
+
+(114) HashAggregate
+Input [1]: [ss_list_price#15]
+Keys [1]: [ss_list_price#15]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#15)), partial_count(ss_list_price#15)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19]
+Results [4]: [ss_list_price#15, sum#72, count#73, count#74]
+
+(115) Exchange
+Input [4]: [ss_list_price#15, sum#72, count#73, count#74]
+Arguments: hashpartitioning(ss_list_price#15, 100), ENSURE_REQUIREMENTS, [plan_id=15]
+
+(116) HashAggregate
+Input [4]: [ss_list_price#15, sum#72, count#73, count#74]
+Keys [1]: [ss_list_price#15]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#15)), merge_count(ss_list_price#15)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19]
+Results [4]: [ss_list_price#15, sum#72, count#73, count#74]
+
+(117) HashAggregate
+Input [4]: [ss_list_price#15, sum#72, count#73, count#74]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#15)), merge_count(ss_list_price#15), partial_count(distinct ss_list_price#15)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19, count(ss_list_price#15)#20]
+Results [4]: [sum#72, count#73, count#74, count#75]
+
+(118) Exchange
+Input [4]: [sum#72, count#73, count#74, count#75]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=16]
+
+(119) HashAggregate
+Input [4]: [sum#72, count#73, count#74, count#75]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#15)), count(ss_list_price#15), count(distinct ss_list_price#15)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#15))#18, count(ss_list_price#15)#19, count(ss_list_price#15)#20]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#15))#18 / 100.0) as decimal(11,6)) AS B2_LP#21, count(ss_list_price#15)#19 AS B2_CNT#22, count(ss_list_price#15)#20 AS B2_CNTD#23]
+
+(120) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(121) Scan parquet
+Output [4]: [ss_quantity#24, ss_wholesale_cost#25, ss_list_price#26, ss_coupon_amt#27]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,11), LessThanOrEqual(ss_quantity,15), Or(Or(And(GreaterThanOrEqual(ss_list_price,142.00),LessThanOrEqual(ss_list_price,152.00)),And(GreaterThanOrEqual(ss_coupon_amt,12214.00),LessThanOrEqual(ss_coupon_amt,13214.00))),And(GreaterThanOrEqual(ss_wholesale_cost,79.00),LessThanOrEqual(ss_wholesale_cost,99.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(122) Filter
+Input [4]: [ss_quantity#24, ss_wholesale_cost#25, ss_list_price#26, ss_coupon_amt#27]
+Condition : (((isnotnull(ss_quantity#24) AND (ss_quantity#24 >= 11)) AND (ss_quantity#24 <= 15)) AND ((((ss_list_price#26 >= 142.00) AND (ss_list_price#26 <= 152.00)) OR ((ss_coupon_amt#27 >= 12214.00) AND (ss_coupon_amt#27 <= 13214.00))) OR ((ss_wholesale_cost#25 >= 79.00) AND (ss_wholesale_cost#25 <= 99.00))))
+
+(123) Project
+Output [1]: [ss_list_price#26]
+Input [4]: [ss_quantity#24, ss_wholesale_cost#25, ss_list_price#26, ss_coupon_amt#27]
+
+(124) HashAggregate
+Input [1]: [ss_list_price#26]
+Keys [1]: [ss_list_price#26]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#26)), partial_count(ss_list_price#26)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30]
+Results [4]: [ss_list_price#26, sum#76, count#77, count#78]
+
+(125) Exchange
+Input [4]: [ss_list_price#26, sum#76, count#77, count#78]
+Arguments: hashpartitioning(ss_list_price#26, 100), ENSURE_REQUIREMENTS, [plan_id=17]
+
+(126) HashAggregate
+Input [4]: [ss_list_price#26, sum#76, count#77, count#78]
+Keys [1]: [ss_list_price#26]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#26)), merge_count(ss_list_price#26)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30]
+Results [4]: [ss_list_price#26, sum#76, count#77, count#78]
+
+(127) HashAggregate
+Input [4]: [ss_list_price#26, sum#76, count#77, count#78]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#26)), merge_count(ss_list_price#26), partial_count(distinct ss_list_price#26)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30, count(ss_list_price#26)#31]
+Results [4]: [sum#76, count#77, count#78, count#79]
+
+(128) Exchange
+Input [4]: [sum#76, count#77, count#78, count#79]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=18]
+
+(129) HashAggregate
+Input [4]: [sum#76, count#77, count#78, count#79]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#26)), count(ss_list_price#26), count(distinct ss_list_price#26)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#26))#29, count(ss_list_price#26)#30, count(ss_list_price#26)#31]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#26))#29 / 100.0) as decimal(11,6)) AS B3_LP#32, count(ss_list_price#26)#30 AS B3_CNT#33, count(ss_list_price#26)#31 AS B3_CNTD#34]
+
+(130) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(131) Scan parquet
+Output [4]: [ss_quantity#35, ss_wholesale_cost#36, ss_list_price#37, ss_coupon_amt#38]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,16), LessThanOrEqual(ss_quantity,20), Or(Or(And(GreaterThanOrEqual(ss_list_price,135.00),LessThanOrEqual(ss_list_price,145.00)),And(GreaterThanOrEqual(ss_coupon_amt,6071.00),LessThanOrEqual(ss_coupon_amt,7071.00))),And(GreaterThanOrEqual(ss_wholesale_cost,38.00),LessThanOrEqual(ss_wholesale_cost,58.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(132) Filter
+Input [4]: [ss_quantity#35, ss_wholesale_cost#36, ss_list_price#37, ss_coupon_amt#38]
+Condition : (((isnotnull(ss_quantity#35) AND (ss_quantity#35 >= 16)) AND (ss_quantity#35 <= 20)) AND ((((ss_list_price#37 >= 135.00) AND (ss_list_price#37 <= 145.00)) OR ((ss_coupon_amt#38 >= 6071.00) AND (ss_coupon_amt#38 <= 7071.00))) OR ((ss_wholesale_cost#36 >= 38.00) AND (ss_wholesale_cost#36 <= 58.00))))
+
+(133) Project
+Output [1]: [ss_list_price#37]
+Input [4]: [ss_quantity#35, ss_wholesale_cost#36, ss_list_price#37, ss_coupon_amt#38]
+
+(134) HashAggregate
+Input [1]: [ss_list_price#37]
+Keys [1]: [ss_list_price#37]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#37)), partial_count(ss_list_price#37)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41]
+Results [4]: [ss_list_price#37, sum#80, count#81, count#82]
+
+(135) Exchange
+Input [4]: [ss_list_price#37, sum#80, count#81, count#82]
+Arguments: hashpartitioning(ss_list_price#37, 100), ENSURE_REQUIREMENTS, [plan_id=19]
+
+(136) HashAggregate
+Input [4]: [ss_list_price#37, sum#80, count#81, count#82]
+Keys [1]: [ss_list_price#37]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#37)), merge_count(ss_list_price#37)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41]
+Results [4]: [ss_list_price#37, sum#80, count#81, count#82]
+
+(137) HashAggregate
+Input [4]: [ss_list_price#37, sum#80, count#81, count#82]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#37)), merge_count(ss_list_price#37), partial_count(distinct ss_list_price#37)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41, count(ss_list_price#37)#42]
+Results [4]: [sum#80, count#81, count#82, count#83]
+
+(138) Exchange
+Input [4]: [sum#80, count#81, count#82, count#83]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=20]
+
+(139) HashAggregate
+Input [4]: [sum#80, count#81, count#82, count#83]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#37)), count(ss_list_price#37), count(distinct ss_list_price#37)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#37))#40, count(ss_list_price#37)#41, count(ss_list_price#37)#42]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#37))#40 / 100.0) as decimal(11,6)) AS B4_LP#43, count(ss_list_price#37)#41 AS B4_CNT#44, count(ss_list_price#37)#42 AS B4_CNTD#45]
+
+(140) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(141) Scan parquet
+Output [4]: [ss_quantity#46, ss_wholesale_cost#47, ss_list_price#48, ss_coupon_amt#49]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,25), Or(Or(And(GreaterThanOrEqual(ss_list_price,122.00),LessThanOrEqual(ss_list_price,132.00)),And(GreaterThanOrEqual(ss_coupon_amt,836.00),LessThanOrEqual(ss_coupon_amt,1836.00))),And(GreaterThanOrEqual(ss_wholesale_cost,17.00),LessThanOrEqual(ss_wholesale_cost,37.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(142) Filter
+Input [4]: [ss_quantity#46, ss_wholesale_cost#47, ss_list_price#48, ss_coupon_amt#49]
+Condition : (((isnotnull(ss_quantity#46) AND (ss_quantity#46 >= 21)) AND (ss_quantity#46 <= 25)) AND ((((ss_list_price#48 >= 122.00) AND (ss_list_price#48 <= 132.00)) OR ((ss_coupon_amt#49 >= 836.00) AND (ss_coupon_amt#49 <= 1836.00))) OR ((ss_wholesale_cost#47 >= 17.00) AND (ss_wholesale_cost#47 <= 37.00))))
+
+(143) Project
+Output [1]: [ss_list_price#48]
+Input [4]: [ss_quantity#46, ss_wholesale_cost#47, ss_list_price#48, ss_coupon_amt#49]
+
+(144) HashAggregate
+Input [1]: [ss_list_price#48]
+Keys [1]: [ss_list_price#48]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#48)), partial_count(ss_list_price#48)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52]
+Results [4]: [ss_list_price#48, sum#84, count#85, count#86]
+
+(145) Exchange
+Input [4]: [ss_list_price#48, sum#84, count#85, count#86]
+Arguments: hashpartitioning(ss_list_price#48, 100), ENSURE_REQUIREMENTS, [plan_id=21]
+
+(146) HashAggregate
+Input [4]: [ss_list_price#48, sum#84, count#85, count#86]
+Keys [1]: [ss_list_price#48]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#48)), merge_count(ss_list_price#48)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52]
+Results [4]: [ss_list_price#48, sum#84, count#85, count#86]
+
+(147) HashAggregate
+Input [4]: [ss_list_price#48, sum#84, count#85, count#86]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#48)), merge_count(ss_list_price#48), partial_count(distinct ss_list_price#48)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#53]
+Results [4]: [sum#84, count#85, count#86, count#87]
+
+(148) Exchange
+Input [4]: [sum#84, count#85, count#86, count#87]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=22]
+
+(149) HashAggregate
+Input [4]: [sum#84, count#85, count#86, count#87]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#48)), count(ss_list_price#48), count(distinct ss_list_price#48)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#53]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#48))#51 / 100.0) as decimal(11,6)) AS B5_LP#54, count(ss_list_price#48)#52 AS B5_CNT#55, count(ss_list_price#48)#53 AS B5_CNTD#56]
+
+(150) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(151) Scan parquet
+Output [4]: [ss_quantity#57, ss_wholesale_cost#58, ss_list_price#59, ss_coupon_amt#60]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,26), LessThanOrEqual(ss_quantity,30), Or(Or(And(GreaterThanOrEqual(ss_list_price,154.00),LessThanOrEqual(ss_list_price,164.00)),And(GreaterThanOrEqual(ss_coupon_amt,7326.00),LessThanOrEqual(ss_coupon_amt,8326.00))),And(GreaterThanOrEqual(ss_wholesale_cost,7.00),LessThanOrEqual(ss_wholesale_cost,27.00)))]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(152) Filter
+Input [4]: [ss_quantity#57, ss_wholesale_cost#58, ss_list_price#59, ss_coupon_amt#60]
+Condition : (((isnotnull(ss_quantity#57) AND (ss_quantity#57 >= 26)) AND (ss_quantity#57 <= 30)) AND ((((ss_list_price#59 >= 154.00) AND (ss_list_price#59 <= 164.00)) OR ((ss_coupon_amt#60 >= 7326.00) AND (ss_coupon_amt#60 <= 8326.00))) OR ((ss_wholesale_cost#58 >= 7.00) AND (ss_wholesale_cost#58 <= 27.00))))
+
+(153) Project
+Output [1]: [ss_list_price#59]
+Input [4]: [ss_quantity#57, ss_wholesale_cost#58, ss_list_price#59, ss_coupon_amt#60]
+
+(154) HashAggregate
+Input [1]: [ss_list_price#59]
+Keys [1]: [ss_list_price#59]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#59)), partial_count(ss_list_price#59)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63]
+Results [4]: [ss_list_price#59, sum#88, count#89, count#90]
+
+(155) Exchange
+Input [4]: [ss_list_price#59, sum#88, count#89, count#90]
+Arguments: hashpartitioning(ss_list_price#59, 100), ENSURE_REQUIREMENTS, [plan_id=23]
+
+(156) HashAggregate
+Input [4]: [ss_list_price#59, sum#88, count#89, count#90]
+Keys [1]: [ss_list_price#59]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#59)), merge_count(ss_list_price#59)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63]
+Results [4]: [ss_list_price#59, sum#88, count#89, count#90]
+
+(157) HashAggregate
+Input [4]: [ss_list_price#59, sum#88, count#89, count#90]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#59)), merge_count(ss_list_price#59), partial_count(distinct ss_list_price#59)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63, count(ss_list_price#59)#64]
+Results [4]: [sum#88, count#89, count#90, count#91]
+
+(158) Exchange
+Input [4]: [sum#88, count#89, count#90, count#91]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=24]
+
+(159) HashAggregate
+Input [4]: [sum#88, count#89, count#90, count#91]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#59)), count(ss_list_price#59), count(distinct ss_list_price#59)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#59))#62, count(ss_list_price#59)#63, count(ss_list_price#59)#64]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#59))#62 / 100.0) as decimal(11,6)) AS B6_LP#65, count(ss_list_price#59)#63 AS B6_CNT#66, count(ss_list_price#59)#64 AS B6_CNTD#67]
+
+(160) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(161) AdaptiveSparkPlan
+Output [18]: [B1_LP#10, B1_CNT#11, B1_CNTD#12, B2_LP#21, B2_CNT#22, B2_CNTD#23, B3_LP#32, B3_CNT#33, B3_CNTD#34, B4_LP#43, B4_CNT#44, B4_CNTD#45, B5_LP#54, B5_CNT#55, B5_CNTD#56, B6_LP#65, B6_CNT#66, B6_CNTD#67]
+Arguments: isFinalPlan=true
+

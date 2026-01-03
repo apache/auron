@@ -1,0 +1,312 @@
+== Physical Plan ==
+AdaptiveSparkPlan (54)
++- == Final Plan ==
+   NativeTakeOrdered (33)
+   +- NativeProject (32)
+      +- NativeHashAggregate (31)
+         +- InputAdapter (30)
+            +- AQEShuffleRead (29)
+               +- ShuffleQueryStage (28), Statistics(X)
+                  +- NativeShuffleExchange (27)
+                     +- NativeHashAggregate (26)
+                        +- NativeProject (25)
+                           +- NativeSortMergeJoin Inner (24)
+                              :- NativeSort (9)
+                              :  +- InputAdapter (8)
+                              :     +- AQEShuffleRead (7)
+                              :        +- ShuffleQueryStage (6), Statistics(X)
+                              :           +- NativeShuffleExchange (5)
+                              :              +- NativeProject (4)
+                              :                 +- NativeFilter (3)
+                              :                    +- InputAdapter (2)
+                              :                       +- NativeParquetScan  (1)
+                              +- NativeSort (23)
+                                 +- NativeProject (22)
+                                    +- NativeFilter (21)
+                                       +- NativeProject (20)
+                                          +- NativeHashAggregate (19)
+                                             +- InputAdapter (18)
+                                                +- AQEShuffleRead (17)
+                                                   +- ShuffleQueryStage (16), Statistics(X)
+                                                      +- NativeShuffleExchange (15)
+                                                         +- NativeHashAggregate (14)
+                                                            +- NativeProject (13)
+                                                               +- NativeFilter (12)
+                                                                  +- InputAdapter (11)
+                                                                     +- NativeParquetScan  (10)
++- == Initial Plan ==
+   TakeOrderedAndProject (53)
+   +- HashAggregate (52)
+      +- Exchange (51)
+         +- HashAggregate (50)
+            +- Project (49)
+               +- SortMergeJoin Inner (48)
+                  :- Sort (38)
+                  :  +- Exchange (37)
+                  :     +- Project (36)
+                  :        +- Filter (35)
+                  :           +- Scan parquet (34)
+                  +- Sort (47)
+                     +- Project (46)
+                        +- Filter (45)
+                           +- HashAggregate (44)
+                              +- Exchange (43)
+                                 +- HashAggregate (42)
+                                    +- Project (41)
+                                       +- Filter (40)
+                                          +- Scan parquet (39)
+
+
+(34) Scan parquet
+Output [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(i_manufact_id), GreaterThanOrEqual(i_manufact_id,738), LessThanOrEqual(i_manufact_id,778), IsNotNull(i_manufact)]
+ReadSchema: struct<i_manufact_id:int,i_manufact:string,i_product_name:string>
+
+(2) InputAdapter
+Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+Arguments: [#1, #2, #3]
+
+(3) NativeFilter
+Input [3]: [#1#1, #2#2, #3#3]
+Condition : (((isnotnull(i_manufact_id#1) AND (i_manufact_id#1 >= 738)) AND (i_manufact_id#1 <= 778)) AND isnotnull(i_manufact#2))
+
+(4) NativeProject
+Output [2]: [i_manufact#2, i_product_name#3]
+Input [3]: [#1#1, #2#2, #3#3]
+
+(5) NativeShuffleExchange
+Input [2]: [i_manufact#2, i_product_name#3]
+Arguments: hashpartitioning(i_manufact#2, 100), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(6) ShuffleQueryStage
+Output [2]: [i_manufact#2, i_product_name#3]
+Arguments: X
+
+(7) AQEShuffleRead
+Input [2]: [i_manufact#2, i_product_name#3]
+Arguments: coalesced
+
+(8) InputAdapter
+Input [2]: [i_manufact#2, i_product_name#3]
+
+(9) NativeSort
+Input [2]: [i_manufact#2, i_product_name#3]
+Arguments: [i_manufact#2 ASC NULLS FIRST], false
+
+(39) Scan parquet
+Output [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [Or(Or(And(EqualTo(i_category,Women),Or(And(And(Or(EqualTo(i_color,powder),EqualTo(i_color,khaki)),Or(EqualTo(i_units,Ounce),EqualTo(i_units,Oz))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))),And(And(Or(EqualTo(i_color,brown),EqualTo(i_color,honeydew)),Or(EqualTo(i_units,Bunch),EqualTo(i_units,Ton))),Or(EqualTo(i_size,N/A),EqualTo(i_size,small))))),And(EqualTo(i_category,Men),Or(And(And(Or(EqualTo(i_color,floral),EqualTo(i_color,deep)),Or(EqualTo(i_units,N/A),EqualTo(i_units,Dozen))),Or(EqualTo(i_size,petite),EqualTo(i_size,large))),And(And(Or(EqualTo(i_color,light),EqualTo(i_color,cornflower)),Or(EqualTo(i_units,Box),EqualTo(i_units,Pound))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large)))))),Or(And(EqualTo(i_category,Women),Or(And(And(Or(EqualTo(i_color,midnight),EqualTo(i_color,snow)),Or(EqualTo(i_units,Pallet),EqualTo(i_units,Gross))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))),And(And(Or(EqualTo(i_color,cyan),EqualTo(i_color,papaya)),Or(EqualTo(i_units,Cup),EqualTo(i_units,Dram))),Or(EqualTo(i_size,N/A),EqualTo(i_size,small))))),And(EqualTo(i_category,Men),Or(And(And(Or(EqualTo(i_color,orange),EqualTo(i_color,frosted)),Or(EqualTo(i_units,Each),EqualTo(i_units,Tbl))),Or(EqualTo(i_size,petite),EqualTo(i_size,large))),And(And(Or(EqualTo(i_color,forest),EqualTo(i_color,ghost)),Or(EqualTo(i_units,Lb),EqualTo(i_units,Bundle))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))))))), IsNotNull(i_manufact)]
+ReadSchema: struct<i_category:string,i_manufact:string,i_size:string,i_color:string,i_units:string>
+
+(11) InputAdapter
+Input [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+Arguments: [#4, #5, #6, #7, #8]
+
+(12) NativeFilter
+Input [5]: [#4#4, #5#5, #6#6, #7#7, #8#8]
+Condition : (((((i_category#4 = Women) AND (((((i_color#7 = powder) OR (i_color#7 = khaki)) AND ((i_units#8 = Ounce) OR (i_units#8 = Oz))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))) OR ((((i_color#7 = brown) OR (i_color#7 = honeydew)) AND ((i_units#8 = Bunch) OR (i_units#8 = Ton))) AND ((i_size#6 = N/A) OR (i_size#6 = small))))) OR ((i_category#4 = Men) AND (((((i_color#7 = floral) OR (i_color#7 = deep)) AND ((i_units#8 = N/A) OR (i_units#8 = Dozen))) AND ((i_size#6 = petite) OR (i_size#6 = large))) OR ((((i_color#7 = light) OR (i_color#7 = cornflower)) AND ((i_units#8 = Box) OR (i_units#8 = Pound))) AND ((i_size#6 = medium) OR (i_size#6 = extra large)))))) OR (((i_category#4 = Women) AND (((((i_color#7 = midnight) OR (i_color#7 = snow)) AND ((i_units#8 = Pallet) OR (i_units#8 = Gross))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))) OR ((((i_color#7 = cyan) OR (i_color#7 = papaya)) AND ((i_units#8 = Cup) OR (i_units#8 = Dram))) AND ((i_size#6 = N/A) OR (i_size#6 = small))))) OR ((i_category#4 = Men) AND (((((i_color#7 = orange) OR (i_color#7 = frosted)) AND ((i_units#8 = Each) OR (i_units#8 = Tbl))) AND ((i_size#6 = petite) OR (i_size#6 = large))) OR ((((i_color#7 = forest) OR (i_color#7 = ghost)) AND ((i_units#8 = Lb) OR (i_units#8 = Bundle))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))))))) AND isnotnull(i_manufact#5))
+
+(13) NativeProject
+Output [1]: [i_manufact#5]
+Input [5]: [#4#4, #5#5, #6#6, #7#7, #8#8]
+
+(14) NativeHashAggregate
+Input [1]: [i_manufact#5]
+Keys [1]: [i_manufact#5]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#9]
+Results [2]: [i_manufact#5, #10#10]
+
+(15) NativeShuffleExchange
+Input [2]: [i_manufact#5, #10#10]
+Arguments: hashpartitioning(i_manufact#5, 100), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(16) ShuffleQueryStage
+Output [2]: [i_manufact#5, #10#10]
+Arguments: X
+
+(17) AQEShuffleRead
+Input [2]: [i_manufact#5, #10#10]
+Arguments: coalesced
+
+(18) InputAdapter
+Input [2]: [i_manufact#5, #10#10]
+
+(19) NativeHashAggregate
+Input [2]: [i_manufact#5, #10#10]
+Keys [1]: [i_manufact#5]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#11]
+Results [2]: [i_manufact#5, count(1)#11]
+
+(20) NativeProject
+Output [2]: [count(1)#11 AS item_cnt#12, i_manufact#5]
+Input [2]: [i_manufact#5, count(1)#11]
+
+(21) NativeFilter
+Input [2]: [item_cnt#12, i_manufact#5]
+Condition : (item_cnt#12 > 0)
+
+(22) NativeProject
+Output [1]: [i_manufact#5]
+Input [2]: [item_cnt#12, i_manufact#5]
+
+(23) NativeSort
+Input [1]: [i_manufact#5]
+Arguments: [i_manufact#5 ASC NULLS FIRST], false
+
+(24) NativeSortMergeJoin
+Left keys [1]: [i_manufact#2]
+Right keys [1]: [i_manufact#5]
+Join type: Inner
+Join condition: None
+
+(25) NativeProject
+Output [1]: [i_product_name#3]
+Input [3]: [i_manufact#2, i_product_name#3, i_manufact#5]
+
+(26) NativeHashAggregate
+Input [1]: [i_product_name#3]
+Keys [1]: [i_product_name#3]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [i_product_name#3, #10#10]
+
+(27) NativeShuffleExchange
+Input [2]: [i_product_name#3, #10#10]
+Arguments: hashpartitioning(i_product_name#3, 100), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(28) ShuffleQueryStage
+Output [2]: [i_product_name#3, #10#10]
+Arguments: X
+
+(29) AQEShuffleRead
+Input [2]: [i_product_name#3, #10#10]
+Arguments: coalesced
+
+(30) InputAdapter
+Input [2]: [i_product_name#3, #10#10]
+
+(31) NativeHashAggregate
+Input [2]: [i_product_name#3, #10#10]
+Keys [1]: [i_product_name#3]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [i_product_name#3, #10#10]
+
+(32) NativeProject
+Output [1]: [i_product_name#3]
+Input [2]: [i_product_name#3, #10#10]
+
+(33) NativeTakeOrdered
+Input [1]: [i_product_name#3]
+Arguments: X, [i_product_name#3 ASC NULLS FIRST]
+
+(34) Scan parquet
+Output [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(i_manufact_id), GreaterThanOrEqual(i_manufact_id,738), LessThanOrEqual(i_manufact_id,778), IsNotNull(i_manufact)]
+ReadSchema: struct<i_manufact_id:int,i_manufact:string,i_product_name:string>
+
+(35) Filter
+Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+Condition : (((isnotnull(i_manufact_id#1) AND (i_manufact_id#1 >= 738)) AND (i_manufact_id#1 <= 778)) AND isnotnull(i_manufact#2))
+
+(36) Project
+Output [2]: [i_manufact#2, i_product_name#3]
+Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+
+(37) Exchange
+Input [2]: [i_manufact#2, i_product_name#3]
+Arguments: hashpartitioning(i_manufact#2, 100), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(38) Sort
+Input [2]: [i_manufact#2, i_product_name#3]
+Arguments: [i_manufact#2 ASC NULLS FIRST], false, 0
+
+(39) Scan parquet
+Output [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [Or(Or(And(EqualTo(i_category,Women),Or(And(And(Or(EqualTo(i_color,powder),EqualTo(i_color,khaki)),Or(EqualTo(i_units,Ounce),EqualTo(i_units,Oz))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))),And(And(Or(EqualTo(i_color,brown),EqualTo(i_color,honeydew)),Or(EqualTo(i_units,Bunch),EqualTo(i_units,Ton))),Or(EqualTo(i_size,N/A),EqualTo(i_size,small))))),And(EqualTo(i_category,Men),Or(And(And(Or(EqualTo(i_color,floral),EqualTo(i_color,deep)),Or(EqualTo(i_units,N/A),EqualTo(i_units,Dozen))),Or(EqualTo(i_size,petite),EqualTo(i_size,large))),And(And(Or(EqualTo(i_color,light),EqualTo(i_color,cornflower)),Or(EqualTo(i_units,Box),EqualTo(i_units,Pound))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large)))))),Or(And(EqualTo(i_category,Women),Or(And(And(Or(EqualTo(i_color,midnight),EqualTo(i_color,snow)),Or(EqualTo(i_units,Pallet),EqualTo(i_units,Gross))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))),And(And(Or(EqualTo(i_color,cyan),EqualTo(i_color,papaya)),Or(EqualTo(i_units,Cup),EqualTo(i_units,Dram))),Or(EqualTo(i_size,N/A),EqualTo(i_size,small))))),And(EqualTo(i_category,Men),Or(And(And(Or(EqualTo(i_color,orange),EqualTo(i_color,frosted)),Or(EqualTo(i_units,Each),EqualTo(i_units,Tbl))),Or(EqualTo(i_size,petite),EqualTo(i_size,large))),And(And(Or(EqualTo(i_color,forest),EqualTo(i_color,ghost)),Or(EqualTo(i_units,Lb),EqualTo(i_units,Bundle))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))))))), IsNotNull(i_manufact)]
+ReadSchema: struct<i_category:string,i_manufact:string,i_size:string,i_color:string,i_units:string>
+
+(40) Filter
+Input [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+Condition : (((((i_category#4 = Women) AND (((((i_color#7 = powder) OR (i_color#7 = khaki)) AND ((i_units#8 = Ounce) OR (i_units#8 = Oz))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))) OR ((((i_color#7 = brown) OR (i_color#7 = honeydew)) AND ((i_units#8 = Bunch) OR (i_units#8 = Ton))) AND ((i_size#6 = N/A) OR (i_size#6 = small))))) OR ((i_category#4 = Men) AND (((((i_color#7 = floral) OR (i_color#7 = deep)) AND ((i_units#8 = N/A) OR (i_units#8 = Dozen))) AND ((i_size#6 = petite) OR (i_size#6 = large))) OR ((((i_color#7 = light) OR (i_color#7 = cornflower)) AND ((i_units#8 = Box) OR (i_units#8 = Pound))) AND ((i_size#6 = medium) OR (i_size#6 = extra large)))))) OR (((i_category#4 = Women) AND (((((i_color#7 = midnight) OR (i_color#7 = snow)) AND ((i_units#8 = Pallet) OR (i_units#8 = Gross))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))) OR ((((i_color#7 = cyan) OR (i_color#7 = papaya)) AND ((i_units#8 = Cup) OR (i_units#8 = Dram))) AND ((i_size#6 = N/A) OR (i_size#6 = small))))) OR ((i_category#4 = Men) AND (((((i_color#7 = orange) OR (i_color#7 = frosted)) AND ((i_units#8 = Each) OR (i_units#8 = Tbl))) AND ((i_size#6 = petite) OR (i_size#6 = large))) OR ((((i_color#7 = forest) OR (i_color#7 = ghost)) AND ((i_units#8 = Lb) OR (i_units#8 = Bundle))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))))))) AND isnotnull(i_manufact#5))
+
+(41) Project
+Output [1]: [i_manufact#5]
+Input [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+
+(42) HashAggregate
+Input [1]: [i_manufact#5]
+Keys [1]: [i_manufact#5]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#9]
+Results [2]: [i_manufact#5, count#13]
+
+(43) Exchange
+Input [2]: [i_manufact#5, count#13]
+Arguments: hashpartitioning(i_manufact#5, 100), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(44) HashAggregate
+Input [2]: [i_manufact#5, count#13]
+Keys [1]: [i_manufact#5]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#11]
+Results [2]: [count(1)#11 AS item_cnt#12, i_manufact#5]
+
+(45) Filter
+Input [2]: [item_cnt#12, i_manufact#5]
+Condition : (item_cnt#12 > 0)
+
+(46) Project
+Output [1]: [i_manufact#5]
+Input [2]: [item_cnt#12, i_manufact#5]
+
+(47) Sort
+Input [1]: [i_manufact#5]
+Arguments: [i_manufact#5 ASC NULLS FIRST], false, 0
+
+(48) SortMergeJoin
+Left keys [1]: [i_manufact#2]
+Right keys [1]: [i_manufact#5]
+Join type: Inner
+Join condition: None
+
+(49) Project
+Output [1]: [i_product_name#3]
+Input [3]: [i_manufact#2, i_product_name#3, i_manufact#5]
+
+(50) HashAggregate
+Input [1]: [i_product_name#3]
+Keys [1]: [i_product_name#3]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [i_product_name#3]
+
+(51) Exchange
+Input [1]: [i_product_name#3]
+Arguments: hashpartitioning(i_product_name#3, 100), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(52) HashAggregate
+Input [1]: [i_product_name#3]
+Keys [1]: [i_product_name#3]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [i_product_name#3]
+
+(53) TakeOrderedAndProject
+Input [1]: [i_product_name#3]
+Arguments: X, [i_product_name#3 ASC NULLS FIRST], [i_product_name#3]
+
+(54) AdaptiveSparkPlan
+Output [1]: [i_product_name#3]
+Arguments: isFinalPlan=true
+
