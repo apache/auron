@@ -314,6 +314,49 @@ pub fn cast_impl(
 
             Arc::new(builder.finish())
         }
+        // array to string (spark compatible)
+        (&DataType::List(_), &DataType::Utf8) => {
+            let list_array = as_list_array(array);
+            let values = list_array.values();
+            let casted_values = cast_impl(values, &DataType::Utf8, match_struct_fields)?;
+            let string_values = as_string_array(&casted_values);
+
+            let mut builder = StringBuilder::new();
+
+            for row_idx in 0..list_array.len() {
+                if list_array.is_null(row_idx) {
+                    builder.append_null();
+                } else {
+                    let mut row_str = String::from("[");
+                    let start = list_array.value_offsets()[row_idx] as usize;
+                    let end = list_array.value_offsets()[row_idx + 1] as usize;
+                    let num_elements = end - start;
+
+                    if num_elements > 0 {
+                        if values.is_null(start) {
+                            row_str.push_str("null");
+                        } else {
+                            row_str.push_str(string_values.value(start));
+                        }
+
+                        for i in 1..num_elements {
+                            row_str.push(',');
+                            if values.is_null(start + i) {
+                                row_str.push_str(" null");
+                            } else {
+                                row_str.push(' ');
+                                row_str.push_str(string_values.value(start + i));
+                            }
+                        }
+                    }
+
+                    row_str.push(']');
+                    builder.append_value(&row_str);
+                }
+            }
+
+            Arc::new(builder.finish())
+        }
         _ => {
             // default cast
             arrow::compute::kernels::cast::cast(array, cast_type)?
@@ -520,6 +563,7 @@ fn to_date(s: &str) -> Option<i32> {
 
 #[cfg(test)]
 mod test {
+    use arrow::buffer::OffsetBuffer;
     use datafusion::common::cast::{as_decimal128_array, as_float64_array, as_int32_array};
 
     use super::*;
@@ -1011,6 +1055,127 @@ mod test {
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{1 -> {x, true}, 2 -> {y, null}}")])
+        );
+    }
+
+    #[test]
+    fn test_array_to_string() {
+        // Create a list array with int32 elements
+        let values = Int32Array::from(vec![
+            Some(1),
+            Some(2),
+            Some(3),
+            None,
+            Some(5),
+            Some(6),
+            None,
+            None,
+        ]);
+        let offsets = OffsetBuffer::new(vec![0, 3, 5, 8].into());
+        let list_array: ArrayRef = Arc::new(ListArray::new(
+            Arc::new(Field::new("item", DataType::Int32, true)),
+            offsets,
+            Arc::new(values),
+            None,
+        ));
+
+        let casted = cast(&list_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![
+                Some("[1, 2, 3]"),
+                Some("[null, 5]"),
+                Some("[6, null, null]"),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_array_to_string_with_null_array() {
+        // Create a list array where some rows are entirely null
+        let values = Int32Array::from(vec![Some(1), Some(2), Some(3), Some(4)]);
+        let offsets = OffsetBuffer::new(vec![0, 2, 2, 4].into());
+        let nulls = arrow::buffer::NullBuffer::from(vec![true, false, true]);
+        let list_array: ArrayRef = Arc::new(ListArray::new(
+            Arc::new(Field::new("item", DataType::Int32, true)),
+            offsets,
+            Arc::new(values),
+            Some(nulls),
+        ));
+
+        let casted = cast(&list_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("[1, 2]"), None, Some("[3, 4]"),])
+        );
+    }
+
+    #[test]
+    fn test_empty_array_to_string() {
+        // Create a list array with empty arrays
+        let values = Int32Array::from(vec![] as Vec<Option<i32>>);
+        let offsets = OffsetBuffer::new(vec![0, 0, 0].into());
+        let list_array: ArrayRef = Arc::new(ListArray::new(
+            Arc::new(Field::new("item", DataType::Int32, true)),
+            offsets,
+            Arc::new(values),
+            None,
+        ));
+
+        let casted = cast(&list_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("[]"), Some("[]")])
+        );
+    }
+
+    #[test]
+    fn test_nested_array_to_string() {
+        // Create a nested array: array<array<int>>
+        let inner_values = Int32Array::from(vec![Some(1), Some(2), Some(3), Some(4)]);
+        let inner_offsets = OffsetBuffer::new(vec![0, 2, 4].into());
+        let inner_list = ListArray::new(
+            Arc::new(Field::new("item", DataType::Int32, true)),
+            inner_offsets,
+            Arc::new(inner_values),
+            None,
+        );
+
+        let outer_offsets = OffsetBuffer::new(vec![0, 1, 2].into());
+        let outer_list: ArrayRef = Arc::new(ListArray::new(
+            Arc::new(Field::new(
+                "item",
+                DataType::List(Arc::new(Field::new("item", DataType::Int32, true))),
+                true,
+            )),
+            outer_offsets,
+            Arc::new(inner_list),
+            None,
+        ));
+
+        let casted = cast(&outer_list, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("[[1, 2]]"), Some("[[3, 4]]"),])
+        );
+    }
+
+    #[test]
+    fn test_array_of_strings_to_string() {
+        // Create a list array with string elements
+        let values = StringArray::from(vec![Some("a"), Some("b"), None, Some("d")]);
+        let offsets = OffsetBuffer::new(vec![0, 2, 4].into());
+        let list_array: ArrayRef = Arc::new(ListArray::new(
+            Arc::new(Field::new("item", DataType::Utf8, true)),
+            offsets,
+            Arc::new(values),
+            None,
+        ));
+
+        let casted = cast(&list_array, &DataType::Utf8).unwrap();
+        assert_eq!(
+            as_string_array(&casted),
+            &StringArray::from_iter(vec![Some("[a, b]"), Some("[null, d]"),])
         );
     }
 }
