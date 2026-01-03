@@ -32,4 +32,9 @@
 NOTICE*
 docs/**
 build/apache-maven-*/**
+**/tpch-data-parquet/**
+**/tpch-plan-stability/**
+**/tpch-queries/**
+**/tpch-query-results/**
+
 src/main/resources/auron-build-info.properties
