@@ -58,6 +58,9 @@ spark:
 spark-ui:
   - "auron-spark-ui/**"
 
+spark-tests:
+  - "auron-spark-tests/**"
+
 flink:
   - "auron-flink-extension/**"
 
