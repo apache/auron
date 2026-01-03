@@ -631,7 +631,8 @@ message SortExecNode {
 
 message FetchLimit {
   // wrap into a message to make it optional
-  uint64 limit = 1;
+  uint32 limit = 1;
+  uint32 offset = 2;
 }
 
 message PhysicalRepartition {
@@ -705,7 +706,8 @@ enum AggMode {
 
 message LimitExecNode {
   PhysicalPlanNode input = 1;
-  uint64 limit = 2;
+  uint32 limit = 2;
+  uint32 offset = 3;
 }
 
 message FFIReaderExecNode {

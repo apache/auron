@@ -47,7 +47,8 @@ import org.apache.auron.protobuf.PhysicalSortExprNode
 import org.apache.auron.protobuf.SortExecNode
 
 abstract class NativeTakeOrderedBase(
-    limit: Long,
+    limit: Int,
+    offset: Int,
     sortOrder: Seq[SortOrder],
     override val child: SparkPlan)
     extends UnaryExecNode
@@ -81,35 +82,37 @@ abstract class NativeTakeOrderedBase(
     val ord = new LazilyGeneratedOrdering(sortOrder, output)
 
     // all partitions are sorted, so perform a sorted-merge to achieve the result
-    partial
-      .execute()
-      .map(_.copy())
-      .mapPartitions(iter => Iterator.single(iter.toArray))
-      .reduce { case (array1, array2) =>
-        val result = ArrayBuffer[InternalRow]()
-        var i = 0
-        var j = 0
+    val rows =
+      partial
+        .execute()
+        .map(_.copy())
+        .mapPartitions(iter => Iterator.single(iter.toArray))
+        .reduce { case (array1, array2) =>
+          val result = ArrayBuffer[InternalRow]()
+          var i = 0
+          var j = 0
 
-        while (result.length < limit && (i < array1.length || j < array2.length)) {
-          0 match {
-            case _ if i == array1.length =>
-              result.append(array2(j))
-              j += 1
-            case _ if j == array2.length =>
-              result.append(array1(i))
-              i += 1
-            case _ =>
-              if (ord.compare(array1(i), array2(j)) <= 0) {
-                result.append(array1(i))
-                i += 1
-              } else {
+          while (result.length < limit && (i < array1.length || j < array2.length)) {
+            0 match {
+              case _ if i == array1.length =>
                 result.append(array2(j))
                 j += 1
-              }
+              case _ if j == array2.length =>
+                result.append(array1(i))
+                i += 1
+              case _ =>
+                if (ord.compare(array1(i), array2(j)) <= 0) {
+                  result.append(array1(i))
+                  i += 1
+                } else {
+                  result.append(array2(j))
+                  j += 1
+                }
+            }
           }
+          result.toArray
         }
-        result.toArray
-      }
+    if (offset > 0) rows.drop(offset) else rows
   }
 
   // check whether native converting is supported
@@ -141,7 +144,7 @@ abstract class NativeTakeOrderedBase(
           .newBuilder()
           .setInput(shuffledRDD.nativePlan(inputPartition, taskContext))
           .addAllExpr(nativeSortExprs.asJava)
-          .setFetchLimit(FetchLimit.newBuilder().setLimit(limit))
+          .setFetchLimit(FetchLimit.newBuilder().setLimit(limit).setOffset(offset))
           .build()
         PhysicalPlanNode.newBuilder().setSort(nativeTakeOrderedExec).build()
       },
@@ -150,7 +153,7 @@ abstract class NativeTakeOrderedBase(
 }
 
 abstract class NativePartialTakeOrderedBase(
-    limit: Long,
+    limit: Int,
     sortOrder: Seq[SortOrder],
     override val child: SparkPlan,
     override val metrics: Map[String, SQLMetric])

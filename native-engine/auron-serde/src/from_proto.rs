@@ -315,12 +315,12 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     panic!("Failed to parse physical sort expressions: {}", e);
                 });
 
+                let fetch = sort.fetch_limit.as_ref();
+                let limit = fetch.map(|f| f.limit as usize);
+                let offset = fetch.map(|f| f.offset as usize).unwrap_or(0);
+
                 // always preserve partitioning
-                Ok(Arc::new(SortExec::new(
-                    input,
-                    exprs,
-                    sort.fetch_limit.as_ref().map(|limit| limit.limit as usize),
-                )))
+                Ok(Arc::new(SortExec::new(input, exprs, limit, offset)))
             }
             PhysicalPlanType::BroadcastJoinBuildHashMap(bhm) => {
                 let input: Arc<dyn ExecutionPlan> = convert_box_required!(bhm.input)?;
@@ -501,7 +501,11 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
             }
             PhysicalPlanType::Limit(limit) => {
                 let input: Arc<dyn ExecutionPlan> = convert_box_required!(limit.input)?;
-                Ok(Arc::new(LimitExec::new(input, limit.limit)))
+                Ok(Arc::new(LimitExec::new(
+                    input,
+                    limit.limit as usize,
+                    limit.offset as usize,
+                )))
             }
             PhysicalPlanType::FfiReader(ffi_reader) => {
                 let schema = Arc::new(convert_required!(ffi_reader.schema)?);
@@ -513,7 +517,11 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
             }
             PhysicalPlanType::CoalesceBatches(coalesce_batches) => {
                 let input: Arc<dyn ExecutionPlan> = convert_box_required!(coalesce_batches.input)?;
-                Ok(Arc::new(LimitExec::new(input, coalesce_batches.batch_size)))
+                Ok(Arc::new(LimitExec::new(
+                    input,
+                    coalesce_batches.batch_size as usize,
+                    0,
+                )))
             }
             PhysicalPlanType::Expand(expand) => {
                 let schema = Arc::new(convert_required!(expand.schema)?);
