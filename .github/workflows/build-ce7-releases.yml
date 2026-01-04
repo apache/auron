@@ -106,7 +106,7 @@ jobs:
           --scalaver ${{ matrix.scalaver }}
 
       - name: Upload auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auron-${{matrix.sparkver}}_${{matrix.scalaver}}-${{ matrix.javaver }}-release-${{ env.osclassfier }}-${{ matrix.auronver }}-${{ matrix.runner }}-${{ steps.commit.outputs.short }}.jar
           path: target-docker/auron-${{matrix.sparkver}}_${{matrix.scalaver}}-release-${{ env.osclassfier }}-${{ matrix.auronver }}.jar
