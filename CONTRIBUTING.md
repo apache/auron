@@ -147,12 +147,12 @@ Before creating a PR, please:
 
 1. **Search for existing issues**: Check if someone else is already working on this
 
-2. **Create a GitHub issue**: All contributions require a GitHub issue to be created first. This allows the community to discuss the approach and provide feedback before you invest time in implementation.
+2. **Create a GitHub issue**: All contributions (including major changes) require a GitHub issue to be created first. This allows the community to discuss the approach and provide feedback before you invest time in implementation.
 
-3. **For major changes, create an AIP**: If your change is substantial (new features, significant architectural changes, or changes affecting the public API), you must:
-   - Create a new GitHub issue describing the problem and proposed solution
-   - Create an **Auron Improvement Plan (AIP)** document 
-   - Share the AIP in the GitHub issue and discuss the high-level approach with the community
+3. **For major changes, also create an AIP**: If your change is substantial (new features, significant architectural changes, or changes affecting the public API), you must, in addition to the GitHub issue from step 2:
+   - Use the GitHub issue to describe the problem and proposed solution
+   - Create an **Auron Improvement Plan (AIP)** document and link it from that GitHub issue
+   - Discuss the AIP and high-level approach with the community in the GitHub issue
    - Wait for community feedback and consensus before starting implementation
    
    Example AIP: [AIP-3: Introduce auron-it for Enhanced CI Integration Testing](https://docs.google.com/document/d/1jR5VZ_uBd6Oe2x2UT_wGFzdX_xVLhORl6ghDs4f3FIw/edit?tab=t.0)
