@@ -273,7 +273,7 @@ jobs:
           cd spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }} && tar -xf ../spark-*.tgz --strip-component=1
 
       - name: Download Auron JAR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: >
             auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
@@ -281,7 +281,7 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Download TPC-DS Validator JAR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: >
             tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
