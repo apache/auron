@@ -106,7 +106,7 @@ jobs:
           repository: auron-project/tpcds-validator
 
       - name: Setup Java and Maven cache
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
         with:
           distribution: 'adopt-hotspot'
@@ -137,7 +137,7 @@ jobs:
           submodules: recursive
 
       - name: Setup Java and Maven cache
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
@@ -300,7 +300,7 @@ jobs:
           cp auron-*${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Setup Java and Maven cache
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
