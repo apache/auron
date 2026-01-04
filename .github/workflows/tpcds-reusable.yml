@@ -144,7 +144,7 @@ jobs:
           cache: 'maven'
 
       - name: Setup protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           version: "21.7"
           repo-token: ${{ secrets.GITHUB_TOKEN }}

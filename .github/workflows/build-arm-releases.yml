@@ -77,7 +77,7 @@ jobs:
           java-version: ${{ matrix.javaver }}
           cache: 'maven'
 
-      - uses: arduino/setup-protoc@v2
+      - uses: arduino/setup-protoc@v3
         with:
           version: "21.7"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
