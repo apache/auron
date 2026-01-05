@@ -18,7 +18,7 @@
 # Apache Auron (Incubating)
 
 [![TPC-DS](https://github.com/apache/auron/actions/workflows/tpcds.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/tpcds.yml)
-[![master-amd64-builds](https://github.com/apache/auron/actions/workflows/build-ce7-releases.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/build-amd64-releases.yml)
+[![master-amd64-builds](https://github.com/apache/auron/actions/workflows/build-amd64-releases.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/build-amd64-releases.yml)
 
 <p align="center"><img src="./dev/auron-logo.png" /></p>
 
