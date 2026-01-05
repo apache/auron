@@ -41,7 +41,7 @@ jobs:
         auronver: [7.0.0-SNAPSHOT]
         scalaver: [2.12, 2.13]
         javaver: [8, 21]
-        runner: [macos-14]
+        runner: [macos-15-arm64]
         exclude:
           # Only build on scala-2.13 for spark-3.5
           - sparkver: spark-3.0
