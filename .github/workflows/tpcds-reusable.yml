@@ -420,3 +420,12 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: |
             /tmp/rss/logs/*
+
+      - name: Clean up injected JARs to keep Spark bin cache pure
+        if: steps.cache-spark-bin.outputs.cache-hit != 'true'
+        run: |
+          cd spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
+          rm -f auron-*${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar
+          rm -f celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar
+          rm -f rss-client-spark*.jar
+          ls -la ./
