@@ -61,7 +61,7 @@ jobs:
 
     - name: Upload reports
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.module }}-test-report
         path: ${{ matrix.module }}/target/surefire-reports

@@ -160,6 +160,7 @@ impl ExecutionPlan for OrcExec {
 
         let force_positional_evolution = conf::ORC_FORCE_POSITIONAL_EVOLUTION.value()?;
         let use_microsecond_precision = conf::ORC_TIMESTAMP_USE_MICROSECOND.value()?;
+        let is_case_sensitive = conf::ORC_SCHEMA_CASE_SENSITIVE.value()?;
 
         let opener: Arc<dyn FileOpener> = Arc::new(OrcOpener {
             projection,
@@ -170,6 +171,7 @@ impl ExecutionPlan for OrcExec {
             metrics: self.metrics.clone(),
             force_positional_evolution,
             use_microsecond_precision,
+            is_case_sensitive,
         });
 
         let file_stream = Box::pin(FileStream::new(
@@ -217,6 +219,7 @@ struct OrcOpener {
     metrics: ExecutionPlanMetricsSet,
     force_positional_evolution: bool,
     use_microsecond_precision: bool,
+    is_case_sensitive: bool,
 }
 
 impl FileOpener for OrcOpener {
@@ -245,6 +248,7 @@ impl FileOpener for OrcOpener {
             self.force_positional_evolution,
         );
         let use_microsecond = self.use_microsecond_precision;
+        let is_case = self.is_case_sensitive;
 
         Ok(Box::pin(async move {
             let mut builder = ArrowReaderBuilder::try_new_async(reader)
@@ -259,7 +263,7 @@ impl FileOpener for OrcOpener {
             }
 
             let (schema_mapping, projection) =
-                schema_adapter.map_schema(builder.file_metadata())?;
+                schema_adapter.map_schema(builder.file_metadata(), is_case)?;
 
             let projection_mask =
                 ProjectionMask::roots(builder.file_metadata().root_data_type(), projection);
@@ -325,6 +329,7 @@ impl SchemaAdapter {
     fn map_schema(
         &self,
         orc_file_meta: &FileMetadata,
+        is_case_sensitive: bool,
     ) -> Result<(Arc<dyn SchemaMapper>, Vec<usize>)> {
         let mut projection = Vec::with_capacity(self.projected_schema.fields().len());
         let mut field_mappings = vec![None; self.projected_schema.fields().len()];
@@ -363,10 +368,25 @@ impl SchemaAdapter {
                     }
                 }
             }
-        } else {
+        } else if is_case_sensitive {
             for named_column in file_named_columns {
                 if let Some((proj_idx, _)) =
                     self.projected_schema.fields().find(named_column.name())
+                {
+                    field_mappings[proj_idx] = Some(projection.len());
+                    projection.push(named_column.data_type().column_index());
+                }
+            }
+        } else {
+            for named_column in file_named_columns {
+                // Case-insensitive field name matching
+                let named_column_name_lower = named_column.name().to_lowercase();
+                if let Some((proj_idx, _)) = self
+                    .projected_schema
+                    .fields()
+                    .iter()
+                    .enumerate()
+                    .find(|(_, f)| f.name().to_lowercase() == named_column_name_lower)
                 {
                     field_mappings[proj_idx] = Some(projection.len());
                     projection.push(named_column.data_type().column_index());

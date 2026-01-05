@@ -54,7 +54,7 @@ jobs:
           -Pflink,flink-1.18
       - name: Upload rat report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rat-report
           path: "**/target/rat*.txt"

@@ -237,6 +237,11 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .description("use microsecond precision when reading ORC timestamp columns. ")
             .booleanType()
             .defaultValue(false);
+    public static final ConfigOption<Boolean> ORC_SCHEMA_CASE_SENSITIVE = ConfigOptions.key(
+                    "auron.orc.schema.caseSensitive.enable")
+            .description("whether ORC file schema matching distinguishes between uppercase and lowercase. ")
+            .booleanType()
+            .defaultValue(false);
 
     public static final ConfigOption<Boolean> FORCE_SHORT_CIRCUIT_AND_OR = ConfigOptions.key(
                     "auron.forceShortCircuitAndOr")
