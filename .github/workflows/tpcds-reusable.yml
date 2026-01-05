@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Cache TPC-DS Validator
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-tpcds-validator
         with:
           key: tpcds-validator_${{ inputs.scalaver }}
@@ -250,7 +250,7 @@ jobs:
           fi
 
       - name: Cache Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }})
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-spark-bin
         with:
           path: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
@@ -307,7 +307,7 @@ jobs:
           cache: 'maven'
 
       - name: Cache Celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         if: ${{ inputs.celebornver != '' }}
         id: cache-celeborn-bin
         with:
@@ -343,7 +343,7 @@ jobs:
           cp celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }}/spark/celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Cache Uniffle-${{ steps.get-dependency-version.outputs.uniffleversion }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         if: ${{ inputs.unifflever != '' }}
         id: cache-uniffle-bin
         with:
@@ -363,7 +363,7 @@ jobs:
           tar -xf ./$UNIFFLE_FILE -C uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} --strip-component=1
 
       - name: Cache hadoop-${{ inputs.hadoopver }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         if: ${{ inputs.hadoopver != '' }}
         id: cache-hadoop-bin
         with:
