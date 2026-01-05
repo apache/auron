@@ -18,7 +18,7 @@
 # Apache Auron (Incubating)
 
 [![TPC-DS](https://github.com/apache/auron/actions/workflows/tpcds.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/tpcds.yml)
-[![master-ce7-builds](https://github.com/apache/auron/actions/workflows/build-ce7-releases.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/build-ce7-releases.yml)
+[![master-amd64-builds](https://github.com/apache/auron/actions/workflows/build-ce7-releases.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/build-amd64-releases.yml)
 
 <p align="center"><img src="./dev/auron-logo.png" /></p>
 
@@ -119,9 +119,9 @@ Contact us through the following mailing list.
 | [dev@auron.apache.org](mailto:dev@auron.apache.org)  | Development-related discussions | [Subscribe](mailto:dev-subscribe@auron.apache.org)    | [Unsubscribe](mailto:dev-unsubscribe@auron.apache.org)     |
 
 
-### Contributing
+### Report Issues or Submit Pull Request
 
-Interested in contributing to Auron? Please read our [Contributing Guide](CONTRIBUTING.md) for detailed information on how to get started.
+If you meet any questions, connect us and fix it by submitting a 🔗[Pull Request](https://github.com/apache/auron/pulls).
 
 ## License
 
