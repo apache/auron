@@ -752,7 +752,7 @@ mod test {
     }
 
     #[test]
-    fn test_struct_to_string() {
+    fn test_struct_to_string() -> Result<()> {
         // Create a struct array with fields: (int32, string, boolean)
         let int_array = Int32Array::from(vec![Some(1), Some(2), None, Some(4), None]);
         let string_array = StringArray::from(vec![Some("a"), None, Some("c"), Some("d"), None]);
@@ -773,7 +773,7 @@ mod test {
             ),
         ]));
 
-        let casted = cast(&struct_array, &DataType::Utf8).unwrap();
+        let casted = cast(&struct_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![
@@ -784,10 +784,11 @@ mod test {
                 Some("{null, null, null}"),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_struct_to_string_with_null_struct() {
+    fn test_struct_to_string_with_null_struct() -> Result<()> {
         // Create a struct array where some rows are entirely null
         let int_array = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
         let string_array = StringArray::from(vec![Some("a"), Some("b"), Some("c")]);
@@ -808,27 +809,29 @@ mod test {
             Some(nulls),
         ));
 
-        let casted = cast(&struct_array_with_nulls, &DataType::Utf8).unwrap();
+        let casted = cast(&struct_array_with_nulls, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{1, a}"), None, Some("{3, c}"),])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_empty_struct_to_string() {
+    fn test_empty_struct_to_string() -> Result<()> {
         // Create a struct array with zero fields but 2 rows
         let struct_array: ArrayRef = Arc::new(StructArray::new_empty_fields(2, None));
 
-        let casted = cast(&struct_array, &DataType::Utf8).unwrap();
+        let casted = cast(&struct_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{}"), Some("{}")])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_nested_struct_to_string() {
+    fn test_nested_struct_to_string() -> Result<()> {
         // Create a nested struct: struct<int, struct<string, bool>>
         let inner_string = StringArray::from(vec![Some("x"), Some("y")]);
         let inner_bool = BooleanArray::from(vec![Some(true), None]);
@@ -857,15 +860,16 @@ mod test {
             ),
         ]));
 
-        let casted = cast(&outer_struct, &DataType::Utf8).unwrap();
+        let casted = cast(&outer_struct, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{100, {x, true}}"), Some("{200, {y, null}}"),])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_map_to_string() {
+    fn test_map_to_string() -> Result<()> {
         // Create a map array: Map<Int32, String>
         let key_field = Arc::new(Field::new("key", DataType::Int32, false));
         let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
@@ -895,7 +899,7 @@ mod test {
             false,
         ));
 
-        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        let casted = cast(&map_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![
@@ -904,10 +908,11 @@ mod test {
                 Some("{4 -> d, 5 -> e}"),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_map_to_string_with_null_map() {
+    fn test_map_to_string_with_null_map() -> Result<()> {
         // Create a map array with null rows
         let key_field = Arc::new(Field::new("key", DataType::Int32, false));
         let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
@@ -938,15 +943,16 @@ mod test {
             false,
         ));
 
-        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        let casted = cast(&map_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{1 -> a}"), None, Some("{3 -> c}"),])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_empty_map_to_string() {
+    fn test_empty_map_to_string() -> Result<()> {
         // Create an empty map array
         let key_field = Arc::new(Field::new("key", DataType::Int32, false));
         let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
@@ -977,15 +983,16 @@ mod test {
             false,
         ));
 
-        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        let casted = cast(&map_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{}"), Some("{}")])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_nested_map_to_string() {
+    fn test_nested_map_to_string() -> Result<()> {
         // Create a map with struct values: Map<Int32, Struct<String, Boolean>>
         let key_field = Arc::new(Field::new("key", DataType::Int32, false));
 
@@ -1029,10 +1036,11 @@ mod test {
             false,
         ));
 
-        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        let casted = cast(&map_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{1 -> {x, true}, 2 -> {y, null}}")])
         );
+        Ok(())
     }
 }
