@@ -13,8 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Serde code to convert from protocol buffers to Rust data structures.
-
 use std::{
     any::Any,
     convert::{TryFrom, TryInto},
@@ -29,7 +27,7 @@ use arrow::{
 };
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use datafusion::{
-    common::{Result, ScalarValue, stats::Precision},
+    common::{ExprSchema, Result, ScalarValue, stats::Precision},
     datasource::{
         file_format::file_compression_type::FileCompressionType,
         listing::{FileRange, PartitionedFile},
@@ -104,32 +102,43 @@ use crate::{
     },
 };
 
-impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
-    type Error = PlanSerDeError;
+type PlanError = PlanSerDeError;
 
-    fn try_into(self) -> Result<Arc<dyn ExecutionPlan>, Self::Error> {
-        let plan = self.physical_plan_type.as_ref().ok_or_else(|| {
+pub struct PhysicalPlanner {
+    partition_id: usize,
+}
+
+impl PhysicalPlanner {
+    pub fn new(partition_id: usize) -> Self {
+        Self { partition_id }
+    }
+
+    pub fn create_plan<'a>(
+        &'a self,
+        spark_plan: &'a protobuf::PhysicalPlanNode,
+    ) -> Result<Arc<dyn ExecutionPlan>, PlanError> {
+        let plan = spark_plan.physical_plan_type.as_ref().ok_or_else(|| {
             proto_error(format!(
                 "physical_plan::from_proto() Unsupported physical plan '{:?}'",
-                self
+                spark_plan
             ))
         })?;
         match plan {
             PhysicalPlanType::Projection(projection) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(projection.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, projection.input)?;
                 let input_schema = input.schema();
                 let data_types: Vec<DataType> = projection
                     .data_type
                     .iter()
                     .map(|data_type| data_type.try_into())
-                    .collect::<Result<Vec<_>, Self::Error>>()?;
+                    .collect::<Result<Vec<_>, PlanError>>()?;
                 let exprs = projection
                     .expr
                     .iter()
                     .zip(projection.expr_name.iter())
                     .zip(data_types)
                     .map(|((expr, name), data_type)| {
-                        let physical_expr = try_parse_physical_expr(expr, &input_schema)?;
+                        let physical_expr = self.try_parse_physical_expr(expr, &input_schema)?;
                         let casted_expr = if physical_expr.data_type(&input_schema)? == data_type {
                             physical_expr
                         } else {
@@ -137,17 +146,17 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                         };
                         Ok((casted_expr, name.to_string()))
                     })
-                    .collect::<Result<Vec<(PhysicalExprRef, String)>, Self::Error>>()?;
+                    .collect::<Result<Vec<(PhysicalExprRef, String)>, PlanError>>()?;
 
                 Ok(Arc::new(ProjectExec::try_new(exprs, input)?))
             }
             PhysicalPlanType::Filter(filter) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(filter.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, filter.input)?;
                 let predicates = filter
                     .expr
                     .iter()
-                    .map(|expr| try_parse_physical_expr(expr, &input.schema()))
-                    .collect::<Result<_, Self::Error>>()?;
+                    .map(|expr| self.try_parse_physical_expr(expr, &input.schema()))
+                    .collect::<Result<_, PlanError>>()?;
                 Ok(Arc::new(FilterExec::try_new(predicates, input)?))
             }
             PhysicalPlanType::ParquetScan(scan) => {
@@ -156,7 +165,8 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .pruning_predicates
                     .iter()
                     .filter_map(|predicate| {
-                        try_parse_physical_expr(predicate, &conf.file_schema).ok()
+                        self.try_parse_physical_expr(predicate, &conf.file_schema)
+                            .ok()
                     })
                     .fold(phys_expr::lit(true), |a, b| {
                         Arc::new(BinaryExpr::new(a, Operator::And, b))
@@ -173,7 +183,8 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .pruning_predicates
                     .iter()
                     .filter_map(|predicate| {
-                        try_parse_physical_expr(predicate, &conf.file_schema).ok()
+                        self.try_parse_physical_expr(predicate, &conf.file_schema)
+                            .ok()
                     })
                     .fold(phys_expr::lit(true), |a, b| {
                         Arc::new(BinaryExpr::new(a, Operator::And, b))
@@ -186,19 +197,21 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
             }
             PhysicalPlanType::HashJoin(hash_join) => {
                 let schema = Arc::new(convert_required!(hash_join.schema)?);
-                let left: Arc<dyn ExecutionPlan> = convert_box_required!(hash_join.left)?;
-                let right: Arc<dyn ExecutionPlan> = convert_box_required!(hash_join.right)?;
+                let left: Arc<dyn ExecutionPlan> = convert_box_required!(self, hash_join.left)?;
+                let right: Arc<dyn ExecutionPlan> = convert_box_required!(self, hash_join.right)?;
                 let on: Vec<(PhysicalExprRef, PhysicalExprRef)> = hash_join
                     .on
                     .iter()
                     .map(|col| {
-                        let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
-                        let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().unwrap(), &right.schema())?;
+                        let left_key = self
+                            .try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
+                        let right_key = self.try_parse_physical_expr(
+                            &col.right.as_ref().unwrap(),
+                            &right.schema(),
+                        )?;
                         Ok((left_key, right_key))
                     })
-                    .collect::<Result<_, Self::Error>>()?;
+                    .collect::<Result<_, PlanError>>()?;
 
                 let join_type =
                     protobuf::JoinType::try_from(hash_join.join_type).expect("invalid JoinType");
@@ -219,24 +232,27 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                         .map_err(|_| proto_error("invalid BuildSide"))?,
                     false,
                     None,
-                    false,
                 )?))
             }
             PhysicalPlanType::SortMergeJoin(sort_merge_join) => {
                 let schema = Arc::new(convert_required!(sort_merge_join.schema)?);
-                let left: Arc<dyn ExecutionPlan> = convert_box_required!(sort_merge_join.left)?;
-                let right: Arc<dyn ExecutionPlan> = convert_box_required!(sort_merge_join.right)?;
+                let left: Arc<dyn ExecutionPlan> =
+                    convert_box_required!(self, sort_merge_join.left)?;
+                let right: Arc<dyn ExecutionPlan> =
+                    convert_box_required!(self, sort_merge_join.right)?;
                 let on: Vec<(PhysicalExprRef, PhysicalExprRef)> = sort_merge_join
                     .on
                     .iter()
                     .map(|col| {
-                        let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
-                        let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().unwrap(), &right.schema())?;
+                        let left_key = self
+                            .try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
+                        let right_key = self.try_parse_physical_expr(
+                            &col.right.as_ref().unwrap(),
+                            &right.schema(),
+                        )?;
                         Ok((left_key, right_key))
                     })
-                    .collect::<Result<_, Self::Error>>()?;
+                    .collect::<Result<_, PlanError>>()?;
 
                 let sort_options = sort_merge_join
                     .sort_options
@@ -262,9 +278,10 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )?))
             }
             PhysicalPlanType::ShuffleWriter(shuffle_writer) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(shuffle_writer.input)?;
+                let input: Arc<dyn ExecutionPlan> =
+                    convert_box_required!(self, shuffle_writer.input)?;
 
-                let output_partitioning = parse_protobuf_partitioning(
+                let output_partitioning = self.parse_protobuf_partitioning(
                     input.clone(),
                     shuffle_writer.output_partitioning.as_ref(),
                 )?;
@@ -278,9 +295,9 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
             }
             PhysicalPlanType::RssShuffleWriter(rss_shuffle_writer) => {
                 let input: Arc<dyn ExecutionPlan> =
-                    convert_box_required!(rss_shuffle_writer.input)?;
+                    convert_box_required!(self, rss_shuffle_writer.input)?;
 
-                let output_partitioning = parse_protobuf_partitioning(
+                let output_partitioning = self.parse_protobuf_partitioning(
                     input.clone(),
                     rss_shuffle_writer.output_partitioning.as_ref(),
                 )?;
@@ -291,7 +308,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )?))
             }
             PhysicalPlanType::IpcWriter(ipc_writer) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(ipc_writer.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, ipc_writer.input)?;
 
                 Ok(Arc::new(IpcWriterExec::new(
                     input,
@@ -307,14 +324,16 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )))
             }
             PhysicalPlanType::Debug(debug) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(debug.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, debug.input)?;
                 Ok(Arc::new(DebugExec::new(input, debug.debug_id.clone())))
             }
             PhysicalPlanType::Sort(sort) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(sort.input)?;
-                let exprs = try_parse_physical_sort_expr(&input, sort).unwrap_or_else(|e| {
-                    panic!("Failed to parse physical sort expressions: {}", e);
-                });
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, sort.input)?;
+                let exprs = self
+                    .try_parse_physical_sort_expr(&input, sort)
+                    .unwrap_or_else(|e| {
+                        panic!("Failed to parse physical sort expressions: {}", e);
+                    });
 
                 // always preserve partitioning
                 Ok(Arc::new(SortExec::new(
@@ -324,29 +343,33 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )))
             }
             PhysicalPlanType::BroadcastJoinBuildHashMap(bhm) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(bhm.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, bhm.input)?;
                 let keys = bhm
                     .keys
                     .iter()
-                    .map(|expr| try_parse_physical_expr(expr, &input.schema()))
-                    .collect::<Result<Vec<PhysicalExprRef>, Self::Error>>()?;
+                    .map(|expr| self.try_parse_physical_expr(expr, &input.schema()))
+                    .collect::<Result<Vec<PhysicalExprRef>, PlanError>>()?;
                 Ok(Arc::new(BroadcastJoinBuildHashMapExec::new(input, keys)))
             }
             PhysicalPlanType::BroadcastJoin(broadcast_join) => {
                 let schema = Arc::new(convert_required!(broadcast_join.schema)?);
-                let left: Arc<dyn ExecutionPlan> = convert_box_required!(broadcast_join.left)?;
-                let right: Arc<dyn ExecutionPlan> = convert_box_required!(broadcast_join.right)?;
+                let left: Arc<dyn ExecutionPlan> =
+                    convert_box_required!(self, broadcast_join.left)?;
+                let right: Arc<dyn ExecutionPlan> =
+                    convert_box_required!(self, broadcast_join.right)?;
                 let on: Vec<(PhysicalExprRef, PhysicalExprRef)> = broadcast_join
                     .on
                     .iter()
                     .map(|col| {
-                        let left_key =
-                            try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
-                        let right_key =
-                            try_parse_physical_expr(&col.right.as_ref().unwrap(), &right.schema())?;
+                        let left_key = self
+                            .try_parse_physical_expr(&col.left.as_ref().unwrap(), &left.schema())?;
+                        let right_key = self.try_parse_physical_expr(
+                            &col.right.as_ref().unwrap(),
+                            &right.schema(),
+                        )?;
                         Ok((left_key, right_key))
                     })
-                    .collect::<Result<_, Self::Error>>()?;
+                    .collect::<Result<_, PlanError>>()?;
 
                 let join_type = protobuf::JoinType::try_from(broadcast_join.join_type)
                     .expect("invalid JoinType");
@@ -355,7 +378,6 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .expect("invalid BroadcastSide");
 
                 let cached_build_hash_map_id = broadcast_join.cached_build_hash_map_id.clone();
-                let is_null_aware_anti_join = broadcast_join.is_null_aware_anti_join;
 
                 Ok(Arc::new(BroadcastJoinExec::try_new(
                     schema,
@@ -370,7 +392,6 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                         .map_err(|_| proto_error("invalid BroadcastSide"))?,
                     true,
                     Some(cached_build_hash_map_id),
-                    is_null_aware_anti_join,
                 )?))
             }
             PhysicalPlanType::Union(union) => {
@@ -381,10 +402,13 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .input
                     .iter()
                     .map(|input| {
-                        let input_exec = convert_required!(input.input)?;
+                        let input_exec =
+                            self.create_plan(input.input.as_ref().ok_or_else(|| {
+                                proto_error("Missing required field in protobuf")
+                            })?)?;
                         Ok(UnionInput(input_exec, input.partition as usize))
                     })
-                    .collect::<Result<Vec<_>, Self::Error>>()?;
+                    .collect::<Result<Vec<_>, PlanError>>()?;
 
                 Ok(Arc::new(UnionExec::new(
                     inputs,
@@ -401,14 +425,15 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )))
             }
             PhysicalPlanType::RenameColumns(rename_columns) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(rename_columns.input)?;
+                let input: Arc<dyn ExecutionPlan> =
+                    convert_box_required!(self, rename_columns.input)?;
                 Ok(Arc::new(RenameColumnsExec::try_new(
                     input,
                     rename_columns.renamed_column_names.clone(),
                 )?))
             }
             PhysicalPlanType::Agg(agg) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(agg.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, agg.input)?;
                 let input_schema = input.schema();
 
                 let exec_mode = match protobuf::AggExecMode::try_from(agg.exec_mode)
@@ -435,12 +460,13 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .iter()
                     .zip(agg.grouping_expr_name.iter())
                     .map(|(expr, name)| {
-                        try_parse_physical_expr(expr, &input_schema).and_then(|expr| {
-                            Ok(GroupingExpr {
-                                expr,
-                                field_name: name.to_owned(),
+                        self.try_parse_physical_expr(expr, &input_schema)
+                            .and_then(|expr| {
+                                Ok(GroupingExpr {
+                                    expr,
+                                    field_name: name.to_owned(),
+                                })
                             })
-                        })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -468,7 +494,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                         let agg_children_exprs = agg_node
                             .children
                             .iter()
-                            .map(|expr| try_parse_physical_expr(expr, &input_schema))
+                            .map(|expr| self.try_parse_physical_expr(expr, &input_schema))
                             .collect::<Result<Vec<_>, _>>()?;
                         let return_type = convert_required!(agg_node.return_type)?;
 
@@ -503,7 +529,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )?))
             }
             PhysicalPlanType::Limit(limit) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(limit.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, limit.input)?;
                 Ok(Arc::new(LimitExec::new(input, limit.limit)))
             }
             PhysicalPlanType::FfiReader(ffi_reader) => {
@@ -515,12 +541,13 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )))
             }
             PhysicalPlanType::CoalesceBatches(coalesce_batches) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(coalesce_batches.input)?;
+                let input: Arc<dyn ExecutionPlan> =
+                    convert_box_required!(self, coalesce_batches.input)?;
                 Ok(Arc::new(LimitExec::new(input, coalesce_batches.batch_size)))
             }
             PhysicalPlanType::Expand(expand) => {
                 let schema = Arc::new(convert_required!(expand.schema)?);
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(expand.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, expand.input)?;
                 let projections = expand
                     .projections
                     .iter()
@@ -528,15 +555,15 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                         projection
                             .expr
                             .iter()
-                            .map(|expr| try_parse_physical_expr(expr, &input.schema()))
-                            .collect::<Result<Vec<_>, Self::Error>>()
+                            .map(|expr| self.try_parse_physical_expr(expr, &input.schema()))
+                            .collect::<Result<Vec<_>, PlanError>>()
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(Arc::new(ExpandExec::try_new(schema, projections, input)?))
             }
             PhysicalPlanType::Window(window) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(window.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, window.input)?;
                 let window_exprs = window
                     .window_expr
                     .iter()
@@ -547,7 +574,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                                 .ok_or_else(|| {
                                     proto_error(format!(
                                         "physical_plan::from_proto() Unexpected sort expr {:?}",
-                                        self
+                                        spark_plan
                                     ))
                                 })?
                                 .try_into()?,
@@ -556,8 +583,8 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                         let children = w
                             .children
                             .iter()
-                            .map(|expr| try_parse_physical_expr(expr, &input.schema()))
-                            .collect::<Result<Vec<_>, Self::Error>>()?;
+                            .map(|expr| self.try_parse_physical_expr(expr, &input.schema()))
+                            .collect::<Result<Vec<_>, PlanError>>()?;
                         let return_type = convert_required!(w.return_type)?;
 
                         let window_func = match w.func_type() {
@@ -606,7 +633,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                                 }
                             },
                         };
-                        Ok::<_, Self::Error>(WindowExpr::new(
+                        Ok::<_, PlanError>(WindowExpr::new(
                             window_func,
                             children,
                             field,
@@ -618,8 +645,8 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 let partition_specs = window
                     .partition_spec
                     .iter()
-                    .map(|expr| try_parse_physical_expr(expr, &input.schema()))
-                    .collect::<Result<Vec<_>, Self::Error>>()?;
+                    .map(|expr| self.try_parse_physical_expr(expr, &input.schema()))
+                    .collect::<Result<Vec<_>, PlanError>>()?;
 
                 let order_specs = window
                     .order_spec
@@ -627,7 +654,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     .map(|expr| {
                         let expr = expr.expr_type.as_ref().ok_or_else(|| {
                             proto_error(format!(
-                                "physical_plan::from_proto() Unexpected expr {self:?}",
+                                "physical_plan::from_proto() Unexpected expr {spark_plan:?}",
                             ))
                         })?;
                         if let protobuf::physical_expr_node::ExprType::Sort(sort_expr) = expr {
@@ -637,12 +664,12 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                                 .ok_or_else(|| {
                                     proto_error(format!(
                                         "physical_plan::from_proto() Unexpected sort expr {:?}",
-                                        self
+                                        spark_plan
                                     ))
                                 })?
                                 .as_ref();
                             Ok(PhysicalSortExpr {
-                                expr: try_parse_physical_expr(expr, &input.schema())?,
+                                expr: self.try_parse_physical_expr(expr, &input.schema())?,
                                 options: SortOptions {
                                     descending: !sort_expr.asc,
                                     nulls_first: sort_expr.nulls_first,
@@ -651,7 +678,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                         } else {
                             Err(PlanSerDeError::General(format!(
                                 "physical_plan::from_proto() {:?}",
-                                self
+                                spark_plan
                             )))
                         }
                     })
@@ -670,7 +697,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                 )?))
             }
             PhysicalPlanType::Generate(generate) => {
-                let input: Arc<dyn ExecutionPlan> = convert_box_required!(generate.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, generate.input)?;
                 let input_schema = input.schema();
                 let pb_generator = generate.generator.as_ref().expect("missing generator");
                 let pb_generator_children = &pb_generator.child;
@@ -679,7 +706,7 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
 
                 let children = pb_generator_children
                     .iter()
-                    .map(|expr| try_parse_physical_expr(expr, &input_schema))
+                    .map(|expr| self.try_parse_physical_expr(expr, &input_schema))
                     .collect::<Result<Vec<_>, _>>()?;
 
                 let generator = match pb_generate_func {
@@ -733,13 +760,373 @@ impl TryInto<Arc<dyn ExecutionPlan>> for &protobuf::PhysicalPlanNode {
                     props.push((prop.key.clone(), prop.value.clone()));
                 }
                 Ok(Arc::new(ParquetSinkExec::new(
-                    convert_box_required!(parquet_sink.input)?,
+                    convert_box_required!(self, parquet_sink.input)?,
                     parquet_sink.fs_resource_id.clone(),
                     parquet_sink.num_dyn_parts as usize,
                     props,
                 )))
             }
         }
+    }
+
+    fn try_parse_physical_expr(
+        &self,
+        expr: &protobuf::PhysicalExprNode,
+        input_schema: &SchemaRef,
+    ) -> Result<PhysicalExprRef, PlanSerDeError> {
+        let expr_type = expr
+            .expr_type
+            .as_ref()
+            .ok_or_else(|| proto_error("Unexpected empty physical expression"))?;
+
+        let pexpr: PhysicalExprRef = match expr_type {
+            ExprType::Column(c) => Arc::new(Column::new(&c.name, input_schema.index_of(&c.name)?)),
+            ExprType::Literal(scalar) => Arc::new(Literal::new(scalar.try_into()?)),
+            ExprType::BoundReference(bound_reference) => {
+                let pcol: Column = bound_reference.into();
+                Arc::new(pcol)
+            }
+            ExprType::BinaryExpr(binary_expr) => Arc::new(BinaryExpr::new(
+                self.try_parse_physical_expr_box_required(&binary_expr.l.clone(), input_schema)?,
+                from_proto_binary_op(&binary_expr.op)?,
+                self.try_parse_physical_expr_box_required(&binary_expr.r.clone(), input_schema)?,
+            )),
+            ExprType::AggExpr(_) => {
+                return Err(PlanSerDeError::General(
+                    "Cannot convert aggregate expr node to physical expression".to_owned(),
+                ));
+            }
+            ExprType::Sort(_) => {
+                return Err(PlanSerDeError::General(
+                    "Cannot convert sort expr node to physical expression".to_owned(),
+                ));
+            }
+            ExprType::IsNullExpr(e) => Arc::new(IsNullExpr::new(
+                self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
+            )),
+            ExprType::IsNotNullExpr(e) => Arc::new(IsNotNullExpr::new(
+                self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
+            )),
+            ExprType::NotExpr(e) => Arc::new(NotExpr::new(
+                self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
+            )),
+            ExprType::Negative(e) => Arc::new(NegativeExpr::new(
+                self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
+            )),
+            ExprType::InList(e) => {
+                let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
+                let dt = expr.data_type(input_schema)?;
+                let list_exprs = e
+                    .list
+                    .iter()
+                    .map(|x| -> Result<PhysicalExprRef, PlanSerDeError> {
+                        let e = self.try_parse_physical_expr(x, input_schema)?;
+                        if e.data_type(input_schema)? != dt {
+                            return Ok(Arc::new(TryCastExpr::new(e, dt.clone())));
+                        }
+                        Ok(e)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                in_list(expr, list_exprs, &e.negated, &input_schema)?
+            }
+            ExprType::Case(e) => Arc::new(CaseExpr::try_new(
+                e.expr
+                    .as_ref()
+                    .map(|e| self.try_parse_physical_expr(e.as_ref(), input_schema))
+                    .transpose()?,
+                e.when_then_expr
+                    .iter()
+                    .map(|e| {
+                        Ok((
+                            self.try_parse_physical_expr_required(&e.when_expr, input_schema)?,
+                            self.try_parse_physical_expr_required(&e.then_expr, input_schema)?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, PlanSerDeError>>()?,
+                e.else_expr
+                    .as_ref()
+                    .map(|e| self.try_parse_physical_expr(e.as_ref(), input_schema))
+                    .transpose()?,
+            )?),
+            ExprType::Cast(e) => Arc::new(CastExpr::new(
+                self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
+                convert_required!(e.arrow_type)?,
+                None,
+            )),
+            ExprType::TryCast(e) => {
+                let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
+                let cast_type = convert_required!(e.arrow_type)?;
+                Arc::new(TryCastExpr::new(expr, cast_type))
+            }
+            ExprType::ScalarFunction(e) => {
+                let scalar_function =
+                    protobuf::ScalarFunction::try_from(e.fun).expect("invalid ScalarFunction");
+                let args = e
+                    .args
+                    .iter()
+                    .map(|x| self.try_parse_physical_expr(x, input_schema))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let scalar_udf = if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
+                    let fun_name = &e.name;
+                    let fun = datafusion_ext_functions::create_auron_ext_function(
+                        fun_name,
+                        self.partition_id,
+                    )?;
+                    Arc::new(create_udf(
+                        &format!("spark_ext_function_{}", fun_name),
+                        args.iter()
+                            .map(|e| e.data_type(input_schema))
+                            .collect::<Result<Vec<_>, _>>()?,
+                        convert_required!(e.return_type)?,
+                        Volatility::Volatile,
+                        fun,
+                    ))
+                } else {
+                    let scalar_udf: Arc<ScalarUDF> = scalar_function.into();
+                    scalar_udf
+                };
+                Arc::new(ScalarFunctionExpr::new(
+                    scalar_udf.name(),
+                    scalar_udf.clone(),
+                    args,
+                    Arc::new(Field::new(
+                        "result",
+                        convert_required!(e.return_type)?,
+                        true,
+                    )),
+                ))
+            }
+            ExprType::SparkUdfWrapperExpr(e) => Arc::new(SparkUDFWrapperExpr::try_new(
+                e.serialized.clone(),
+                convert_required!(e.return_type)?,
+                e.return_nullable,
+                e.params
+                    .iter()
+                    .map(|x| self.try_parse_physical_expr(x, input_schema))
+                    .collect::<Result<Vec<_>, _>>()?,
+                e.expr_string.clone(),
+            )?),
+            ExprType::SparkScalarSubqueryWrapperExpr(e) => {
+                Arc::new(SparkScalarSubqueryWrapperExpr::try_new(
+                    e.serialized.clone(),
+                    convert_required!(e.return_type)?,
+                    e.return_nullable,
+                )?)
+            }
+            ExprType::GetIndexedFieldExpr(e) => {
+                let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
+                let key = convert_required!(e.key)?;
+                Arc::new(GetIndexedFieldExpr::new(expr, key))
+            }
+            ExprType::GetMapValueExpr(e) => {
+                let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
+                let key = convert_required!(e.key)?;
+                Arc::new(GetMapValueExpr::new(expr, key))
+            }
+            ExprType::StringStartsWithExpr(e) => {
+                let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
+                Arc::new(StringStartsWithExpr::new(expr, e.prefix.clone()))
+            }
+            ExprType::StringEndsWithExpr(e) => {
+                let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
+                Arc::new(StringEndsWithExpr::new(expr, e.suffix.clone()))
+            }
+            ExprType::StringContainsExpr(e) => {
+                let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
+                Arc::new(StringContainsExpr::new(expr, e.infix.clone()))
+            }
+            ExprType::RowNumExpr(_) => Arc::new(RowNumExpr::default()),
+            ExprType::BloomFilterMightContainExpr(e) => Arc::new(BloomFilterMightContainExpr::new(
+                e.uuid.clone(),
+                self.try_parse_physical_expr_box_required(&e.bloom_filter_expr, input_schema)?,
+                self.try_parse_physical_expr_box_required(&e.value_expr, input_schema)?,
+            )),
+            ExprType::ScAndExpr(e) => {
+                let l = self.try_parse_physical_expr_box_required(&e.left, input_schema)?;
+                let r = self.try_parse_physical_expr_box_required(&e.right, input_schema)?;
+                Arc::new(SCAndExpr::new(l, r))
+            }
+            ExprType::ScOrExpr(e) => {
+                let l = self.try_parse_physical_expr_box_required(&e.left, input_schema)?;
+                let r = self.try_parse_physical_expr_box_required(&e.right, input_schema)?;
+                Arc::new(SCOrExpr::new(l, r))
+            }
+            ExprType::LikeExpr(e) => Arc::new(LikeExpr::new(
+                e.negated,
+                e.case_insensitive,
+                self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
+                self.try_parse_physical_expr_box_required(&e.pattern, input_schema)?,
+            )),
+
+            ExprType::NamedStruct(e) => {
+                let data_type = convert_required!(e.return_type)?;
+                Arc::new(NamedStructExpr::try_new(
+                    e.values
+                        .iter()
+                        .map(|x| self.try_parse_physical_expr(x, input_schema))
+                        .collect::<Result<Vec<_>, _>>()?,
+                    data_type,
+                )?)
+            }
+        };
+
+        Ok(pexpr)
+    }
+
+    fn try_parse_physical_expr_required(
+        &self,
+        proto: &Option<protobuf::PhysicalExprNode>,
+        input_schema: &SchemaRef,
+    ) -> Result<PhysicalExprRef, PlanSerDeError> {
+        if let Some(field) = proto.as_ref() {
+            self.try_parse_physical_expr(field, input_schema)
+        } else {
+            Err(proto_error("Missing required field in protobuf"))
+        }
+    }
+
+    fn try_parse_physical_expr_box_required(
+        &self,
+        proto: &Option<Box<protobuf::PhysicalExprNode>>,
+        input_schema: &SchemaRef,
+    ) -> Result<PhysicalExprRef, PlanSerDeError> {
+        if let Some(field) = proto.as_ref() {
+            self.try_parse_physical_expr(field, input_schema)
+        } else {
+            Err(proto_error("Missing required field in protobuf"))
+        }
+    }
+
+    fn try_parse_physical_sort_expr(
+        &self,
+        input: &Arc<dyn ExecutionPlan>,
+        sort: &Box<SortExecNode>,
+    ) -> Result<Vec<PhysicalSortExpr>, PlanSerDeError> {
+        let pyhsical_sort_expr = sort
+            .expr
+            .iter()
+            .map(|expr| {
+                let expr = expr.expr_type.as_ref().ok_or_else(|| {
+                    proto_error(format!(
+                        "physical_plan::from_proto() Unexpected expr {:?}",
+                        input
+                    ))
+                })?;
+                if let ExprType::Sort(sort_expr) = expr {
+                    let expr = sort_expr
+                        .expr
+                        .as_ref()
+                        .ok_or_else(|| {
+                            proto_error(format!(
+                                "physical_plan::from_proto() Unexpected sort expr {:?}",
+                                input
+                            ))
+                        })?
+                        .as_ref();
+                    Ok(PhysicalSortExpr {
+                        expr: self.try_parse_physical_expr(expr, &input.schema())?,
+                        options: SortOptions {
+                            descending: !sort_expr.asc,
+                            nulls_first: sort_expr.nulls_first,
+                        },
+                    })
+                } else {
+                    Err(PlanSerDeError::General(format!(
+                        "physical_plan::from_proto() {:?}",
+                        input
+                    )))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(pyhsical_sort_expr)
+    }
+
+    pub fn parse_protobuf_partitioning(
+        &self,
+        input: Arc<dyn ExecutionPlan>,
+        partitioning: Option<&Box<PhysicalRepartition>>,
+    ) -> Result<Option<Partitioning>, PlanSerDeError> {
+        partitioning.map_or(Ok(None), |p| {
+            let plan = p.repartition_type.as_ref().ok_or_else(|| {
+                proto_error(format!(
+                    "partition::from_proto() Unsupported partition '{:?}'",
+                    p
+                ))
+            })?;
+            match plan {
+                RepartitionType::SingleRepartition(..) => {
+                    Ok(Some(Partitioning::SinglePartitioning()))
+                }
+                RepartitionType::HashRepartition(hash_part) => {
+                    // let hash_part = p.hash_repartition;
+                    let expr = hash_part
+                        .hash_expr
+                        .iter()
+                        .map(|e| self.try_parse_physical_expr(e, &input.schema()))
+                        .collect::<Result<Vec<PhysicalExprRef>, _>>()?;
+                    Ok(Some(Partitioning::HashPartitioning(
+                        expr,
+                        hash_part.partition_count.try_into().unwrap(),
+                    )))
+                }
+
+                RepartitionType::RoundRobinRepartition(round_robin_part) => {
+                    Ok(Some(Partitioning::RoundRobinPartitioning(
+                        round_robin_part.partition_count.try_into().unwrap(),
+                    )))
+                }
+
+                RepartitionType::RangeRepartition(range_part) => {
+                    if range_part.partition_count == 1 {
+                        Ok(Some(Partitioning::SinglePartitioning()))
+                    } else {
+                        let sort = range_part.sort_expr.clone().unwrap();
+                        let exprs = self
+                            .try_parse_physical_sort_expr(&input, &sort)
+                            .unwrap_or_else(|e| {
+                                panic!("Failed to parse physical sort expressions: {}", e);
+                            });
+
+                        let value_list: Vec<ScalarValue> = range_part
+                            .list_value
+                            .iter()
+                            .map(|v| v.try_into())
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        let sort_row_converter = Arc::new(SyncMutex::new(RowConverter::new(
+                            exprs
+                                .iter()
+                                .map(|expr: &PhysicalSortExpr| {
+                                    Ok(SortField::new_with_options(
+                                        expr.expr.data_type(&input.schema())?,
+                                        expr.options,
+                                    ))
+                                })
+                                .collect::<Result<Vec<SortField>>>()?,
+                        )?));
+
+                        let bound_cols: Vec<ArrayRef> = value_list
+                            .iter()
+                            .map(|x| {
+                                if let ScalarValue::List(single) = x {
+                                    return single.value(0);
+                                } else {
+                                    unreachable!("expect list scalar value");
+                                }
+                            })
+                            .collect::<Vec<ArrayRef>>();
+
+                        let bound_rows = sort_row_converter.lock().convert_columns(&bound_cols)?;
+                        Ok(Some(Partitioning::RangePartitioning(
+                            exprs,
+                            range_part.partition_count.try_into().unwrap(),
+                            Arc::new(bound_rows),
+                        )))
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -849,360 +1236,10 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
     }
 }
 
-fn try_parse_physical_expr(
-    expr: &protobuf::PhysicalExprNode,
-    input_schema: &SchemaRef,
-) -> Result<PhysicalExprRef, PlanSerDeError> {
-    let expr_type = expr
-        .expr_type
-        .as_ref()
-        .ok_or_else(|| proto_error("Unexpected empty physical expression"))?;
-
-    let pexpr: PhysicalExprRef =
-        match expr_type {
-            ExprType::Column(c) => Arc::new(Column::new(&c.name, input_schema.index_of(&c.name)?)),
-            ExprType::Literal(scalar) => Arc::new(Literal::new(scalar.try_into()?)),
-            ExprType::BoundReference(bound_reference) => {
-                let pcol: Column = bound_reference.into();
-                Arc::new(pcol)
-            }
-            ExprType::BinaryExpr(binary_expr) => Arc::new(BinaryExpr::new(
-                try_parse_physical_expr_box_required(&binary_expr.l.clone(), input_schema)?,
-                from_proto_binary_op(&binary_expr.op)?,
-                try_parse_physical_expr_box_required(&binary_expr.r.clone(), input_schema)?,
-            )),
-            ExprType::AggExpr(_) => {
-                return Err(PlanSerDeError::General(
-                    "Cannot convert aggregate expr node to physical expression".to_owned(),
-                ));
-            }
-            ExprType::Sort(_) => {
-                return Err(PlanSerDeError::General(
-                    "Cannot convert sort expr node to physical expression".to_owned(),
-                ));
-            }
-            ExprType::IsNullExpr(e) => Arc::new(IsNullExpr::new(
-                try_parse_physical_expr_box_required(&e.expr, input_schema)?,
-            )),
-            ExprType::IsNotNullExpr(e) => Arc::new(IsNotNullExpr::new(
-                try_parse_physical_expr_box_required(&e.expr, input_schema)?,
-            )),
-            ExprType::NotExpr(e) => Arc::new(NotExpr::new(try_parse_physical_expr_box_required(
-                &e.expr,
-                input_schema,
-            )?)),
-            ExprType::Negative(e) => Arc::new(NegativeExpr::new(
-                try_parse_physical_expr_box_required(&e.expr, input_schema)?,
-            )),
-            ExprType::InList(e) => {
-                let expr = try_parse_physical_expr_box_required(&e.expr, input_schema)?;
-                let dt = expr.data_type(input_schema)?;
-                let list_exprs = e
-                    .list
-                    .iter()
-                    .map(|x| -> Result<PhysicalExprRef, PlanSerDeError> {
-                        let e = try_parse_physical_expr(x, input_schema)?;
-                        if e.data_type(input_schema)? != dt {
-                            return Ok(Arc::new(TryCastExpr::new(e, dt.clone())));
-                        }
-                        Ok(e)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                in_list(expr, list_exprs, &e.negated, &input_schema)?
-            }
-            ExprType::Case(e) => Arc::new(CaseExpr::try_new(
-                e.expr
-                    .as_ref()
-                    .map(|e| try_parse_physical_expr(e.as_ref(), input_schema))
-                    .transpose()?,
-                e.when_then_expr
-                    .iter()
-                    .map(|e| {
-                        Ok((
-                            try_parse_physical_expr_required(&e.when_expr, input_schema)?,
-                            try_parse_physical_expr_required(&e.then_expr, input_schema)?,
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, PlanSerDeError>>()?,
-                e.else_expr
-                    .as_ref()
-                    .map(|e| try_parse_physical_expr(e.as_ref(), input_schema))
-                    .transpose()?,
-            )?),
-            ExprType::Cast(e) => Arc::new(CastExpr::new(
-                try_parse_physical_expr_box_required(&e.expr, input_schema)?,
-                convert_required!(e.arrow_type)?,
-                None,
-            )),
-            ExprType::TryCast(e) => {
-                let expr = try_parse_physical_expr_box_required(&e.expr, input_schema)?;
-                let cast_type = convert_required!(e.arrow_type)?;
-                Arc::new(TryCastExpr::new(expr, cast_type))
-            }
-            ExprType::ScalarFunction(e) => {
-                let scalar_function =
-                    protobuf::ScalarFunction::try_from(e.fun).expect("invalid ScalarFunction");
-                let args = e
-                    .args
-                    .iter()
-                    .map(|x| try_parse_physical_expr(x, input_schema))
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let scalar_udf = if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
-                    let fun_name = &e.name;
-                    let fun = datafusion_ext_functions::create_auron_ext_function(fun_name)?;
-                    Arc::new(create_udf(
-                        &format!("spark_ext_function_{}", fun_name),
-                        args.iter()
-                            .map(|e| e.data_type(input_schema))
-                            .collect::<Result<Vec<_>, _>>()?,
-                        convert_required!(e.return_type)?,
-                        Volatility::Volatile,
-                        fun,
-                    ))
-                } else {
-                    let scalar_udf: Arc<ScalarUDF> = scalar_function.into();
-                    scalar_udf
-                };
-                Arc::new(ScalarFunctionExpr::new(
-                    scalar_udf.name(),
-                    scalar_udf.clone(),
-                    args,
-                    Arc::new(Field::new(
-                        "result",
-                        convert_required!(e.return_type)?,
-                        true,
-                    )),
-                ))
-            }
-            ExprType::SparkUdfWrapperExpr(e) => Arc::new(SparkUDFWrapperExpr::try_new(
-                e.serialized.clone(),
-                convert_required!(e.return_type)?,
-                e.return_nullable,
-                e.params
-                    .iter()
-                    .map(|x| try_parse_physical_expr(x, input_schema))
-                    .collect::<Result<Vec<_>, _>>()?,
-                e.expr_string.clone(),
-            )?),
-            ExprType::SparkScalarSubqueryWrapperExpr(e) => {
-                Arc::new(SparkScalarSubqueryWrapperExpr::try_new(
-                    e.serialized.clone(),
-                    convert_required!(e.return_type)?,
-                    e.return_nullable,
-                )?)
-            }
-            ExprType::GetIndexedFieldExpr(e) => {
-                let expr = try_parse_physical_expr_box_required(&e.expr, input_schema)?;
-                let key = convert_required!(e.key)?;
-                Arc::new(GetIndexedFieldExpr::new(expr, key))
-            }
-            ExprType::GetMapValueExpr(e) => {
-                let expr = try_parse_physical_expr_box_required(&e.expr, input_schema)?;
-                let key = convert_required!(e.key)?;
-                Arc::new(GetMapValueExpr::new(expr, key))
-            }
-            ExprType::StringStartsWithExpr(e) => {
-                let expr = try_parse_physical_expr_box_required(&e.expr, input_schema)?;
-                Arc::new(StringStartsWithExpr::new(expr, e.prefix.clone()))
-            }
-            ExprType::StringEndsWithExpr(e) => {
-                let expr = try_parse_physical_expr_box_required(&e.expr, input_schema)?;
-                Arc::new(StringEndsWithExpr::new(expr, e.suffix.clone()))
-            }
-            ExprType::StringContainsExpr(e) => {
-                let expr = try_parse_physical_expr_box_required(&e.expr, input_schema)?;
-                Arc::new(StringContainsExpr::new(expr, e.infix.clone()))
-            }
-            ExprType::RowNumExpr(_) => Arc::new(RowNumExpr::default()),
-            ExprType::BloomFilterMightContainExpr(e) => Arc::new(BloomFilterMightContainExpr::new(
-                e.uuid.clone(),
-                try_parse_physical_expr_box_required(&e.bloom_filter_expr, input_schema)?,
-                try_parse_physical_expr_box_required(&e.value_expr, input_schema)?,
-            )),
-            ExprType::ScAndExpr(e) => {
-                let l = try_parse_physical_expr_box_required(&e.left, input_schema)?;
-                let r = try_parse_physical_expr_box_required(&e.right, input_schema)?;
-                Arc::new(SCAndExpr::new(l, r))
-            }
-            ExprType::ScOrExpr(e) => {
-                let l = try_parse_physical_expr_box_required(&e.left, input_schema)?;
-                let r = try_parse_physical_expr_box_required(&e.right, input_schema)?;
-                Arc::new(SCOrExpr::new(l, r))
-            }
-            ExprType::LikeExpr(e) => Arc::new(LikeExpr::new(
-                e.negated,
-                e.case_insensitive,
-                try_parse_physical_expr_box_required(&e.expr, input_schema)?,
-                try_parse_physical_expr_box_required(&e.pattern, input_schema)?,
-            )),
-
-            ExprType::NamedStruct(e) => {
-                let data_type = convert_required!(e.return_type)?;
-                Arc::new(NamedStructExpr::try_new(
-                    e.values
-                        .iter()
-                        .map(|x| try_parse_physical_expr(x, input_schema))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    data_type,
-                )?)
-            }
-        };
-
-    Ok(pexpr)
-}
-
-fn try_parse_physical_expr_required(
-    proto: &Option<protobuf::PhysicalExprNode>,
-    input_schema: &SchemaRef,
-) -> Result<PhysicalExprRef, PlanSerDeError> {
-    if let Some(field) = proto.as_ref() {
-        try_parse_physical_expr(field, input_schema)
-    } else {
-        Err(proto_error("Missing required field in protobuf"))
-    }
-}
-
-fn try_parse_physical_expr_box_required(
-    proto: &Option<Box<protobuf::PhysicalExprNode>>,
-    input_schema: &SchemaRef,
-) -> Result<PhysicalExprRef, PlanSerDeError> {
-    if let Some(field) = proto.as_ref() {
-        try_parse_physical_expr(field, input_schema)
-    } else {
-        Err(proto_error("Missing required field in protobuf"))
-    }
-}
-
-fn try_parse_physical_sort_expr(
-    input: &Arc<dyn ExecutionPlan>,
-    sort: &Box<SortExecNode>,
-) -> Result<Vec<PhysicalSortExpr>, PlanSerDeError> {
-    let physical_sort_expr = sort
-        .expr
-        .iter()
-        .map(|expr| {
-            let expr = expr.expr_type.as_ref().ok_or_else(|| {
-                proto_error(format!(
-                    "physical_plan::from_proto() Unexpected expr {:?}",
-                    input
-                ))
-            })?;
-            if let ExprType::Sort(sort_expr) = expr {
-                let expr = sort_expr
-                    .expr
-                    .as_ref()
-                    .ok_or_else(|| {
-                        proto_error(format!(
-                            "physical_plan::from_proto() Unexpected sort expr {:?}",
-                            input
-                        ))
-                    })?
-                    .as_ref();
-                Ok(PhysicalSortExpr {
-                    expr: try_parse_physical_expr(expr, &input.schema())?,
-                    options: SortOptions {
-                        descending: !sort_expr.asc,
-                        nulls_first: sort_expr.nulls_first,
-                    },
-                })
-            } else {
-                Err(PlanSerDeError::General(format!(
-                    "physical_plan::from_proto() {:?}",
-                    input
-                )))
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(physical_sort_expr)
-}
-
-pub fn parse_protobuf_partitioning(
-    input: Arc<dyn ExecutionPlan>,
-    partitioning: Option<&Box<PhysicalRepartition>>,
-) -> Result<Option<Partitioning>, PlanSerDeError> {
-    partitioning.map_or(Ok(None), |p| {
-        let plan = p.repartition_type.as_ref().ok_or_else(|| {
-            proto_error(format!(
-                "partition::from_proto() Unsupported partition '{:?}'",
-                p
-            ))
-        })?;
-        match plan {
-            RepartitionType::SingleRepartition(..) => Ok(Some(Partitioning::SinglePartitioning())),
-            RepartitionType::HashRepartition(hash_part) => {
-                // let hash_part = p.hash_repartition;
-                let expr = hash_part
-                    .hash_expr
-                    .iter()
-                    .map(|e| try_parse_physical_expr(e, &input.schema()))
-                    .collect::<Result<Vec<PhysicalExprRef>, _>>()?;
-                Ok(Some(Partitioning::HashPartitioning(
-                    expr,
-                    hash_part.partition_count.try_into().unwrap(),
-                )))
-            }
-
-            RepartitionType::RoundRobinRepartition(round_robin_part) => {
-                Ok(Some(Partitioning::RoundRobinPartitioning(
-                    round_robin_part.partition_count.try_into().unwrap(),
-                )))
-            }
-
-            RepartitionType::RangeRepartition(range_part) => {
-                if range_part.partition_count == 1 {
-                    Ok(Some(Partitioning::SinglePartitioning()))
-                } else {
-                    let sort = range_part.sort_expr.clone().unwrap();
-                    let exprs = try_parse_physical_sort_expr(&input, &sort).unwrap_or_else(|e| {
-                        panic!("Failed to parse physical sort expressions: {}", e);
-                    });
-
-                    let value_list: Vec<ScalarValue> = range_part
-                        .list_value
-                        .iter()
-                        .map(|v| v.try_into())
-                        .collect::<Result<Vec<_>, _>>()?;
-
-                    let sort_row_converter = Arc::new(SyncMutex::new(RowConverter::new(
-                        exprs
-                            .iter()
-                            .map(|expr: &PhysicalSortExpr| {
-                                Ok(SortField::new_with_options(
-                                    expr.expr.data_type(&input.schema())?,
-                                    expr.options,
-                                ))
-                            })
-                            .collect::<Result<Vec<SortField>>>()?,
-                    )?));
-
-                    let bound_cols: Vec<ArrayRef> = value_list
-                        .iter()
-                        .map(|x| {
-                            if let ScalarValue::List(single) = x {
-                                return single.value(0);
-                            } else {
-                                unreachable!("expect list scalar value");
-                            }
-                        })
-                        .collect::<Vec<ArrayRef>>();
-
-                    let bound_rows = sort_row_converter.lock().convert_columns(&bound_cols)?;
-                    Ok(Some(Partitioning::RangePartitioning(
-                        exprs,
-                        range_part.partition_count.try_into().unwrap(),
-                        Arc::new(bound_rows),
-                    )))
-                }
-            }
-        }
-    })
-}
-
 impl TryFrom<&protobuf::PartitionedFile> for PartitionedFile {
     type Error = PlanSerDeError;
 
-    fn try_from(val: &protobuf::PartitionedFile) -> Result<Self, Self::Error> {
+    fn try_from(val: &protobuf::PartitionedFile) -> Result<Self, PlanError> {
         Ok(PartitionedFile {
             object_meta: ObjectMeta {
                 location: Path::from(format!("/{}", BASE64_URL_SAFE_NO_PAD.encode(&val.path))),
@@ -1227,7 +1264,7 @@ impl TryFrom<&protobuf::PartitionedFile> for PartitionedFile {
 impl TryFrom<&protobuf::FileRange> for FileRange {
     type Error = PlanSerDeError;
 
-    fn try_from(value: &protobuf::FileRange) -> Result<Self, Self::Error> {
+    fn try_from(value: &protobuf::FileRange) -> Result<Self, PlanError> {
         Ok(FileRange {
             start: value.start,
             end: value.end,
@@ -1238,7 +1275,7 @@ impl TryFrom<&protobuf::FileRange> for FileRange {
 impl TryFrom<&protobuf::FileGroup> for Vec<PartitionedFile> {
     type Error = PlanSerDeError;
 
-    fn try_from(val: &protobuf::FileGroup) -> Result<Self, Self::Error> {
+    fn try_from(val: &protobuf::FileGroup) -> Result<Self, PlanError> {
         val.files
             .iter()
             .map(|f| f.try_into())
@@ -1269,7 +1306,7 @@ impl From<&protobuf::ColumnStats> for ColumnStatistics {
 impl TryInto<Statistics> for &protobuf::Statistics {
     type Error = PlanSerDeError;
 
-    fn try_into(self) -> Result<Statistics, Self::Error> {
+    fn try_into(self) -> Result<Statistics, PlanError> {
         let column_statistics = self
             .column_stats
             .iter()
@@ -1287,7 +1324,7 @@ impl TryInto<Statistics> for &protobuf::Statistics {
 impl TryInto<FileScanConfig> for &protobuf::FileScanExecConf {
     type Error = PlanSerDeError;
 
-    fn try_into(self) -> Result<FileScanConfig, Self::Error> {
+    fn try_into(self) -> Result<FileScanConfig, PlanError> {
         let schema: SchemaRef = Arc::new(convert_required!(self.schema)?);
         let projection = self
             .projection
