@@ -16,4 +16,63 @@
  */
 package org.apache.spark.sql
 
-class AuronDataFrameAggregateSuite extends DataFrameAggregateSuite with SparkQueryTestsBase {}
+import scala.util.Random
+
+import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.auron.plan.NativeAggBase
+import org.apache.spark.sql.functions.{collect_list, monotonically_increasing_id, rand, randn, spark_partition_id, sum}
+import org.apache.spark.sql.internal.SQLConf
+
+class AuronDataFrameAggregateSuite extends DataFrameAggregateSuite with SparkQueryTestsBase {
+  import testImplicits._
+
+  // Ported from spark DataFrameAggregateSuite only with plan check changed.
+  private def assertNoExceptions(c: Column): Unit = {
+    for ((wholeStage, useObjectHashAgg) <-
+        Seq((true, true), (true, false), (false, true), (false, false))) {
+      withSQLConf(
+        (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
+
+        val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
+
+        val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        hashAggDF.collect()
+        val hashAggPlan = hashAggDF.queryExecution.executedPlan
+        if (wholeStage) {
+          assert(find(hashAggPlan) {
+            case WholeStageCodegenExec(_: HashAggregateExec) => true
+            // If offloaded, Spark whole stage codegen takes no effect and a native hash agg is
+            // expected to be used.
+            case _: NativeAggBase => true
+            case _ => false
+          }.isDefined)
+        } else {
+          assert(
+            stripAQEPlan(hashAggPlan).isInstanceOf[HashAggregateExec] ||
+              stripAQEPlan(hashAggPlan).find {
+                case _: NativeAggBase => true
+                case _ => false
+              }.isDefined)
+        }
+
+        val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
+        objHashAggOrSortAggDF.collect()
+        assert(stripAQEPlan(objHashAggOrSortAggDF.queryExecution.executedPlan).find {
+          case _: NativeAggBase => true
+          case _ => false
+        }.isDefined)
+      }
+    }
+  }
+
+  testAuron(
+    "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it") {
+    Seq(
+      monotonically_increasing_id(),
+      spark_partition_id(),
+      rand(Random.nextLong()),
+      randn(Random.nextLong())).foreach(assertNoExceptions)
+  }
+}
