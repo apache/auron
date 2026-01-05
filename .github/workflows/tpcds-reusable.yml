@@ -100,7 +100,7 @@ jobs:
           path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
 
       - name: Checkout TPC-DS Validator
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
         with:
           repository: auron-project/tpcds-validator
@@ -132,7 +132,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -228,7 +228,7 @@ jobs:
         query: ${{ fromJson(inputs.queries) }}
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get dependency version from pom
         id: get-dependency-version
@@ -289,7 +289,7 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Checkout TPC-DS Data
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: auron-project/tpcds_1g
           path: dev/tpcds_1g
