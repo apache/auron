@@ -32,10 +32,11 @@ services:
     environment:
       RUSTFLAGS: "-C target-cpu=skylake"
       AURON_BUILD_ARGS: "${AURON_BUILD_ARGS}"
+      AURON_BUILD_MVN_BIN: "${AURON_BUILD_MVN_BIN:-./build/mvn}"
     command: >
       bash -c '
         source ~/.bashrc &&
         cd /auron &&
-        echo "[DOCKER] Running: ./build/mvn $AURON_BUILD_ARGS" &&
-        ./build/mvn $AURON_BUILD_ARGS
+        echo "[DOCKER] Running: $AURON_BUILD_MVN_BIN $AURON_BUILD_ARGS" &&
+        $AURON_BUILD_MVN_BIN $AURON_BUILD_ARGS
       '
