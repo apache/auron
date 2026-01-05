@@ -81,7 +81,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: zulu
-          java-version: ${{ matrix.java }}
+          java-version: ${{ matrix.javaver }}
           cache: 'maven'
 
       - uses: arduino/setup-protoc@v3
