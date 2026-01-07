@@ -16,7 +16,7 @@
 #
 
 [package]
-name = "auron-serde"
+name = "auron-planner"
 version = "0.1.0"
 edition = "2024"
 

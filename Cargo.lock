@@ -349,7 +349,7 @@ dependencies = [
  "arrow",
  "auron-jni-bridge",
  "auron-memmgr",
- "auron-serde",
+ "auron-planner",
  "chrono",
  "datafusion",
  "datafusion-ext-commons",
@@ -399,7 +399,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "auron-serde"
+name = "auron-planner"
 version = "0.1.0"
 dependencies = [
  "arrow",
