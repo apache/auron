@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.auron.plan
 import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeConverters
@@ -54,7 +55,8 @@ abstract class NativeBroadcastJoinBase(
     joinType: JoinType,
     broadcastSide: BroadcastSide)
     extends BinaryExecNode
-    with NativeSupports {
+    with NativeSupports
+    with Logging {
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
@@ -140,6 +142,9 @@ abstract class NativeBroadcastJoinBase(
     // where exists = true for Semi, false for Anti
     //
     // Note: This optimization only applies to Semi/Anti joins.
+    logError("Debug: probedRDD.partitions.size = " + probedRDD.partitions.length
+      + ", builtRDD.partitions.size = " + builtRDD.partitions.length
+      + ", joinType = " + joinType.toString)
     if (probedRDD.partitions.isEmpty) {
       joinType match {
         case LeftAnti =>
@@ -149,6 +154,9 @@ abstract class NativeBroadcastJoinBase(
         case _ =>
       }
     }
+    logError("Debug: probedRDDV2.partitions.size = " + probedRDD.partitions.length
+      + ", builtRDD.partitions.size = " + builtRDD.partitions.length
+      + ", joinType = " + joinType.toString)
 
     val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
     val nativeSchema = this.nativeSchema
