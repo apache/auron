@@ -19,21 +19,16 @@ package org.apache.spark.sql.execution.auron.plan
 import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.Partition
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.FullOuter
-import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.LeftAnti
-import org.apache.spark.sql.catalyst.plans.LeftOuter
-import org.apache.spark.sql.catalyst.plans.LeftSemi
-import org.apache.spark.sql.catalyst.plans.RightOuter
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.BinaryExecNode
 import org.apache.spark.sql.execution.SparkPlan
@@ -44,7 +39,7 @@ import org.apache.spark.sql.types.LongType
 
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.metric.SparkMetricNode
-import org.apache.auron.protobuf.JoinOn
+import org.apache.auron.protobuf.{EmptyPartitionsExecNode, JoinOn, PhysicalPlanNode}
 
 abstract class NativeBroadcastJoinBase(
     override val left: SparkPlan,
@@ -142,21 +137,30 @@ abstract class NativeBroadcastJoinBase(
     // where exists = true for Semi, false for Anti
     //
     // Note: This optimization only applies to Semi/Anti joins.
-    logError("Debug: probedRDD.partitions.size = " + probedRDD.partitions.length
-      + ", builtRDD.partitions.size = " + builtRDD.partitions.length
-      + ", joinType = " + joinType.toString)
+    // For ExistenceJoin, we need to let native join execute so that finish() can output
+    // all build rows with exists=false when streamed is empty.
+    logError(
+      "Debug: probedRDD.partitions.size = " + probedRDD.partitions.length
+        + ", builtRDD.partitions.size = " + builtRDD.partitions.length
+        + ", joinType = " + joinType.toString)
     if (probedRDD.partitions.isEmpty) {
       joinType match {
         case LeftAnti =>
           return builtRDD
         case LeftSemi =>
           return probedRDD
+        case _: ExistenceJoin =>
+        // For ExistenceJoin, when streamed is empty, we need to output all build rows
+        // with exists=false. We let native join execute with empty probed side,
+        // and native finish() will handle this correctly.
+        // Use builtRDD.partitions to ensure native join can execute.
         case _ =>
       }
     }
-    logError("Debug: probedRDDV2.partitions.size = " + probedRDD.partitions.length
-      + ", builtRDD.partitions.size = " + builtRDD.partitions.length
-      + ", joinType = " + joinType.toString)
+    logError(
+      "Debug: probedRDDV2.partitions.size = " + probedRDD.partitions.length
+        + ", builtRDD.partitions.size = " + builtRDD.partitions.length
+        + ", joinType = " + joinType.toString)
 
     val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
     val nativeSchema = this.nativeSchema
@@ -170,27 +174,65 @@ abstract class NativeBroadcastJoinBase(
         Seq(FullOuter, LeftOuter, LeftSemi, LeftAnti).contains(joinType)
     })
 
+    // For ExistenceJoin with empty probed side, use builtRDD.partitions to ensure
+    // native join can execute and finish() will output all build rows with exists=false
+    val (rddPartitions, rddPartitioner, rddDependencies) =
+      if (probedRDD.partitions.isEmpty && joinType.isInstanceOf[ExistenceJoin]) {
+        (builtRDD.partitions, builtRDD.partitioner, new OneToOneDependency(builtRDD) :: Nil)
+      } else {
+        (probedRDD.partitions, probedRDD.partitioner, new OneToOneDependency(probedRDD) :: Nil)
+      }
+
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      probedRDD.partitions,
-      rddPartitioner = probedRDD.partitioner,
-      rddDependencies = new OneToOneDependency(probedRDD) :: Nil,
+      rddPartitions,
+      rddPartitioner = rddPartitioner,
+      rddDependencies = rddDependencies,
       probedShuffleReadFull,
       (partition, context) => {
         val partition0 = new Partition() {
           override def index: Int = 0
         }
-        val (leftChild, rightChild) = broadcastSide match {
-          case BroadcastLeft =>
-            (
-              leftRDD.nativePlan(partition0, context),
-              rightRDD.nativePlan(rightRDD.partitions(partition.index), context))
-          case BroadcastRight =>
-            (
-              leftRDD.nativePlan(leftRDD.partitions(partition.index), context),
-              rightRDD.nativePlan(partition0, context))
-        }
+        val (leftChild, rightChild) =
+          if (probedRDD.partitions.isEmpty && joinType.isInstanceOf[ExistenceJoin]) {
+            // For ExistenceJoin with empty probed side, use empty probed plan
+            // and build plan from builtRDD partition
+            val probedSchema = broadcastSide match {
+              case BroadcastLeft => Util.getNativeSchema(right.output)
+              case BroadcastRight => Util.getNativeSchema(left.output)
+            }
+            val emptyProbedPlan = PhysicalPlanNode
+              .newBuilder()
+              .setEmptyPartitions(
+                EmptyPartitionsExecNode
+                  .newBuilder()
+                  .setNumPartitions(1)
+                  .setSchema(probedSchema)
+                  .build())
+              .build()
+            broadcastSide match {
+              case BroadcastLeft =>
+                (
+                  leftRDD.nativePlan(leftRDD.partitions(partition.index), context),
+                  emptyProbedPlan)
+              case BroadcastRight =>
+                (
+                  emptyProbedPlan,
+                  rightRDD.nativePlan(rightRDD.partitions(partition.index), context))
+            }
+          } else {
+            broadcastSide match {
+              case BroadcastLeft =>
+                (
+                  leftRDD.nativePlan(partition0, context),
+                  rightRDD.nativePlan(rightRDD.partitions(partition.index), context))
+              case BroadcastRight =>
+                (
+                  leftRDD.nativePlan(leftRDD.partitions(partition.index), context),
+                  rightRDD.nativePlan(partition0, context))
+            }
+          }
         val cachedBuildHashMapId = s"bhm_stage${context.stageId}_rdd${builtRDD.id}"
 
         val broadcastJoinExec = pb.BroadcastJoinExecNode
