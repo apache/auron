@@ -33,3 +33,5 @@ NOTICE*
 docs/**
 build/apache-maven-*/**
 src/main/resources/auron-build-info.properties
+**/tpcds-plan-stability/**
+**/tpcds-queries/**

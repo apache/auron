@@ -1,0 +1,356 @@
+== Physical Plan ==
+AdaptiveSparkPlan (64)
++- == Final Plan ==
+   NativeTakeOrdered (41)
+   +- NativeProject (40)
+      +- NativeHashAggregate (39)
+         +- InputAdapter (38)
+            +- AQEShuffleRead (37)
+               +- ShuffleQueryStage (36), Statistics(X)
+                  +- NativeShuffleExchange (35)
+                     +- NativeHashAggregate (34)
+                        +- NativeProject (33)
+                           +- NativeSortMergeJoin Inner (32)
+                              :- NativeSort (22)
+                              :  +- InputAdapter (21)
+                              :     +- AQEShuffleRead (20)
+                              :        +- ShuffleQueryStage (19), Statistics(X)
+                              :           +- NativeShuffleExchange (18)
+                              :              +- NativeProject (17)
+                              :                 +- NativeSortMergeJoin Inner (16)
+                              :                    :- NativeSort (7)
+                              :                    :  +- InputAdapter (6)
+                              :                    :     +- AQEShuffleRead (5)
+                              :                    :        +- ShuffleQueryStage (4), Statistics(X)
+                              :                    :           +- NativeShuffleExchange (3)
+                              :                    :              +- InputAdapter (2)
+                              :                    :                 +- NativeParquetScan  (1)
+                              :                    +- NativeSort (15)
+                              :                       +- InputAdapter (14)
+                              :                          +- AQEShuffleRead (13)
+                              :                             +- ShuffleQueryStage (12), Statistics(X)
+                              :                                +- NativeShuffleExchange (11)
+                              :                                   +- NativeFilter (10)
+                              :                                      +- InputAdapter (9)
+                              :                                         +- NativeParquetScan  (8)
+                              +- NativeSort (31)
+                                 +- InputAdapter (30)
+                                    +- AQEShuffleRead (29)
+                                       +- ShuffleQueryStage (28), Statistics(X)
+                                          +- NativeShuffleExchange (27)
+                                             +- NativeProject (26)
+                                                +- NativeFilter (25)
+                                                   +- InputAdapter (24)
+                                                      +- NativeParquetScan  (23)
++- == Initial Plan ==
+   TakeOrderedAndProject (63)
+   +- HashAggregate (62)
+      +- Exchange (61)
+         +- HashAggregate (60)
+            +- Project (59)
+               +- SortMergeJoin Inner (58)
+                  :- Sort (52)
+                  :  +- Exchange (51)
+                  :     +- Project (50)
+                  :        +- SortMergeJoin Inner (49)
+                  :           :- Sort (44)
+                  :           :  +- Exchange (43)
+                  :           :     +- Scan parquet (42)
+                  :           +- Sort (48)
+                  :              +- Exchange (47)
+                  :                 +- Filter (46)
+                  :                    +- Scan parquet (45)
+                  +- Sort (57)
+                     +- Exchange (56)
+                        +- Project (55)
+                           +- Filter (54)
+                              +- Scan parquet (53)
+
+
+(42) Scan parquet
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
+
+(2) InputAdapter
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Arguments: [#1, #2, #3, #4, #5]
+
+(3) NativeShuffleExchange
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Arguments: hashpartitioning(ss_item_sk#1, ss_ticket_number#3, 100), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(4) ShuffleQueryStage
+Output [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Arguments: X
+
+(5) AQEShuffleRead
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Arguments: coalesced
+
+(6) InputAdapter
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+
+(7) NativeSort
+Input [5]: [#1#1, #2#2, #3#3, #4#4, #5#5]
+Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#3 ASC NULLS FIRST], false
+
+(45) Scan parquet
+Output [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
+ReadSchema: struct<sr_item_sk:int,sr_reason_sk:int,sr_ticket_number:int,sr_return_quantity:int>
+
+(9) InputAdapter
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Arguments: [#6, #7, #8, #9]
+
+(10) NativeFilter
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+Condition : ((isnotnull(sr_item_sk#6) AND isnotnull(sr_ticket_number#8)) AND isnotnull(sr_reason_sk#7))
+
+(11) NativeShuffleExchange
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+Arguments: hashpartitioning(sr_item_sk#6, sr_ticket_number#8, 100), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(12) ShuffleQueryStage
+Output [4]: [#6#6, #7#7, #8#8, #9#9]
+Arguments: X
+
+(13) AQEShuffleRead
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+Arguments: coalesced
+
+(14) InputAdapter
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+
+(15) NativeSort
+Input [4]: [#6#6, #7#7, #8#8, #9#9]
+Arguments: [sr_item_sk#6 ASC NULLS FIRST, sr_ticket_number#8 ASC NULLS FIRST], false
+
+(16) NativeSortMergeJoin
+Left keys [2]: [ss_item_sk#1, ss_ticket_number#3]
+Right keys [2]: [sr_item_sk#6, sr_ticket_number#8]
+Join type: Inner
+Join condition: None
+
+(17) NativeProject
+Output [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Input [9]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7, #8#8, #9#9]
+
+(18) NativeShuffleExchange
+Input [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Arguments: hashpartitioning(sr_reason_sk#7, 100), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(19) ShuffleQueryStage
+Output [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Arguments: X
+
+(20) AQEShuffleRead
+Input [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Arguments: coalesced
+
+(21) InputAdapter
+Input [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+
+(22) NativeSort
+Input [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Arguments: [sr_reason_sk#7 ASC NULLS FIRST], false
+
+(53) Scan parquet
+Output [2]: [r_reason_sk#10, r_reason_desc#11]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28), IsNotNull(r_reason_sk)]
+ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
+
+(24) InputAdapter
+Input [2]: [r_reason_sk#10, r_reason_desc#11]
+Arguments: [#10, #11]
+
+(25) NativeFilter
+Input [2]: [#10#10, #11#11]
+Condition : ((isnotnull(r_reason_desc#11) AND (r_reason_desc#11 = reason 28)) AND isnotnull(r_reason_sk#10))
+
+(26) NativeProject
+Output [1]: [r_reason_sk#10]
+Input [2]: [#10#10, #11#11]
+
+(27) NativeShuffleExchange
+Input [1]: [r_reason_sk#10]
+Arguments: hashpartitioning(r_reason_sk#10, 100), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(28) ShuffleQueryStage
+Output [1]: [r_reason_sk#10]
+Arguments: X
+
+(29) AQEShuffleRead
+Input [1]: [r_reason_sk#10]
+Arguments: coalesced
+
+(30) InputAdapter
+Input [1]: [r_reason_sk#10]
+
+(31) NativeSort
+Input [1]: [r_reason_sk#10]
+Arguments: [r_reason_sk#10 ASC NULLS FIRST], false
+
+(32) NativeSortMergeJoin
+Left keys [1]: [sr_reason_sk#7]
+Right keys [1]: [r_reason_sk#10]
+Join type: Inner
+Join condition: None
+
+(33) NativeProject
+Output [2]: [ss_customer_sk#2, CASE WHEN isnotnull(sr_return_quantity#9) THEN (cast((ss_quantity#4 - sr_return_quantity#9) as decimal(10,0)) * ss_sales_price#5) ELSE (cast(ss_quantity#4 as decimal(10,0)) * ss_sales_price#5) END AS act_sales#12]
+Input [6]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9, r_reason_sk#10]
+
+(34) NativeHashAggregate
+Input [2]: [ss_customer_sk#2, act_sales#12]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [partial_sum(act_sales#12)]
+Aggregate Attributes [2]: [sum#13, isEmpty#14]
+Results [2]: [ss_customer_sk#2, #15#15]
+
+(35) NativeShuffleExchange
+Input [2]: [ss_customer_sk#2, #15#15]
+Arguments: hashpartitioning(ss_customer_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(36) ShuffleQueryStage
+Output [2]: [ss_customer_sk#2, #15#15]
+Arguments: X
+
+(37) AQEShuffleRead
+Input [2]: [ss_customer_sk#2, #15#15]
+Arguments: coalesced
+
+(38) InputAdapter
+Input [2]: [ss_customer_sk#2, #15#15]
+
+(39) NativeHashAggregate
+Input [2]: [ss_customer_sk#2, #15#15]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [sum(act_sales#12)]
+Aggregate Attributes [1]: [sum(act_sales#12)#16]
+Results [2]: [ss_customer_sk#2, sum(act_sales#12)#16]
+
+(40) NativeProject
+Output [2]: [ss_customer_sk#2, sum(act_sales#12)#16 AS sumsales#17]
+Input [2]: [ss_customer_sk#2, sum(act_sales#12)#16]
+
+(41) NativeTakeOrdered
+Input [2]: [ss_customer_sk#2, sumsales#17]
+Arguments: X, [sumsales#17 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST]
+
+(42) Scan parquet
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
+
+(43) Exchange
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Arguments: hashpartitioning(ss_item_sk#1, ss_ticket_number#3, 100), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(44) Sort
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#3 ASC NULLS FIRST], false, 0
+
+(45) Scan parquet
+Output [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
+ReadSchema: struct<sr_item_sk:int,sr_reason_sk:int,sr_ticket_number:int,sr_return_quantity:int>
+
+(46) Filter
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Condition : ((isnotnull(sr_item_sk#6) AND isnotnull(sr_ticket_number#8)) AND isnotnull(sr_reason_sk#7))
+
+(47) Exchange
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Arguments: hashpartitioning(sr_item_sk#6, sr_ticket_number#8, 100), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(48) Sort
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Arguments: [sr_item_sk#6 ASC NULLS FIRST, sr_ticket_number#8 ASC NULLS FIRST], false, 0
+
+(49) SortMergeJoin
+Left keys [2]: [ss_item_sk#1, ss_ticket_number#3]
+Right keys [2]: [sr_item_sk#6, sr_ticket_number#8]
+Join type: Inner
+Join condition: None
+
+(50) Project
+Output [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+
+(51) Exchange
+Input [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Arguments: hashpartitioning(sr_reason_sk#7, 100), ENSURE_REQUIREMENTS, [plan_id=8]
+
+(52) Sort
+Input [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Arguments: [sr_reason_sk#7 ASC NULLS FIRST], false, 0
+
+(53) Scan parquet
+Output [2]: [r_reason_sk#10, r_reason_desc#11]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28), IsNotNull(r_reason_sk)]
+ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
+
+(54) Filter
+Input [2]: [r_reason_sk#10, r_reason_desc#11]
+Condition : ((isnotnull(r_reason_desc#11) AND (r_reason_desc#11 = reason 28)) AND isnotnull(r_reason_sk#10))
+
+(55) Project
+Output [1]: [r_reason_sk#10]
+Input [2]: [r_reason_sk#10, r_reason_desc#11]
+
+(56) Exchange
+Input [1]: [r_reason_sk#10]
+Arguments: hashpartitioning(r_reason_sk#10, 100), ENSURE_REQUIREMENTS, [plan_id=9]
+
+(57) Sort
+Input [1]: [r_reason_sk#10]
+Arguments: [r_reason_sk#10 ASC NULLS FIRST], false, 0
+
+(58) SortMergeJoin
+Left keys [1]: [sr_reason_sk#7]
+Right keys [1]: [r_reason_sk#10]
+Join type: Inner
+Join condition: None
+
+(59) Project
+Output [2]: [ss_customer_sk#2, CASE WHEN isnotnull(sr_return_quantity#9) THEN (cast((ss_quantity#4 - sr_return_quantity#9) as decimal(10,0)) * ss_sales_price#5) ELSE (cast(ss_quantity#4 as decimal(10,0)) * ss_sales_price#5) END AS act_sales#12]
+Input [6]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9, r_reason_sk#10]
+
+(60) HashAggregate
+Input [2]: [ss_customer_sk#2, act_sales#12]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [partial_sum(act_sales#12)]
+Aggregate Attributes [2]: [sum#13, isEmpty#14]
+Results [3]: [ss_customer_sk#2, sum#18, isEmpty#19]
+
+(61) Exchange
+Input [3]: [ss_customer_sk#2, sum#18, isEmpty#19]
+Arguments: hashpartitioning(ss_customer_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=10]
+
+(62) HashAggregate
+Input [3]: [ss_customer_sk#2, sum#18, isEmpty#19]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [sum(act_sales#12)]
+Aggregate Attributes [1]: [sum(act_sales#12)#16]
+Results [2]: [ss_customer_sk#2, sum(act_sales#12)#16 AS sumsales#17]
+
+(63) TakeOrderedAndProject
+Input [2]: [ss_customer_sk#2, sumsales#17]
+Arguments: X, [sumsales#17 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST], [ss_customer_sk#2, sumsales#17]
+
+(64) AdaptiveSparkPlan
+Output [2]: [ss_customer_sk#2, sumsales#17]
+Arguments: isFinalPlan=true
+

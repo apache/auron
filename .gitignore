@@ -57,3 +57,7 @@ native-engine/_build
 
 # exclude org.apache.auron.common.AuronBuildInfo
 common/src/main/resources/auron-build-info.properties
+
+
+.flattened-pom.xml
+dependency-reduced-pom.xml

@@ -1,0 +1,878 @@
+== Physical Plan ==
+AdaptiveSparkPlan (160)
++- == Final Plan ==
+   * Project (93)
+   +- CartesianProduct Inner (92)
+      :- NativeProject (56)
+      :  +- NativeHashAggregate (55)
+      :     +- ShuffleQueryStage (54), Statistics(X)
+      :        +- NativeShuffleExchange (53)
+      :           +- NativeHashAggregate (52)
+      :              +- NativeProject (51)
+      :                 +- NativeSortMergeJoin Inner (50)
+      :                    :- NativeSort (40)
+      :                    :  +- InputAdapter (39)
+      :                    :     +- AQEShuffleRead (38)
+      :                    :        +- ShuffleQueryStage (37), Statistics(X)
+      :                    :           +- NativeShuffleExchange (36)
+      :                    :              +- NativeProject (35)
+      :                    :                 +- NativeSortMergeJoin Inner (34)
+      :                    :                    :- NativeSort (24)
+      :                    :                    :  +- InputAdapter (23)
+      :                    :                    :     +- AQEShuffleRead (22)
+      :                    :                    :        +- ShuffleQueryStage (21), Statistics(X)
+      :                    :                    :           +- NativeShuffleExchange (20)
+      :                    :                    :              +- NativeProject (19)
+      :                    :                    :                 +- NativeSortMergeJoin Inner (18)
+      :                    :                    :                    :- NativeSort (8)
+      :                    :                    :                    :  +- InputAdapter (7)
+      :                    :                    :                    :     +- AQEShuffleRead (6)
+      :                    :                    :                    :        +- ShuffleQueryStage (5), Statistics(X)
+      :                    :                    :                    :           +- NativeShuffleExchange (4)
+      :                    :                    :                    :              +- NativeFilter (3)
+      :                    :                    :                    :                 +- InputAdapter (2)
+      :                    :                    :                    :                    +- NativeParquetScan  (1)
+      :                    :                    :                    +- NativeSort (17)
+      :                    :                    :                       +- InputAdapter (16)
+      :                    :                    :                          +- AQEShuffleRead (15)
+      :                    :                    :                             +- ShuffleQueryStage (14), Statistics(X)
+      :                    :                    :                                +- NativeShuffleExchange (13)
+      :                    :                    :                                   +- NativeProject (12)
+      :                    :                    :                                      +- NativeFilter (11)
+      :                    :                    :                                         +- InputAdapter (10)
+      :                    :                    :                                            +- NativeParquetScan  (9)
+      :                    :                    +- NativeSort (33)
+      :                    :                       +- InputAdapter (32)
+      :                    :                          +- AQEShuffleRead (31)
+      :                    :                             +- ShuffleQueryStage (30), Statistics(X)
+      :                    :                                +- NativeShuffleExchange (29)
+      :                    :                                   +- NativeProject (28)
+      :                    :                                      +- NativeFilter (27)
+      :                    :                                         +- InputAdapter (26)
+      :                    :                                            +- NativeParquetScan  (25)
+      :                    +- NativeSort (49)
+      :                       +- InputAdapter (48)
+      :                          +- AQEShuffleRead (47)
+      :                             +- ShuffleQueryStage (46), Statistics(X)
+      :                                +- NativeShuffleExchange (45)
+      :                                   +- NativeProject (44)
+      :                                      +- NativeFilter (43)
+      :                                         +- InputAdapter (42)
+      :                                            +- NativeParquetScan  (41)
+      +- NativeProject (91)
+         +- NativeHashAggregate (90)
+            +- ShuffleQueryStage (89), Statistics(X)
+               +- NativeShuffleExchange (88)
+                  +- NativeHashAggregate (87)
+                     +- NativeProject (86)
+                        +- NativeSortMergeJoin Inner (85)
+                           :- NativeSort (78)
+                           :  +- InputAdapter (77)
+                           :     +- AQEShuffleRead (76)
+                           :        +- ShuffleQueryStage (75), Statistics(X)
+                           :           +- NativeShuffleExchange (74)
+                           :              +- NativeProject (73)
+                           :                 +- NativeSortMergeJoin Inner (72)
+                           :                    :- NativeSort (62)
+                           :                    :  +- InputAdapter (61)
+                           :                    :     +- InputAdapter (60)
+                           :                    :        +- AQEShuffleRead (59)
+                           :                    :           +- ShuffleQueryStage (58), Statistics(X)
+                           :                    :              +- ReusedExchange (57)
+                           :                    +- NativeSort (71)
+                           :                       +- InputAdapter (70)
+                           :                          +- AQEShuffleRead (69)
+                           :                             +- ShuffleQueryStage (68), Statistics(X)
+                           :                                +- NativeShuffleExchange (67)
+                           :                                   +- NativeProject (66)
+                           :                                      +- NativeFilter (65)
+                           :                                         +- InputAdapter (64)
+                           :                                            +- NativeParquetScan  (63)
+                           +- NativeSort (84)
+                              +- InputAdapter (83)
+                                 +- InputAdapter (82)
+                                    +- AQEShuffleRead (81)
+                                       +- ShuffleQueryStage (80), Statistics(X)
+                                          +- ReusedExchange (79)
++- == Initial Plan ==
+   Project (159)
+   +- CartesianProduct Inner (158)
+      :- HashAggregate (125)
+      :  +- Exchange (124)
+      :     +- HashAggregate (123)
+      :        +- Project (122)
+      :           +- SortMergeJoin Inner (121)
+      :              :- Sort (115)
+      :              :  +- Exchange (114)
+      :              :     +- Project (113)
+      :              :        +- SortMergeJoin Inner (112)
+      :              :           :- Sort (106)
+      :              :           :  +- Exchange (105)
+      :              :           :     +- Project (104)
+      :              :           :        +- SortMergeJoin Inner (103)
+      :              :           :           :- Sort (97)
+      :              :           :           :  +- Exchange (96)
+      :              :           :           :     +- Filter (95)
+      :              :           :           :        +- Scan parquet (94)
+      :              :           :           +- Sort (102)
+      :              :           :              +- Exchange (101)
+      :              :           :                 +- Project (100)
+      :              :           :                    +- Filter (99)
+      :              :           :                       +- Scan parquet (98)
+      :              :           +- Sort (111)
+      :              :              +- Exchange (110)
+      :              :                 +- Project (109)
+      :              :                    +- Filter (108)
+      :              :                       +- Scan parquet (107)
+      :              +- Sort (120)
+      :                 +- Exchange (119)
+      :                    +- Project (118)
+      :                       +- Filter (117)
+      :                          +- Scan parquet (116)
+      +- HashAggregate (157)
+         +- Exchange (156)
+            +- HashAggregate (155)
+               +- Project (154)
+                  +- SortMergeJoin Inner (153)
+                     :- Sort (147)
+                     :  +- Exchange (146)
+                     :     +- Project (145)
+                     :        +- SortMergeJoin Inner (144)
+                     :           :- Sort (138)
+                     :           :  +- Exchange (137)
+                     :           :     +- Project (136)
+                     :           :        +- SortMergeJoin Inner (135)
+                     :           :           :- Sort (129)
+                     :           :           :  +- Exchange (128)
+                     :           :           :     +- Filter (127)
+                     :           :           :        +- Scan parquet (126)
+                     :           :           +- Sort (134)
+                     :           :              +- Exchange (133)
+                     :           :                 +- Project (132)
+                     :           :                    +- Filter (131)
+                     :           :                       +- Scan parquet (130)
+                     :           +- Sort (143)
+                     :              +- Exchange (142)
+                     :                 +- Project (141)
+                     :                    +- Filter (140)
+                     :                       +- Scan parquet (139)
+                     +- Sort (152)
+                        +- Exchange (151)
+                           +- Project (150)
+                              +- Filter (149)
+                                 +- Scan parquet (148)
+
+
+(94) Scan parquet
+Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
+ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+
+(2) InputAdapter
+Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Arguments: [#1, #2, #3]
+
+(3) NativeFilter
+Input [3]: [#1#1, #2#2, #3#3]
+Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_web_page_sk#3))
+
+(4) NativeShuffleExchange
+Input [3]: [#1#1, #2#2, #3#3]
+Arguments: hashpartitioning(ws_ship_hdemo_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(5) ShuffleQueryStage
+Output [3]: [#1#1, #2#2, #3#3]
+Arguments: X
+
+(6) AQEShuffleRead
+Input [3]: [#1#1, #2#2, #3#3]
+Arguments: coalesced
+
+(7) InputAdapter
+Input [3]: [#1#1, #2#2, #3#3]
+
+(8) NativeSort
+Input [3]: [#1#1, #2#2, #3#3]
+Arguments: [ws_ship_hdemo_sk#2 ASC NULLS FIRST], false
+
+(98) Scan parquet
+Output [2]: [hd_demo_sk#4, hd_dep_count#5]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+
+(10) InputAdapter
+Input [2]: [hd_demo_sk#4, hd_dep_count#5]
+Arguments: [#4, #5]
+
+(11) NativeFilter
+Input [2]: [#4#4, #5#5]
+Condition : ((isnotnull(hd_dep_count#5) AND (hd_dep_count#5 = 6)) AND isnotnull(hd_demo_sk#4))
+
+(12) NativeProject
+Output [1]: [hd_demo_sk#4]
+Input [2]: [#4#4, #5#5]
+
+(13) NativeShuffleExchange
+Input [1]: [hd_demo_sk#4]
+Arguments: hashpartitioning(hd_demo_sk#4, 100), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(14) ShuffleQueryStage
+Output [1]: [hd_demo_sk#4]
+Arguments: X
+
+(15) AQEShuffleRead
+Input [1]: [hd_demo_sk#4]
+Arguments: coalesced
+
+(16) InputAdapter
+Input [1]: [hd_demo_sk#4]
+
+(17) NativeSort
+Input [1]: [hd_demo_sk#4]
+Arguments: [hd_demo_sk#4 ASC NULLS FIRST], false
+
+(18) NativeSortMergeJoin
+Left keys [1]: [ws_ship_hdemo_sk#2]
+Right keys [1]: [hd_demo_sk#4]
+Join type: Inner
+Join condition: None
+
+(19) NativeProject
+Output [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Input [4]: [#1#1, #2#2, #3#3, hd_demo_sk#4]
+
+(20) NativeShuffleExchange
+Input [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Arguments: hashpartitioning(ws_sold_time_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(21) ShuffleQueryStage
+Output [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Arguments: X
+
+(22) AQEShuffleRead
+Input [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Arguments: coalesced
+
+(23) InputAdapter
+Input [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+
+(24) NativeSort
+Input [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Arguments: [ws_sold_time_sk#1 ASC NULLS FIRST], false
+
+(107) Scan parquet
+Output [2]: [t_time_sk#6, t_hour#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_hour:int>
+
+(26) InputAdapter
+Input [2]: [t_time_sk#6, t_hour#7]
+Arguments: [#6, #7]
+
+(27) NativeFilter
+Input [2]: [#6#6, #7#7]
+Condition : (((isnotnull(t_hour#7) AND (t_hour#7 >= 8)) AND (t_hour#7 <= 9)) AND isnotnull(t_time_sk#6))
+
+(28) NativeProject
+Output [1]: [t_time_sk#6]
+Input [2]: [#6#6, #7#7]
+
+(29) NativeShuffleExchange
+Input [1]: [t_time_sk#6]
+Arguments: hashpartitioning(t_time_sk#6, 100), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(30) ShuffleQueryStage
+Output [1]: [t_time_sk#6]
+Arguments: X
+
+(31) AQEShuffleRead
+Input [1]: [t_time_sk#6]
+Arguments: coalesced
+
+(32) InputAdapter
+Input [1]: [t_time_sk#6]
+
+(33) NativeSort
+Input [1]: [t_time_sk#6]
+Arguments: [t_time_sk#6 ASC NULLS FIRST], false
+
+(34) NativeSortMergeJoin
+Left keys [1]: [ws_sold_time_sk#1]
+Right keys [1]: [t_time_sk#6]
+Join type: Inner
+Join condition: None
+
+(35) NativeProject
+Output [1]: [ws_web_page_sk#3]
+Input [3]: [ws_sold_time_sk#1, ws_web_page_sk#3, t_time_sk#6]
+
+(36) NativeShuffleExchange
+Input [1]: [ws_web_page_sk#3]
+Arguments: hashpartitioning(ws_web_page_sk#3, 100), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(37) ShuffleQueryStage
+Output [1]: [ws_web_page_sk#3]
+Arguments: X
+
+(38) AQEShuffleRead
+Input [1]: [ws_web_page_sk#3]
+Arguments: coalesced
+
+(39) InputAdapter
+Input [1]: [ws_web_page_sk#3]
+
+(40) NativeSort
+Input [1]: [ws_web_page_sk#3]
+Arguments: [ws_web_page_sk#3 ASC NULLS FIRST], false
+
+(116) Scan parquet
+Output [2]: [wp_web_page_sk#8, wp_char_count#9]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
+ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
+
+(42) InputAdapter
+Input [2]: [wp_web_page_sk#8, wp_char_count#9]
+Arguments: [#8, #9]
+
+(43) NativeFilter
+Input [2]: [#8#8, #9#9]
+Condition : (((isnotnull(wp_char_count#9) AND (wp_char_count#9 >= 5000)) AND (wp_char_count#9 <= 5200)) AND isnotnull(wp_web_page_sk#8))
+
+(44) NativeProject
+Output [1]: [wp_web_page_sk#8]
+Input [2]: [#8#8, #9#9]
+
+(45) NativeShuffleExchange
+Input [1]: [wp_web_page_sk#8]
+Arguments: hashpartitioning(wp_web_page_sk#8, 100), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(46) ShuffleQueryStage
+Output [1]: [wp_web_page_sk#8]
+Arguments: X
+
+(47) AQEShuffleRead
+Input [1]: [wp_web_page_sk#8]
+Arguments: coalesced
+
+(48) InputAdapter
+Input [1]: [wp_web_page_sk#8]
+
+(49) NativeSort
+Input [1]: [wp_web_page_sk#8]
+Arguments: [wp_web_page_sk#8 ASC NULLS FIRST], false
+
+(50) NativeSortMergeJoin
+Left keys [1]: [ws_web_page_sk#3]
+Right keys [1]: [wp_web_page_sk#8]
+Join type: Inner
+Join condition: None
+
+(51) NativeProject
+Output: []
+Input [2]: [ws_web_page_sk#3, wp_web_page_sk#8]
+
+(52) NativeHashAggregate
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#10]
+Results [1]: [#11#11]
+
+(53) NativeShuffleExchange
+Input [1]: [#11#11]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
+
+(54) ShuffleQueryStage
+Output [1]: [#11#11]
+Arguments: X
+
+(55) NativeHashAggregate
+Input [1]: [#11#11]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#12]
+Results [1]: [count(1)#12]
+
+(56) NativeProject
+Output [1]: [count(1)#12 AS amc#13]
+Input [1]: [count(1)#12]
+
+(57) ReusedExchange [Reuses operator id: 20]
+Output [2]: [ws_sold_time_sk#14, ws_web_page_sk#15]
+
+(58) ShuffleQueryStage
+Output [2]: [ws_sold_time_sk#14, ws_web_page_sk#15]
+Arguments: X
+
+(59) AQEShuffleRead
+Input [2]: [ws_sold_time_sk#14, ws_web_page_sk#15]
+Arguments: coalesced
+
+(60) InputAdapter
+Input [2]: [ws_sold_time_sk#14, ws_web_page_sk#15]
+Arguments: [#14, #15]
+
+(61) InputAdapter
+Input [2]: [#14#14, #15#15]
+
+(62) NativeSort
+Input [2]: [#14#14, #15#15]
+Arguments: [ws_sold_time_sk#14 ASC NULLS FIRST], false
+
+(139) Scan parquet
+Output [2]: [t_time_sk#16, t_hour#17]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_hour:int>
+
+(64) InputAdapter
+Input [2]: [t_time_sk#16, t_hour#17]
+Arguments: [#16, #17]
+
+(65) NativeFilter
+Input [2]: [#16#16, #17#17]
+Condition : (((isnotnull(t_hour#17) AND (t_hour#17 >= 19)) AND (t_hour#17 <= 20)) AND isnotnull(t_time_sk#16))
+
+(66) NativeProject
+Output [1]: [t_time_sk#16]
+Input [2]: [#16#16, #17#17]
+
+(67) NativeShuffleExchange
+Input [1]: [t_time_sk#16]
+Arguments: hashpartitioning(t_time_sk#16, 100), ENSURE_REQUIREMENTS, [plan_id=8]
+
+(68) ShuffleQueryStage
+Output [1]: [t_time_sk#16]
+Arguments: X
+
+(69) AQEShuffleRead
+Input [1]: [t_time_sk#16]
+Arguments: coalesced
+
+(70) InputAdapter
+Input [1]: [t_time_sk#16]
+
+(71) NativeSort
+Input [1]: [t_time_sk#16]
+Arguments: [t_time_sk#16 ASC NULLS FIRST], false
+
+(72) NativeSortMergeJoin
+Left keys [1]: [ws_sold_time_sk#14]
+Right keys [1]: [t_time_sk#16]
+Join type: Inner
+Join condition: None
+
+(73) NativeProject
+Output [1]: [ws_web_page_sk#15]
+Input [3]: [#14#14, #15#15, t_time_sk#16]
+
+(74) NativeShuffleExchange
+Input [1]: [ws_web_page_sk#15]
+Arguments: hashpartitioning(ws_web_page_sk#15, 100), ENSURE_REQUIREMENTS, [plan_id=9]
+
+(75) ShuffleQueryStage
+Output [1]: [ws_web_page_sk#15]
+Arguments: X
+
+(76) AQEShuffleRead
+Input [1]: [ws_web_page_sk#15]
+Arguments: coalesced
+
+(77) InputAdapter
+Input [1]: [ws_web_page_sk#15]
+
+(78) NativeSort
+Input [1]: [ws_web_page_sk#15]
+Arguments: [ws_web_page_sk#15 ASC NULLS FIRST], false
+
+(79) ReusedExchange [Reuses operator id: 45]
+Output [1]: [wp_web_page_sk#18]
+
+(80) ShuffleQueryStage
+Output [1]: [wp_web_page_sk#18]
+Arguments: X
+
+(81) AQEShuffleRead
+Input [1]: [wp_web_page_sk#18]
+Arguments: coalesced
+
+(82) InputAdapter
+Input [1]: [wp_web_page_sk#18]
+Arguments: [#18]
+
+(83) InputAdapter
+Input [1]: [#18#18]
+
+(84) NativeSort
+Input [1]: [#18#18]
+Arguments: [wp_web_page_sk#18 ASC NULLS FIRST], false
+
+(85) NativeSortMergeJoin
+Left keys [1]: [ws_web_page_sk#15]
+Right keys [1]: [wp_web_page_sk#18]
+Join type: Inner
+Join condition: None
+
+(86) NativeProject
+Output: []
+Input [2]: [ws_web_page_sk#15, #18#18]
+
+(87) NativeHashAggregate
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#19]
+Results [1]: [#11#11]
+
+(88) NativeShuffleExchange
+Input [1]: [#11#11]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+
+(89) ShuffleQueryStage
+Output [1]: [#11#11]
+Arguments: X
+
+(90) NativeHashAggregate
+Input [1]: [#11#11]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#20]
+Results [1]: [count(1)#20]
+
+(91) NativeProject
+Output [1]: [count(1)#20 AS pmc#21]
+Input [1]: [count(1)#20]
+
+(92) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(93) Project [codegen id : 1]
+Output [1]: [(cast(amc#13 as decimal(15,4)) / cast(pmc#21 as decimal(15,4))) AS am_pm_ratio#22]
+Input [2]: [amc#13, pmc#21]
+
+(94) Scan parquet
+Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
+ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+
+(95) Filter
+Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_web_page_sk#3))
+
+(96) Exchange
+Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Arguments: hashpartitioning(ws_ship_hdemo_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=11]
+
+(97) Sort
+Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Arguments: [ws_ship_hdemo_sk#2 ASC NULLS FIRST], false, 0
+
+(98) Scan parquet
+Output [2]: [hd_demo_sk#4, hd_dep_count#5]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+
+(99) Filter
+Input [2]: [hd_demo_sk#4, hd_dep_count#5]
+Condition : ((isnotnull(hd_dep_count#5) AND (hd_dep_count#5 = 6)) AND isnotnull(hd_demo_sk#4))
+
+(100) Project
+Output [1]: [hd_demo_sk#4]
+Input [2]: [hd_demo_sk#4, hd_dep_count#5]
+
+(101) Exchange
+Input [1]: [hd_demo_sk#4]
+Arguments: hashpartitioning(hd_demo_sk#4, 100), ENSURE_REQUIREMENTS, [plan_id=12]
+
+(102) Sort
+Input [1]: [hd_demo_sk#4]
+Arguments: [hd_demo_sk#4 ASC NULLS FIRST], false, 0
+
+(103) SortMergeJoin
+Left keys [1]: [ws_ship_hdemo_sk#2]
+Right keys [1]: [hd_demo_sk#4]
+Join type: Inner
+Join condition: None
+
+(104) Project
+Output [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, hd_demo_sk#4]
+
+(105) Exchange
+Input [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Arguments: hashpartitioning(ws_sold_time_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=13]
+
+(106) Sort
+Input [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Arguments: [ws_sold_time_sk#1 ASC NULLS FIRST], false, 0
+
+(107) Scan parquet
+Output [2]: [t_time_sk#6, t_hour#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_hour:int>
+
+(108) Filter
+Input [2]: [t_time_sk#6, t_hour#7]
+Condition : (((isnotnull(t_hour#7) AND (t_hour#7 >= 8)) AND (t_hour#7 <= 9)) AND isnotnull(t_time_sk#6))
+
+(109) Project
+Output [1]: [t_time_sk#6]
+Input [2]: [t_time_sk#6, t_hour#7]
+
+(110) Exchange
+Input [1]: [t_time_sk#6]
+Arguments: hashpartitioning(t_time_sk#6, 100), ENSURE_REQUIREMENTS, [plan_id=14]
+
+(111) Sort
+Input [1]: [t_time_sk#6]
+Arguments: [t_time_sk#6 ASC NULLS FIRST], false, 0
+
+(112) SortMergeJoin
+Left keys [1]: [ws_sold_time_sk#1]
+Right keys [1]: [t_time_sk#6]
+Join type: Inner
+Join condition: None
+
+(113) Project
+Output [1]: [ws_web_page_sk#3]
+Input [3]: [ws_sold_time_sk#1, ws_web_page_sk#3, t_time_sk#6]
+
+(114) Exchange
+Input [1]: [ws_web_page_sk#3]
+Arguments: hashpartitioning(ws_web_page_sk#3, 100), ENSURE_REQUIREMENTS, [plan_id=15]
+
+(115) Sort
+Input [1]: [ws_web_page_sk#3]
+Arguments: [ws_web_page_sk#3 ASC NULLS FIRST], false, 0
+
+(116) Scan parquet
+Output [2]: [wp_web_page_sk#8, wp_char_count#9]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
+ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
+
+(117) Filter
+Input [2]: [wp_web_page_sk#8, wp_char_count#9]
+Condition : (((isnotnull(wp_char_count#9) AND (wp_char_count#9 >= 5000)) AND (wp_char_count#9 <= 5200)) AND isnotnull(wp_web_page_sk#8))
+
+(118) Project
+Output [1]: [wp_web_page_sk#8]
+Input [2]: [wp_web_page_sk#8, wp_char_count#9]
+
+(119) Exchange
+Input [1]: [wp_web_page_sk#8]
+Arguments: hashpartitioning(wp_web_page_sk#8, 100), ENSURE_REQUIREMENTS, [plan_id=16]
+
+(120) Sort
+Input [1]: [wp_web_page_sk#8]
+Arguments: [wp_web_page_sk#8 ASC NULLS FIRST], false, 0
+
+(121) SortMergeJoin
+Left keys [1]: [ws_web_page_sk#3]
+Right keys [1]: [wp_web_page_sk#8]
+Join type: Inner
+Join condition: None
+
+(122) Project
+Output: []
+Input [2]: [ws_web_page_sk#3, wp_web_page_sk#8]
+
+(123) HashAggregate
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#10]
+Results [1]: [count#23]
+
+(124) Exchange
+Input [1]: [count#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=17]
+
+(125) HashAggregate
+Input [1]: [count#23]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#12]
+Results [1]: [count(1)#12 AS amc#13]
+
+(126) Scan parquet
+Output [3]: [ws_sold_time_sk#14, ws_ship_hdemo_sk#24, ws_web_page_sk#15]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
+ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+
+(127) Filter
+Input [3]: [ws_sold_time_sk#14, ws_ship_hdemo_sk#24, ws_web_page_sk#15]
+Condition : ((isnotnull(ws_ship_hdemo_sk#24) AND isnotnull(ws_sold_time_sk#14)) AND isnotnull(ws_web_page_sk#15))
+
+(128) Exchange
+Input [3]: [ws_sold_time_sk#14, ws_ship_hdemo_sk#24, ws_web_page_sk#15]
+Arguments: hashpartitioning(ws_ship_hdemo_sk#24, 100), ENSURE_REQUIREMENTS, [plan_id=18]
+
+(129) Sort
+Input [3]: [ws_sold_time_sk#14, ws_ship_hdemo_sk#24, ws_web_page_sk#15]
+Arguments: [ws_ship_hdemo_sk#24 ASC NULLS FIRST], false, 0
+
+(130) Scan parquet
+Output [2]: [hd_demo_sk#25, hd_dep_count#26]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+
+(131) Filter
+Input [2]: [hd_demo_sk#25, hd_dep_count#26]
+Condition : ((isnotnull(hd_dep_count#26) AND (hd_dep_count#26 = 6)) AND isnotnull(hd_demo_sk#25))
+
+(132) Project
+Output [1]: [hd_demo_sk#25]
+Input [2]: [hd_demo_sk#25, hd_dep_count#26]
+
+(133) Exchange
+Input [1]: [hd_demo_sk#25]
+Arguments: hashpartitioning(hd_demo_sk#25, 100), ENSURE_REQUIREMENTS, [plan_id=19]
+
+(134) Sort
+Input [1]: [hd_demo_sk#25]
+Arguments: [hd_demo_sk#25 ASC NULLS FIRST], false, 0
+
+(135) SortMergeJoin
+Left keys [1]: [ws_ship_hdemo_sk#24]
+Right keys [1]: [hd_demo_sk#25]
+Join type: Inner
+Join condition: None
+
+(136) Project
+Output [2]: [ws_sold_time_sk#14, ws_web_page_sk#15]
+Input [4]: [ws_sold_time_sk#14, ws_ship_hdemo_sk#24, ws_web_page_sk#15, hd_demo_sk#25]
+
+(137) Exchange
+Input [2]: [ws_sold_time_sk#14, ws_web_page_sk#15]
+Arguments: hashpartitioning(ws_sold_time_sk#14, 100), ENSURE_REQUIREMENTS, [plan_id=20]
+
+(138) Sort
+Input [2]: [ws_sold_time_sk#14, ws_web_page_sk#15]
+Arguments: [ws_sold_time_sk#14 ASC NULLS FIRST], false, 0
+
+(139) Scan parquet
+Output [2]: [t_time_sk#16, t_hour#17]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_hour:int>
+
+(140) Filter
+Input [2]: [t_time_sk#16, t_hour#17]
+Condition : (((isnotnull(t_hour#17) AND (t_hour#17 >= 19)) AND (t_hour#17 <= 20)) AND isnotnull(t_time_sk#16))
+
+(141) Project
+Output [1]: [t_time_sk#16]
+Input [2]: [t_time_sk#16, t_hour#17]
+
+(142) Exchange
+Input [1]: [t_time_sk#16]
+Arguments: hashpartitioning(t_time_sk#16, 100), ENSURE_REQUIREMENTS, [plan_id=21]
+
+(143) Sort
+Input [1]: [t_time_sk#16]
+Arguments: [t_time_sk#16 ASC NULLS FIRST], false, 0
+
+(144) SortMergeJoin
+Left keys [1]: [ws_sold_time_sk#14]
+Right keys [1]: [t_time_sk#16]
+Join type: Inner
+Join condition: None
+
+(145) Project
+Output [1]: [ws_web_page_sk#15]
+Input [3]: [ws_sold_time_sk#14, ws_web_page_sk#15, t_time_sk#16]
+
+(146) Exchange
+Input [1]: [ws_web_page_sk#15]
+Arguments: hashpartitioning(ws_web_page_sk#15, 100), ENSURE_REQUIREMENTS, [plan_id=22]
+
+(147) Sort
+Input [1]: [ws_web_page_sk#15]
+Arguments: [ws_web_page_sk#15 ASC NULLS FIRST], false, 0
+
+(148) Scan parquet
+Output [2]: [wp_web_page_sk#18, wp_char_count#27]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
+ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
+
+(149) Filter
+Input [2]: [wp_web_page_sk#18, wp_char_count#27]
+Condition : (((isnotnull(wp_char_count#27) AND (wp_char_count#27 >= 5000)) AND (wp_char_count#27 <= 5200)) AND isnotnull(wp_web_page_sk#18))
+
+(150) Project
+Output [1]: [wp_web_page_sk#18]
+Input [2]: [wp_web_page_sk#18, wp_char_count#27]
+
+(151) Exchange
+Input [1]: [wp_web_page_sk#18]
+Arguments: hashpartitioning(wp_web_page_sk#18, 100), ENSURE_REQUIREMENTS, [plan_id=23]
+
+(152) Sort
+Input [1]: [wp_web_page_sk#18]
+Arguments: [wp_web_page_sk#18 ASC NULLS FIRST], false, 0
+
+(153) SortMergeJoin
+Left keys [1]: [ws_web_page_sk#15]
+Right keys [1]: [wp_web_page_sk#18]
+Join type: Inner
+Join condition: None
+
+(154) Project
+Output: []
+Input [2]: [ws_web_page_sk#15, wp_web_page_sk#18]
+
+(155) HashAggregate
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#19]
+Results [1]: [count#28]
+
+(156) Exchange
+Input [1]: [count#28]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=24]
+
+(157) HashAggregate
+Input [1]: [count#28]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#20]
+Results [1]: [count(1)#20 AS pmc#21]
+
+(158) CartesianProduct
+Join type: Inner
+Join condition: None
+
+(159) Project
+Output [1]: [(cast(amc#13 as decimal(15,4)) / cast(pmc#21 as decimal(15,4))) AS am_pm_ratio#22]
+Input [2]: [amc#13, pmc#21]
+
+(160) AdaptiveSparkPlan
+Output [1]: [am_pm_ratio#22]
+Arguments: isFinalPlan=true
+

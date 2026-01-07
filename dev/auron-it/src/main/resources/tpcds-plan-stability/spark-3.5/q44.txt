@@ -1,0 +1,790 @@
+== Physical Plan ==
+AdaptiveSparkPlan (124)
++- == Final Plan ==
+   NativeTakeOrdered (72)
+   +- NativeProject (71)
+      +- NativeSortMergeJoin Inner (70)
+         :- NativeSort (63)
+         :  +- InputAdapter (62)
+         :     +- AQEShuffleRead (61)
+         :        +- ShuffleQueryStage (60), Statistics(X)
+         :           +- NativeShuffleExchange (59)
+         :              +- NativeProject (58)
+         :                 +- NativeSortMergeJoin Inner (57)
+         :                    :- NativeSort (48)
+         :                    :  +- InputAdapter (47)
+         :                    :     +- AQEShuffleRead (46)
+         :                    :        +- ShuffleQueryStage (45), Statistics(X)
+         :                    :           +- NativeShuffleExchange (44)
+         :                    :              +- NativeProject (43)
+         :                    :                 +- NativeSortMergeJoin Inner (42)
+         :                    :                    :- NativeSort (23)
+         :                    :                    :  +- NativeProject (22)
+         :                    :                    :     +- NativeFilter (21)
+         :                    :                    :        +- NativeWindow (20)
+         :                    :                    :           +- NativeWindowGroupLimit (19)
+         :                    :                    :              +- NativeSort (18)
+         :                    :                    :                 +- ShuffleQueryStage (17), Statistics(X)
+         :                    :                    :                    +- NativeShuffleExchange (16)
+         :                    :                    :                       +- NativeWindowGroupLimit (15)
+         :                    :                    :                          +- NativeSort (14)
+         :                    :                    :                             +- NativeFilter (13)
+         :                    :                    :                                +- NativeProject (12)
+         :                    :                    :                                   +- NativeHashAggregate (11)
+         :                    :                    :                                      +- InputAdapter (10)
+         :                    :                    :                                         +- AQEShuffleRead (9)
+         :                    :                    :                                            +- ShuffleQueryStage (8), Statistics(X)
+         :                    :                    :                                               +- NativeShuffleExchange (7)
+         :                    :                    :                                                  +- NativeHashAggregate (6)
+         :                    :                    :                                                     +- NativeProject (5)
+         :                    :                    :                                                        +- NativeProject (4)
+         :                    :                    :                                                           +- NativeFilter (3)
+         :                    :                    :                                                              +- InputAdapter (2)
+         :                    :                    :                                                                 +- NativeParquetScan  (1)
+         :                    :                    +- NativeSort (41)
+         :                    :                       +- NativeProject (40)
+         :                    :                          +- NativeFilter (39)
+         :                    :                             +- NativeWindow (38)
+         :                    :                                +- NativeWindowGroupLimit (37)
+         :                    :                                   +- NativeSort (36)
+         :                    :                                      +- ShuffleQueryStage (35), Statistics(X)
+         :                    :                                         +- NativeShuffleExchange (34)
+         :                    :                                            +- NativeWindowGroupLimit (33)
+         :                    :                                               +- NativeSort (32)
+         :                    :                                                  +- NativeFilter (31)
+         :                    :                                                     +- NativeProject (30)
+         :                    :                                                        +- NativeHashAggregate (29)
+         :                    :                                                           +- InputAdapter (28)
+         :                    :                                                              +- InputAdapter (27)
+         :                    :                                                                 +- AQEShuffleRead (26)
+         :                    :                                                                    +- ShuffleQueryStage (25), Statistics(X)
+         :                    :                                                                       +- ReusedExchange (24)
+         :                    +- NativeSort (56)
+         :                       +- InputAdapter (55)
+         :                          +- AQEShuffleRead (54)
+         :                             +- ShuffleQueryStage (53), Statistics(X)
+         :                                +- NativeShuffleExchange (52)
+         :                                   +- NativeFilter (51)
+         :                                      +- InputAdapter (50)
+         :                                         +- NativeParquetScan  (49)
+         +- NativeSort (69)
+            +- InputAdapter (68)
+               +- InputAdapter (67)
+                  +- AQEShuffleRead (66)
+                     +- ShuffleQueryStage (65), Statistics(X)
+                        +- ReusedExchange (64)
++- == Initial Plan ==
+   TakeOrderedAndProject (123)
+   +- Project (122)
+      +- SortMergeJoin Inner (121)
+         :- Sort (116)
+         :  +- Exchange (115)
+         :     +- Project (114)
+         :        +- SortMergeJoin Inner (113)
+         :           :- Sort (108)
+         :           :  +- Exchange (107)
+         :           :     +- Project (106)
+         :           :        +- SortMergeJoin Inner (105)
+         :           :           :- Sort (88)
+         :           :           :  +- Project (87)
+         :           :           :     +- Filter (86)
+         :           :           :        +- Window (85)
+         :           :           :           +- WindowGroupLimit (84)
+         :           :           :              +- Sort (83)
+         :           :           :                 +- Exchange (82)
+         :           :           :                    +- WindowGroupLimit (81)
+         :           :           :                       +- Sort (80)
+         :           :           :                          +- Filter (79)
+         :           :           :                             +- HashAggregate (78)
+         :           :           :                                +- Exchange (77)
+         :           :           :                                   +- HashAggregate (76)
+         :           :           :                                      +- Project (75)
+         :           :           :                                         +- Filter (74)
+         :           :           :                                            +- Scan parquet (73)
+         :           :           +- Sort (104)
+         :           :              +- Project (103)
+         :           :                 +- Filter (102)
+         :           :                    +- Window (101)
+         :           :                       +- WindowGroupLimit (100)
+         :           :                          +- Sort (99)
+         :           :                             +- Exchange (98)
+         :           :                                +- WindowGroupLimit (97)
+         :           :                                   +- Sort (96)
+         :           :                                      +- Filter (95)
+         :           :                                         +- HashAggregate (94)
+         :           :                                            +- Exchange (93)
+         :           :                                               +- HashAggregate (92)
+         :           :                                                  +- Project (91)
+         :           :                                                     +- Filter (90)
+         :           :                                                        +- Scan parquet (89)
+         :           +- Sort (112)
+         :              +- Exchange (111)
+         :                 +- Filter (110)
+         :                    +- Scan parquet (109)
+         +- Sort (120)
+            +- Exchange (119)
+               +- Filter (118)
+                  +- Scan parquet (117)
+
+
+(73) Scan parquet
+Output [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4)]
+ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
+
+(2) InputAdapter
+Input [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
+Arguments: [#1, #2, #3]
+
+(3) NativeFilter
+Input [3]: [#1#1, #2#2, #3#3]
+Condition : (isnotnull(ss_store_sk#2) AND (ss_store_sk#2 = 4))
+
+(4) NativeProject
+Output [2]: [ss_item_sk#1, ss_net_profit#3]
+Input [3]: [#1#1, #2#2, #3#3]
+
+(5) NativeProject
+Output [2]: [ss_item_sk#1 AS ss_item_sk#1, UnscaledValue(ss_net_profit#3) AS _c1#4]
+Input [2]: [ss_item_sk#1, ss_net_profit#3]
+
+(6) NativeHashAggregate
+Input [2]: [ss_item_sk#1, _c1#4]
+Keys [1]: [ss_item_sk#1]
+Functions [1]: [partial_avg(_c1#4)]
+Aggregate Attributes [2]: [sum#5, count#6]
+Results [2]: [ss_item_sk#1, #7#7]
+
+(7) NativeShuffleExchange
+Input [2]: [ss_item_sk#1, #7#7]
+Arguments: hashpartitioning(ss_item_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(8) ShuffleQueryStage
+Output [2]: [ss_item_sk#1, #7#7]
+Arguments: X
+
+(9) AQEShuffleRead
+Input [2]: [ss_item_sk#1, #7#7]
+Arguments: coalesced
+
+(10) InputAdapter
+Input [2]: [ss_item_sk#1, #7#7]
+
+(11) NativeHashAggregate
+Input [2]: [ss_item_sk#1, #7#7]
+Keys [1]: [ss_item_sk#1]
+Functions [1]: [avg(UnscaledValue(ss_net_profit#3))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#3))#8]
+Results [2]: [ss_item_sk#1, avg(UnscaledValue(ss_net_profit#3))#8]
+
+(12) NativeProject
+Output [2]: [ss_item_sk#1 AS item_sk#9, cast((avg(UnscaledValue(ss_net_profit#3))#8 / 100.0) as decimal(11,6)) AS rank_col#10]
+Input [2]: [ss_item_sk#1, avg(UnscaledValue(ss_net_profit#3))#8]
+
+(13) NativeFilter
+Input [2]: [item_sk#9, rank_col#10]
+Condition : (isnotnull(rank_col#10) AND (cast(rank_col#10 as decimal(13,7)) > (0.9 * Subquery subquery#11, [id=#12])))
+
+(14) NativeSort
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank_col#10 ASC NULLS FIRST], false
+
+(15) NativeWindowGroupLimit
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank(rank_col#10) windowspecdefinition(rank_col#10 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS __window_expression__#13], [rank_col#10 ASC NULLS FIRST], 10
+
+(16) NativeShuffleExchange
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
+
+(17) ShuffleQueryStage
+Output [2]: [item_sk#9, rank_col#10]
+Arguments: X
+
+(18) NativeSort
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank_col#10 ASC NULLS FIRST], false
+
+(19) NativeWindowGroupLimit
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank(rank_col#10) windowspecdefinition(rank_col#10 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS __window_expression__#14], [rank_col#10 ASC NULLS FIRST], 10
+
+(20) NativeWindow
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank(rank_col#10) windowspecdefinition(rank_col#10 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#15], [rank_col#10 ASC NULLS FIRST]
+
+(21) NativeFilter
+Input [3]: [item_sk#9, rank_col#10, rnk#15]
+Condition : ((rnk#15 < 11) AND isnotnull(item_sk#9))
+
+(22) NativeProject
+Output [2]: [item_sk#9, rnk#15]
+Input [3]: [item_sk#9, rank_col#10, rnk#15]
+
+(23) NativeSort
+Input [2]: [item_sk#9, rnk#15]
+Arguments: [rnk#15 ASC NULLS FIRST], false
+
+(24) ReusedExchange [Reuses operator id: 7]
+Output [3]: [ss_item_sk#16, sum#17, count#18]
+
+(25) ShuffleQueryStage
+Output [3]: [ss_item_sk#16, sum#17, count#18]
+Arguments: X
+
+(26) AQEShuffleRead
+Input [3]: [ss_item_sk#16, sum#17, count#18]
+Arguments: coalesced
+
+(27) InputAdapter
+Input [3]: [ss_item_sk#16, sum#17, count#18]
+Arguments: [#16, #17, #19]
+
+(28) InputAdapter
+Input [3]: [#16#16, #17#17, #19#18]
+
+(29) NativeHashAggregate
+Input [3]: [#16#16, #17#17, #19#18]
+Keys [1]: [ss_item_sk#16]
+Functions [1]: [avg(UnscaledValue(ss_net_profit#20))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#20))#21]
+Results [2]: [ss_item_sk#16, avg(UnscaledValue(ss_net_profit#20))#21]
+
+(30) NativeProject
+Output [2]: [ss_item_sk#16 AS item_sk#22, cast((avg(UnscaledValue(ss_net_profit#20))#21 / 100.0) as decimal(11,6)) AS rank_col#23]
+Input [2]: [ss_item_sk#16, avg(UnscaledValue(ss_net_profit#20))#21]
+
+(31) NativeFilter
+Input [2]: [item_sk#22, rank_col#23]
+Condition : (isnotnull(rank_col#23) AND (cast(rank_col#23 as decimal(13,7)) > (0.9 * ReusedSubquery Subquery subquery#11, [id=#12])))
+
+(32) NativeSort
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank_col#23 DESC NULLS LAST], false
+
+(33) NativeWindowGroupLimit
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank(rank_col#23) windowspecdefinition(rank_col#23 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS __window_expression__#24], [rank_col#23 DESC NULLS LAST], 10
+
+(34) NativeShuffleExchange
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=3]
+
+(35) ShuffleQueryStage
+Output [2]: [item_sk#22, rank_col#23]
+Arguments: X
+
+(36) NativeSort
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank_col#23 DESC NULLS LAST], false
+
+(37) NativeWindowGroupLimit
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank(rank_col#23) windowspecdefinition(rank_col#23 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS __window_expression__#25], [rank_col#23 DESC NULLS LAST], 10
+
+(38) NativeWindow
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank(rank_col#23) windowspecdefinition(rank_col#23 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#26], [rank_col#23 DESC NULLS LAST]
+
+(39) NativeFilter
+Input [3]: [item_sk#22, rank_col#23, rnk#26]
+Condition : ((rnk#26 < 11) AND isnotnull(item_sk#22))
+
+(40) NativeProject
+Output [2]: [item_sk#22, rnk#26]
+Input [3]: [item_sk#22, rank_col#23, rnk#26]
+
+(41) NativeSort
+Input [2]: [item_sk#22, rnk#26]
+Arguments: [rnk#26 ASC NULLS FIRST], false
+
+(42) NativeSortMergeJoin
+Left keys [1]: [rnk#15]
+Right keys [1]: [rnk#26]
+Join type: Inner
+Join condition: None
+
+(43) NativeProject
+Output [3]: [item_sk#9, rnk#15, item_sk#22]
+Input [4]: [item_sk#9, rnk#15, item_sk#22, rnk#26]
+
+(44) NativeShuffleExchange
+Input [3]: [item_sk#9, rnk#15, item_sk#22]
+Arguments: hashpartitioning(item_sk#9, 100), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(45) ShuffleQueryStage
+Output [3]: [item_sk#9, rnk#15, item_sk#22]
+Arguments: X
+
+(46) AQEShuffleRead
+Input [3]: [item_sk#9, rnk#15, item_sk#22]
+Arguments: coalesced
+
+(47) InputAdapter
+Input [3]: [item_sk#9, rnk#15, item_sk#22]
+
+(48) NativeSort
+Input [3]: [item_sk#9, rnk#15, item_sk#22]
+Arguments: [item_sk#9 ASC NULLS FIRST], false
+
+(109) Scan parquet
+Output [2]: [i_item_sk#27, i_product_name#28]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_product_name:string>
+
+(50) InputAdapter
+Input [2]: [i_item_sk#27, i_product_name#28]
+Arguments: [#27, #28]
+
+(51) NativeFilter
+Input [2]: [#27#27, #28#28]
+Condition : isnotnull(i_item_sk#27)
+
+(52) NativeShuffleExchange
+Input [2]: [#27#27, #28#28]
+Arguments: hashpartitioning(i_item_sk#27, 100), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(53) ShuffleQueryStage
+Output [2]: [#27#27, #28#28]
+Arguments: X
+
+(54) AQEShuffleRead
+Input [2]: [#27#27, #28#28]
+Arguments: coalesced
+
+(55) InputAdapter
+Input [2]: [#27#27, #28#28]
+
+(56) NativeSort
+Input [2]: [#27#27, #28#28]
+Arguments: [i_item_sk#27 ASC NULLS FIRST], false
+
+(57) NativeSortMergeJoin
+Left keys [1]: [item_sk#9]
+Right keys [1]: [i_item_sk#27]
+Join type: Inner
+Join condition: None
+
+(58) NativeProject
+Output [3]: [rnk#15, item_sk#22, i_product_name#28]
+Input [5]: [item_sk#9, rnk#15, item_sk#22, #27#27, #28#28]
+
+(59) NativeShuffleExchange
+Input [3]: [rnk#15, item_sk#22, i_product_name#28]
+Arguments: hashpartitioning(item_sk#22, 100), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(60) ShuffleQueryStage
+Output [3]: [rnk#15, item_sk#22, i_product_name#28]
+Arguments: X
+
+(61) AQEShuffleRead
+Input [3]: [rnk#15, item_sk#22, i_product_name#28]
+Arguments: coalesced
+
+(62) InputAdapter
+Input [3]: [rnk#15, item_sk#22, i_product_name#28]
+
+(63) NativeSort
+Input [3]: [rnk#15, item_sk#22, i_product_name#28]
+Arguments: [item_sk#22 ASC NULLS FIRST], false
+
+(64) ReusedExchange [Reuses operator id: 52]
+Output [2]: [i_item_sk#29, i_product_name#30]
+
+(65) ShuffleQueryStage
+Output [2]: [i_item_sk#29, i_product_name#30]
+Arguments: X
+
+(66) AQEShuffleRead
+Input [2]: [i_item_sk#29, i_product_name#30]
+Arguments: coalesced
+
+(67) InputAdapter
+Input [2]: [i_item_sk#29, i_product_name#30]
+Arguments: [#29, #30]
+
+(68) InputAdapter
+Input [2]: [#29#29, #30#30]
+
+(69) NativeSort
+Input [2]: [#29#29, #30#30]
+Arguments: [i_item_sk#29 ASC NULLS FIRST], false
+
+(70) NativeSortMergeJoin
+Left keys [1]: [item_sk#22]
+Right keys [1]: [i_item_sk#29]
+Join type: Inner
+Join condition: None
+
+(71) NativeProject
+Output [3]: [rnk#15, i_product_name#28 AS best_performing#31, i_product_name#30 AS worst_performing#32]
+Input [5]: [rnk#15, item_sk#22, i_product_name#28, #29#29, #30#30]
+
+(72) NativeTakeOrdered
+Input [3]: [rnk#15, best_performing#31, worst_performing#32]
+Arguments: X, [rnk#15 ASC NULLS FIRST]
+
+(73) Scan parquet
+Output [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4)]
+ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
+
+(74) Filter
+Input [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
+Condition : (isnotnull(ss_store_sk#2) AND (ss_store_sk#2 = 4))
+
+(75) Project
+Output [2]: [ss_item_sk#1, ss_net_profit#3]
+Input [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
+
+(76) HashAggregate
+Input [2]: [ss_item_sk#1, ss_net_profit#3]
+Keys [1]: [ss_item_sk#1]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_profit#3))]
+Aggregate Attributes [2]: [sum#5, count#6]
+Results [3]: [ss_item_sk#1, sum#33, count#34]
+
+(77) Exchange
+Input [3]: [ss_item_sk#1, sum#33, count#34]
+Arguments: hashpartitioning(ss_item_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(78) HashAggregate
+Input [3]: [ss_item_sk#1, sum#33, count#34]
+Keys [1]: [ss_item_sk#1]
+Functions [1]: [avg(UnscaledValue(ss_net_profit#3))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#3))#8]
+Results [2]: [ss_item_sk#1 AS item_sk#9, cast((avg(UnscaledValue(ss_net_profit#3))#8 / 100.0) as decimal(11,6)) AS rank_col#10]
+
+(79) Filter
+Input [2]: [item_sk#9, rank_col#10]
+Condition : (isnotnull(rank_col#10) AND (cast(rank_col#10 as decimal(13,7)) > (0.9 * Subquery subquery#11, [id=#12])))
+
+(80) Sort
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank_col#10 ASC NULLS FIRST], false, 0
+
+(81) WindowGroupLimit
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank_col#10 ASC NULLS FIRST], rank(rank_col#10), 10, Partial
+
+(82) Exchange
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
+
+(83) Sort
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank_col#10 ASC NULLS FIRST], false, 0
+
+(84) WindowGroupLimit
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank_col#10 ASC NULLS FIRST], rank(rank_col#10), 10, Final
+
+(85) Window
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank(rank_col#10) windowspecdefinition(rank_col#10 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#15], [rank_col#10 ASC NULLS FIRST]
+
+(86) Filter
+Input [3]: [item_sk#9, rank_col#10, rnk#15]
+Condition : ((rnk#15 < 11) AND isnotnull(item_sk#9))
+
+(87) Project
+Output [2]: [item_sk#9, rnk#15]
+Input [3]: [item_sk#9, rank_col#10, rnk#15]
+
+(88) Sort
+Input [2]: [item_sk#9, rnk#15]
+Arguments: [rnk#15 ASC NULLS FIRST], false, 0
+
+(89) Scan parquet
+Output [3]: [ss_item_sk#16, ss_store_sk#35, ss_net_profit#20]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4)]
+ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
+
+(90) Filter
+Input [3]: [ss_item_sk#16, ss_store_sk#35, ss_net_profit#20]
+Condition : (isnotnull(ss_store_sk#35) AND (ss_store_sk#35 = 4))
+
+(91) Project
+Output [2]: [ss_item_sk#16, ss_net_profit#20]
+Input [3]: [ss_item_sk#16, ss_store_sk#35, ss_net_profit#20]
+
+(92) HashAggregate
+Input [2]: [ss_item_sk#16, ss_net_profit#20]
+Keys [1]: [ss_item_sk#16]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_profit#20))]
+Aggregate Attributes [2]: [sum#36, count#37]
+Results [3]: [ss_item_sk#16, sum#17, count#18]
+
+(93) Exchange
+Input [3]: [ss_item_sk#16, sum#17, count#18]
+Arguments: hashpartitioning(ss_item_sk#16, 100), ENSURE_REQUIREMENTS, [plan_id=9]
+
+(94) HashAggregate
+Input [3]: [ss_item_sk#16, sum#17, count#18]
+Keys [1]: [ss_item_sk#16]
+Functions [1]: [avg(UnscaledValue(ss_net_profit#20))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#20))#21]
+Results [2]: [ss_item_sk#16 AS item_sk#22, cast((avg(UnscaledValue(ss_net_profit#20))#21 / 100.0) as decimal(11,6)) AS rank_col#23]
+
+(95) Filter
+Input [2]: [item_sk#22, rank_col#23]
+Condition : (isnotnull(rank_col#23) AND (cast(rank_col#23 as decimal(13,7)) > (0.9 * Subquery subquery#38, [id=#39])))
+
+(96) Sort
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank_col#23 DESC NULLS LAST], false, 0
+
+(97) WindowGroupLimit
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank_col#23 DESC NULLS LAST], rank(rank_col#23), 10, Partial
+
+(98) Exchange
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+
+(99) Sort
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank_col#23 DESC NULLS LAST], false, 0
+
+(100) WindowGroupLimit
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank_col#23 DESC NULLS LAST], rank(rank_col#23), 10, Final
+
+(101) Window
+Input [2]: [item_sk#22, rank_col#23]
+Arguments: [rank(rank_col#23) windowspecdefinition(rank_col#23 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#26], [rank_col#23 DESC NULLS LAST]
+
+(102) Filter
+Input [3]: [item_sk#22, rank_col#23, rnk#26]
+Condition : ((rnk#26 < 11) AND isnotnull(item_sk#22))
+
+(103) Project
+Output [2]: [item_sk#22, rnk#26]
+Input [3]: [item_sk#22, rank_col#23, rnk#26]
+
+(104) Sort
+Input [2]: [item_sk#22, rnk#26]
+Arguments: [rnk#26 ASC NULLS FIRST], false, 0
+
+(105) SortMergeJoin
+Left keys [1]: [rnk#15]
+Right keys [1]: [rnk#26]
+Join type: Inner
+Join condition: None
+
+(106) Project
+Output [3]: [item_sk#9, rnk#15, item_sk#22]
+Input [4]: [item_sk#9, rnk#15, item_sk#22, rnk#26]
+
+(107) Exchange
+Input [3]: [item_sk#9, rnk#15, item_sk#22]
+Arguments: hashpartitioning(item_sk#9, 100), ENSURE_REQUIREMENTS, [plan_id=11]
+
+(108) Sort
+Input [3]: [item_sk#9, rnk#15, item_sk#22]
+Arguments: [item_sk#9 ASC NULLS FIRST], false, 0
+
+(109) Scan parquet
+Output [2]: [i_item_sk#27, i_product_name#28]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_product_name:string>
+
+(110) Filter
+Input [2]: [i_item_sk#27, i_product_name#28]
+Condition : isnotnull(i_item_sk#27)
+
+(111) Exchange
+Input [2]: [i_item_sk#27, i_product_name#28]
+Arguments: hashpartitioning(i_item_sk#27, 100), ENSURE_REQUIREMENTS, [plan_id=12]
+
+(112) Sort
+Input [2]: [i_item_sk#27, i_product_name#28]
+Arguments: [i_item_sk#27 ASC NULLS FIRST], false, 0
+
+(113) SortMergeJoin
+Left keys [1]: [item_sk#9]
+Right keys [1]: [i_item_sk#27]
+Join type: Inner
+Join condition: None
+
+(114) Project
+Output [3]: [rnk#15, item_sk#22, i_product_name#28]
+Input [5]: [item_sk#9, rnk#15, item_sk#22, i_item_sk#27, i_product_name#28]
+
+(115) Exchange
+Input [3]: [rnk#15, item_sk#22, i_product_name#28]
+Arguments: hashpartitioning(item_sk#22, 100), ENSURE_REQUIREMENTS, [plan_id=13]
+
+(116) Sort
+Input [3]: [rnk#15, item_sk#22, i_product_name#28]
+Arguments: [item_sk#22 ASC NULLS FIRST], false, 0
+
+(117) Scan parquet
+Output [2]: [i_item_sk#29, i_product_name#30]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_product_name:string>
+
+(118) Filter
+Input [2]: [i_item_sk#29, i_product_name#30]
+Condition : isnotnull(i_item_sk#29)
+
+(119) Exchange
+Input [2]: [i_item_sk#29, i_product_name#30]
+Arguments: hashpartitioning(i_item_sk#29, 100), ENSURE_REQUIREMENTS, [plan_id=14]
+
+(120) Sort
+Input [2]: [i_item_sk#29, i_product_name#30]
+Arguments: [i_item_sk#29 ASC NULLS FIRST], false, 0
+
+(121) SortMergeJoin
+Left keys [1]: [item_sk#22]
+Right keys [1]: [i_item_sk#29]
+Join type: Inner
+Join condition: None
+
+(122) Project
+Output [3]: [rnk#15, i_product_name#28 AS best_performing#31, i_product_name#30 AS worst_performing#32]
+Input [5]: [rnk#15, item_sk#22, i_product_name#28, i_item_sk#29, i_product_name#30]
+
+(123) TakeOrderedAndProject
+Input [3]: [rnk#15, best_performing#31, worst_performing#32]
+Arguments: X, [rnk#15 ASC NULLS FIRST], [rnk#15, best_performing#31, worst_performing#32]
+
+(124) AdaptiveSparkPlan
+Output [3]: [rnk#15, best_performing#31, worst_performing#32]
+Arguments: isFinalPlan=true
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 13 Hosting Expression = Subquery subquery#11, [id=#12]
+AdaptiveSparkPlan (143)
++- == Final Plan ==
+   NativeProject (136)
+   +- NativeHashAggregate (135)
+      +- InputAdapter (134)
+         +- AQEShuffleRead (133)
+            +- ShuffleQueryStage (132), Statistics(X)
+               +- NativeShuffleExchange (131)
+                  +- NativeHashAggregate (130)
+                     +- NativeProject (129)
+                        +- NativeProject (128)
+                           +- NativeFilter (127)
+                              +- InputAdapter (126)
+                                 +- NativeParquetScan  (125)
++- == Initial Plan ==
+   HashAggregate (142)
+   +- Exchange (141)
+      +- HashAggregate (140)
+         +- Project (139)
+            +- Filter (138)
+               +- Scan parquet (137)
+
+
+(137) Scan parquet
+Output [3]: [ss_addr_sk#40, ss_store_sk#41, ss_net_profit#42]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4), IsNull(ss_addr_sk)]
+ReadSchema: struct<ss_addr_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
+
+(126) InputAdapter
+Input [3]: [ss_addr_sk#40, ss_store_sk#41, ss_net_profit#42]
+Arguments: [#40, #41, #42]
+
+(127) NativeFilter
+Input [3]: [#40#40, #41#41, #42#42]
+Condition : ((isnotnull(ss_store_sk#41) AND (ss_store_sk#41 = 4)) AND isnull(ss_addr_sk#40))
+
+(128) NativeProject
+Output [2]: [ss_store_sk#41, ss_net_profit#42]
+Input [3]: [#40#40, #41#41, #42#42]
+
+(129) NativeProject
+Output [2]: [ss_store_sk#41 AS ss_store_sk#41, UnscaledValue(ss_net_profit#42) AS _c1#43]
+Input [2]: [ss_store_sk#41, ss_net_profit#42]
+
+(130) NativeHashAggregate
+Input [2]: [ss_store_sk#41, _c1#43]
+Keys [1]: [ss_store_sk#41]
+Functions [1]: [partial_avg(_c1#43)]
+Aggregate Attributes [2]: [sum#44, count#45]
+Results [2]: [ss_store_sk#41, #7#7]
+
+(131) NativeShuffleExchange
+Input [2]: [ss_store_sk#41, #7#7]
+Arguments: hashpartitioning(ss_store_sk#41, 100), ENSURE_REQUIREMENTS, [plan_id=15]
+
+(132) ShuffleQueryStage
+Output [2]: [ss_store_sk#41, #7#7]
+Arguments: X
+
+(133) AQEShuffleRead
+Input [2]: [ss_store_sk#41, #7#7]
+Arguments: coalesced
+
+(134) InputAdapter
+Input [2]: [ss_store_sk#41, #7#7]
+
+(135) NativeHashAggregate
+Input [2]: [ss_store_sk#41, #7#7]
+Keys [1]: [ss_store_sk#41]
+Functions [1]: [avg(UnscaledValue(ss_net_profit#42))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#42))#46]
+Results [2]: [ss_store_sk#41, avg(UnscaledValue(ss_net_profit#42))#46]
+
+(136) NativeProject
+Output [1]: [cast((avg(UnscaledValue(ss_net_profit#42))#46 / 100.0) as decimal(11,6)) AS rank_col#47]
+Input [2]: [ss_store_sk#41, avg(UnscaledValue(ss_net_profit#42))#46]
+
+(137) Scan parquet
+Output [3]: [ss_addr_sk#40, ss_store_sk#41, ss_net_profit#42]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4), IsNull(ss_addr_sk)]
+ReadSchema: struct<ss_addr_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
+
+(138) Filter
+Input [3]: [ss_addr_sk#40, ss_store_sk#41, ss_net_profit#42]
+Condition : ((isnotnull(ss_store_sk#41) AND (ss_store_sk#41 = 4)) AND isnull(ss_addr_sk#40))
+
+(139) Project
+Output [2]: [ss_store_sk#41, ss_net_profit#42]
+Input [3]: [ss_addr_sk#40, ss_store_sk#41, ss_net_profit#42]
+
+(140) HashAggregate
+Input [2]: [ss_store_sk#41, ss_net_profit#42]
+Keys [1]: [ss_store_sk#41]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_profit#42))]
+Aggregate Attributes [2]: [sum#44, count#45]
+Results [3]: [ss_store_sk#41, sum#48, count#49]
+
+(141) Exchange
+Input [3]: [ss_store_sk#41, sum#48, count#49]
+Arguments: hashpartitioning(ss_store_sk#41, 100), ENSURE_REQUIREMENTS, [plan_id=16]
+
+(142) HashAggregate
+Input [3]: [ss_store_sk#41, sum#48, count#49]
+Keys [1]: [ss_store_sk#41]
+Functions [1]: [avg(UnscaledValue(ss_net_profit#42))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#42))#46]
+Results [1]: [cast((avg(UnscaledValue(ss_net_profit#42))#46 / 100.0) as decimal(11,6)) AS rank_col#47]
+
+(143) AdaptiveSparkPlan
+Output [1]: [rank_col#47]
+Arguments: isFinalPlan=true
+
+Subquery:2 Hosting operator id = 31 Hosting Expression = ReusedSubquery Subquery subquery#11, [id=#12]
+
+

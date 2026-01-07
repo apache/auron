@@ -24,7 +24,7 @@
     <version>${project.version}</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <artifactId>assembly</artifactId>
+  <artifactId>auron-${shimName}_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
   <name>Apache Auron Assembly</name>
   <description>Apache Auron Assembly Project</description>
@@ -63,6 +63,9 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>${maven.plugin.shade.version}</version>
+        <configuration>
+          <finalName>auron-${shimName}_${scalaVersion}-${project.version}</finalName>
+        </configuration>
         <executions>
           <execution>
             <goals>
@@ -141,7 +144,27 @@
               <archive>
                 <addMavenDescriptor>false</addMavenDescriptor>
               </archive>
-              <outputFile>../../../target/auron-${shimName}_${scalaVersion}-${releaseMode}-${os.detected.classifier}-${project.version}.jar</outputFile>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>${exec-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>copy-fat-jar</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>package</phase>
+            <configuration>
+              <executable>cp</executable>
+              <arguments>
+                <argument>target/auron-${shimName}_${scalaVersion}-${project.version}.jar</argument>
+                <argument>../../../target/auron-${shimName}_${scalaVersion}-${releaseMode}-${os.detected.classifier}-${project.version}.jar</argument>
+              </arguments>
             </configuration>
           </execution>
         </executions>
