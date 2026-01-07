@@ -126,15 +126,34 @@ abstract class NativeBroadcastJoinBase(
   override def doExecuteNative(): NativeRDD = {
     val leftRDD = NativeHelper.executeNative(left)
     val rightRDD = NativeHelper.executeNative(right)
-    val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
-    val nativeSchema = this.nativeSchema
-    val nativeJoinType = this.nativeJoinType
-    val nativeJoinOn = this.nativeJoinOn
 
     val (probedRDD, builtRDD) = broadcastSide match {
       case BroadcastLeft => (rightRDD, leftRDD)
       case BroadcastRight => (leftRDD, rightRDD)
     }
+
+    // Handle the edge case when probed side is empty (no partitions)
+    // This matches Spark's BroadcastNestedLoopJoinExec behavior for condition.isEmpty case:
+    //   val streamExists = !streamed.executeTake(1).isEmpty
+    //   if (streamExists == exists) sparkContext.makeRDD(relation.value)
+    //   else sparkContext.emptyRDD
+    // where exists = true for Semi, false for Anti
+    //
+    // Note: This optimization only applies to Semi/Anti joins.
+    if (probedRDD.partitions.isEmpty) {
+      joinType match {
+        case LeftAnti =>
+          return builtRDD
+        case LeftSemi =>
+          return probedRDD
+        case _ =>
+      }
+    }
+
+    val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
+    val nativeSchema = this.nativeSchema
+    val nativeJoinType = this.nativeJoinType
+    val nativeJoinOn = this.nativeJoinOn
 
     val probedShuffleReadFull = probedRDD.isShuffleReadFull && (broadcastSide match {
       case BroadcastLeft =>
