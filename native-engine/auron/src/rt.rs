@@ -29,7 +29,7 @@ use auron_jni_bridge::{
     is_task_running, jni_call, jni_call_static, jni_convert_byte_array, jni_exception_check,
     jni_exception_occurred, jni_new_global_ref, jni_new_object, jni_new_string,
 };
-use auron_serde::{planner::PhysicalPlanner, protobuf::TaskDefinition};
+use auron_planner::{planner::PhysicalPlanner, protobuf::TaskDefinition};
 use datafusion::{
     common::Result,
     error::DataFusionError,

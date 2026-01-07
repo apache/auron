@@ -48,7 +48,7 @@
         <version>0.6.1</version>
         <extensions>true</extensions>
         <configuration>
-          <protoSourceRoot>../../../native-engine/auron-serde/proto</protoSourceRoot>
+          <protoSourceRoot>../../../native-engine/auron-planner/proto</protoSourceRoot>
           <protocArtifact>com.google.protobuf:protoc:${protobufVersion}:exe:${os.detected.classifier}</protocArtifact>
           <checkStaleness>true</checkStaleness>
           <clearOutputDirectory>true</clearOutputDirectory>
