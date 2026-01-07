@@ -29,8 +29,7 @@ class AuronSparkTestSettings extends SparkTestSettings {
     // See https://github.com/apache/auron/issues/1724
     .exclude("string / binary substring function")
 
-  enableSuite[AuronExistenceJoinSuite].exclude(
-    "test no condition with empty right side for left anti join using BroadcastNestedLoopJoin build left")
+  enableSuite[AuronExistenceJoinSuite]
 
   // Will be implemented in the future.
   override def getSQLQueryTestSettings = new SQLQueryTestSettings {
