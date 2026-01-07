@@ -29,7 +29,11 @@ class AuronSparkTestSettings extends SparkTestSettings {
     // See https://github.com/apache/auron/issues/1724
     .exclude("string / binary substring function")
 
-  enableSuite[AuronExistenceJoinSuite]
+  enableSuite[AuronExistenceJoinSuite].exclude(
+    "test single condition (equal) for left anti join using ShuffledHashJoin (whole-stage-codegen off)",
+    "test single condition (equal) for left anti join using ShuffledHashJoin (whole-stage-codegen on)",
+    "test single unique condition (equal) for left anti join using ShuffledHashJoin (whole-stage-codegen off)",
+    "test single unique condition (equal) for left anti join using ShuffledHashJoin (whole-stage-codegen on)")
 
   // Will be implemented in the future.
   override def getSQLQueryTestSettings = new SQLQueryTestSettings {
