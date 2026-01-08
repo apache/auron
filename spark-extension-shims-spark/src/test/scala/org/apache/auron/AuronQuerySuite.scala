@@ -582,6 +582,44 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("standard LEFT ANTI JOIN includes NULL keys") {
+    // This test verifies that standard LEFT ANTI JOIN correctly includes NULL keys
+    // NULL keys should be in the result because NULL never matches anything
+    withTable("left_table", "right_table") {
+      sql("""
+            |CREATE TABLE left_table using parquet AS
+            |SELECT * FROM VALUES
+            |  (1, 2.0),
+            |  (1, 2.0),
+            |  (2, 1.0),
+            |  (2, 1.0),
+            |  (3, 3.0),
+            |  (null, null),
+            |  (null, 5.0),
+            |  (6, null)
+            |AS t(a, b)
+            |""".stripMargin)
+
+      sql("""
+            |CREATE TABLE right_table using parquet AS
+            |SELECT * FROM VALUES
+            |  (2, 3.0),
+            |  (2, 3.0),
+            |  (3, 2.0),
+            |  (4, 1.0),
+            |  (null, null),
+            |  (null, 5.0),
+            |  (6, null)
+            |AS t(c, d)
+            |""".stripMargin)
+
+      // Standard LEFT ANTI JOIN should include rows with NULL keys
+      // Expected: (1, 2.0), (1, 2.0), (null, null), (null, 5.0)
+      checkSparkAnswer(
+        "SELECT * FROM left_table LEFT ANTI JOIN right_table ON left_table.a = right_table.c")
+    }
+  }
+
   test("left join with NOT IN subquery should filter NULL values") {
     // This test verifies the fix for the NULL handling issue in Anti join.
     //
