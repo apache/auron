@@ -917,8 +917,9 @@ class ShimsImpl extends Shims with Logging {
   override def createNativeExprWrapper(
       nativeExpr: pb.PhysicalExprNode,
       dataType: DataType,
-      nullable: Boolean): Expression = {
-    NativeExprWrapper(nativeExpr, dataType, nullable)
+      nullable: Boolean,
+      originalExpr: Option[Expression] = None): Expression = {
+    NativeExprWrapper(nativeExpr, dataType, nullable, originalExpr)
   }
 
   @sparkver("3.0 / 3.1 / 3.2 / 3.3")
@@ -1052,8 +1053,9 @@ case class ForceNativeExecutionWrapper(override val child: SparkPlan)
 case class NativeExprWrapper(
     nativeExpr: pb.PhysicalExprNode,
     override val dataType: DataType,
-    override val nullable: Boolean)
-    extends NativeExprWrapperBase(nativeExpr, dataType, nullable) {
+    override val nullable: Boolean,
+    override val originalExpr: Option[Expression] = None)
+    extends NativeExprWrapperBase(nativeExpr, dataType, nullable, Nil, originalExpr) {
 
   @sparkver("3.2 / 3.3 / 3.4 / 3.5")
   override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = copy()

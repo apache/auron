@@ -276,7 +276,8 @@ object NativeConverters extends Logging {
       _wrapped: pb.PhysicalExprNode,
       override val dataType: DataType = NullType,
       override val nullable: Boolean = true,
-      override val children: Seq[Expression] = Nil)
+      override val children: Seq[Expression] = Nil,
+      val originalExpr: Option[Expression] = None)
       extends Unevaluable {
     val wrapped: PhysicalExprNode = _wrapped
 
@@ -311,7 +312,11 @@ object NativeConverters extends Logging {
             try {
               val converted =
                 convertExprWithFallback(child, isPruningExpr = false, fallbackToError)
-              Shims.get.createNativeExprWrapper(converted, child.dataType, child.nullable)
+              Shims.get.createNativeExprWrapper(
+                converted,
+                child.dataType,
+                child.nullable,
+                Some(child))
             } catch {
               case _: NotImplementedError =>
                 val fallbacked = convertExpr(child)
@@ -1077,19 +1082,16 @@ object NativeConverters extends Logging {
               .setReturnType(convertDataType(e.dataType)))
         }
 
-      case e: GetArrayItem
-          if e.ordinal.isInstanceOf[Literal] && e.ordinal
-            .asInstanceOf[Literal]
-            .value
-            .isInstanceOf[Number] =>
-        // NOTE: data-fusion index starts from 1
-        val ordinalValue = e.ordinal.asInstanceOf[Literal].value.asInstanceOf[Number]
+      case e: GetArrayItem if getArrayItemConstantOrdinal(e.ordinal).isDefined =>
+        val indexVal = getArrayItemConstantOrdinal(e.ordinal).get
+        //  NOTE: data-fusion index starts from 1
+        val adjustedIndex = indexVal + 1L
         buildExprNode {
           _.setGetIndexedFieldExpr(
             pb.PhysicalGetIndexedFieldExprNode
               .newBuilder()
               .setExpr(convertExprWithFallback(e.child, isPruningExpr, fallback))
-              .setKey(convertExpr(Literal(ordinalValue.longValue() + 1, LongType)).getLiteral))
+              .setKey(convertExpr(Literal(adjustedIndex, LongType)).getLiteral))
         }
 
       case e: GetMapValue if e.key.isInstanceOf[Literal] =>
@@ -1422,6 +1424,20 @@ object NativeConverters extends Logging {
         case _ =>
       }
     }
+  }
+
+  private def getArrayItemConstantOrdinal(expr: Expression): Option[Long] = expr match {
+    case l: Literal if l.value.isInstanceOf[Number] =>
+      Some(l.value.asInstanceOf[Number].longValue())
+
+    case w: NativeExprWrapperBase =>
+      w.originalExpr.flatMap {
+        case l: Literal if l.value.isInstanceOf[Number] =>
+          Some(l.value.asInstanceOf[Number].longValue())
+        case _ => None
+      }
+
+    case _ => None
   }
 
   case class StubExpr(
