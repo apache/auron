@@ -581,4 +581,62 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       }
     }
   }
+
+  test("left join with NOT IN subquery should filter NULL values") {
+    // This test verifies the fix for the NULL handling issue in Anti join.
+    //
+    // SQL Scenario:
+    // - t2: Large table with 100000 rows (IDs 0..99999)
+    // - t1: Small table with 10 rows (IDs 1..10, each with partner_code)
+    // - blk: Blacklist with 2 codes ('B' and 'Z')
+    //
+    // After LEFT JOIN t2 and t1 on loan_req_no:
+    // - 10 rows match (loan_req_no 1..10)
+    // - 99990 rows don't match (partner_code is NULL)
+    //
+    // WHERE t1.partner_code NOT IN (SELECT code FROM blk):
+    // - According to SQL semantics, "NULL NOT IN (...)" returns NULL (not TRUE)
+    // - Therefore NULL rows should be filtered out by WHERE clause
+    //
+    // Expected result: 9 rows (10 matched - 1 with partner_code='B')
+    // NOT 99999 rows (which would incorrectly include 99990 NULL rows)
+
+    val query = """
+      |WITH t2 AS (
+      |  -- Large table: 100000 rows (0..99999)
+      |  SELECT id AS loan_req_no
+      |  FROM range(0, 100000)
+      |),
+      |t1 AS (
+      |  -- Small table: 10 rows that can match t2
+      |  SELECT * FROM VALUES
+      |    (1, 'A'),
+      |    (2, 'B'),
+      |    (3, 'C'),
+      |    (4, 'D'),
+      |    (5, 'E'),
+      |    (6, 'F'),
+      |    (7, 'G'),
+      |    (8, 'H'),
+      |    (9, 'I'),
+      |    (10,'J')
+      |  AS t1(loan_req_no, partner_code)
+      |),
+      |blk AS (
+      |  -- Blacklist: only 'B' and 'Z'
+      |  SELECT * FROM VALUES
+      |    ('B'),
+      |    ('Z')
+      |  AS blk(code)
+      |)
+      |SELECT
+      |  COUNT(*) AS cnt
+      |FROM t2
+      |LEFT JOIN t1
+      |  ON t1.loan_req_no = t2.loan_req_no
+      |WHERE t1.partner_code NOT IN (SELECT code FROM blk)
+      |""".stripMargin
+
+    checkSparkAnswer(query)
+  }
 }
