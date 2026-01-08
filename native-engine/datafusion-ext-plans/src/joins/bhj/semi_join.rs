@@ -254,15 +254,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                             let probed_indices = probed_joined
                                 .into_iter()
                                 .enumerate()
-                                .filter(|(idx, joined)| {
-                                    // For anti join, exclude rows with NULL keys
-                                    let is_valid_key = probed_valids
-                                        .as_ref()
-                                        .map(|nb| nb.is_valid(*idx))
-                                        .unwrap_or(true);
-                                    let should_output = (P.mode == Semi) ^ !joined;
-                                    should_output && (P.mode != Anti || is_valid_key)
-                                })
+                                .filter(|(_, joined)| (P.mode == Semi) ^ !joined)
                                 .map(|(idx, _)| idx as u32)
                                 .collect::<Vec<_>>();
                             take_cols(&pprojected, probed_indices)?
