@@ -28,7 +28,7 @@ pub mod protobuf {
 }
 
 pub mod error;
-pub mod from_proto;
+pub mod planner;
 
 pub(crate) fn proto_error<S: Into<String>>(message: S) -> PlanSerDeError {
     PlanSerDeError::General(message.into())
@@ -58,9 +58,9 @@ macro_rules! into_required {
 
 #[macro_export]
 macro_rules! convert_box_required {
-    ($PB:expr) => {{
+    ($self:expr, $PB:expr) => {{
         if let Some(field) = $PB.as_ref() {
-            field.as_ref().try_into()
+            $self.create_plan(field.as_ref())
         } else {
             Err(proto_error("Missing required field in protobuf"))
         }

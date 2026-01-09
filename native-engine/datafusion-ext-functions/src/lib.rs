@@ -34,7 +34,10 @@ mod spark_round;
 mod spark_strings;
 mod spark_unscaled_value;
 
-pub fn create_auron_ext_function(name: &str) -> Result<ScalarFunctionImplementation> {
+pub fn create_auron_ext_function(
+    name: &str,
+    spark_partition_id: usize,
+) -> Result<ScalarFunctionImplementation> {
     // auron ext functions, if used for spark should be start with 'Spark_',
     // if used for flink should be start with 'Flink_',
     // same to other engines.
