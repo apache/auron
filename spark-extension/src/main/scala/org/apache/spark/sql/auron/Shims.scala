@@ -247,7 +247,8 @@ abstract class Shims {
   def createNativeExprWrapper(
       nativeExpr: pb.PhysicalExprNode,
       dataType: DataType,
-      nullable: Boolean): Expression
+      nullable: Boolean,
+      originalExpr: Option[Expression] = None): Expression
 
   def getPartitionedFile(
       partitionValues: InternalRow,
