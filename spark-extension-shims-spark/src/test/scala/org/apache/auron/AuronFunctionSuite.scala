@@ -489,4 +489,167 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       }
     }
   }
+
+  test("bround function with varying scales for doublePi") {
+    withTable("t1") {
+      val doublePi: Double = math.Pi
+      sql(s"CREATE TABLE t1(c1 DOUBLE) USING parquet")
+      sql(s"INSERT INTO t1 VALUES($doublePi)")
+
+      val scales = -6 to 6
+      val expectedResults = Map(
+        -6 -> 0.0,
+        -5 -> 0.0,
+        -4 -> 0.0,
+        -3 -> 0.0,
+        -2 -> 0.0,
+        -1 -> 0.0,
+        0 -> 3.0,
+        1 -> 3.1,
+        2 -> 3.14,
+        3 -> 3.142,
+        4 -> 3.1416,
+        5 -> 3.14159,
+        6 -> 3.141593)
+
+      scales.foreach { scale =>
+        val df = sql(s"SELECT bround(c1, $scale) FROM t1")
+        val expected = expectedResults(scale)
+        checkAnswer(df, Seq(Row(expected)))
+      }
+    }
+  }
+
+  test("bround function with varying scales for floatPi") {
+    withTable("t1") {
+      val floatPi: Float = 3.1415f
+      sql(s"CREATE TABLE t1(c1 FLOAT) USING parquet")
+      sql(s"INSERT INTO t1 VALUES($floatPi)")
+
+      val scales = -6 to 6
+      val expectedResults = Map(
+        -6 -> 0.0f,
+        -5 -> 0.0f,
+        -4 -> 0.0f,
+        -3 -> 0.0f,
+        -2 -> 0.0f,
+        -1 -> 0.0f,
+        0 -> 3.0f,
+        1 -> 3.1f,
+        2 -> 3.14f,
+        3 -> 3.142f,
+        4 -> 3.1415f,
+        5 -> 3.1415f,
+        6 -> 3.1415f)
+
+      scales.foreach { scale =>
+        val df = sql(s"SELECT bround(c1, $scale) FROM t1")
+        val expected = expectedResults(scale)
+        checkAnswer(df, Seq(Row(expected)))
+      }
+    }
+  }
+
+  test("bround function with varying scales for shortPi") {
+    withTable("t1") {
+      val shortPi: Short = 31415
+      sql(s"CREATE TABLE t1(c1 SMALLINT) USING parquet")
+      sql(s"INSERT INTO t1 VALUES($shortPi)")
+
+      val scales = -6 to 6
+      val expectedResults = Map(
+        -6 -> 0.toShort,
+        -5 -> 0.toShort,
+        -4 -> 30000.toShort,
+        -3 -> 31000.toShort,
+        -2 -> 31400.toShort,
+        -1 -> 31420.toShort,
+        0 -> 31415.toShort,
+        1 -> 31415.toShort,
+        2 -> 31415.toShort,
+        3 -> 31415.toShort,
+        4 -> 31415.toShort,
+        5 -> 31415.toShort,
+        6 -> 31415.toShort)
+
+      scales.foreach { scale =>
+        val df = sql(s"SELECT bround(c1, $scale) FROM t1")
+        val expected = expectedResults(scale)
+        checkAnswer(df, Seq(Row(expected)))
+      }
+    }
+  }
+
+  test("bround function with varying scales for intPi") {
+    withTable("t1") {
+      val intPi: Int = 314159265
+      sql(s"CREATE TABLE t1(c1 INT) USING parquet")
+      sql(s"INSERT INTO t1 VALUES($intPi)")
+
+      val scales = -6 to 6
+      val expectedResults = Map(
+        -6 -> 314000000,
+        -5 -> 314200000,
+        -4 -> 314160000,
+        -3 -> 314159000,
+        -2 -> 314159300,
+        -1 -> 314159260,
+        0 -> 314159265,
+        1 -> 314159265,
+        2 -> 314159265,
+        3 -> 314159265,
+        4 -> 314159265,
+        5 -> 314159265,
+        6 -> 314159265)
+
+      scales.foreach { scale =>
+        val df = sql(s"SELECT bround(c1, $scale) FROM t1")
+        val expected = expectedResults(scale)
+        checkAnswer(df, Seq(Row(expected)))
+      }
+    }
+  }
+
+  test("bround function with varying scales for longPi") {
+    withTable("t1") {
+      val longPi: Long = 31415926535897932L
+      sql(s"CREATE TABLE t1(c1 BIGINT) USING parquet")
+      sql(s"INSERT INTO t1 VALUES($longPi)")
+
+      val scales = -6 to 6
+      val expectedResults = Map(
+        -6 -> 31415926536000000L,
+        -5 -> 31415926535900000L,
+        -4 -> 31415926535900000L,
+        -3 -> 31415926535898000L,
+        -2 -> 31415926535897900L,
+        -1 -> 31415926535897930L,
+        0 -> 31415926535897932L,
+        1 -> 31415926535897932L,
+        2 -> 31415926535897932L,
+        3 -> 31415926535897932L,
+        4 -> 31415926535897932L,
+        5 -> 31415926535897932L,
+        6 -> 31415926535897932L)
+
+      scales.foreach { scale =>
+        val df = sql(s"SELECT bround(c1, $scale) FROM t1")
+        val expected = expectedResults(scale)
+        checkAnswer(df, Seq(Row(expected)))
+      }
+    }
+  }
+
+  test("bround function for null values") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(c1 DOUBLE) USING parquet")
+      sql("INSERT INTO t1 VALUES(NULL)")
+
+      val scales = -6 to 6
+      scales.foreach { scale =>
+        val df = sql(s"SELECT bround(c1, $scale) FROM t1")
+        checkAnswer(df, Seq(Row(null)))
+      }
+    }
+  }
 }
