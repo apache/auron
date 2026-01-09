@@ -29,13 +29,15 @@ use datafusion::{
     },
     error::Result,
     execution::context::TaskContext,
-    physical_expr::{EquivalenceProperties, PhysicalExprRef},
+    logical_expr::Operator,
+    physical_expr::{EquivalenceProperties, PhysicalExprRef, expressions::{BinaryExpr, Column, Literal, NotExpr, IsNullExpr, IsNotNullExpr, InListExpr}},
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
         SendableRecordBatchStream, Statistics,
         execution_plan::{Boundedness, EmissionType},
         metrics::{Count, ExecutionPlanMetricsSet, MetricBuilder, MetricsSet},
     },
+    scalar::ScalarValue,
 };
 use datafusion_datasource::PartitionedFile;
 use datafusion_ext_commons::{batch_size, df_execution_err, hadoop_fs::FsProvider};
@@ -45,6 +47,7 @@ use once_cell::sync::OnceCell;
 use orc_rust::{
     TimestampPrecision,
     arrow_reader::ArrowReaderBuilder,
+    predicate::{Predicate, PredicateValue},
     projection::ProjectionMask,
     reader::{AsyncChunkReader, metadata::FileMetadata},
 };
@@ -62,7 +65,7 @@ pub struct OrcExec {
     projected_statistics: Statistics,
     projected_schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
-    _predicate: Option<PhysicalExprRef>,
+    predicate: Option<PhysicalExprRef>,
     props: OnceCell<PlanProperties>,
 }
 
@@ -72,7 +75,7 @@ impl OrcExec {
     pub fn new(
         base_config: FileScanConfig,
         fs_resource_id: String,
-        _predicate: Option<PhysicalExprRef>,
+        predicate: Option<PhysicalExprRef>,
     ) -> Self {
         let metrics = ExecutionPlanMetricsSet::new();
 
@@ -85,7 +88,7 @@ impl OrcExec {
             projected_statistics,
             projected_schema,
             metrics,
-            _predicate,
+            predicate,
             props: OnceCell::new(),
         }
     }
@@ -96,11 +99,12 @@ impl DisplayAs for OrcExec {
         let limit = self.base_config.limit;
         let projection = self.base_config.projection.clone();
         let file_group = &self.base_config.file_groups;
+        let pred = &self.predicate;
 
         write!(
             f,
-            "OrcExec: file_group={:?}, limit={:?}, projection={:?}",
-            file_group, limit, projection
+            "OrcExec: file_group={:?}, limit={:?}, projection={:?}, predicate={:?}",
+            file_group, limit, projection, pred
         )
     }
 }
@@ -172,6 +176,7 @@ impl ExecutionPlan for OrcExec {
             force_positional_evolution,
             use_microsecond_precision,
             is_case_sensitive,
+            predicate: self.predicate.clone(),
         });
 
         let file_stream = Box::pin(FileStream::new(
@@ -220,6 +225,7 @@ struct OrcOpener {
     force_positional_evolution: bool,
     use_microsecond_precision: bool,
     is_case_sensitive: bool,
+    predicate: Option<PhysicalExprRef>,
 }
 
 impl FileOpener for OrcOpener {
@@ -244,11 +250,12 @@ impl FileOpener for OrcOpener {
         let projected_schema = SchemaRef::from(self.table_schema.project(&projection)?);
         let schema_adapter = SchemaAdapter::new(
             self.table_schema.clone(),
-            projected_schema,
+            projected_schema.clone(),
             self.force_positional_evolution,
         );
         let use_microsecond = self.use_microsecond_precision;
         let is_case = self.is_case_sensitive;
+        let predicate = self.predicate.clone();
 
         Ok(Box::pin(async move {
             let mut builder = ArrowReaderBuilder::try_new_async(reader)
@@ -267,10 +274,15 @@ impl FileOpener for OrcOpener {
 
             let projection_mask =
                 ProjectionMask::roots(builder.file_metadata().root_data_type(), projection);
-            let stream = builder
+            builder = builder
                 .with_batch_size(batch_size)
-                .with_projection(projection_mask)
-                .build_async();
+                .with_projection(projection_mask);
+
+            if let Some(orc_predicate) = convert_predicate_to_orc(predicate, &projected_schema) {
+                builder = builder.with_predicate(orc_predicate);
+            }
+
+            let stream = builder.build_async();
 
             let adapted = stream
                 .map_err(|e| ArrowError::ExternalError(Box::new(e)))
@@ -412,5 +424,219 @@ impl OrcFileMetrics {
             .with_new_label("filename", filename.to_string())
             .counter("bytes_scanned", partition);
         Self { bytes_scanned }
+    }
+}
+
+fn convert_predicate_to_orc(
+    predicate: Option<PhysicalExprRef>,
+    file_schema: &SchemaRef,
+) -> Option<Predicate> {
+    let predicate = predicate?;
+    convert_expr_to_orc(&predicate, file_schema)
+}
+
+fn convert_expr_to_orc(
+    expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+    schema: &SchemaRef,
+) -> Option<Predicate> {
+    // 处理 Literal 表达式 (WHERE true, WHERE false 等)
+    if let Some(lit) = expr.as_any().downcast_ref::<Literal>() {
+        match lit.value() {
+            ScalarValue::Boolean(Some(true)) => {
+                // WHERE true - 不过滤任何数据,返回 None 表示不应用谓词
+                return None;
+            }
+            ScalarValue::Boolean(Some(false)) => {
+                // WHERE false - 需要过滤所有数据
+                // ORC 没有直接的 "false" 谓词,返回 None 表示无法转换
+                return None;
+            }
+            _ => {
+                return None;
+            }
+        }
+    }
+
+    // 处理 NOT 表达式 (WHERE NOT condition)
+    if let Some(not_expr) = expr.as_any().downcast_ref::<NotExpr>() {
+        if let Some(inner_pred) = convert_expr_to_orc(not_expr.arg(), schema) {
+            return Some(Predicate::not(inner_pred));
+        }
+        return None;
+    }
+
+    // 处理 IS NULL 表达式
+    if let Some(is_null) = expr.as_any().downcast_ref::<IsNullExpr>() {
+        if let Some(col) = is_null.arg().as_any().downcast_ref::<Column>() {
+            let col_name = col.name();
+            return Some(Predicate::is_null(col_name));
+        }
+        return None;
+    }
+
+    // 处理 IS NOT NULL 表达式
+    if let Some(is_not_null) = expr.as_any().downcast_ref::<IsNotNullExpr>() {
+        if let Some(col) = is_not_null.arg().as_any().downcast_ref::<Column>() {
+            let col_name = col.name();
+            return Some(Predicate::not(Predicate::is_null(col_name)));
+        }
+        return None;
+    }
+
+    // 处理 IN 表达式 (WHERE col IN (val1, val2, ...))
+    if let Some(in_list) = expr.as_any().downcast_ref::<InListExpr>() {
+        if let Some(col) = in_list.expr().as_any().downcast_ref::<Column>() {
+            let col_name = col.name();
+
+            // 将 IN 转换为多个 OR 条件: col = val1 OR col = val2 OR ...
+            let mut predicates = Vec::new();
+            for list_expr in in_list.list() {
+                if let Some(lit) = list_expr.as_any().downcast_ref::<Literal>() {
+                    if let Some(pred_value) = convert_scalar_value(lit.value()) {
+                        predicates.push(Predicate::eq(col_name, pred_value));
+                    }
+                }
+            }
+
+            if predicates.is_empty() {
+                return None;
+            }
+
+            // 如果 negated 为 true,表示 NOT IN
+            if in_list.negated() {
+                return Some(Predicate::not(Predicate::or(predicates)));
+            } else {
+                return Some(Predicate::or(predicates));
+            }
+        }
+        return None;
+    }
+
+    // 处理 BinaryExpr (比较运算和逻辑运算)
+    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
+        let left = binary.left();
+        let right = binary.right();
+        let op = binary.op();
+        match op {
+            Operator::And => {
+                let left_pred = convert_expr_to_orc(left, schema);
+                let right_pred = convert_expr_to_orc(right, schema);
+
+                // 处理 AND 逻辑优化:
+                // true AND right => right
+                // left AND true => left
+                // false AND right => false (返回 None 表示无法转换)
+                // left AND false => false (返回 None 表示无法转换)
+                match (left_pred, right_pred) {
+                    (Some(l), Some(r)) => {
+                        return Some(Predicate::and(vec![l, r]));
+                    }
+                    (Some(l), None) => {
+                        return Some(l);
+                    }
+                    (None, Some(r)) => {
+                        return Some(r);
+                    }
+                    (None, None) => {
+                        return None;
+                    }
+                }
+            }
+            Operator::Or => {
+                let left_pred = convert_expr_to_orc(left, schema);
+                let right_pred = convert_expr_to_orc(right, schema);
+
+                // 处理 OR 逻辑优化:
+                // true OR right => true (返回 None 表示不过滤)
+                // left OR true => true (返回 None 表示不过滤)
+                // false OR right => right
+                // left OR false => left
+                match (left_pred, right_pred) {
+                    (Some(l), Some(r)) => {
+                        return Some(Predicate::or(vec![l, r]));
+                    }
+                    (Some(l), None) => {
+                        return Some(l);
+                    }
+                    (None, Some(r)) => {
+                        return Some(r);
+                    }
+                    (None, None) => {
+                        return None;
+                    }
+                }
+            }
+
+            _ => {}
+        }
+
+        if let Some(col) = left.as_any().downcast_ref::<Column>() {
+            if let Some(lit) = right.as_any().downcast_ref::<Literal>() {
+                let col_name = col.name();
+                let value = lit.value();
+                return build_comparison_predicate(col_name, op, value);
+            }
+        }
+
+        if let Some(lit) = left.as_any().downcast_ref::<Literal>() {
+            if let Some(col) = right.as_any().downcast_ref::<Column>() {
+                let col_name = col.name();
+                let value = lit.value();
+                return build_comparison_predicate_reversed(col_name, op, value);
+            }
+        }
+    }
+
+    None
+}
+
+fn build_comparison_predicate(
+    col_name: &str,
+    op: &Operator,
+    value: &ScalarValue,
+) -> Option<Predicate> {
+    let predicate_value = convert_scalar_value(value)?;
+
+    match op {
+        Operator::Eq => Some(Predicate::eq(col_name, predicate_value)),
+        Operator::NotEq => Some(Predicate::ne(col_name, predicate_value)),
+        Operator::Lt => Some(Predicate::lt(col_name, predicate_value)),
+        Operator::LtEq => Some(Predicate::lte(col_name, predicate_value)),
+        Operator::Gt => Some(Predicate::gt(col_name, predicate_value)),
+        Operator::GtEq => Some(Predicate::gte(col_name, predicate_value)),
+        _ => None,
+    }
+}
+
+fn build_comparison_predicate_reversed(
+    col_name: &str,
+    op: &Operator,
+    value: &ScalarValue,
+) -> Option<Predicate> {
+    let predicate_value = convert_scalar_value(value)?;
+
+    match op {
+        Operator::Eq => Some(Predicate::eq(col_name, predicate_value)),
+        Operator::NotEq => Some(Predicate::ne(col_name, predicate_value)),
+        Operator::Lt => Some(Predicate::gt(col_name, predicate_value)),
+        Operator::LtEq => Some(Predicate::gte(col_name, predicate_value)),
+        Operator::Gt => Some(Predicate::lt(col_name, predicate_value)),
+        Operator::GtEq => Some(Predicate::lte(col_name, predicate_value)),
+        _ => None,
+    }
+}
+
+fn convert_scalar_value(value: &ScalarValue) -> Option<PredicateValue> {
+    match value {
+        ScalarValue::Boolean(v) => Some(PredicateValue::Boolean(*v)),
+        ScalarValue::Int8(v) => Some(PredicateValue::Int8(*v)),
+        ScalarValue::Int16(v) => Some(PredicateValue::Int16(*v)),
+        ScalarValue::Int32(v) => Some(PredicateValue::Int32(*v)),
+        ScalarValue::Int64(v) => Some(PredicateValue::Int64(*v)),
+        ScalarValue::Float32(v) => Some(PredicateValue::Float32(*v)),
+        ScalarValue::Float64(v) => Some(PredicateValue::Float64(*v)),
+        ScalarValue::Utf8(v) => Some(PredicateValue::Utf8(v.clone())),
+        ScalarValue::LargeUtf8(v) => Some(PredicateValue::Utf8(v.clone())),
+        _ => None,
     }
 }
