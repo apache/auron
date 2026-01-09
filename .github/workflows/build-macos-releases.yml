@@ -1,0 +1,122 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Build macOS Releases
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - branch-*
+  pull_request:
+    branches:
+      - master
+      - branch-*
+    paths:
+      - '.github/workflows/build-macos-releases.yml'
+      - 'auron-build.sh'
+
+jobs:
+  build-snapshot:
+    name: Build macOS
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        sparkver: [spark-3.0, spark-3.1, spark-3.2, spark-3.3, spark-3.4, spark-3.5]
+        auronver: [7.0.0-SNAPSHOT]
+        scalaver: [2.12, 2.13]
+        javaver: [8, 21]
+        runner: [macos-15]
+        exclude:
+          # Only build on scala-2.13 for spark-3.5
+          - sparkver: spark-3.0
+            scalaver: '2.13'
+          - sparkver: spark-3.1
+            scalaver: '2.13'
+          - sparkver: spark-3.2
+            scalaver: '2.13'
+          - sparkver: spark-3.3
+            scalaver: '2.13'
+          - sparkver: spark-3.4
+            scalaver: '2.13'
+          - sparkver: spark-3.0
+            javaver: '21'
+          - sparkver: spark-3.1
+            javaver: '21'
+          - sparkver: spark-3.2
+            javaver: '21'
+          - sparkver: spark-3.3
+            javaver: '21'
+          - sparkver: spark-3.4
+            javaver: '21'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Extract spark version
+        run: |
+          raw="${{ matrix.sparkver }}"
+          ver="${raw#spark-}"
+          echo "sparkver_short=$ver" >> $GITHUB_ENV          
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: ${{ matrix.javaver }}
+          cache: 'maven'
+
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: "21.7"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/setup-rust-toolchain
+        with:
+          rustflags: --allow warnings
+          components:
+            cargo
+            rustfmt
+
+      - name: Detect osclassfier
+        id: detect-osclassfier
+        run: |
+          osclassfier=$(./build/mvn help:evaluate -Dexpression=os.detected.classifier -q -DforceStdout -P${{ matrix.sparkver }})
+          echo "osclassfier=$osclassfier" >> $GITHUB_ENV
+
+      - name: Get short commit hash
+        id: commit
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
+        run: |
+          ./auron-build.sh \
+          --release \
+          --sparkver ${{ env.sparkver_short }} \
+          --scalaver ${{ matrix.scalaver }}
+
+      - name: Upload auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: auron-${{matrix.sparkver}}_${{ matrix.scalaver }}-${{ matrix.javaver }}-release-${{ env.osclassfier }}-${{ matrix.auronver }}-${{ matrix.runner }}-${{ steps.commit.outputs.short }}.jar
+          path: target/auron-${{matrix.sparkver}}_${{ matrix.scalaver }}-release-${{ env.osclassfier }}-${{ matrix.auronver }}.jar
+          overwrite: true
+
