@@ -210,7 +210,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
             withTable("t") {
               sql(s"CREATE EXTERNAL TABLE t(c3 INT, c2 INT) USING ORC LOCATION '$path'")
 
-              val expected = if (forcePositionalEvolution) {
+              val _ = if (forcePositionalEvolution) {
                 correctAnswer
               } else {
                 Seq(Row(null, 2), Row(null, 4), Row(null, 6), Row(null, null))
@@ -247,7 +247,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                      |LOCATION '$path'
                      |""".stripMargin)
               sql("MSCK REPAIR TABLE t")
-              if (forcePositionalEvolution) {
+              val _ = if (forcePositionalEvolution) {
                 correctAnswer
               } else {
                 Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3), Row(null, null, 4))

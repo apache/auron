@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.auron
 
+import scala.annotation.nowarn
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -71,6 +73,7 @@ object InterceptedValidateSparkPlan extends Logging {
     }
   }
 
+  @nowarn("cat=unused") // plan unused
   @sparkver("3.0 / 3.1")
   def validate(plan: SparkPlan): Unit = {
     throw new UnsupportedOperationException("validate is not supported in spark 3.0.3 or 3.1.3")

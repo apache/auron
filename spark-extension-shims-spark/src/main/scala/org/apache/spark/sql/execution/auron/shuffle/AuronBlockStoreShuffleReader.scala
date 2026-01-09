@@ -37,6 +37,9 @@ class AuronBlockStoreShuffleReader[K, C](
     extends AuronBlockStoreShuffleReaderBase[K, C](handle, context)
     with Logging {
 
+  // Touch mapOutputTracker to suppress -Xfatal-warnings (used in Spark 3.2+, unused in 3.0/3.1)
+  private val _ = mapOutputTracker
+
   override def readBlocks(): Iterator[InputStream] = {
     @sparkver("3.2 / 3.3 / 3.4 / 3.5")
     def fetchIterator = new ShuffleBlockFetcherIterator(

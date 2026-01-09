@@ -278,8 +278,6 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       val dateTimeStampMin = format.parse(dateStringMin).getTime
       val dateTimeStampMax = format.parse(dateStringMax).getTime
       format = new SimpleDateFormat("yyyy-MM-dd")
-      val dateString = "2015-01-01"
-      val date = format.parse(dateString)
 
       val functions =
         s"""
@@ -320,8 +318,6 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       val dateTimeStampMin = format.parse(dateStringMin).getTime
       val dateTimeStampMax = format.parse(dateStringMax).getTime
       format = new SimpleDateFormat("yyyy-MM-dd")
-      val dateString = "2015-07-01"
-      val date = format.parse(dateString)
 
       val functions =
         s"""

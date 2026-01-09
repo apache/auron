@@ -186,22 +186,22 @@ class AuronDataFrameSuite extends DataFrameSuite with SparkQueryTestsBase {
       val join = df.join(df, "id")
       checkAnswer(join, df)
       val shuffleCount = collect(join.queryExecution.executedPlan) {
-        case e: NativeShuffleExchangeExec =>
+        case _: NativeShuffleExchangeExec =>
           true
       }.size
       assert(shuffleCount === 1, s"Expected 1 shuffle exchange, got $shuffleCount")
-      assert(collect(join.queryExecution.executedPlan) { case e: ReusedExchangeExec =>
+      assert(collect(join.queryExecution.executedPlan) { case _: ReusedExchangeExec =>
         true
       }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       val shuffleCount2 = collect(join2.queryExecution.executedPlan) {
-        case e: NativeShuffleExchangeExec =>
+        case _: NativeShuffleExchangeExec =>
           true
       }.size
       assert(shuffleCount2 == 1, s"Expected 1 shuffle exchange in join2, got $shuffleCount2")
-      assert(collect(join2.queryExecution.executedPlan) { case e: ReusedExchangeExec =>
+      assert(collect(join2.queryExecution.executedPlan) { case _: ReusedExchangeExec =>
         true
       }.size == 4)
     }

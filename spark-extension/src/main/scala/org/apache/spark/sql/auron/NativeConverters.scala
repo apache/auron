@@ -1001,12 +1001,12 @@ object NativeConverters extends Logging {
         val children = e.children.map(Cast(_, e.dataType))
         buildScalarFunction(pb.ScalarFunction.Coalesce, children, e.dataType)
 
-      case e @ StringLPad(str, len, pad) =>
+      case _ @StringLPad(str, len, pad) =>
         buildScalarFunction(
           pb.ScalarFunction.Lpad,
           Seq(str, castIfNecessary(len, LongType), pad),
           StringType)
-      case e @ StringRPad(str, len, pad) =>
+      case _ @StringRPad(str, len, pad) =>
         buildScalarFunction(
           pb.ScalarFunction.Rpad,
           Seq(str, castIfNecessary(len, LongType), pad),

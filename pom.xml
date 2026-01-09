@@ -379,7 +379,10 @@
           <target>${javaVersion}</target>
           <scalaVersion>${scalaLongVersion}</scalaVersion>
           <args>
+            <arg>-deprecation</arg>
+            <arg>-feature</arg>
             <arg>-Ywarn-unused</arg>
+            <arg>-Xfatal-warnings</arg>
           </args>
         </configuration>
         <dependencies>
@@ -927,11 +930,25 @@
             <artifactId>scala-maven-plugin</artifactId>
             <configuration>
               <args>
+                <arg>-deprecation</arg>
+                <arg>-feature</arg>
                 <arg>-Ywarn-unused</arg>
                 <!-- https://github.com/scalamacros/paradise is no longer actively developed. -->
                 <!-- In Scala 2.13, the plugin's functionality has been included in the compiler -->
                 <!-- directly under the -Ymacro-annotations flag.  -->
                 <arg>-Ymacro-annotations</arg>
+                <arg>-Xfatal-warnings</arg>
+
+                <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+                <arg>-Wconf:cat=other-nullary-override:s</arg>
+                <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
+                <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
+                <arg>-Wconf:msg=object JavaConverters in package collection is deprecated:s</arg>
+                <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
+                <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
+                <arg>-Wconf:cat=unused-nowarn:s</arg>
+                <arg>-Wconf:msg=early initializers are deprecated:s</arg>
+                <arg>-Wconf:cat=other-match-analysis:s</arg>
               </args>
               <compilerPlugins>
                 <compilerPlugin>

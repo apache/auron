@@ -18,7 +18,7 @@ package org.apache.spark.sql.auron
 
 import java.util.ServiceLoader
 
-import scala.annotation.tailrec
+import scala.annotation.{nowarn, tailrec}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -418,12 +418,14 @@ object AuronConverters extends Logging {
   @sparkver(" 3.2 / 3.3 / 3.4 / 3.5")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
 
+  @nowarn("cat=unused")
   @sparkver("3.0 / 3.1")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
 
+  @nowarn("cat=unused")
   @sparkver("3.0")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = None
 
@@ -649,6 +651,7 @@ object AuronConverters extends Logging {
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = exec.isNullAwareAntiJoin
 
+  @nowarn("cat=unused")
   @sparkver("3.0")
   def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = false
 

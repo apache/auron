@@ -82,6 +82,8 @@ abstract class NativeShuffledHashJoinBase(
   private def nativeBuildSide = buildSide match {
     case JoinBuildLeft => pb.JoinSide.LEFT_SIDE
     case JoinBuildRight => pb.JoinSide.RIGHT_SIDE
+    case other =>
+      throw new IllegalArgumentException(s"Unknown Join buildSide: $other")
   }
 
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]

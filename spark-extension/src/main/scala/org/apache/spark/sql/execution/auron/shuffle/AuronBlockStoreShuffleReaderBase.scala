@@ -182,5 +182,5 @@ trait BlockObject extends AutoCloseable {
   def getFileLength: Long = throw new UnsupportedOperationException
   def getByteBuffer: ByteBuffer = throw new UnsupportedOperationException
   def getChannel: ReadableByteChannel = throw new UnsupportedOperationException
-  def throwFetchFailed(errmsg: String): Unit = throw new UnsupportedOperationException
+  def throwFetchFailed(errmsg: String): Unit = throw new UnsupportedOperationException(errmsg)
 }
