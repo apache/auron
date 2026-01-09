@@ -1110,7 +1110,7 @@ object AuronConverters extends Logging {
         extends LeafExecNode
         with NativeSupports {
 
-      private def nativeSchema = Util.getNativeSchema(output)
+      private lazy val nativeSchema = Util.getNativeSchema(output)
 
       // check whether native converting is supported
       nativeSchema
