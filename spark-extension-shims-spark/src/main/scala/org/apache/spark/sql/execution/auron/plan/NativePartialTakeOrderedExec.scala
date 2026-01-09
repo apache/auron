@@ -27,7 +27,7 @@ case class NativePartialTakeOrderedExec(
     sortOrder: Seq[SortOrder],
     override val child: SparkPlan,
     override val metrics: Map[String, SQLMetric])
-    extends NativePartialTakeOrderedBase(limit, sortOrder, child, metrics) {
+    extends NativePartialTakeOrderedAndProjectBase(limit, sortOrder, child, metrics) {
 
   @sparkver("3.2 / 3.3 / 3.4 / 3.5")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
