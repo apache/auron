@@ -45,6 +45,8 @@ import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
+import scala.annotation.nowarn
+
 class AuronArrowColumnVector(vector: ValueVector)
     extends AuronColumnVector(ArrowUtils.fromArrowField(vector.getField)) {
   private var childColumns: Array[AuronArrowColumnVector] = _
@@ -143,6 +145,7 @@ class AuronArrowColumnVector(vector: ValueVector)
 }
 
 object AuronArrowColumnVector {
+  @nowarn
   abstract private class ArrowVectorAccessor(private val vector: ValueVector) {
     def isNullAt(rowId: Int): Boolean =
       if (vector.getValueCount > 0 && vector.getValidityBuffer.capacity == 0) false

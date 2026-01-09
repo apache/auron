@@ -17,18 +17,16 @@
 package org.apache.spark.sql.auron
 
 import java.util.ServiceLoader
-
-import scala.annotation.tailrec
+import scala.annotation.{nowarn, tailrec}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
-import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
+import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertStrategyTag, convertToNonNativeTag, convertibleTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
+import org.apache.spark.sql.auron.NativeConverters.{StubExpr, existTimestampType, isTypeSupported, roundRobinTypeSupported}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -72,7 +70,6 @@ import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.execution.auron.plan.NativeHiveTableScanBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
-
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.metric.SparkMetricNode
@@ -159,6 +156,7 @@ object AuronConverters extends Logging {
   // format: off
   // scalafix:off
   // necessary imports for cross spark versions build
+  @nowarn("cat=unused-imports")
   import org.apache.spark.sql.catalyst.plans._
   import org.apache.spark.sql.catalyst.optimizer._
   // scalafix:on

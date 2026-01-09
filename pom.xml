@@ -375,6 +375,7 @@
           <scalaVersion>${scalaLongVersion}</scalaVersion>
           <args>
             <arg>-Ywarn-unused</arg>
+            <arg>-Xfatal-warnings</arg>
           </args>
         </configuration>
         <dependencies>
@@ -839,6 +840,7 @@
                 <!-- In Scala 2.13, the plugin's functionality has been included in the compiler -->
                 <!-- directly under the -Ymacro-annotations flag.  -->
                 <arg>-Ymacro-annotations</arg>
+                <arg>-Xfatal-warnings</arg>
               </args>
               <compilerPlugins>
                 <compilerPlugin>

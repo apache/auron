@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.ui
 
+import scala.annotation.nowarn
+
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
@@ -23,7 +25,7 @@ import org.apache.spark.status.ElementTrackingStore
 
 import org.apache.auron.spark.ui.AuronBuildInfoEvent
 
-class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
+class AuronSQLAppStatusListener(@nowarn conf: SparkConf, kvstore: ElementTrackingStore)
     extends SparkListener
     with Logging {
 

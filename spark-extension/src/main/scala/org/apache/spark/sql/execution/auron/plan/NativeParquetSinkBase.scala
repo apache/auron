@@ -20,9 +20,7 @@ import java.net.URI
 import java.security.PrivilegedExceptionAction
 import java.util
 import java.util.UUID
-
 import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.ql.io.IOConstants
@@ -50,12 +48,13 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.hive.auron.HiveClientHelper
 import org.apache.spark.util.SerializableConfiguration
-
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.ParquetProp
 import org.apache.auron.protobuf.ParquetSinkExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
+
+import scala.annotation.nowarn
 
 abstract class NativeParquetSinkBase(
     sparkSession: SparkSession,
@@ -157,6 +156,6 @@ abstract class NativeParquetSinkBase(
       friendlyName = "NativeRDD.ParquetSink")
   }
 
-  protected def newHadoopConf(_tableDesc: TableDesc): Configuration =
+  protected def newHadoopConf(@nowarn _tableDesc: TableDesc): Configuration =
     sparkSession.sessionState.newHadoopConf()
 }

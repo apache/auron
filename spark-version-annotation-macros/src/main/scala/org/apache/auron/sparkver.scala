@@ -16,8 +16,7 @@
  */
 package org.apache.auron
 
-import scala.annotation.StaticAnnotation
-import scala.annotation.compileTimeOnly
+import scala.annotation.{compileTimeOnly, nowarn, StaticAnnotation}
 import scala.language.experimental._
 import scala.reflect.macros.whitebox
 
@@ -97,16 +96,16 @@ object sparkver {
 }
 
 @compileTimeOnly("enable macro paradise to expand macro annotations")
-final class sparkver(vers: String) extends StaticAnnotation {
+final class sparkver(@nowarn vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnable
 }
 
 @compileTimeOnly("enable macro paradise to expand macro annotations")
-final class sparkverEnableMembers(vers: String) extends StaticAnnotation {
+final class sparkverEnableMembers(@nowarn vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnableMembers
 }
 
 @compileTimeOnly("enable macro paradise to expand macro annotations")
-final class sparkverEnableOverride(vers: String) extends StaticAnnotation {
+final class sparkverEnableOverride(@nowarn vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnableOverride
 }
