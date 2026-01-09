@@ -664,16 +664,23 @@ object AuronConverters extends Logging {
     }
   }
 
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = exec.isNullAwareAntiJoin
+
+  @sparkver("3.0")
+  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = false
+
   def convertBroadcastHashJoinExec(exec: BroadcastHashJoinExec): SparkPlan = {
     try {
-      val (leftKeys, rightKeys, joinType, buildSide, condition, left, right) = (
+      val (leftKeys, rightKeys, joinType, buildSide, condition, left, right, naaj) = (
         exec.leftKeys,
         exec.rightKeys,
         exec.joinType,
         exec.buildSide,
         exec.condition,
         exec.left,
-        exec.right)
+        exec.right,
+        isNullAwareAntiJoin(exec))
       logDebugPlanConversion(
         exec,
         Seq(
@@ -702,7 +709,8 @@ object AuronConverters extends Logging {
         buildSide match {
           case BuildLeft => BroadcastLeft
           case BuildRight => BroadcastRight
-        })
+        },
+        naaj)
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
@@ -744,7 +752,8 @@ object AuronConverters extends Logging {
         buildSide match {
           case BuildLeft => BroadcastLeft
           case BuildRight => BroadcastRight
-        })
+        },
+        isNullAwareAntiJoin = false)
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>

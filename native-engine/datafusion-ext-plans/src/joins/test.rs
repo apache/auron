@@ -219,6 +219,7 @@ mod tests {
                     JoinSide::Right,
                     true,
                     None,
+                    false,
                 )?)
             }
             BHJRightProbed => {
@@ -235,6 +236,7 @@ mod tests {
                     JoinSide::Left,
                     true,
                     None,
+                    false,
                 )?)
             }
             SHJLeftProbed => Arc::new(BroadcastJoinExec::try_new(
@@ -246,6 +248,7 @@ mod tests {
                 JoinSide::Right,
                 false,
                 None,
+                false,
             )?),
             SHJRightProbed => Arc::new(BroadcastJoinExec::try_new(
                 schema,
@@ -256,6 +259,7 @@ mod tests {
                 JoinSide::Left,
                 false,
                 None,
+                false,
             )?),
         };
         let columns = columns(&join.schema());
@@ -617,21 +621,7 @@ mod tests {
             Arc::new(Column::new_with_schema("b1", &right.schema())?),
         )];
 
-        for test_type in [BHJLeftProbed, SHJLeftProbed] {
-            let (_, batches) =
-                join_collect(test_type, left.clone(), right.clone(), on.clone(), LeftAnti).await?;
-            let expected = vec![
-                "+----+----+----+",
-                "| a1 | b1 | c1 |",
-                "+----+----+----+",
-                "|    | 6  | 9  |",
-                "| 5  | 8  | 11 |",
-                "+----+----+----+",
-            ];
-            assert_batches_sorted_eq!(expected, &batches);
-        }
-
-        for test_type in [SMJ, BHJRightProbed, SHJRightProbed] {
+        for test_type in ALL_TEST_TYPE {
             let (_, batches) =
                 join_collect(test_type, left.clone(), right.clone(), on.clone(), LeftAnti).await?;
             let expected = vec![

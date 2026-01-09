@@ -46,6 +46,7 @@ pub struct JoinParams {
     pub sort_options: Vec<SortOptions>,
     pub projection: JoinProjection,
     pub batch_size: usize,
+    pub is_null_aware_anti_join: bool,
 }
 
 #[derive(Debug, Clone)]
