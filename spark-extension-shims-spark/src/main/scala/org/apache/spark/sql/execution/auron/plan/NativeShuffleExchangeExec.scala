@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.auron.plan
 
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 import org.apache.spark._
@@ -78,6 +77,9 @@ case class NativeShuffleExchangeExec(
 
   // 'mapOutputStatisticsFuture' is only needed when enable AQE.
   @transient override lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+    // scalastyle:off executioncontextglobal
+    import scala.concurrent.ExecutionContext.Implicits.global
+    // scalastyle:on executioncontextglobal
     if (inputRDD.getNumPartitions == 0) {
       Future.successful(null)
     } else {
@@ -173,7 +175,7 @@ case class NativeShuffleExchangeExec(
     outputPartitioning != SinglePartition
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-  override def shuffleOrigin = {
+  override def shuffleOrigin: org.apache.spark.sql.execution.exchange.ShuffleOrigin = {
     import org.apache.spark.sql.execution.exchange.ShuffleOrigin;
     _shuffleOrigin.get.asInstanceOf[ShuffleOrigin]
   }

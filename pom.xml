@@ -60,6 +60,7 @@
     <maven.version>3.9.12</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
     <maven.plugin.scalatest.version>2.2.0</maven.plugin.scalatest.version>
+    <maven.plugin.scalastyle.version>1.0.0</maven.plugin.scalastyle.version>
     <maven.plugin.scalatest.exclude.tags />
     <maven.plugin.scalatest.include.tags />
     <maven.plugin.scalatest.debug.enabled>false</maven.plugin.scalatest.debug.enabled>
@@ -462,6 +463,32 @@
             <goals>
               <goal>test</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.scalastyle</groupId>
+        <artifactId>scalastyle-maven-plugin</artifactId>
+        <version>${maven.plugin.scalastyle.version}</version>
+        <configuration>
+          <verbose>false</verbose>
+          <failOnViolation>true</failOnViolation>
+          <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          <failOnWarning>false</failOnWarning>
+          <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
+          <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
+          <configLocation>${maven.multiModuleProjectDirectory}/dev/scalastyle-config.xml</configLocation>
+          <outputFile>${basedir}/target/scalastyle-output.xml</outputFile>
+          <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
+          <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <phase>validate</phase>
           </execution>
         </executions>
       </plugin>
