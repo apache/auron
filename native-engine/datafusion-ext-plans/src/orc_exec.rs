@@ -277,8 +277,9 @@ impl FileOpener for OrcOpener {
             builder = builder
                 .with_batch_size(batch_size)
                 .with_projection(projection_mask);
-
+            log::error!("duanhao--->rust predicate: {:?}", predicate);
             if let Some(orc_predicate) = convert_predicate_to_orc(predicate, &projected_schema) {
+                log::error!("duanhao--->orc predicate: {:?}", orc_predicate.clone());
                 builder = builder.with_predicate(orc_predicate);
             }
 
