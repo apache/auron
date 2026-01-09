@@ -219,6 +219,7 @@ mod tests {
                     JoinSide::Right,
                     true,
                     None,
+                    false,
                 )?)
             }
             BHJRightProbed => {
@@ -235,6 +236,7 @@ mod tests {
                     JoinSide::Left,
                     true,
                     None,
+                    false,
                 )?)
             }
             SHJLeftProbed => Arc::new(BroadcastJoinExec::try_new(
@@ -246,6 +248,7 @@ mod tests {
                 JoinSide::Right,
                 false,
                 None,
+                false,
             )?),
             SHJRightProbed => Arc::new(BroadcastJoinExec::try_new(
                 schema,
@@ -256,6 +259,7 @@ mod tests {
                 JoinSide::Left,
                 false,
                 None,
+                false,
             )?),
         };
         let columns = columns(&join.schema());

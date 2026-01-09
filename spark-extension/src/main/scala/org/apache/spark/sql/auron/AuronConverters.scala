@@ -689,7 +689,6 @@ object AuronConverters extends Logging {
           "joinType" -> joinType,
           "condition" -> condition,
           "buildSide" -> buildSide))
-      assert(naaj, "null aware anti join is not supported")
       assert(condition.isEmpty, "join condition is not supported")
 
       // verify build side is native
@@ -710,7 +709,8 @@ object AuronConverters extends Logging {
         buildSide match {
           case BuildLeft => BroadcastLeft
           case BuildRight => BroadcastRight
-        })
+        },
+        naaj)
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
@@ -752,7 +752,8 @@ object AuronConverters extends Logging {
         buildSide match {
           case BuildLeft => BroadcastLeft
           case BuildRight => BroadcastRight
-        })
+        },
+        isNullAwareAntiJoin = false)
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>

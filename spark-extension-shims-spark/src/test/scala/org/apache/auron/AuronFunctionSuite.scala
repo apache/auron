@@ -78,7 +78,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |  select md5(concat(c1, version)) as md5 from t1
           |) b on md5(concat(a.c1, a.version)) = b.md5
           |""".stripMargin
-      checkSparkAnswer(functions)
+      checkSparkAnswerAndOperator(functions)
     }
   }
 

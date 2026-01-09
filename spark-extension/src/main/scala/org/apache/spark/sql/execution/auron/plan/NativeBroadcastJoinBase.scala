@@ -48,7 +48,8 @@ abstract class NativeBroadcastJoinBase(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
-    broadcastSide: BroadcastSide)
+    broadcastSide: BroadcastSide,
+    isNullAwareAntiJoin: Boolean)
     extends BinaryExecNode
     with NativeSupports
     with Logging {
@@ -243,6 +244,7 @@ abstract class NativeBroadcastJoinBase(
           .setJoinType(nativeJoinType)
           .setBroadcastSide(nativeBroadcastSide)
           .setCachedBuildHashMapId(cachedBuildHashMapId)
+          .setIsNullAwareAntiJoin(isNullAwareAntiJoin)
           .addAllOn(nativeJoinOn.asJava)
 
         pb.PhysicalPlanNode.newBuilder().setBroadcastJoin(broadcastJoinExec).build()
