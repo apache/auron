@@ -479,7 +479,7 @@ fn prune_expr_cols(expr: &PhysicalExprRef) -> (PhysicalExprRef, Vec<usize>) {
                 Ok(Transformed::yes(expr))
             }
         })
-        .unwrap()
+        .expect("expr transform failed")
         .data;
 
     let mapped_cols: Vec<usize> = used_cols

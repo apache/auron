@@ -275,8 +275,14 @@ fn eq_fixed_list(
         ignores_null,
     )?;
 
-    let l_size = left.value_length().to_usize().unwrap();
-    let r_size = right.value_length().to_usize().unwrap();
+    let l_size = left
+        .value_length()
+        .to_usize()
+        .expect("left length to_usize failed");
+    let r_size = right
+        .value_length()
+        .to_usize()
+        .expect("right length to_usize failed");
     let size_eq = l_size == r_size;
 
     let f = eq_impl(left, right, ignores_null, move |i, j| {
@@ -390,78 +396,85 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn test_fixed_size_binary() {
+    fn test_fixed_size_binary() -> Result<()> {
         let items = vec![vec![1u8], vec![2u8]];
-        let array = FixedSizeBinaryArray::try_from_iter(items.into_iter()).unwrap();
+        let array = FixedSizeBinaryArray::try_from_iter(items.into_iter())?;
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(false, eq(0, 1));
+        Ok(())
     }
 
     #[test]
-    fn test_fixed_size_binary_fixed_size_binary() {
+    fn test_fixed_size_binary_fixed_size_binary() -> Result<()> {
         let items = vec![vec![1u8]];
-        let array1 = FixedSizeBinaryArray::try_from_iter(items.into_iter()).unwrap();
+        let array1 = FixedSizeBinaryArray::try_from_iter(items.into_iter())?;
         let items = vec![vec![2u8]];
-        let array2 = FixedSizeBinaryArray::try_from_iter(items.into_iter()).unwrap();
+        let array2 = FixedSizeBinaryArray::try_from_iter(items.into_iter())?;
 
-        let eq = make_eq_comparator(&array1, &array2, false).unwrap();
+        let eq = make_eq_comparator(&array1, &array2, false)?;
 
         assert_eq!(false, eq(0, 0));
+        Ok(())
     }
 
     #[test]
-    fn test_i32() {
+    fn test_i32() -> Result<()> {
         let array = Int32Array::from(vec![1, 2]);
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(false, (eq)(0, 1));
+        Ok(())
     }
 
     #[test]
-    fn test_i32_i32() {
+    fn test_i32_i32() -> Result<()> {
         let array1 = Int32Array::from(vec![1]);
         let array2 = Int32Array::from(vec![2]);
 
-        let eq = make_eq_comparator(&array1, &array2, false).unwrap();
+        let eq = make_eq_comparator(&array1, &array2, false)?;
 
         assert_eq!(false, eq(0, 0));
+        Ok(())
     }
 
     #[test]
-    fn test_f64() {
+    fn test_f64() -> Result<()> {
         let array = Float64Array::from(vec![1.0, 2.0]);
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(false, eq(0, 1));
+        Ok(())
     }
 
     #[test]
-    fn test_f64_nan() {
+    fn test_f64_nan() -> Result<()> {
         let array = Float64Array::from(vec![1.0, f64::NAN]);
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(true, eq(0, 0));
         assert_eq!(false, eq(0, 1));
         assert_eq!(false, eq(1, 1)); // NaN != NaN
+        Ok(())
     }
 
     #[test]
-    fn test_f64_zeros() {
+    fn test_f64_zeros() -> Result<()> {
         let array = Float64Array::from(vec![-0.0, 0.0]);
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(true, eq(0, 1)); // -0.0 == 0.0
         assert_eq!(true, eq(1, 0));
+        Ok(())
     }
 
     #[test]
-    fn test_interval_day_time() {
+    fn test_interval_day_time() -> Result<()> {
         let array = IntervalDayTimeArray::from(vec![
             // 0 days, 1 second
             IntervalDayTimeType::make_value(0, 1000),
@@ -471,7 +484,7 @@ pub mod tests {
             IntervalDayTimeType::make_value(0, 90_000_000),
         ]);
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(false, eq(0, 1));
         assert_eq!(false, eq(1, 0));
@@ -481,10 +494,11 @@ pub mod tests {
         // values not field by field
         assert_eq!(false, eq(1, 2));
         assert_eq!(false, eq(2, 1));
+        Ok(())
     }
 
     #[test]
-    fn test_interval_year_month() {
+    fn test_interval_year_month() -> Result<()> {
         let array = IntervalYearMonthArray::from(vec![
             // 1 year, 0 months
             IntervalYearMonthType::make_value(1, 0),
@@ -494,7 +508,7 @@ pub mod tests {
             IntervalYearMonthType::make_value(1, 1),
         ]);
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(false, eq(0, 1));
         assert_eq!(false, eq(1, 0));
@@ -502,10 +516,11 @@ pub mod tests {
         // the underlying representation is months, so both quantities are the same
         assert_eq!(true, eq(1, 2));
         assert_eq!(true, eq(2, 1));
+        Ok(())
     }
 
     #[test]
-    fn test_interval_month_day_nano() {
+    fn test_interval_month_day_nano() -> Result<()> {
         let array = IntervalMonthDayNanoArray::from(vec![
             // 100 days
             IntervalMonthDayNanoType::make_value(0, 100, 0),
@@ -515,7 +530,7 @@ pub mod tests {
             IntervalMonthDayNanoType::make_value(0, 100, 2),
         ]);
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(false, eq(0, 1));
         assert_eq!(false, eq(1, 0));
@@ -525,23 +540,24 @@ pub mod tests {
         // values not field by field
         assert_eq!(false, eq(1, 2));
         assert_eq!(false, eq(2, 1));
+        Ok(())
     }
 
     #[test]
-    fn test_decimal() {
+    fn test_decimal() -> Result<()> {
         let array = vec![Some(5_i128), Some(2_i128), Some(3_i128)]
             .into_iter()
             .collect::<Decimal128Array>()
-            .with_precision_and_scale(23, 6)
-            .unwrap();
+            .with_precision_and_scale(23, 6)?;
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
         assert_eq!(false, eq(1, 0));
         assert_eq!(false, eq(0, 2));
+        Ok(())
     }
 
     #[test]
-    fn test_decimali256() {
+    fn test_decimali256() -> Result<()> {
         let array = vec![
             Some(i256::from_i128(5_i128)),
             Some(i256::from_i128(2_i128)),
@@ -549,42 +565,44 @@ pub mod tests {
         ]
         .into_iter()
         .collect::<Decimal256Array>()
-        .with_precision_and_scale(53, 6)
-        .unwrap();
+        .with_precision_and_scale(53, 6)?;
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
         assert_eq!(false, eq(1, 0));
         assert_eq!(false, eq(0, 2));
+        Ok(())
     }
 
     #[test]
-    fn test_dict() {
+    fn test_dict() -> Result<()> {
         let data = vec!["a", "b", "c", "a", "a", "c", "c"];
         let array = data.into_iter().collect::<DictionaryArray<Int16Type>>();
 
-        let eq = make_eq_comparator(&array, &array, false).unwrap();
+        let eq = make_eq_comparator(&array, &array, false)?;
 
         assert_eq!(false, eq(0, 1));
         assert_eq!(true, eq(3, 4));
         assert_eq!(false, eq(2, 3));
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_dict() {
+    fn test_multiple_dict() -> Result<()> {
         let d1 = vec!["a", "b", "c", "d"];
         let a1 = d1.into_iter().collect::<DictionaryArray<Int16Type>>();
         let d2 = vec!["e", "f", "g", "a"];
         let a2 = d2.into_iter().collect::<DictionaryArray<Int16Type>>();
 
-        let eq = make_eq_comparator(&a1, &a2, false).unwrap();
+        let eq = make_eq_comparator(&a1, &a2, false)?;
 
         assert_eq!(false, eq(0, 0));
         assert_eq!(true, eq(0, 3));
         assert_eq!(false, eq(1, 3));
+        Ok(())
     }
 
     #[test]
-    fn test_primitive_dict() {
+    fn test_primitive_dict() -> Result<()> {
         let values = Int32Array::from(vec![1_i32, 0, 2, 5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::new(keys, Arc::new(values));
@@ -593,36 +611,38 @@ pub mod tests {
         let keys = Int8Array::from_iter_values([0, 1, 1, 3]);
         let array2 = DictionaryArray::new(keys, Arc::new(values));
 
-        let eq = make_eq_comparator(&array1, &array2, false).unwrap();
+        let eq = make_eq_comparator(&array1, &array2, false)?;
 
         assert_eq!(false, eq(0, 0));
         assert_eq!(false, eq(0, 3));
         assert_eq!(true, eq(3, 3));
         assert_eq!(false, eq(3, 1));
         assert_eq!(false, eq(3, 2));
+        Ok(())
     }
 
     #[test]
-    fn test_float_dict() {
+    fn test_float_dict() -> Result<()> {
         let values = Float32Array::from(vec![1.0, 0.5, 2.1, 5.5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
-        let array1 = DictionaryArray::try_new(keys, Arc::new(values)).unwrap();
+        let array1 = DictionaryArray::try_new(keys, Arc::new(values))?;
 
         let values = Float32Array::from(vec![1.2, 3.2, 4.0, 5.5]);
         let keys = Int8Array::from_iter_values([0, 1, 1, 3]);
         let array2 = DictionaryArray::new(keys, Arc::new(values));
 
-        let eq = make_eq_comparator(&array1, &array2, false).unwrap();
+        let eq = make_eq_comparator(&array1, &array2, false)?;
 
         assert_eq!(false, eq(0, 0));
         assert_eq!(false, eq(0, 3));
         assert_eq!(true, eq(3, 3));
         assert_eq!(false, eq(3, 1));
         assert_eq!(false, eq(3, 2));
+        Ok(())
     }
 
     #[test]
-    fn test_timestamp_dict() {
+    fn test_timestamp_dict() -> Result<()> {
         let values = TimestampSecondArray::from(vec![1, 0, 2, 5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::new(keys, Arc::new(values));
@@ -631,17 +651,18 @@ pub mod tests {
         let keys = Int8Array::from_iter_values([0, 1, 1, 3]);
         let array2 = DictionaryArray::new(keys, Arc::new(values));
 
-        let eq = make_eq_comparator(&array1, &array2, false).unwrap();
+        let eq = make_eq_comparator(&array1, &array2, false)?;
 
         assert_eq!(false, eq(0, 0));
         assert_eq!(false, eq(0, 3));
         assert_eq!(true, eq(3, 3));
         assert_eq!(false, eq(3, 1));
         assert_eq!(false, eq(3, 2));
+        Ok(())
     }
 
     #[test]
-    fn test_duration_dict() {
+    fn test_duration_dict() -> Result<()> {
         let values = DurationSecondArray::from(vec![1, 0, 2, 5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::new(keys, Arc::new(values));
@@ -650,17 +671,18 @@ pub mod tests {
         let keys = Int8Array::from_iter_values([0, 1, 1, 3]);
         let array2 = DictionaryArray::new(keys, Arc::new(values));
 
-        let eq = make_eq_comparator(&array1, &array2, false).unwrap();
+        let eq = make_eq_comparator(&array1, &array2, false)?;
 
         assert_eq!(false, eq(0, 0));
         assert_eq!(false, eq(0, 3));
         assert_eq!(true, eq(3, 3));
         assert_eq!(false, eq(3, 1));
         assert_eq!(false, eq(3, 2));
+        Ok(())
     }
 
     #[test]
-    fn test_decimal_dict() {
+    fn test_decimal_dict() -> Result<()> {
         let values = Decimal128Array::from(vec![1, 0, 2, 5]);
         let keys = Int8Array::from_iter_values([0, 0, 1, 3]);
         let array1 = DictionaryArray::new(keys, Arc::new(values));
@@ -669,17 +691,18 @@ pub mod tests {
         let keys = Int8Array::from_iter_values([0, 1, 1, 3]);
         let array2 = DictionaryArray::new(keys, Arc::new(values));
 
-        let eq = make_eq_comparator(&array1, &array2, false).unwrap();
+        let eq = make_eq_comparator(&array1, &array2, false)?;
 
         assert_eq!(false, eq(0, 0));
         assert_eq!(false, eq(0, 3));
         assert_eq!(true, eq(3, 3));
         assert_eq!(false, eq(3, 1));
         assert_eq!(false, eq(3, 2));
+        Ok(())
     }
 
     #[test]
-    fn test_decimal256_dict() {
+    fn test_decimal256_dict() -> Result<()> {
         let values = Decimal256Array::from(vec![
             i256::from_i128(1),
             i256::from_i128(0),
@@ -698,23 +721,25 @@ pub mod tests {
         let keys = Int8Array::from_iter_values([0, 1, 1, 3]);
         let array2 = DictionaryArray::new(keys, Arc::new(values));
 
-        let eq = make_eq_comparator(&array1, &array2, false).unwrap();
+        let eq = make_eq_comparator(&array1, &array2, false)?;
 
         assert_eq!(false, eq(0, 0));
         assert_eq!(false, eq(0, 3));
         assert_eq!(true, eq(3, 3));
         assert_eq!(false, eq(3, 1));
         assert_eq!(false, eq(3, 2));
+        Ok(())
     }
 
-    fn test_bytes_impl<T: ByteArrayType>() {
+    fn test_bytes_impl<T: ByteArrayType>() -> Result<()> {
         let offsets = OffsetBuffer::from_lengths([3, 3, 1]);
         let a = GenericByteArray::<T>::new(offsets, b"abcdefa".into(), None);
-        let eq = make_eq_comparator(&a, &a, false).unwrap();
+        let eq = make_eq_comparator(&a, &a, false)?;
 
         assert_eq!(false, eq(0, 1));
         assert_eq!(false, eq(0, 2));
         assert_eq!(true, eq(1, 1));
+        Ok(())
     }
 
     #[test]
@@ -726,7 +751,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_lists() {
+    fn test_lists() -> Result<()> {
         let mut a = ListBuilder::new(ListBuilder::new(Int32Builder::new()));
         a.extend([
             Some(vec![Some(vec![Some(1), Some(2), None]), Some(vec![None])]),
@@ -755,7 +780,7 @@ pub mod tests {
         ]);
         let b = b.finish();
 
-        let eq = make_eq_comparator(&a, &b, false).unwrap();
+        let eq = make_eq_comparator(&a, &b, false)?;
         assert_eq!(eq(0, 0), false); // lists contains null never equal
         assert_eq!(eq(0, 1), false);
         assert_eq!(eq(0, 2), false);
@@ -763,10 +788,11 @@ pub mod tests {
         assert_eq!(eq(1, 3), false);
         assert_eq!(eq(2, 0), false);
         assert_eq!(eq(4, 4), true);
+        Ok(())
     }
 
     #[test]
-    fn test_struct() {
+    fn test_struct() -> Result<()> {
         let fields = Fields::from(vec![
             Field::new("a", DataType::Int32, true),
             Field::new_list("b", Field::new("item", DataType::Int32, true), true),
@@ -789,7 +815,7 @@ pub mod tests {
         let values = vec![Arc::new(a) as _, Arc::new(b) as _];
         let s2 = StructArray::new(fields.clone(), values, None);
 
-        let eq = make_eq_comparator(&s1, &s2, false).unwrap();
+        let eq = make_eq_comparator(&s1, &s2, false)?;
         assert_eq!(eq(0, 1), false); // (1, [1, 2]) eq (2, None)
         assert_eq!(eq(0, 0), false); // (1, [1, 2]) eq (None, None)
         assert_eq!(eq(1, 1), false); // (2, [None]) eq (2, None)
@@ -797,5 +823,6 @@ pub mod tests {
         assert_eq!(eq(3, 0), false); // None eq (None, [])
         assert_eq!(eq(2, 0), false); // (None, None) eq (None, None)
         assert_eq!(eq(3, 0), false); // None eq (None, None)
+        Ok(())
     }
 }

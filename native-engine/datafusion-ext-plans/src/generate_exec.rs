@@ -106,7 +106,7 @@ impl GenerateExec {
             self.generator_output_schema.clone(),
             outer,
         )
-        .unwrap()
+        .expect("GeneratorExec::try_new failed")
     }
 }
 

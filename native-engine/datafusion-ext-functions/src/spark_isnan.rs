@@ -30,13 +30,19 @@ pub fn spark_isnan(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     match value {
         ColumnarValue::Array(array) => match array.data_type() {
             DataType::Float64 => {
-                let array = array.as_any().downcast_ref::<Float64Array>().unwrap();
+                let array = array
+                    .as_any()
+                    .downcast_ref::<Float64Array>()
+                    .expect("Expected a Float64Array");
                 let is_nan = BooleanArray::from_unary(array, |x| x.is_nan());
                 let cleaned = nulls_to_false(&is_nan);
                 Ok(ColumnarValue::Array(Arc::new(cleaned)))
             }
             DataType::Float32 => {
-                let array = array.as_any().downcast_ref::<Float32Array>().unwrap();
+                let array = array
+                    .as_any()
+                    .downcast_ref::<Float32Array>()
+                    .expect("Expected a Float32Array");
                 let is_nan = BooleanArray::from_unary(array, |x| x.is_nan());
                 let cleaned = nulls_to_false(&is_nan);
                 Ok(ColumnarValue::Array(Arc::new(cleaned)))
