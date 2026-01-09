@@ -88,6 +88,7 @@ pub struct BroadcastJoinExec {
     schema: SchemaRef,
     is_built: bool, // true for BroadcastHashJoin, false for ShuffledHashJoin
     cached_build_hash_map_id: Option<String>,
+    is_null_aware_anti_join: bool,
     metrics: ExecutionPlanMetricsSet,
     props: OnceCell<PlanProperties>,
 }
@@ -102,6 +103,7 @@ impl BroadcastJoinExec {
         broadcast_side: JoinSide,
         is_built: bool,
         cached_build_hash_map_id: Option<String>,
+        is_null_aware_anti_join: bool,
     ) -> Result<Self> {
         Ok(Self {
             left,
@@ -112,6 +114,7 @@ impl BroadcastJoinExec {
             schema,
             is_built,
             cached_build_hash_map_id,
+            is_null_aware_anti_join,
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
         })
@@ -176,6 +179,7 @@ impl BroadcastJoinExec {
             sort_options: vec![SortOptions::default(); self.on.len()],
             projection,
             key_data_types,
+            is_null_aware_anti_join: self.is_null_aware_anti_join,
         })
     }
 
@@ -279,6 +283,7 @@ impl ExecutionPlan for BroadcastJoinExec {
             self.broadcast_side,
             self.is_built,
             None,
+            self.is_null_aware_anti_join,
         )?))
     }
 

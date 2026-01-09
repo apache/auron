@@ -193,10 +193,15 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                 .as_ref()
                 .map(|nb| nb.is_valid(row_idx))
                 .unwrap_or(true);
-            if P.mode == Anti && P.probe_is_join_side && !key_is_valid {
+            if P.mode == Anti
+                && P.probe_is_join_side
+                && !key_is_valid
+                && self.join_params.is_null_aware_anti_join
+            {
                 probed_joined.set(row_idx, true);
                 continue;
             }
+
             if key_is_valid {
                 let map_value = map_values[hashes_idx];
                 hashes_idx += 1;

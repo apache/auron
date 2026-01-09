@@ -128,6 +128,7 @@ impl SortMergeJoinExec {
             sort_options: self.sort_options.clone(),
             projection,
             batch_size: batch_size(),
+            is_null_aware_anti_join: false,
         })
     }
 
