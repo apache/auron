@@ -61,6 +61,7 @@ case class NativeBroadcastJoinExec(
     case BroadcastRight => org.apache.spark.sql.execution.joins.BuildRight
   }
 
+  // scalastyle:off publicmethodtype
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   override def requiredChildDistribution = {
     import org.apache.spark.sql.catalyst.plans.physical.BroadcastDistribution
@@ -75,6 +76,7 @@ case class NativeBroadcastJoinExec(
         UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
     }
   }
+  // scalastyle:on publicmethodtype
 
   override def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression] =
     HashJoin.rewriteKeyExpr(exprs)
@@ -83,7 +85,7 @@ case class NativeBroadcastJoinExec(
   override def supportCodegen: Boolean = false
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-  override def inputRDDs() = {
+  override def inputRDDs(): Nothing = {
     throw new NotImplementedError("NativeBroadcastJoin dose not support codegen")
   }
 

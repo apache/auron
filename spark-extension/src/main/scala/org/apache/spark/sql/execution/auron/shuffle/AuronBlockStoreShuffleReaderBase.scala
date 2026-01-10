@@ -90,8 +90,10 @@ object AuronBlockStoreShuffleReaderBase extends Logging {
   }
 
   private def unwrapInputStream(in: InputStream): InputStream = {
+    // scalastyle:off classforname
     val bufferReleasingInputStreamCls =
       Class.forName("org.apache.spark.storage.BufferReleasingInputStream")
+    // scalastyle:on classforname
     if (in.getClass != bufferReleasingInputStreamCls) {
       return in
     }

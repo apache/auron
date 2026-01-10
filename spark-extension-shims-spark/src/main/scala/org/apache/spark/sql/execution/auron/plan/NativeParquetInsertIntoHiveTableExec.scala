@@ -103,6 +103,7 @@ case class NativeParquetInsertIntoHiveTableExec(
       super.run(sparkSession, nativeParquetSink)
     }
 
+    // scalastyle:off publicmethodtype
     @sparkver("3.2 / 3.3")
     override def basicWriteJobStatsTracker(hadoopConf: org.apache.hadoop.conf.Configuration) = {
       import org.apache.spark.sql.catalyst.InternalRow
@@ -223,6 +224,7 @@ case class NativeParquetInsertIntoHiveTableExec(
       }
     }
   }
+  // scalastyle:on publicmethodtype
 
   @sparkver("3.4 / 3.5")
   class AuronInsertIntoHiveTable34(
