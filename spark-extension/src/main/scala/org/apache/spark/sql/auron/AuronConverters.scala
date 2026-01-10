@@ -79,7 +79,6 @@ import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.EmptyPartitionsExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
-import org.apache.auron.sparkver
 
 object AuronConverters extends Logging {
   def enableScan: Boolean =
@@ -421,20 +420,8 @@ object AuronConverters extends Logging {
     Shims.get.createNativeShuffleExchangeExec(
       outputPartitioning,
       addRenameColumnsExec(convertedChild),
-      getShuffleOrigin(exec))
+      Shims.get.getShuffleOrigin(exec))
   }
-
-  @sparkver(" 3.2 / 3.3 / 3.4 / 3.5")
-  def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
-
-  @sparkver("3.0 / 3.1")
-  def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
-
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-  def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
-
-  @sparkver("3.0")
-  def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = None
 
   def convertFileSourceScanExec(exec: FileSourceScanExec): SparkPlan = {
     val (
@@ -624,7 +611,7 @@ object AuronConverters extends Logging {
           case BuildLeft => org.apache.spark.sql.execution.auron.plan.BuildLeft
           case BuildRight => org.apache.spark.sql.execution.auron.plan.BuildRight
         },
-        getIsSkewJoinFromSHJ(exec))
+        Shims.get.getIsSkewJoinFromSHJ(exec))
 
     } catch {
       case _ if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN) =>
