@@ -48,7 +48,8 @@ import org.apache.spark.sql.execution.auron.plan.NativeBroadcastJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.auron.shuffle.RssPartitionWriterBase
 import org.apache.spark.sql.execution.datasources.PartitionedFile
-import org.apache.spark.sql.execution.exchange.BroadcastExchangeLike
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.types.DataType
@@ -264,6 +265,12 @@ abstract class Shims {
   def getAdaptiveInputPlan(exec: AdaptiveSparkPlanExec): SparkPlan
 
   def getJoinBuildSide(exec: SparkPlan): JoinBuildSide
+
+  def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean
+
+  def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any]
+
+  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean
 }
 
 object Shims {

@@ -96,7 +96,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeWindowBase
 import org.apache.spark.sql.execution.auron.plan.NativeWindowExec
 import org.apache.spark.sql.execution.auron.shuffle.{AuronBlockStoreShuffleReaderBase, AuronRssShuffleManagerBase, RssPartitionWriterBase}
 import org.apache.spark.sql.execution.datasources.PartitionedFile
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 import org.apache.spark.sql.execution.joins.auron.plan.NativeShuffledHashJoinExecProvider
@@ -1074,6 +1074,25 @@ class ShimsImpl extends Shims with Logging {
         case _ => false
       })
   }
+
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  override def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
+
+  @sparkver("3.0 / 3.1")
+  override def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  override def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
+
+  @sparkver("3.0")
+  override def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = None
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  override def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean =
+    exec.isNullAwareAntiJoin
+
+  @sparkver("3.0")
+  override def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = false
 }
 
 case class ForceNativeExecutionWrapper(override val child: SparkPlan)
