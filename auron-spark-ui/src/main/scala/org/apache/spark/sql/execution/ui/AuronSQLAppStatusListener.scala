@@ -25,7 +25,8 @@ import org.apache.spark.status.ElementTrackingStore
 
 import org.apache.auron.spark.ui.AuronBuildInfoEvent
 
-class AuronSQLAppStatusListener(@nowarn conf: SparkConf, kvstore: ElementTrackingStore)
+@nowarn("cat=unused") // conf temporarily unused
+class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
     extends SparkListener
     with Logging {
 

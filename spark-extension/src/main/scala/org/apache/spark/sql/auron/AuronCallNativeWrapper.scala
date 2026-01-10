@@ -22,6 +22,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.annotation.nowarn
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.arrow.c.ArrowArray
@@ -53,6 +54,7 @@ import org.apache.auron.protobuf.TaskDefinition
  * This class has been deprecated and migrated to {@link
  * org.apache.auron.jni.AuronCallNativeWrapper}. Will be removed in the future.
  */
+@nowarn("cat=deprecation") // JniBridge is temporarily used (deprecated)
 @Deprecated
 case class AuronCallNativeWrapper(
     nativePlan: PhysicalPlanNode,
@@ -193,6 +195,7 @@ case class AuronCallNativeWrapper(
   }
 }
 
+@nowarn("cat=deprecation") // JniBridge is temporarily used (deprecated)
 object AuronCallNativeWrapper extends Logging {
   def initNative(): Unit = {
     lazyInitNative

@@ -19,6 +19,7 @@ package org.apache.spark.sql.auron
 import java.io.File
 import java.util.UUID
 
+import scala.annotation.nowarn
 import scala.collection.mutable
 
 import org.apache.commons.lang3.reflect.FieldUtils
@@ -962,6 +963,7 @@ class ShimsImpl extends Shims with Logging {
     }
   }
 
+  @nowarn("cat=unused") // Some params temporarily unused
   @sparkver("3.4 / 3.5")
   private def convertPromotePrecision(
       e: Expression,

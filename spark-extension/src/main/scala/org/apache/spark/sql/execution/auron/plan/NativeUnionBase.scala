@@ -70,7 +70,7 @@ abstract class NativeUnionBase(
         val unionInputs = ArrayBuffer[(PhysicalPlanNode, Int)]()
         partition match {
           case p: UnionPartition[_] =>
-            val rdds = unionRDD.asInstanceOf[UnionRDD[_]].rdds
+            val rdds = unionRDD.asInstanceOf[UnionRDD[Any]].rdds
             val nativeRDD = rdds(p.parentRddIndex).asInstanceOf[NativeRDD]
             val input = nativeRDD.nativePlan(p.parentPartition, taskContext)
             for (childIndex <- rdds.indices) {
@@ -81,7 +81,7 @@ abstract class NativeUnionBase(
               }
             }
           case p: PartitionerAwareUnionRDDPartition =>
-            val rdds = unionRDD.asInstanceOf[PartitionerAwareUnionRDD[_]].rdds
+            val rdds = unionRDD.asInstanceOf[PartitionerAwareUnionRDD[Any]].rdds
             for ((rdd, partition) <- rdds.zip(p.parents)) {
               val nativeRDD = rdd.asInstanceOf[NativeRDD]
               unionInputs.append((nativeRDD.nativePlan(partition, taskContext), partition.index))
