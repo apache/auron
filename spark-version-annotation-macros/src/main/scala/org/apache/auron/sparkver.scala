@@ -16,8 +16,7 @@
  */
 package org.apache.auron
 
-import scala.annotation.StaticAnnotation
-import scala.annotation.compileTimeOnly
+import scala.annotation.{compileTimeOnly, nowarn, StaticAnnotation}
 import scala.language.experimental._
 import scala.reflect.macros.whitebox
 
@@ -96,16 +95,19 @@ object sparkver {
   }
 }
 
+@nowarn("cat=unused") // 'vers' is used by macro
 @compileTimeOnly("enable macro paradise to expand macro annotations")
 final class sparkver(vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnable
 }
 
+@nowarn("cat=unused") // 'vers' is used by macro
 @compileTimeOnly("enable macro paradise to expand macro annotations")
 final class sparkverEnableMembers(vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnableMembers
 }
 
+@nowarn("cat=unused") // 'vers' is used by macro
 @compileTimeOnly("enable macro paradise to expand macro annotations")
 final class sparkverEnableOverride(vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnableOverride

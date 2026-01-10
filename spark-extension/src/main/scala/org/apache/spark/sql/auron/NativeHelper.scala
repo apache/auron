@@ -100,7 +100,7 @@ object NativeHelper extends Logging {
     if (nativePlan == null) {
       return Iterator.empty
     }
-    var auronCallNativeWrapper = new org.apache.auron.jni.AuronCallNativeWrapper(
+    val auronCallNativeWrapper = new org.apache.auron.jni.AuronCallNativeWrapper(
       ROOT_ALLOCATOR,
       nativePlan,
       metrics,

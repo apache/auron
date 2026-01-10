@@ -18,6 +18,8 @@ package org.apache.spark.sql.auron
 
 import java.io.File
 
+import scala.annotation.nowarn
+
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.SparkContext
 import org.apache.spark.TaskContext
@@ -257,6 +259,7 @@ abstract class Shims {
 
   def getMinPartitionNum(sparkSession: SparkSession): Int
 
+  @nowarn("cat=unused") // Params temporarily unused
   def postTransform(plan: SparkPlan, sc: SparkContext): Unit = {}
 
   def getAdaptiveInputPlan(exec: AdaptiveSparkPlanExec): SparkPlan
