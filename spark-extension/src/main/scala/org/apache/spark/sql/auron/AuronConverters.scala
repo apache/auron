@@ -29,6 +29,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
 import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
+import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -53,8 +54,6 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
-import org.apache.spark.sql.execution.auron.plan.BroadcastLeft
-import org.apache.spark.sql.execution.auron.plan.BroadcastRight
 import org.apache.spark.sql.execution.auron.plan.ConvertToNativeBase
 import org.apache.spark.sql.execution.auron.plan.NativeAggBase
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeBase
@@ -155,14 +154,6 @@ object AuronConverters extends Logging {
     val name = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
     supportedShuffleManagers.exists(name.contains)
   }
-
-  // format: off
-  // scalafix:off
-  // necessary imports for cross spark versions build
-  import org.apache.spark.sql.catalyst.plans._
-  import org.apache.spark.sql.catalyst.optimizer._
-  // scalafix:on
-  // format: on
 
   def convertSparkPlanRecursively(exec: SparkPlan): SparkPlan = {
     // convert
@@ -549,15 +540,14 @@ object AuronConverters extends Logging {
           "condition" -> condition))
       assert(condition.isEmpty, "join condition is not supported")
 
-      val buildSide = exec.getTagValue(joinSmallerSideTag) match {
-        case Some(org.apache.spark.sql.execution.auron.plan.BuildLeft) =>
-          org.apache.spark.sql.execution.auron.plan.BuildLeft
-        case Some(org.apache.spark.sql.execution.auron.plan.BuildRight) =>
-          org.apache.spark.sql.execution.auron.plan.BuildRight
-        case None =>
+      val buildSide = exec
+        .getTagValue(joinSmallerSideTag)
+        .map(_.asInstanceOf[JoinBuildSide])
+        .getOrElse {
           logWarning("JoinSmallerSideTag is missing, defaults to BuildRight")
-          org.apache.spark.sql.execution.auron.plan.BuildRight
-      }
+          JoinBuildRight
+        }
+
       return Shims.get.createNativeShuffledHashJoinExec(
         addRenameColumnsExec(convertToNative(left.children(0))),
         addRenameColumnsExec(convertToNative(right.children(0))),
@@ -603,7 +593,7 @@ object AuronConverters extends Logging {
       exec.condition,
       exec.left,
       exec.right,
-      exec.buildSide)
+      Shims.get.getJoinBuildSide(exec))
     logDebugPlanConversion(
       exec,
       Seq(
@@ -620,10 +610,7 @@ object AuronConverters extends Logging {
         leftKeys,
         rightKeys,
         joinType,
-        buildSide match {
-          case BuildLeft => org.apache.spark.sql.execution.auron.plan.BuildLeft
-          case BuildRight => org.apache.spark.sql.execution.auron.plan.BuildRight
-        },
+        buildSide,
         getIsSkewJoinFromSHJ(exec))
 
     } catch {
@@ -665,15 +652,10 @@ object AuronConverters extends Logging {
   }
 
   def convertBroadcastHashJoinExec(exec: BroadcastHashJoinExec): SparkPlan = {
+    val buildSide = Shims.get.getJoinBuildSide(exec)
     try {
-      val (leftKeys, rightKeys, joinType, buildSide, condition, left, right) = (
-        exec.leftKeys,
-        exec.rightKeys,
-        exec.joinType,
-        exec.buildSide,
-        exec.condition,
-        exec.left,
-        exec.right)
+      val (leftKeys, rightKeys, joinType, condition, left, right) =
+        (exec.leftKeys, exec.rightKeys, exec.joinType, exec.condition, exec.left, exec.right)
       logDebugPlanConversion(
         exec,
         Seq(
@@ -686,9 +668,9 @@ object AuronConverters extends Logging {
 
       // verify build side is native
       buildSide match {
-        case BuildRight =>
+        case JoinBuildRight =>
           assert(NativeHelper.isNative(right), "broadcast join build side is not native")
-        case BuildLeft =>
+        case JoinBuildLeft =>
           assert(NativeHelper.isNative(left), "broadcast join build side is not native")
       }
 
@@ -699,16 +681,13 @@ object AuronConverters extends Logging {
         leftKeys,
         rightKeys,
         joinType,
-        buildSide match {
-          case BuildLeft => BroadcastLeft
-          case BuildRight => BroadcastRight
-        })
+        buildSide)
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
-        val underlyingBroadcast = exec.buildSide match {
-          case BuildLeft => Shims.get.getUnderlyingBroadcast(exec.left)
-          case BuildRight => Shims.get.getUnderlyingBroadcast(exec.right)
+        val underlyingBroadcast = buildSide match {
+          case JoinBuildLeft => Shims.get.getUnderlyingBroadcast(exec.left)
+          case JoinBuildRight => Shims.get.getUnderlyingBroadcast(exec.right)
         }
         underlyingBroadcast.setTagValue(NativeBroadcastExchangeBase.nativeExecutionTag, false)
         throw e
@@ -716,9 +695,10 @@ object AuronConverters extends Logging {
   }
 
   def convertBroadcastNestedLoopJoinExec(exec: BroadcastNestedLoopJoinExec): SparkPlan = {
+    val buildSide = Shims.get.getJoinBuildSide(exec)
     try {
-      val (joinType, buildSide, condition, left, right) =
-        (exec.joinType, exec.buildSide, exec.condition, exec.left, exec.right)
+      val (joinType, condition, left, right) =
+        (exec.joinType, exec.condition, exec.left, exec.right)
       logDebugPlanConversion(
         exec,
         Seq("joinType" -> joinType, "condition" -> condition, "buildSide" -> buildSide))
@@ -727,9 +707,9 @@ object AuronConverters extends Logging {
 
       // verify build side is native
       buildSide match {
-        case BuildRight =>
+        case JoinBuildRight =>
           assert(NativeHelper.isNative(right), "broadcast join build side is not native")
-        case BuildLeft =>
+        case JoinBuildLeft =>
           assert(NativeHelper.isNative(left), "broadcast join build side is not native")
       }
 
@@ -741,16 +721,12 @@ object AuronConverters extends Logging {
         Nil,
         Nil,
         joinType,
-        buildSide match {
-          case BuildLeft => BroadcastLeft
-          case BuildRight => BroadcastRight
-        })
-
+        buildSide)
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
-        val underlyingBroadcast = exec.buildSide match {
-          case BuildLeft => Shims.get.getUnderlyingBroadcast(exec.left)
-          case BuildRight => Shims.get.getUnderlyingBroadcast(exec.right)
+        val underlyingBroadcast = buildSide match {
+          case JoinBuildLeft => Shims.get.getUnderlyingBroadcast(exec.left)
+          case JoinBuildRight => Shims.get.getUnderlyingBroadcast(exec.right)
         }
         underlyingBroadcast.setTagValue(NativeBroadcastExchangeBase.nativeExecutionTag, false)
         throw e

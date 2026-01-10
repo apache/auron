@@ -16,13 +16,11 @@
  */
 package org.apache.spark.sql.execution.joins.auron.plan
 
+import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.auron.plan.BroadcastLeft
-import org.apache.spark.sql.execution.auron.plan.BroadcastRight
-import org.apache.spark.sql.execution.auron.plan.BroadcastSide
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastJoinBase
 import org.apache.spark.sql.execution.joins.HashJoin
 
@@ -35,7 +33,7 @@ case class NativeBroadcastJoinExec(
     override val leftKeys: Seq[Expression],
     override val rightKeys: Seq[Expression],
     override val joinType: JoinType,
-    broadcastSide: BroadcastSide)
+    broadcastSide: JoinBuildSide)
     extends NativeBroadcastJoinBase(
       left,
       right,
@@ -51,14 +49,14 @@ case class NativeBroadcastJoinExec(
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   override def buildSide: org.apache.spark.sql.catalyst.optimizer.BuildSide =
     broadcastSide match {
-      case BroadcastLeft => org.apache.spark.sql.catalyst.optimizer.BuildLeft
-      case BroadcastRight => org.apache.spark.sql.catalyst.optimizer.BuildRight
+      case JoinBuildLeft => org.apache.spark.sql.catalyst.optimizer.BuildLeft
+      case JoinBuildRight => org.apache.spark.sql.catalyst.optimizer.BuildRight
     }
 
   @sparkver("3.0")
   override val buildSide: org.apache.spark.sql.execution.joins.BuildSide = broadcastSide match {
-    case BroadcastLeft => org.apache.spark.sql.execution.joins.BuildLeft
-    case BroadcastRight => org.apache.spark.sql.execution.joins.BuildRight
+    case JoinBuildLeft => org.apache.spark.sql.execution.joins.BuildLeft
+    case JoinBuildRight => org.apache.spark.sql.execution.joins.BuildRight
   }
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
@@ -69,9 +67,9 @@ case class NativeBroadcastJoinExec(
 
     def mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAware = false)
     broadcastSide match {
-      case BroadcastLeft =>
+      case JoinBuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
-      case BroadcastRight =>
+      case JoinBuildRight =>
         UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
     }
   }

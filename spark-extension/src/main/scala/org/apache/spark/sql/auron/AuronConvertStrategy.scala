@@ -18,13 +18,13 @@ package org.apache.spark.sql.auron
 
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.auron.join.JoinBuildSides.JoinBuildSide
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
-import org.apache.spark.sql.execution.auron.plan.BuildSide
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -44,7 +44,7 @@ object AuronConvertStrategy extends Logging {
   val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
   val childOrderingRequiredTag: TreeNodeTag[Boolean] = TreeNodeTag(
     "auron.child.ordering.required")
-  val joinSmallerSideTag: TreeNodeTag[BuildSide] = TreeNodeTag("auron.join.smallerSide")
+  val joinSmallerSideTag: TreeNodeTag[JoinBuildSide] = TreeNodeTag("auron.join.smallerSide")
 
   def apply(exec: SparkPlan): Unit = {
     exec.foreach(_.setTagValue(convertibleTag, true))
