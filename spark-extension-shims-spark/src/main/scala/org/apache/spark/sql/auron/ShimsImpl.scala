@@ -33,6 +33,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.auron.AuronConverters.ForceNativeExecutionWrapperBase
 import org.apache.spark.sql.auron.NativeConverters.NativeExprWrapperBase
+import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -96,6 +97,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeWindowExec
 import org.apache.spark.sql.execution.auron.shuffle.{AuronBlockStoreShuffleReaderBase, AuronRssShuffleManagerBase, RssPartitionWriterBase}
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 import org.apache.spark.sql.execution.joins.auron.plan.NativeShuffledHashJoinExecProvider
 import org.apache.spark.sql.execution.joins.auron.plan.NativeSortMergeJoinExecProvider
@@ -229,7 +231,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      broadcastSide: BroadcastSide): NativeBroadcastJoinBase =
+      broadcastSide: JoinBuildSide): NativeBroadcastJoinBase =
     NativeBroadcastJoinExec(
       left,
       right,
@@ -260,7 +262,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      buildSide: BuildSide,
+      buildSide: JoinBuildSide,
       isSkewJoin: Boolean): SparkPlan =
     NativeShuffledHashJoinExecProvider.provide(
       left,
@@ -1034,6 +1036,40 @@ class ShimsImpl extends Shims with Logging {
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   override def getAdaptiveInputPlan(exec: AdaptiveSparkPlanExec): SparkPlan = {
     exec.inputPlan
+  }
+
+  private def convertBuildSide(exec: SparkPlan, isBuildLeft: Any => Boolean): JoinBuildSide = {
+    exec match {
+      case shj: ShuffledHashJoinExec =>
+        if (isBuildLeft(shj.buildSide)) JoinBuildLeft else JoinBuildRight
+      case bhj: BroadcastHashJoinExec =>
+        if (isBuildLeft(bhj.buildSide)) JoinBuildLeft else JoinBuildRight
+      case bnlj: BroadcastNestedLoopJoinExec =>
+        if (isBuildLeft(bnlj.buildSide)) JoinBuildLeft else JoinBuildRight
+      case other => throw new IllegalArgumentException(s"Unsupported SparkPlan type: $other")
+    }
+  }
+
+  @sparkver("3.0")
+  override def getJoinBuildSide(exec: SparkPlan): JoinBuildSide = {
+    import org.apache.spark.sql.execution.joins.BuildLeft
+    convertBuildSide(
+      exec,
+      isBuildLeft = {
+        case BuildLeft => true
+        case _ => false
+      })
+  }
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  override def getJoinBuildSide(exec: SparkPlan): JoinBuildSide = {
+    import org.apache.spark.sql.catalyst.optimizer.BuildLeft
+    convertBuildSide(
+      exec,
+      isBuildLeft = {
+        case BuildLeft => true
+        case _ => false
+      })
   }
 }
 

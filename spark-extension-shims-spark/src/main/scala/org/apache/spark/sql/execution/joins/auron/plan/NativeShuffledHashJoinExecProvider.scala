@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.execution.joins.auron.plan
 
+import org.apache.spark.sql.auron.join.JoinBuildSides.JoinBuildSide
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.auron.plan.BuildSide
 import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
 import org.apache.spark.sql.execution.joins.HashJoin
 
@@ -34,7 +34,7 @@ case object NativeShuffledHashJoinExecProvider {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      buildSide: BuildSide,
+      buildSide: JoinBuildSide,
       isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
 
     import org.apache.spark.rdd.RDD
@@ -47,7 +47,7 @@ case object NativeShuffledHashJoinExecProvider {
         override val leftKeys: Seq[Expression],
         override val rightKeys: Seq[Expression],
         override val joinType: JoinType,
-        buildSide: BuildSide,
+        buildSide: JoinBuildSide,
         skewJoin: Boolean)
         extends NativeShuffledHashJoinBase(left, right, leftKeys, rightKeys, joinType, buildSide)
         with org.apache.spark.sql.execution.joins.ShuffledJoin {
@@ -87,12 +87,11 @@ case object NativeShuffledHashJoinExecProvider {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      buildSide: BuildSide,
+      buildSide: JoinBuildSide,
       isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
 
+    import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
     import org.apache.spark.sql.catalyst.expressions.SortOrder
-    import org.apache.spark.sql.execution.auron.plan.BuildLeft
-    import org.apache.spark.sql.execution.auron.plan.BuildRight
     import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 
     case class NativeShuffledHashJoinExec(
@@ -101,7 +100,7 @@ case object NativeShuffledHashJoinExecProvider {
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
         joinType: JoinType,
-        buildSide: BuildSide)
+        buildSide: JoinBuildSide)
         extends NativeShuffledHashJoinBase(left, right, leftKeys, rightKeys, joinType, buildSide)
         with org.apache.spark.sql.execution.joins.ShuffledJoin {
 
@@ -112,8 +111,8 @@ case object NativeShuffledHashJoinExecProvider {
 
       override def outputOrdering: Seq[SortOrder] = {
         val sparkBuildSide = buildSide match {
-          case BuildLeft => org.apache.spark.sql.catalyst.optimizer.BuildLeft
-          case BuildRight => org.apache.spark.sql.catalyst.optimizer.BuildRight
+          case JoinBuildLeft => org.apache.spark.sql.catalyst.optimizer.BuildLeft
+          case JoinBuildRight => org.apache.spark.sql.catalyst.optimizer.BuildRight
         }
         val shj =
           ShuffledHashJoinExec(leftKeys, rightKeys, joinType, sparkBuildSide, None, left, right)
@@ -135,12 +134,11 @@ case object NativeShuffledHashJoinExecProvider {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      buildSide: BuildSide,
+      buildSide: JoinBuildSide,
       isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
 
+    import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
     import org.apache.spark.sql.catalyst.expressions.Attribute
-    import org.apache.spark.sql.execution.auron.plan.BuildLeft
-    import org.apache.spark.sql.execution.auron.plan.BuildRight
     import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 
     case class NativeShuffledHashJoinExec(
@@ -149,7 +147,7 @@ case object NativeShuffledHashJoinExecProvider {
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
         joinType: JoinType,
-        buildSide: BuildSide)
+        buildSide: JoinBuildSide)
         extends NativeShuffledHashJoinBase(
           left,
           right,
@@ -160,8 +158,8 @@ case object NativeShuffledHashJoinExecProvider {
 
       private def shj: ShuffledHashJoinExec = {
         val sparkBuildSide = buildSide match {
-          case BuildLeft => org.apache.spark.sql.execution.joins.BuildLeft
-          case BuildRight => org.apache.spark.sql.execution.joins.BuildRight
+          case JoinBuildLeft => org.apache.spark.sql.execution.joins.BuildLeft
+          case JoinBuildRight => org.apache.spark.sql.execution.joins.BuildRight
         }
         ShuffledHashJoinExec(leftKeys, rightKeys, joinType, sparkBuildSide, None, left, right)
       }
