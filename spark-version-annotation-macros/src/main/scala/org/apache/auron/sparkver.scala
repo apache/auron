@@ -95,17 +95,20 @@ object sparkver {
   }
 }
 
+@nowarn("cat=unused") // 'vers' is used by macro
 @compileTimeOnly("enable macro paradise to expand macro annotations")
-final class sparkver(@nowarn vers: String) extends StaticAnnotation {
+final class sparkver(vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnable
 }
 
+@nowarn("cat=unused") // 'vers' is used by macro
 @compileTimeOnly("enable macro paradise to expand macro annotations")
-final class sparkverEnableMembers(@nowarn vers: String) extends StaticAnnotation {
+final class sparkverEnableMembers(vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnableMembers
 }
 
+@nowarn("cat=unused") // 'vers' is used by macro
 @compileTimeOnly("enable macro paradise to expand macro annotations")
-final class sparkverEnableOverride(@nowarn vers: String) extends StaticAnnotation {
+final class sparkverEnableOverride(vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnableOverride
 }

@@ -17,16 +17,18 @@
 package org.apache.spark.sql.auron
 
 import java.util.ServiceLoader
+
 import scala.annotation.{nowarn, tailrec}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.{Logging, config}
-import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertStrategyTag, convertToNonNativeTag, convertibleTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
-import org.apache.spark.sql.auron.NativeConverters.{StubExpr, existTimestampType, isTypeSupported, roundRobinTypeSupported}
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
+import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -43,6 +45,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -70,6 +73,7 @@ import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.execution.auron.plan.NativeHiveTableScanBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
+
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.metric.SparkMetricNode
@@ -152,15 +156,6 @@ object AuronConverters extends Logging {
     val name = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
     supportedShuffleManagers.exists(name.contains)
   }
-
-  // format: off
-  // scalafix:off
-  // necessary imports for cross spark versions build
-  @nowarn("cat=unused-imports")
-  import org.apache.spark.sql.catalyst.plans._
-  import org.apache.spark.sql.catalyst.optimizer._
-  // scalafix:on
-  // format: on
 
   def convertSparkPlanRecursively(exec: SparkPlan): SparkPlan = {
     // convert
@@ -425,12 +420,14 @@ object AuronConverters extends Logging {
   @sparkver(" 3.2 / 3.3 / 3.4 / 3.5")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
 
+  @nowarn("cat=unused")
   @sparkver("3.0 / 3.1")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
 
+  @nowarn("cat=unused")
   @sparkver("3.0")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = None
 
@@ -552,7 +549,7 @@ object AuronConverters extends Logging {
           org.apache.spark.sql.execution.auron.plan.BuildLeft
         case Some(org.apache.spark.sql.execution.auron.plan.BuildRight) =>
           org.apache.spark.sql.execution.auron.plan.BuildRight
-        case None =>
+        case _ =>
           logWarning("JoinSmallerSideTag is missing, defaults to BuildRight")
           org.apache.spark.sql.execution.auron.plan.BuildRight
       }

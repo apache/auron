@@ -20,6 +20,7 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 import java.util
 
+import scala.annotation.nowarn
 import scala.collection.AbstractIterator
 
 import org.apache.commons.lang3.reflect.FieldUtils
@@ -40,6 +41,7 @@ import org.apache.uniffle.common.config.RssConf
 import org.apache.uniffle.common.exception.RssException
 import org.apache.uniffle.shaded.org.roaringbitmap.longlong.Roaring64NavigableMap
 
+@nowarn("cat=unused") // Some params temporarily unused
 class AuronUniffleShuffleReader[K, C](
     reader: RssShuffleReader[K, C],
     handle: RssShuffleHandleWrapper[K, _, C],
@@ -207,6 +209,7 @@ class AuronUniffleShuffleReader[K, C](
     }
   }
 
+  @nowarn("cat=unused") // Some params temporarily unused
   private class UniffleInputStream(
       iterator: MultiPartitionIterator[_, _],
       shuffleId: Int,

@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.auron.columnar
 
+import scala.annotation.nowarn
+
 import org.apache.arrow.vector.BigIntVector
 import org.apache.arrow.vector.BitVector
 import org.apache.arrow.vector.DateDayVector
@@ -44,8 +46,6 @@ import org.apache.arrow.vector.holders.NullableVarCharHolder
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
-
-import scala.annotation.nowarn
 
 class AuronArrowColumnVector(vector: ValueVector)
     extends AuronColumnVector(ArrowUtils.fromArrowField(vector.getField)) {
@@ -145,7 +145,7 @@ class AuronArrowColumnVector(vector: ValueVector)
 }
 
 object AuronArrowColumnVector {
-  @nowarn
+  @nowarn("cat=unused") // Data type get methods unimplemented (placeholder)
   abstract private class ArrowVectorAccessor(private val vector: ValueVector) {
     def isNullAt(rowId: Int): Boolean =
       if (vector.getValueCount > 0 && vector.getValidityBuffer.capacity == 0) false
