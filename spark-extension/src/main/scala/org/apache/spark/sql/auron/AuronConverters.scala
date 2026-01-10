@@ -29,6 +29,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
 import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
+import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -664,23 +665,16 @@ object AuronConverters extends Logging {
     }
   }
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = exec.isNullAwareAntiJoin
-
-  @sparkver("3.0")
-  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = false
-
   def convertBroadcastHashJoinExec(exec: BroadcastHashJoinExec): SparkPlan = {
     try {
-      val (leftKeys, rightKeys, joinType, buildSide, condition, left, right, naaj) = (
+      val (leftKeys, rightKeys, joinType, buildSide, condition, left, right) = (
         exec.leftKeys,
         exec.rightKeys,
         exec.joinType,
         exec.buildSide,
         exec.condition,
         exec.left,
-        exec.right,
-        isNullAwareAntiJoin(exec))
+        exec.right)
       logDebugPlanConversion(
         exec,
         Seq(
@@ -709,8 +703,7 @@ object AuronConverters extends Logging {
         buildSide match {
           case BuildLeft => BroadcastLeft
           case BuildRight => BroadcastRight
-        },
-        naaj)
+        })
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
@@ -752,8 +745,7 @@ object AuronConverters extends Logging {
         buildSide match {
           case BuildLeft => BroadcastLeft
           case BuildRight => BroadcastRight
-        },
-        isNullAwareAntiJoin = false)
+        })
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>

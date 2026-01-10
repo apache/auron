@@ -24,6 +24,7 @@ import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
+import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.RightOuter
@@ -40,7 +41,7 @@ abstract class NativeShuffledHashJoinBase(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
-    buildSide: BuildSide)
+    buildSide: JoinBuildSide)
     extends BinaryExecNode
     with NativeSupports {
 
@@ -79,8 +80,8 @@ abstract class NativeShuffledHashJoinBase(
   private def nativeJoinType = NativeConverters.convertJoinType(joinType)
 
   private def nativeBuildSide = buildSide match {
-    case BuildLeft => pb.JoinSide.LEFT_SIDE
-    case BuildRight => pb.JoinSide.RIGHT_SIDE
+    case JoinBuildLeft => pb.JoinSide.LEFT_SIDE
+    case JoinBuildRight => pb.JoinSide.RIGHT_SIDE
   }
 
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
@@ -133,7 +134,3 @@ abstract class NativeShuffledHashJoinBase(
       friendlyName = "NativeRDD.ShuffledHashJoin")
   }
 }
-
-class BuildSide {}
-case object BuildLeft extends BuildSide {}
-case object BuildRight extends BuildSide {}

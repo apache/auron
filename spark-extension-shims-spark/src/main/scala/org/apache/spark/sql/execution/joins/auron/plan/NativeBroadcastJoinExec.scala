@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.joins.auron.plan
 
+import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -35,8 +36,7 @@ case class NativeBroadcastJoinExec(
     override val leftKeys: Seq[Expression],
     override val rightKeys: Seq[Expression],
     override val joinType: JoinType,
-    broadcastSide: BroadcastSide,
-    isNullAwareAntiJoin: Boolean)
+    broadcastSide: BroadcastSide)
     extends NativeBroadcastJoinBase(
       left,
       right,
@@ -44,8 +44,7 @@ case class NativeBroadcastJoinExec(
       leftKeys,
       rightKeys,
       joinType,
-      broadcastSide,
-      isNullAwareAntiJoin)
+      broadcastSide)
     with HashJoin {
 
   override val condition: Option[Expression] = None

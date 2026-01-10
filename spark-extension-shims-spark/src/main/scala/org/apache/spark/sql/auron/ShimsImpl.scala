@@ -33,6 +33,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.auron.AuronConverters.ForceNativeExecutionWrapperBase
 import org.apache.spark.sql.auron.NativeConverters.NativeExprWrapperBase
+import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -229,8 +230,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      broadcastSide: BroadcastSide,
-      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase =
+      broadcastSide: BroadcastSide): NativeBroadcastJoinBase =
     NativeBroadcastJoinExec(
       left,
       right,
@@ -238,8 +238,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys,
       rightKeys,
       joinType,
-      broadcastSide,
-      isNullAwareAntiJoin)
+      broadcastSide)
 
   override def createNativeSortMergeJoinExec(
       left: SparkPlan,
