@@ -249,14 +249,14 @@ jobs:
             echo "uniffleversion=$UNIFFLE_VERSION" >> $GITHUB_OUTPUT
           fi
 
-      - name: Cache Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }})
+      - name: Cache Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, ${{ inputs.hadoop-profile }})
         uses: actions/cache@v5
         id: cache-spark-bin
         with:
           path: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
-          key: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
+          key: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}-${{ inputs.hadoop-profile }}
 
-      - name: Setup Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }})
+      - name: Setup Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, ${{ inputs.hadoop-profile }})
         id: setup-spark-bin
         if: steps.cache-spark-bin.outputs.cache-hit != 'true'
         run: |
