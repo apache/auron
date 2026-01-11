@@ -209,7 +209,7 @@ fn invoke_udf(
     params_batch: RecordBatch,
     result_schema: SchemaRef,
 ) -> Result<ArrayRef> {
-    // evalute via context
+    // evaluate via context
     let struct_array = StructArray::from(params_batch);
     let mut export_ffi_array = FFI_ArrowArray::new(&struct_array.to_data());
     let mut import_ffi_array = FFI_ArrowArray::empty();

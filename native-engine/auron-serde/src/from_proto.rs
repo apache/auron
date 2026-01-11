@@ -1075,7 +1075,7 @@ fn try_parse_physical_sort_expr(
     input: &Arc<dyn ExecutionPlan>,
     sort: &Box<SortExecNode>,
 ) -> Result<Vec<PhysicalSortExpr>, PlanSerDeError> {
-    let pyhsical_sort_expr = sort
+    let physical_sort_expr = sort
         .expr
         .iter()
         .map(|expr| {
@@ -1111,7 +1111,7 @@ fn try_parse_physical_sort_expr(
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(pyhsical_sort_expr)
+    Ok(physical_sort_expr)
 }
 
 pub fn parse_protobuf_partitioning(
