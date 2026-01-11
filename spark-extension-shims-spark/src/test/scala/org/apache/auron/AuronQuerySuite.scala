@@ -581,4 +581,76 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       }
     }
   }
+
+  test("cast array to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_array") {
+        sql("""
+              |create table t_array using parquet as
+              |select array(1, 2, 3) as arr
+              |union all select array(4, 5)
+              |union all select array(null, 7, null)
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(arr as string) from t_array")
+      }
+    }
+  }
+
+  test("cast nested array to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_nested_array") {
+        sql("""
+              |create table t_nested_array using parquet as
+              |select array(array(1, 2), array(3, 4, 5)) as arr
+              |union all select array(array(6), array(7, 8))
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(arr as string) from t_nested_array")
+      }
+    }
+  }
+
+  test("cast array with null elements to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_array_nulls") {
+        sql("""
+              |create table t_array_nulls using parquet as
+              |select array(cast(null as int), cast(null as int)) as arr
+              |union all select array(1, null, 3)
+              |union all select array(null, 2, null, 4)
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(arr as string) from t_array_nulls")
+      }
+    }
+  }
+
+  test("cast array of strings to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_array_strings") {
+        sql("""
+              |create table t_array_strings using parquet as
+              |select array('hello', 'world') as arr
+              |union all select array('foo', null, 'bar')
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(arr as string) from t_array_strings")
+      }
+    }
+  }
+
+  test("cast empty array to string") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_empty_array") {
+        sql("""
+              |create table t_empty_array using parquet as
+              |select array() as arr
+              |union all select array(1, 2)
+              |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select cast(arr as string) from t_empty_array")
+      }
+    }
+  }
 }
