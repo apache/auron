@@ -695,14 +695,18 @@ fn convert_scalar_value(value: &ScalarValue) -> Option<PredicateValue> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use arrow::datatypes::{DataType, Field, Schema};
-    use datafusion::logical_expr::Operator;
-    use datafusion::physical_expr::expressions::{
-        BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr,
-    };
-    use datafusion::scalar::ScalarValue;
     use std::sync::Arc;
+
+    use arrow::datatypes::{DataType, Field, Schema};
+    use datafusion::{
+        logical_expr::Operator,
+        physical_expr::expressions::{
+            BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr,
+        },
+        scalar::ScalarValue,
+    };
+
+    use super::*;
 
     fn create_test_schema() -> SchemaRef {
         Arc::new(Schema::new(vec![
@@ -848,9 +852,12 @@ mod tests {
         let schema = create_test_schema();
         let col = Arc::new(Column::new("id", 0));
         let values = vec![
-            Arc::new(Literal::new(ScalarValue::Int32(Some(1)))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
-            Arc::new(Literal::new(ScalarValue::Int32(Some(2)))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
-            Arc::new(Literal::new(ScalarValue::Int32(Some(3)))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(1))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(2))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(3))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
         ];
         let expr = Arc::new(InListExpr::new(col, values, false, None));
 
@@ -866,8 +873,10 @@ mod tests {
         let schema = create_test_schema();
         let col = Arc::new(Column::new("name", 1));
         let values = vec![
-            Arc::new(Literal::new(ScalarValue::Utf8(Some("foo".to_string())))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
-            Arc::new(Literal::new(ScalarValue::Utf8(Some("bar".to_string())))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Utf8(Some("foo".to_string()))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Utf8(Some("bar".to_string()))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
         ];
         let expr = Arc::new(InListExpr::new(col, values, true, None));
 
