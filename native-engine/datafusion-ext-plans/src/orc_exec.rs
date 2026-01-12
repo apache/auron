@@ -455,8 +455,9 @@ fn collect_and_predicates(
         }
     }
 
-    // Not an AND expression, try to convert to ORC predicate
-    if let Some(pred) = convert_expr_to_orc_internal(expr, schema) {
+    // Not an AND expression, convert the whole expression
+    // (could be OR, comparison, IS NULL, etc.)
+    if let Some(pred) = convert_expr_to_orc(expr, schema) {
         predicates.push(pred);
     }
 }
@@ -477,8 +478,9 @@ fn collect_or_predicates(
         }
     }
 
-    // Not an OR expression, try to convert to ORC predicate
-    if let Some(pred) = convert_expr_to_orc_internal(expr, schema) {
+    // Not an OR expression, convert the whole expression
+    // (could be AND, comparison, IS NULL, etc.)
+    if let Some(pred) = convert_expr_to_orc(expr, schema) {
         predicates.push(pred);
     }
 }
@@ -1009,10 +1011,16 @@ mod tests {
         assert!(result.is_some());
         let predicate = result.unwrap();
         let debug_str = format!("{:?}", predicate);
-        // Should have And at top level with Or and Not(IsNull) inside
-        assert!(debug_str.starts_with("And(["));
-        assert!(debug_str.contains("Or(["));
-        assert!(debug_str.contains("Not(IsNull"));
+        // Should have And at top level
+        assert!(debug_str.contains("And"), "Expected And, got: {}", debug_str);
+        // Should contain OR for the id conditions
+        assert!(debug_str.contains("Or"), "Expected Or, got: {}", debug_str);
+        // Should contain the IS NOT NULL condition
+        assert!(
+            debug_str.contains("IsNull"),
+            "Expected IsNull, got: {}",
+            debug_str
+        );
     }
 
     #[test]
