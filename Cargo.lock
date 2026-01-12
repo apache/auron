@@ -2807,6 +2807,7 @@ dependencies = [
  "futures",
  "futures-util",
  "iana-time-zone",
+ "log",
  "lz4_flex 0.11.5",
  "lzokay-native",
  "num",

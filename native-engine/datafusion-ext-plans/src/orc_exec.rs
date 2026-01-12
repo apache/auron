@@ -538,7 +538,16 @@ fn convert_expr_to_orc_internal(
             }
             ScalarValue::Boolean(Some(false)) => {
                 // WHERE false - need to filter all data
-                // ORC doesn't have a direct "false" predicate, return None
+                // Create an impossible condition using a schema column if available
+                // Use: column IS NULL AND column IS NOT NULL (always false)
+                if let Some(field) = schema.fields().first() {
+                    let col_name = field.name().as_str();
+                    return Some(Predicate::and(vec![
+                        Predicate::is_null(col_name),
+                        Predicate::not(Predicate::is_null(col_name)),
+                    ]));
+                }
+                // Fallback: no columns in schema, can't create a predicate
                 return None;
             }
             _ => {
@@ -681,5 +690,417 @@ fn convert_scalar_value(value: &ScalarValue) -> Option<PredicateValue> {
         ScalarValue::Utf8(v) => Some(PredicateValue::Utf8(v.clone())),
         ScalarValue::LargeUtf8(v) => Some(PredicateValue::Utf8(v.clone())),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow::datatypes::{DataType, Field, Schema};
+    use datafusion::logical_expr::Operator;
+    use datafusion::physical_expr::expressions::{
+        BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr,
+    };
+    use datafusion::scalar::ScalarValue;
+    use std::sync::Arc;
+
+    fn create_test_schema() -> SchemaRef {
+        Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, true),
+            Field::new("age", DataType::Int32, true),
+            Field::new("score", DataType::Float64, true),
+        ]))
+    }
+
+    #[test]
+    fn test_literal_true() {
+        let schema = create_test_schema();
+        let expr = Arc::new(Literal::new(ScalarValue::Boolean(Some(true))));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        // WHERE true should return None (no filtering)
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_literal_false() {
+        let schema = create_test_schema();
+        let expr = Arc::new(Literal::new(ScalarValue::Boolean(Some(false))));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        // WHERE false should return a predicate that filters all data
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_comparison_eq() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("id", 0));
+        let lit = Arc::new(Literal::new(ScalarValue::Int32(Some(42))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        assert_eq!(
+            format!("{:?}", predicate),
+            "Comparison { column: \"id\", op: Equal, value: Int32(Some(42)) }"
+        );
+    }
+
+    #[test]
+    fn test_comparison_ne() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("name", 1));
+        let lit = Arc::new(Literal::new(ScalarValue::Utf8(Some("test".to_string()))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::NotEq, lit));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        assert_eq!(
+            format!("{:?}", predicate),
+            "Comparison { column: \"name\", op: NotEqual, value: Utf8(Some(\"test\")) }"
+        );
+    }
+
+    #[test]
+    fn test_comparison_lt_gt_lte_gte() {
+        let schema = create_test_schema();
+
+        // Test LT
+        let col = Arc::new(Column::new("age", 2));
+        let lit = Arc::new(Literal::new(ScalarValue::Int32(Some(30))));
+        let expr = Arc::new(BinaryExpr::new(col.clone(), Operator::Lt, lit.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+
+        // Test GT
+        let expr = Arc::new(BinaryExpr::new(col.clone(), Operator::Gt, lit.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+
+        // Test LtEq
+        let expr = Arc::new(BinaryExpr::new(col.clone(), Operator::LtEq, lit.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+
+        // Test GtEq
+        let expr = Arc::new(BinaryExpr::new(col, Operator::GtEq, lit));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_comparison_reversed() {
+        let schema = create_test_schema();
+        // Literal on left: 42 = id (should be reversed to: id = 42)
+        let lit = Arc::new(Literal::new(ScalarValue::Int32(Some(42))));
+        let col = Arc::new(Column::new("id", 0));
+        let expr = Arc::new(BinaryExpr::new(lit, Operator::Eq, col));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_is_null() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("name", 1));
+        let expr = Arc::new(IsNullExpr::new(col));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        assert_eq!(format!("{:?}", predicate), "IsNull { column: \"name\" }");
+    }
+
+    #[test]
+    fn test_is_not_null() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("age", 2));
+        let expr = Arc::new(IsNotNullExpr::new(col));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        assert_eq!(
+            format!("{:?}", predicate),
+            "Not(IsNull { column: \"age\" })"
+        );
+    }
+
+    #[test]
+    fn test_not_expr() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("id", 0));
+        let lit = Arc::new(Literal::new(ScalarValue::Int32(Some(42))));
+        let eq_expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        let not_expr = Arc::new(NotExpr::new(eq_expr));
+
+        let result = convert_predicate_to_orc(Some(not_expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        assert!(format!("{:?}", predicate).starts_with("Not(Comparison"));
+    }
+
+    #[test]
+    fn test_in_list() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("id", 0));
+        let values = vec![
+            Arc::new(Literal::new(ScalarValue::Int32(Some(1)))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(2)))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(3)))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ];
+        let expr = Arc::new(InListExpr::new(col, values, false, None));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        // IN list should be converted to OR of equality predicates
+        assert!(format!("{:?}", predicate).starts_with("Or(["));
+    }
+
+    #[test]
+    fn test_not_in_list() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("name", 1));
+        let values = vec![
+            Arc::new(Literal::new(ScalarValue::Utf8(Some("foo".to_string())))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Utf8(Some("bar".to_string())))) as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ];
+        let expr = Arc::new(InListExpr::new(col, values, true, None));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        // NOT IN should be converted to NOT(OR(...))
+        assert!(format!("{:?}", predicate).starts_with("Not(Or(["));
+    }
+
+    #[test]
+    fn test_and_simple() {
+        let schema = create_test_schema();
+        // id = 42 AND age > 18
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(42))));
+        let expr1 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit1));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(18))));
+        let expr2 = Arc::new(BinaryExpr::new(col2, Operator::Gt, lit2));
+
+        let and_expr = Arc::new(BinaryExpr::new(expr1, Operator::And, expr2));
+
+        let result = convert_predicate_to_orc(Some(and_expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        assert!(format!("{:?}", predicate).starts_with("And(["));
+    }
+
+    #[test]
+    fn test_and_nested_flattening() {
+        let schema = create_test_schema();
+        // ((id = 1 AND age = 2) AND name = "foo") should be flattened to And([...])
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(1))));
+        let expr1 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit1));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(2))));
+        let expr2 = Arc::new(BinaryExpr::new(col2, Operator::Eq, lit2));
+
+        let and1 = Arc::new(BinaryExpr::new(expr1, Operator::And, expr2));
+
+        let col3 = Arc::new(Column::new("name", 1));
+        let lit3 = Arc::new(Literal::new(ScalarValue::Utf8(Some("foo".to_string()))));
+        let expr3 = Arc::new(BinaryExpr::new(col3, Operator::Eq, lit3));
+
+        let and2 = Arc::new(BinaryExpr::new(and1, Operator::And, expr3));
+
+        let result = convert_predicate_to_orc(Some(and2), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be flattened to And([cond1, cond2, cond3])
+        assert!(debug_str.starts_with("And(["));
+        // Count the number of conditions (should be 3)
+        let condition_count = debug_str.matches("Comparison").count();
+        assert_eq!(condition_count, 3);
+    }
+
+    #[test]
+    fn test_or_simple() {
+        let schema = create_test_schema();
+        // id = 1 OR id = 2
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(1))));
+        let expr1 = Arc::new(BinaryExpr::new(col1.clone(), Operator::Eq, lit1));
+
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(2))));
+        let expr2 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit2));
+
+        let or_expr = Arc::new(BinaryExpr::new(expr1, Operator::Or, expr2));
+
+        let result = convert_predicate_to_orc(Some(or_expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        assert!(format!("{:?}", predicate).starts_with("Or(["));
+    }
+
+    #[test]
+    fn test_or_nested_flattening() {
+        let schema = create_test_schema();
+        // ((id = 1 OR age = 2) OR score = 3.0) should be flattened
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(1))));
+        let expr1 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit1));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(2))));
+        let expr2 = Arc::new(BinaryExpr::new(col2, Operator::Eq, lit2));
+
+        let or1 = Arc::new(BinaryExpr::new(expr1, Operator::Or, expr2));
+
+        let col3 = Arc::new(Column::new("score", 3));
+        let lit3 = Arc::new(Literal::new(ScalarValue::Float64(Some(3.0))));
+        let expr3 = Arc::new(BinaryExpr::new(col3, Operator::Eq, lit3));
+
+        let or2 = Arc::new(BinaryExpr::new(or1, Operator::Or, expr3));
+
+        let result = convert_predicate_to_orc(Some(or2), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be flattened to Or([cond1, cond2, cond3])
+        assert!(debug_str.starts_with("Or(["));
+        let condition_count = debug_str.matches("Comparison").count();
+        assert_eq!(condition_count, 3);
+    }
+
+    #[test]
+    fn test_complex_mixed_predicates() {
+        let schema = create_test_schema();
+        // (id = 1 OR id = 2) AND name IS NOT NULL
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(1))));
+        let expr1 = Arc::new(BinaryExpr::new(col1.clone(), Operator::Eq, lit1));
+
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(2))));
+        let expr2 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit2));
+
+        let or_expr = Arc::new(BinaryExpr::new(expr1, Operator::Or, expr2));
+
+        let col2 = Arc::new(Column::new("name", 1));
+        let is_not_null = Arc::new(IsNotNullExpr::new(col2));
+
+        let and_expr = Arc::new(BinaryExpr::new(or_expr, Operator::And, is_not_null));
+
+        let result = convert_predicate_to_orc(Some(and_expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should have And at top level with Or and Not(IsNull) inside
+        assert!(debug_str.starts_with("And(["));
+        assert!(debug_str.contains("Or(["));
+        assert!(debug_str.contains("Not(IsNull"));
+    }
+
+    #[test]
+    fn test_deeply_nested_and() {
+        let schema = create_test_schema();
+        // Build: (((id = 1 AND age = 2) AND name = "foo") AND score = 3.0)
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(1))));
+        let expr1 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit1));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(2))));
+        let expr2 = Arc::new(BinaryExpr::new(col2, Operator::Eq, lit2));
+
+        let and1 = Arc::new(BinaryExpr::new(expr1, Operator::And, expr2));
+
+        let col3 = Arc::new(Column::new("name", 1));
+        let lit3 = Arc::new(Literal::new(ScalarValue::Utf8(Some("foo".to_string()))));
+        let expr3 = Arc::new(BinaryExpr::new(col3, Operator::Eq, lit3));
+
+        let and2 = Arc::new(BinaryExpr::new(and1, Operator::And, expr3));
+
+        let col4 = Arc::new(Column::new("score", 3));
+        let lit4 = Arc::new(Literal::new(ScalarValue::Float64(Some(3.0))));
+        let expr4 = Arc::new(BinaryExpr::new(col4, Operator::Eq, lit4));
+
+        let and3 = Arc::new(BinaryExpr::new(and2, Operator::And, expr4));
+
+        let result = convert_predicate_to_orc(Some(and3), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be flattened to And([cond1, cond2, cond3, cond4])
+        assert!(debug_str.starts_with("And(["));
+        let condition_count = debug_str.matches("Comparison").count();
+        assert_eq!(condition_count, 4);
+    }
+
+    #[test]
+    fn test_all_scalar_types() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col_bool", DataType::Boolean, true),
+            Field::new("col_i8", DataType::Int8, true),
+            Field::new("col_i16", DataType::Int16, true),
+            Field::new("col_i32", DataType::Int32, true),
+            Field::new("col_i64", DataType::Int64, true),
+            Field::new("col_f32", DataType::Float32, true),
+            Field::new("col_f64", DataType::Float64, true),
+            Field::new("col_utf8", DataType::Utf8, true),
+        ]));
+
+        // Test Boolean
+        let col = Arc::new(Column::new("col_bool", 0));
+        let lit = Arc::new(Literal::new(ScalarValue::Boolean(Some(true))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
+
+        // Test Int8
+        let col = Arc::new(Column::new("col_i8", 1));
+        let lit = Arc::new(Literal::new(ScalarValue::Int8(Some(42))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
+
+        // Test Int16
+        let col = Arc::new(Column::new("col_i16", 2));
+        let lit = Arc::new(Literal::new(ScalarValue::Int16(Some(1000))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
+
+        // Test Int32
+        let col = Arc::new(Column::new("col_i32", 3));
+        let lit = Arc::new(Literal::new(ScalarValue::Int32(Some(100000))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
+
+        // Test Int64
+        let col = Arc::new(Column::new("col_i64", 4));
+        let lit = Arc::new(Literal::new(ScalarValue::Int64(Some(1000000000))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
+
+        // Test Float32
+        let col = Arc::new(Column::new("col_f32", 5));
+        let lit = Arc::new(Literal::new(ScalarValue::Float32(Some(3.14))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
+
+        // Test Float64
+        let col = Arc::new(Column::new("col_f64", 6));
+        let lit = Arc::new(Literal::new(ScalarValue::Float64(Some(2.718))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
+
+        // Test Utf8
+        let col = Arc::new(Column::new("col_utf8", 7));
+        let lit = Arc::new(Literal::new(ScalarValue::Utf8(Some("test".to_string()))));
+        let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
+        assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
     }
 }
