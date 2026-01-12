@@ -232,6 +232,7 @@ impl PhysicalPlanner {
                         .map_err(|_| proto_error("invalid BuildSide"))?,
                     false,
                     None,
+                    false,
                 )?))
             }
             PhysicalPlanType::SortMergeJoin(sort_merge_join) => {
@@ -378,6 +379,7 @@ impl PhysicalPlanner {
                     .expect("invalid BroadcastSide");
 
                 let cached_build_hash_map_id = broadcast_join.cached_build_hash_map_id.clone();
+                let is_null_aware_anti_join = broadcast_join.is_null_aware_anti_join;
 
                 Ok(Arc::new(BroadcastJoinExec::try_new(
                     schema,
@@ -392,6 +394,7 @@ impl PhysicalPlanner {
                         .map_err(|_| proto_error("invalid BroadcastSide"))?,
                     true,
                     Some(cached_build_hash_map_id),
+                    is_null_aware_anti_join,
                 )?))
             }
             PhysicalPlanType::Union(union) => {
