@@ -1018,11 +1018,7 @@ mod tests {
             debug_str
         );
         // Should contain OR for the id conditions
-        assert!(
-            debug_str.contains("Or"),
-            "Expected Or, got: {}",
-            debug_str
-        );
+        assert!(debug_str.contains("Or"), "Expected Or, got: {}", debug_str);
         // Should contain the IS NOT NULL condition
         assert!(
             debug_str.contains("IsNull"),
