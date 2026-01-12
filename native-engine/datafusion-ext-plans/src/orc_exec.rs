@@ -32,7 +32,9 @@ use datafusion::{
     logical_expr::Operator,
     physical_expr::{
         EquivalenceProperties, PhysicalExprRef,
-        expressions::{BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr},
+        expressions::{
+            BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr,
+        },
     },
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
@@ -437,7 +439,8 @@ fn convert_predicate_to_orc(
     convert_expr_to_orc(&predicate, file_schema)
 }
 
-/// Recursively collect all AND sub-conditions and flatten nested AND structures.
+/// Recursively collect all AND sub-conditions and flatten nested AND
+/// structures.
 fn collect_and_predicates(
     expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
     schema: &SchemaRef,
@@ -458,7 +461,8 @@ fn collect_and_predicates(
     }
 }
 
-/// Recursively collect all OR sub-conditions and flatten nested OR structures.
+/// Recursively collect all OR sub-conditions and flatten nested OR
+/// structures.
 fn collect_or_predicates(
     expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
     schema: &SchemaRef,
