@@ -1012,9 +1012,17 @@ mod tests {
         let predicate = result.unwrap();
         let debug_str = format!("{:?}", predicate);
         // Should have And at top level
-        assert!(debug_str.contains("And"), "Expected And, got: {}", debug_str);
+        assert!(
+            debug_str.contains("And"),
+            "Expected And, got: {}",
+            debug_str
+        );
         // Should contain OR for the id conditions
-        assert!(debug_str.contains("Or"), "Expected Or, got: {}", debug_str);
+        assert!(
+            debug_str.contains("Or"),
+            "Expected Or, got: {}",
+            debug_str
+        );
         // Should contain the IS NOT NULL condition
         assert!(
             debug_str.contains("IsNull"),
