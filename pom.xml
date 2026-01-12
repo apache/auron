@@ -57,7 +57,7 @@
     <scalaVersion>2.12</scalaVersion>
     <scalaLongVersion>2.12.18</scalaLongVersion>
     <scalaJava8CompatVersion>1.0.2</scalaJava8CompatVersion>
-    <maven.version>3.9.11</maven.version>
+    <maven.version>3.9.12</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
     <maven.plugin.scalatest.version>2.2.0</maven.plugin.scalatest.version>
     <maven.plugin.scalatest.exclude.tags />
