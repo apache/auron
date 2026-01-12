@@ -87,7 +87,8 @@ abstract class Shims {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      broadcastSide: BroadcastSide): NativeBroadcastJoinBase
+      broadcastSide: JoinBuildSide,
+      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase
 
   def createNativeSortMergeJoinExec(
       left: SparkPlan,
@@ -103,7 +104,7 @@ abstract class Shims {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      buildSide: BuildSide,
+      buildSide: JoinBuildSide,
       isSkewJoin: Boolean): SparkPlan
 
   def createNativeExpandExec(
@@ -261,6 +262,8 @@ abstract class Shims {
   def postTransform(plan: SparkPlan, sc: SparkContext): Unit = {}
 
   def getAdaptiveInputPlan(exec: AdaptiveSparkPlanExec): SparkPlan
+
+  def getJoinBuildSide(exec: SparkPlan): JoinBuildSide
 }
 
 object Shims {

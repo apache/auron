@@ -646,11 +646,24 @@ object AuronConverters extends Logging {
     }
   }
 
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = exec.isNullAwareAntiJoin
+
+  @sparkver("3.0")
+  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = false
+
   def convertBroadcastHashJoinExec(exec: BroadcastHashJoinExec): SparkPlan = {
     val buildSide = Shims.get.getJoinBuildSide(exec)
     try {
-      val (leftKeys, rightKeys, joinType, condition, left, right) =
-        (exec.leftKeys, exec.rightKeys, exec.joinType, exec.condition, exec.left, exec.right)
+      val (leftKeys, rightKeys, joinType, condition, left, right, naaj) =
+        (
+          exec.leftKeys,
+          exec.rightKeys,
+          exec.joinType,
+          exec.condition,
+          exec.left,
+          exec.right,
+          isNullAwareAntiJoin(exec))
       logDebugPlanConversion(
         exec,
         Seq(
@@ -676,7 +689,8 @@ object AuronConverters extends Logging {
         leftKeys,
         rightKeys,
         joinType,
-        buildSide)
+        buildSide,
+        naaj)
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
@@ -716,7 +730,8 @@ object AuronConverters extends Logging {
         Nil,
         Nil,
         joinType,
-        buildSide)
+        buildSide,
+        isNullAwareAntiJoin = false)
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
         val underlyingBroadcast = buildSide match {

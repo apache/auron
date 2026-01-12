@@ -53,7 +53,8 @@ abstract class NativeBroadcastJoinBase(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
-    broadcastSide: BroadcastSide)
+    broadcastSide: JoinBuildSide,
+    isNullAwareAntiJoin: Boolean)
     extends BinaryExecNode
     with NativeSupports {
 
@@ -76,8 +77,8 @@ abstract class NativeBroadcastJoinBase(
 
   {
     val baseBroadcast = broadcastSide match {
-      case BroadcastLeft => Shims.get.getUnderlyingBroadcast(left)
-      case BroadcastRight => Shims.get.getUnderlyingBroadcast(right)
+      case JoinBuildLeft => Shims.get.getUnderlyingBroadcast(left)
+      case JoinBuildRight => Shims.get.getUnderlyingBroadcast(right)
     }
     val mode = baseBroadcast match {
       case b: BroadcastExchangeExec => b.mode
@@ -112,8 +113,8 @@ abstract class NativeBroadcastJoinBase(
   private def nativeJoinType = NativeConverters.convertJoinType(joinType)
 
   private def nativeBroadcastSide = broadcastSide match {
-    case BroadcastLeft => pb.JoinSide.LEFT_SIDE
-    case BroadcastRight => pb.JoinSide.RIGHT_SIDE
+    case JoinBuildLeft => pb.JoinSide.LEFT_SIDE
+    case JoinBuildRight => pb.JoinSide.RIGHT_SIDE
   }
 
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
@@ -133,14 +134,14 @@ abstract class NativeBroadcastJoinBase(
     val nativeJoinOn = this.nativeJoinOn
 
     val (probedRDD, builtRDD) = broadcastSide match {
-      case BroadcastLeft => (rightRDD, leftRDD)
-      case BroadcastRight => (leftRDD, rightRDD)
+      case JoinBuildLeft => (rightRDD, leftRDD)
+      case JoinBuildRight => (leftRDD, rightRDD)
     }
 
     val probedShuffleReadFull = probedRDD.isShuffleReadFull && (broadcastSide match {
-      case BroadcastLeft =>
+      case JoinBuildLeft =>
         Seq(FullOuter, RightOuter).contains(joinType)
-      case BroadcastRight =>
+      case JoinBuildRight =>
         Seq(FullOuter, LeftOuter, LeftSemi, LeftAnti).contains(joinType)
     })
 
@@ -156,11 +157,11 @@ abstract class NativeBroadcastJoinBase(
           override def index: Int = 0
         }
         val (leftChild, rightChild) = broadcastSide match {
-          case BroadcastLeft =>
+          case JoinBuildLeft =>
             (
               leftRDD.nativePlan(partition0, context),
               rightRDD.nativePlan(rightRDD.partitions(partition.index), context))
-          case BroadcastRight =>
+          case JoinBuildRight =>
             (
               leftRDD.nativePlan(leftRDD.partitions(partition.index), context),
               rightRDD.nativePlan(partition0, context))
