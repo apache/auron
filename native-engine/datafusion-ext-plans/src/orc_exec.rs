@@ -30,7 +30,10 @@ use datafusion::{
     error::Result,
     execution::context::TaskContext,
     logical_expr::Operator,
-    physical_expr::{EquivalenceProperties, PhysicalExprRef, expressions::{BinaryExpr, Column, Literal, NotExpr, IsNullExpr, IsNotNullExpr, InListExpr}},
+    physical_expr::{
+        EquivalenceProperties, PhysicalExprRef,
+        expressions::{BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr},
+    },
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
         SendableRecordBatchStream, Statistics,
@@ -436,20 +439,104 @@ fn convert_predicate_to_orc(
     convert_expr_to_orc(&predicate, file_schema)
 }
 
+/// Recursively collect all AND sub-conditions and flatten nested AND structures.
+fn collect_and_predicates(
+    expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+    schema: &SchemaRef,
+    predicates: &mut Vec<Predicate>,
+) {
+    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
+        if matches!(binary.op(), Operator::And) {
+            // Recursively collect AND sub-conditions from both sides
+            collect_and_predicates(binary.left(), schema, predicates);
+            collect_and_predicates(binary.right(), schema, predicates);
+            return;
+        }
+    }
+
+    // Not an AND expression, try to convert to ORC predicate
+    if let Some(pred) = convert_expr_to_orc_internal(expr, schema) {
+        predicates.push(pred);
+    }
+}
+
+/// Recursively collect all OR sub-conditions and flatten nested OR structures.
+fn collect_or_predicates(
+    expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+    schema: &SchemaRef,
+    predicates: &mut Vec<Predicate>,
+) {
+    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
+        if matches!(binary.op(), Operator::Or) {
+            // Recursively collect OR sub-conditions from both sides
+            collect_or_predicates(binary.left(), schema, predicates);
+            collect_or_predicates(binary.right(), schema, predicates);
+            return;
+        }
+    }
+
+    // Not an OR expression, try to convert to ORC predicate
+    if let Some(pred) = convert_expr_to_orc_internal(expr, schema) {
+        predicates.push(pred);
+    }
+}
+
 fn convert_expr_to_orc(
     expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
     schema: &SchemaRef,
 ) -> Option<Predicate> {
-    // 处理 Literal 表达式 (WHERE true, WHERE false 等)
+    // Handle top-level AND expression, flatten all AND conditions
+    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
+        if matches!(binary.op(), Operator::And) {
+            let mut predicates = Vec::new();
+            collect_and_predicates(expr, schema, &mut predicates);
+
+            if predicates.is_empty() {
+                return None;
+            }
+
+            if predicates.len() == 1 {
+                return Some(predicates.into_iter().next().unwrap());
+            }
+
+            return Some(Predicate::and(predicates));
+        }
+
+        // Handle top-level OR expression, flatten all OR conditions
+        if matches!(binary.op(), Operator::Or) {
+            let mut predicates = Vec::new();
+            collect_or_predicates(expr, schema, &mut predicates);
+
+            if predicates.is_empty() {
+                return None;
+            }
+
+            if predicates.len() == 1 {
+                return Some(predicates.into_iter().next().unwrap());
+            }
+
+            return Some(Predicate::or(predicates));
+        }
+    }
+
+    convert_expr_to_orc_internal(expr, schema)
+}
+
+/// Internal conversion function for non-AND/OR expressions.
+fn convert_expr_to_orc_internal(
+    expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+    schema: &SchemaRef,
+) -> Option<Predicate> {
+    // Handle Literal expressions (WHERE true, WHERE false, etc.)
     if let Some(lit) = expr.as_any().downcast_ref::<Literal>() {
         match lit.value() {
             ScalarValue::Boolean(Some(true)) => {
-                // WHERE true - 不过滤任何数据,返回 None 表示不应用谓词
+                // WHERE true - no filtering needed, return None to skip predicate
                 return None;
             }
             ScalarValue::Boolean(Some(false)) => {
-                // WHERE false - 需要过滤所有数据
-                // ORC 没有直接的 "false" 谓词,返回 None 表示无法转换
+                // WHERE false - need to filter all data
+                // ORC doesn't have a direct "false" predicate, return None
                 return None;
             }
             _ => {
@@ -458,7 +545,7 @@ fn convert_expr_to_orc(
         }
     }
 
-    // 处理 NOT 表达式 (WHERE NOT condition)
+    // Handle NOT expressions (WHERE NOT condition)
     if let Some(not_expr) = expr.as_any().downcast_ref::<NotExpr>() {
         if let Some(inner_pred) = convert_expr_to_orc(not_expr.arg(), schema) {
             return Some(Predicate::not(inner_pred));
@@ -466,7 +553,7 @@ fn convert_expr_to_orc(
         return None;
     }
 
-    // 处理 IS NULL 表达式
+    // Handle IS NULL expressions
     if let Some(is_null) = expr.as_any().downcast_ref::<IsNullExpr>() {
         if let Some(col) = is_null.arg().as_any().downcast_ref::<Column>() {
             let col_name = col.name();
@@ -475,7 +562,7 @@ fn convert_expr_to_orc(
         return None;
     }
 
-    // 处理 IS NOT NULL 表达式
+    // Handle IS NOT NULL expressions
     if let Some(is_not_null) = expr.as_any().downcast_ref::<IsNotNullExpr>() {
         if let Some(col) = is_not_null.arg().as_any().downcast_ref::<Column>() {
             let col_name = col.name();
@@ -484,12 +571,12 @@ fn convert_expr_to_orc(
         return None;
     }
 
-    // 处理 IN 表达式 (WHERE col IN (val1, val2, ...))
+    // Handle IN expressions (WHERE col IN (val1, val2, ...))
     if let Some(in_list) = expr.as_any().downcast_ref::<InListExpr>() {
         if let Some(col) = in_list.expr().as_any().downcast_ref::<Column>() {
             let col_name = col.name();
 
-            // 将 IN 转换为多个 OR 条件: col = val1 OR col = val2 OR ...
+            // Convert IN to multiple OR conditions: col = val1 OR col = val2 OR ...
             let mut predicates = Vec::new();
             for list_expr in in_list.list() {
                 if let Some(lit) = list_expr.as_any().downcast_ref::<Literal>() {
@@ -503,7 +590,7 @@ fn convert_expr_to_orc(
                 return None;
             }
 
-            // 如果 negated 为 true,表示 NOT IN
+            // If negated is true, it represents NOT IN
             if in_list.negated() {
                 return Some(Predicate::not(Predicate::or(predicates)));
             } else {
@@ -513,62 +600,15 @@ fn convert_expr_to_orc(
         return None;
     }
 
-    // 处理 BinaryExpr (比较运算和逻辑运算)
+    // Handle BinaryExpr (comparison operations)
     if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
         let left = binary.left();
         let right = binary.right();
         let op = binary.op();
-        match op {
-            Operator::And => {
-                let left_pred = convert_expr_to_orc(left, schema);
-                let right_pred = convert_expr_to_orc(right, schema);
 
-                // 处理 AND 逻辑优化:
-                // true AND right => right
-                // left AND true => left
-                // false AND right => false (返回 None 表示无法转换)
-                // left AND false => false (返回 None 表示无法转换)
-                match (left_pred, right_pred) {
-                    (Some(l), Some(r)) => {
-                        return Some(Predicate::and(vec![l, r]));
-                    }
-                    (Some(l), None) => {
-                        return Some(l);
-                    }
-                    (None, Some(r)) => {
-                        return Some(r);
-                    }
-                    (None, None) => {
-                        return None;
-                    }
-                }
-            }
-            Operator::Or => {
-                let left_pred = convert_expr_to_orc(left, schema);
-                let right_pred = convert_expr_to_orc(right, schema);
-
-                // 处理 OR 逻辑优化:
-                // true OR right => true (返回 None 表示不过滤)
-                // left OR true => true (返回 None 表示不过滤)
-                // false OR right => right
-                // left OR false => left
-                match (left_pred, right_pred) {
-                    (Some(l), Some(r)) => {
-                        return Some(Predicate::or(vec![l, r]));
-                    }
-                    (Some(l), None) => {
-                        return Some(l);
-                    }
-                    (None, Some(r)) => {
-                        return Some(r);
-                    }
-                    (None, None) => {
-                        return None;
-                    }
-                }
-            }
-
-            _ => {}
+        // AND/OR are already handled at the outer level, skip here
+        if matches!(op, Operator::And | Operator::Or) {
+            return None;
         }
 
         if let Some(col) = left.as_any().downcast_ref::<Column>() {
