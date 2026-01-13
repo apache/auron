@@ -550,7 +550,12 @@ fn convert_expr_to_orc_internal(
                     ]));
                 }
                 // Fallback: no columns in schema, can't create a predicate
-                return None;
+                // using a synthetic column name to ensure all data is filtered.
+                let col_name = "__orc_where_false_constant__";
+                return Some(Predicate::and(vec![
+                    Predicate::is_null(col_name),
+                    Predicate::not(Predicate::is_null(col_name)),
+                ]));
             }
             _ => {
                 return None;
@@ -799,13 +804,73 @@ mod tests {
     #[test]
     fn test_comparison_reversed() {
         let schema = create_test_schema();
-        // Literal on left: 42 = id (should be reversed to: id = 42)
+
+        // Test all reversed comparison operators
+        // Format: (operator, expected_debug_string_fragment)
+
+        // Symmetric operators (Eq, NotEq) - order doesn't change semantics
         let lit = Arc::new(Literal::new(ScalarValue::Int32(Some(42))));
         let col = Arc::new(Column::new("id", 0));
-        let expr = Arc::new(BinaryExpr::new(lit, Operator::Eq, col));
-
+        let expr = Arc::new(BinaryExpr::new(lit.clone(), Operator::Eq, col.clone()));
         let result = convert_predicate_to_orc(Some(expr), &schema);
         assert!(result.is_some());
+        // 42 = id → id = 42
+
+        let expr = Arc::new(BinaryExpr::new(lit.clone(), Operator::NotEq, col.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        // 42 != id → id != 42
+
+        // Asymmetric operators - must be reversed
+
+        // Test: 42 < id → id > 42
+        let expr = Arc::new(BinaryExpr::new(lit.clone(), Operator::Lt, col.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be GreaterThan, not LessThan
+        assert!(
+            debug_str.contains("GreaterThan") || debug_str.contains("Gt"),
+            "Expected GreaterThan for reversed Lt, got: {}",
+            debug_str
+        );
+
+        // Test: 42 <= id → id >= 42
+        let expr = Arc::new(BinaryExpr::new(lit.clone(), Operator::LtEq, col.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        assert!(
+            debug_str.contains("GreaterThanEquals") || debug_str.contains("Gte"),
+            "Expected GreaterThanEquals for reversed LtEq, got: {}",
+            debug_str
+        );
+
+        // Test: 42 > id → id < 42
+        let expr = Arc::new(BinaryExpr::new(lit.clone(), Operator::Gt, col.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        assert!(
+            debug_str.contains("LessThan") || debug_str.contains("Lt"),
+            "Expected LessThan for reversed Gt, got: {}",
+            debug_str
+        );
+
+        // Test: 42 >= id → id <= 42
+        let expr = Arc::new(BinaryExpr::new(lit, Operator::GtEq, col));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        assert!(
+            debug_str.contains("LessThanEquals") || debug_str.contains("Lte"),
+            "Expected LessThanEquals for reversed GtEq, got: {}",
+            debug_str
+        );
     }
 
     #[test]
@@ -1123,5 +1188,257 @@ mod tests {
         let lit = Arc::new(Literal::new(ScalarValue::Utf8(Some("test".to_string()))));
         let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, lit));
         assert!(convert_predicate_to_orc(Some(expr), &schema).is_some());
+    }
+
+    #[test]
+    fn test_null_literal_in_comparison() {
+        let schema = create_test_schema();
+
+        // Test: WHERE id = NULL
+        // Note: In SQL semantics, "col = NULL" always evaluates to NULL (not true or
+        // false) However, we should still handle it gracefully
+        let col = Arc::new(Column::new("id", 0));
+        let null_lit = Arc::new(Literal::new(ScalarValue::Int32(None)));
+        let expr = Arc::new(BinaryExpr::new(col.clone(), Operator::Eq, null_lit.clone()));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        // Should convert to an ORC predicate (even though semantically it won't match
+        // anything)
+        assert!(result.is_some());
+
+        // Test: WHERE id != NULL
+        let expr = Arc::new(BinaryExpr::new(
+            col.clone(),
+            Operator::NotEq,
+            null_lit.clone(),
+        ));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+
+        // Test: WHERE id < NULL
+        let expr = Arc::new(BinaryExpr::new(col.clone(), Operator::Lt, null_lit.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+
+        // Test: WHERE id > NULL
+        let expr = Arc::new(BinaryExpr::new(col.clone(), Operator::Gt, null_lit.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+
+        // Test: WHERE NULL = id (reversed)
+        let expr = Arc::new(BinaryExpr::new(null_lit.clone(), Operator::Eq, col.clone()));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+
+        // Test: WHERE NULL < id (reversed)
+        let expr = Arc::new(BinaryExpr::new(null_lit, Operator::Lt, col));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_null_in_in_list() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("id", 0));
+
+        // Test: WHERE id IN (1, NULL, 3)
+        // This should handle NULL gracefully
+        let values = vec![
+            Arc::new(Literal::new(ScalarValue::Int32(Some(1))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(None)))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(3))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ];
+        let expr = Arc::new(InListExpr::new(col.clone(), values, false, None));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be converted to OR of equality predicates
+        // NULL values should be included (even though they won't match)
+        assert!(debug_str.starts_with("Or(["));
+    }
+
+    #[test]
+    fn test_null_in_not_in_list() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("name", 1));
+
+        // Test: WHERE name NOT IN ('foo', NULL, 'bar')
+        let values = vec![
+            Arc::new(Literal::new(ScalarValue::Utf8(Some("foo".to_string()))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Utf8(None)))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Utf8(Some("bar".to_string()))))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ];
+        let expr = Arc::new(InListExpr::new(col, values, true, None));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be NOT(OR(...))
+        assert!(debug_str.starts_with("Not(Or(["));
+    }
+
+    #[test]
+    fn test_all_null_in_list() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("id", 0));
+
+        // Test: WHERE id IN (NULL, NULL, NULL)
+        // Edge case: all values are NULL
+        let values = vec![
+            Arc::new(Literal::new(ScalarValue::Int32(None)))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(None)))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+            Arc::new(Literal::new(ScalarValue::Int32(None)))
+                as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ];
+        let expr = Arc::new(InListExpr::new(col, values, false, None));
+
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        // Should still produce a predicate (though it won't match anything)
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_null_with_and_predicate() {
+        let schema = create_test_schema();
+
+        // Test: WHERE id = NULL AND age > 18
+        let col1 = Arc::new(Column::new("id", 0));
+        let null_lit = Arc::new(Literal::new(ScalarValue::Int32(None)));
+        let expr1 = Arc::new(BinaryExpr::new(col1, Operator::Eq, null_lit));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(18))));
+        let expr2 = Arc::new(BinaryExpr::new(col2, Operator::Gt, lit2));
+
+        let and_expr = Arc::new(BinaryExpr::new(expr1, Operator::And, expr2));
+
+        let result = convert_predicate_to_orc(Some(and_expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be flattened to And([...])
+        assert!(debug_str.contains("And"));
+    }
+
+    #[test]
+    fn test_null_with_or_predicate() {
+        let schema = create_test_schema();
+
+        // Test: WHERE id = NULL OR age > 18
+        let col1 = Arc::new(Column::new("id", 0));
+        let null_lit = Arc::new(Literal::new(ScalarValue::Int32(None)));
+        let expr1 = Arc::new(BinaryExpr::new(col1, Operator::Eq, null_lit));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(18))));
+        let expr2 = Arc::new(BinaryExpr::new(col2, Operator::Gt, lit2));
+
+        let or_expr = Arc::new(BinaryExpr::new(expr1, Operator::Or, expr2));
+
+        let result = convert_predicate_to_orc(Some(or_expr), &schema);
+        assert!(result.is_some());
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be flattened to Or([...])
+        assert!(debug_str.contains("Or"));
+    }
+
+    #[test]
+    fn test_various_null_types() {
+        let schema = create_test_schema();
+
+        // Test NULL with different data types
+        let test_cases = vec![
+            ("id", ScalarValue::Int32(None)),
+            ("name", ScalarValue::Utf8(None)),
+            ("age", ScalarValue::Int32(None)),
+            ("score", ScalarValue::Float64(None)),
+        ];
+
+        for (col_name, null_value) in test_cases {
+            let col = Arc::new(Column::new(col_name, schema.index_of(col_name).unwrap()));
+            let null_lit = Arc::new(Literal::new(null_value));
+            let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, null_lit));
+
+            let result = convert_predicate_to_orc(Some(expr), &schema);
+            assert!(
+                result.is_some(),
+                "Failed to convert NULL comparison for column: {}",
+                col_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_null_literal_edge_cases() {
+        let schema = create_test_schema();
+        let col = Arc::new(Column::new("id", 0));
+
+        // Test: WHERE id >= NULL
+        let null_lit = Arc::new(Literal::new(ScalarValue::Int32(None)));
+        let expr = Arc::new(BinaryExpr::new(
+            col.clone(),
+            Operator::GtEq,
+            null_lit.clone(),
+        ));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+
+        // Test: WHERE id <= NULL
+        let expr = Arc::new(BinaryExpr::new(col, Operator::LtEq, null_lit));
+        let result = convert_predicate_to_orc(Some(expr), &schema);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_where_false_with_empty_schema() {
+        // Edge case: WHERE false with an empty schema (no columns)
+        let empty_schema = Arc::new(Schema::empty());
+        let expr = Arc::new(Literal::new(ScalarValue::Boolean(Some(false))));
+
+        let result = convert_predicate_to_orc(Some(expr), &empty_schema);
+
+        // Should still produce a predicate using a synthetic column name
+        // to ensure all data is filtered
+        assert!(
+            result.is_some(),
+            "WHERE false should produce a predicate even with empty schema"
+        );
+
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+
+        // Should use the synthetic column name
+        assert!(
+            debug_str.contains("__orc_where_false_constant__") || debug_str.contains("And"),
+            "Expected synthetic column or And predicate, got: {}",
+            debug_str
+        );
+    }
+
+    #[test]
+    fn test_where_true_with_empty_schema() {
+        // Edge case: WHERE true with an empty schema
+        let empty_schema = Arc::new(Schema::empty());
+        let expr = Arc::new(Literal::new(ScalarValue::Boolean(Some(true))));
+
+        let result = convert_predicate_to_orc(Some(expr), &empty_schema);
+
+        // WHERE true should always return None (no filtering)
+        assert!(
+            result.is_none(),
+            "WHERE true should not produce any predicate"
+        );
     }
 }
