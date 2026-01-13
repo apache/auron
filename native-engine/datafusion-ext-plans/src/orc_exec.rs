@@ -450,8 +450,8 @@ fn collect_and_predicates(
     // Handle short-circuit AND expression (SCAndExpr)
     if let Some(sc_and) = expr.as_any().downcast_ref::<SCAndExpr>() {
         // Recursively collect AND sub-conditions from both sides
-        collect_and_predicates(sc_and.left(), schema, predicates);
-        collect_and_predicates(sc_and.right(), schema, predicates);
+        collect_and_predicates(&sc_and.left, schema, predicates);
+        collect_and_predicates(&sc_and.right, schema, predicates);
         return;
     }
 
@@ -482,8 +482,8 @@ fn collect_or_predicates(
     // Handle short-circuit OR expression (SCOrExpr)
     if let Some(sc_or) = expr.as_any().downcast_ref::<SCOrExpr>() {
         // Recursively collect OR sub-conditions from both sides
-        collect_or_predicates(sc_or.left(), schema, predicates);
-        collect_or_predicates(sc_or.right(), schema, predicates);
+        collect_or_predicates(&sc_or.left, schema, predicates);
+        collect_or_predicates(&sc_or.right, schema, predicates);
         return;
     }
 
