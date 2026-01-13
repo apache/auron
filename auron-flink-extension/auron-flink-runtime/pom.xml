@@ -17,22 +17,27 @@
   -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-
   <parent>
     <groupId>org.apache.auron</groupId>
-    <artifactId>auron-parent_${scalaVersion}</artifactId>
+    <artifactId>auron-flink-extension</artifactId>
     <version>${project.version}</version>
-    <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>auron-flink-extension</artifactId>
-  <packaging>pom</packaging>
-  <name>Apache Auron Flink ${flink.version}</name>
+  <artifactId>auron-flink-runtime</artifactId>
+  <name>Apache Auron Flink Runtime ${flink.version}</name>
   <description>Apache Auron Flink Project</description>
-  <modules>
-    <module>auron-flink-planner</module>
-    <module>auron-flink-runtime</module>
-    <module>auron-flink-assembly</module>
-  </modules>
+  <dependencies>
+    <!-- Auron dependencies -->
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>auron-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>proto</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
 
 </project>
