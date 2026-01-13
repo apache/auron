@@ -33,7 +33,8 @@ use datafusion::{
     physical_expr::{
         EquivalenceProperties, PhysicalExprRef,
         expressions::{
-            BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr,
+            BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr, SCAndExpr,
+            SCOrExpr,
         },
     },
     physical_plan::{
@@ -446,6 +447,15 @@ fn collect_and_predicates(
     schema: &SchemaRef,
     predicates: &mut Vec<Predicate>,
 ) {
+    // Handle short-circuit AND expression (SCAndExpr)
+    if let Some(sc_and) = expr.as_any().downcast_ref::<SCAndExpr>() {
+        // Recursively collect AND sub-conditions from both sides
+        collect_and_predicates(sc_and.left(), schema, predicates);
+        collect_and_predicates(sc_and.right(), schema, predicates);
+        return;
+    }
+
+    // Handle BinaryExpr with AND operator
     if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
         if matches!(binary.op(), Operator::And) {
             // Recursively collect AND sub-conditions from both sides
@@ -469,6 +479,15 @@ fn collect_or_predicates(
     schema: &SchemaRef,
     predicates: &mut Vec<Predicate>,
 ) {
+    // Handle short-circuit OR expression (SCOrExpr)
+    if let Some(sc_or) = expr.as_any().downcast_ref::<SCOrExpr>() {
+        // Recursively collect OR sub-conditions from both sides
+        collect_or_predicates(sc_or.left(), schema, predicates);
+        collect_or_predicates(sc_or.right(), schema, predicates);
+        return;
+    }
+
+    // Handle BinaryExpr with OR operator
     if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
         if matches!(binary.op(), Operator::Or) {
             // Recursively collect OR sub-conditions from both sides
@@ -489,7 +508,39 @@ fn convert_expr_to_orc(
     expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
     schema: &SchemaRef,
 ) -> Option<Predicate> {
-    // Handle top-level AND expression, flatten all AND conditions
+    // Handle top-level short-circuit AND expression (SCAndExpr)
+    if let Some(_sc_and) = expr.as_any().downcast_ref::<SCAndExpr>() {
+        let mut predicates = Vec::new();
+        collect_and_predicates(expr, schema, &mut predicates);
+
+        if predicates.is_empty() {
+            return None;
+        }
+
+        if predicates.len() == 1 {
+            return Some(predicates.into_iter().next().unwrap());
+        }
+
+        return Some(Predicate::and(predicates));
+    }
+
+    // Handle top-level short-circuit OR expression (SCOrExpr)
+    if let Some(_sc_or) = expr.as_any().downcast_ref::<SCOrExpr>() {
+        let mut predicates = Vec::new();
+        collect_or_predicates(expr, schema, &mut predicates);
+
+        if predicates.is_empty() {
+            return None;
+        }
+
+        if predicates.len() == 1 {
+            return Some(predicates.into_iter().next().unwrap());
+        }
+
+        return Some(Predicate::or(predicates));
+    }
+
+    // Handle top-level AND expression (BinaryExpr with AND operator)
     if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
         if matches!(binary.op(), Operator::And) {
             let mut predicates = Vec::new();
@@ -506,7 +557,7 @@ fn convert_expr_to_orc(
             return Some(Predicate::and(predicates));
         }
 
-        // Handle top-level OR expression, flatten all OR conditions
+        // Handle top-level OR expression (BinaryExpr with OR operator)
         if matches!(binary.op(), Operator::Or) {
             let mut predicates = Vec::new();
             collect_or_predicates(expr, schema, &mut predicates);
@@ -708,7 +759,8 @@ mod tests {
     use datafusion::{
         logical_expr::Operator,
         physical_expr::expressions::{
-            BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr,
+            BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr, SCAndExpr,
+            SCOrExpr,
         },
         scalar::ScalarValue,
     };
@@ -843,8 +895,10 @@ mod tests {
         let predicate = result.unwrap();
         let debug_str = format!("{:?}", predicate);
         assert!(
-            debug_str.contains("GreaterThanEquals") || debug_str.contains("Gte"),
-            "Expected GreaterThanEquals for reversed LtEq, got: {}",
+            debug_str.contains("GreaterThanOrEqual")
+                || debug_str.contains("GreaterThanEquals")
+                || debug_str.contains("Gte"),
+            "Expected GreaterThanOrEqual for reversed LtEq, got: {}",
             debug_str
         );
 
@@ -867,8 +921,10 @@ mod tests {
         let predicate = result.unwrap();
         let debug_str = format!("{:?}", predicate);
         assert!(
-            debug_str.contains("LessThanEquals") || debug_str.contains("Lte"),
-            "Expected LessThanEquals for reversed GtEq, got: {}",
+            debug_str.contains("LessThanOrEqual")
+                || debug_str.contains("LessThanEquals")
+                || debug_str.contains("Lte"),
+            "Expected LessThanOrEqual for reversed GtEq, got: {}",
             debug_str
         );
     }
@@ -1439,6 +1495,149 @@ mod tests {
         assert!(
             result.is_none(),
             "WHERE true should not produce any predicate"
+        );
+    }
+
+    #[test]
+    fn test_short_circuit_and_expr() {
+        let schema = create_test_schema();
+
+        // Test: SCAndExpr (short-circuit AND)
+        // Simulating: WHERE id = 42 AND age > 18
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(42))));
+        let expr1 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit1));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(18))));
+        let expr2 = Arc::new(BinaryExpr::new(col2, Operator::Gt, lit2));
+
+        let sc_and_expr = Arc::new(SCAndExpr::new(expr1, expr2));
+
+        let result = convert_predicate_to_orc(Some(sc_and_expr), &schema);
+        assert!(result.is_some(), "SCAndExpr should convert to predicate");
+
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be flattened to And([...])
+        assert!(
+            debug_str.contains("And"),
+            "Expected And predicate, got: {}",
+            debug_str
+        );
+    }
+
+    #[test]
+    fn test_short_circuit_or_expr() {
+        let schema = create_test_schema();
+
+        // Test: SCOrExpr (short-circuit OR)
+        // Simulating: WHERE id = 1 OR id = 2
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(1))));
+        let expr1 = Arc::new(BinaryExpr::new(col1.clone(), Operator::Eq, lit1));
+
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(2))));
+        let expr2 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit2));
+
+        let sc_or_expr = Arc::new(SCOrExpr::new(expr1, expr2));
+
+        let result = convert_predicate_to_orc(Some(sc_or_expr), &schema);
+        assert!(result.is_some(), "SCOrExpr should convert to predicate");
+
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should be flattened to Or([...])
+        assert!(
+            debug_str.contains("Or"),
+            "Expected Or predicate, got: {}",
+            debug_str
+        );
+    }
+
+    #[test]
+    fn test_nested_short_circuit_exprs() {
+        let schema = create_test_schema();
+
+        // Test: Nested SCAndExpr and SCOrExpr
+        // Simulating: WHERE (id = 1 OR id = 2) AND age > 18
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(1))));
+        let expr1 = Arc::new(BinaryExpr::new(col1.clone(), Operator::Eq, lit1));
+
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(2))));
+        let expr2 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit2));
+
+        let sc_or_expr = Arc::new(SCOrExpr::new(expr1, expr2));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit3 = Arc::new(Literal::new(ScalarValue::Int32(Some(18))));
+        let expr3 = Arc::new(BinaryExpr::new(col2, Operator::Gt, lit3));
+
+        let sc_and_expr = Arc::new(SCAndExpr::new(sc_or_expr, expr3));
+
+        let result = convert_predicate_to_orc(Some(sc_and_expr), &schema);
+        assert!(
+            result.is_some(),
+            "Nested SCAndExpr/SCOrExpr should convert to predicate"
+        );
+
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should have And at top level with Or inside
+        assert!(
+            debug_str.contains("And"),
+            "Expected And at top level, got: {}",
+            debug_str
+        );
+        assert!(
+            debug_str.contains("Or"),
+            "Expected Or inside And, got: {}",
+            debug_str
+        );
+    }
+
+    #[test]
+    fn test_mixed_binary_and_short_circuit() {
+        let schema = create_test_schema();
+
+        // Test: Mix of BinaryExpr (AND) and SCAndExpr
+        // Simulating: WHERE id = 42 AND (age > 18 AND status = 'ACTIVE')
+        let col1 = Arc::new(Column::new("id", 0));
+        let lit1 = Arc::new(Literal::new(ScalarValue::Int32(Some(42))));
+        let expr1 = Arc::new(BinaryExpr::new(col1, Operator::Eq, lit1));
+
+        let col2 = Arc::new(Column::new("age", 2));
+        let lit2 = Arc::new(Literal::new(ScalarValue::Int32(Some(18))));
+        let expr2 = Arc::new(BinaryExpr::new(col2, Operator::Gt, lit2));
+
+        let col3 = Arc::new(Column::new("name", 1));
+        let lit3 = Arc::new(Literal::new(ScalarValue::Utf8(Some("ACTIVE".to_string()))));
+        let expr3 = Arc::new(BinaryExpr::new(col3, Operator::Eq, lit3));
+
+        let sc_and_inner = Arc::new(SCAndExpr::new(expr2, expr3));
+        let binary_and_outer = Arc::new(BinaryExpr::new(expr1, Operator::And, sc_and_inner));
+
+        let result = convert_predicate_to_orc(Some(binary_and_outer), &schema);
+        assert!(
+            result.is_some(),
+            "Mixed BinaryExpr/SCAndExpr should convert to predicate"
+        );
+
+        let predicate = result.unwrap();
+        let debug_str = format!("{:?}", predicate);
+        // Should all be flattened to And([...])
+        assert!(
+            debug_str.contains("And"),
+            "Expected And predicate, got: {}",
+            debug_str
+        );
+        // Should have 3 conditions flattened
+        let condition_count = debug_str.matches("Comparison").count();
+        assert_eq!(
+            condition_count, 3,
+            "Expected 3 comparison conditions, got: {}",
+            condition_count
         );
     }
 }
