@@ -33,7 +33,7 @@ import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.LimitExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 
-abstract class NativeLocalLimitBase(limit: Long, override val child: SparkPlan)
+abstract class NativeLocalLimitBase(limit: Int, override val child: SparkPlan)
     extends UnaryExecNode
     with NativeSupports {
 

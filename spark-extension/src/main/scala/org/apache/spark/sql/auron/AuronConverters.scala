@@ -752,18 +752,21 @@ object AuronConverters extends Logging {
 
   def convertLocalLimitExec(exec: LocalLimitExec): SparkPlan = {
     logDebugPlanConversion(exec)
-    Shims.get.createNativeLocalLimitExec(exec.limit.toLong, exec.child)
+    Shims.get.createNativeLocalLimitExec(exec.limit, exec.child)
   }
 
   def convertGlobalLimitExec(exec: GlobalLimitExec): SparkPlan = {
     logDebugPlanConversion(exec)
-    Shims.get.createNativeGlobalLimitExec(exec.limit.toLong, exec.child)
+    val (limit, offset) = Shims.get.getLimitAndOffset(exec)
+    Shims.get.createNativeGlobalLimitExec(limit, offset, exec.child)
   }
 
   def convertTakeOrderedAndProjectExec(exec: TakeOrderedAndProjectExec): SparkPlan = {
     logDebugPlanConversion(exec)
+    val (limit, offset) = Shims.get.getLimitAndOffset(exec)
     val nativeTakeOrdered = Shims.get.createNativeTakeOrderedExec(
-      exec.limit,
+      limit,
+      offset,
       exec.sortOrder,
       addRenameColumnsExec(convertToNative(exec.child)))
 
@@ -777,7 +780,8 @@ object AuronConverters extends Logging {
 
   def convertCollectLimitExec(exec: CollectLimitExec): SparkPlan = {
     logDebugPlanConversion(exec)
-    Shims.get.createNativeCollectLimitExec(exec.limit, exec.child)
+    val (limit, offset) = Shims.get.getLimitAndOffset(exec)
+    Shims.get.createNativeCollectLimitExec(limit, offset, exec.child)
   }
 
   def convertHashAggregateExec(exec: HashAggregateExec): SparkPlan = {

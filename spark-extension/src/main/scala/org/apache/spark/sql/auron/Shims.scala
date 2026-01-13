@@ -40,8 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{CollectLimitExec, FileSourceScanExec, GlobalLimitExec, SparkPlan, TakeOrderedAndProjectExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.auron.plan._
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastJoinBase
@@ -121,11 +120,21 @@ abstract class Shims {
       generatorOutput: Seq[Attribute],
       child: SparkPlan): NativeGenerateBase
 
-  def createNativeGlobalLimitExec(limit: Long, child: SparkPlan): NativeGlobalLimitBase
+  def getLimitAndOffset(plan: GlobalLimitExec): (Int, Int) = (plan.limit, 0)
 
-  def createNativeLocalLimitExec(limit: Long, child: SparkPlan): NativeLocalLimitBase
+  def createNativeGlobalLimitExec(
+      limit: Int,
+      offset: Int,
+      child: SparkPlan): NativeGlobalLimitBase
 
-  def createNativeCollectLimitExec(limit: Int, child: SparkPlan): NativeCollectLimitBase
+  def createNativeLocalLimitExec(limit: Int, child: SparkPlan): NativeLocalLimitBase
+
+  def getLimitAndOffset(plan: CollectLimitExec): (Int, Int) = (plan.limit, 0)
+
+  def createNativeCollectLimitExec(
+      limit: Int,
+      offset: Int,
+      child: SparkPlan): NativeCollectLimitBase
 
   def createNativeParquetInsertIntoHiveTableExec(
       cmd: InsertIntoHiveTable,
@@ -153,13 +162,16 @@ abstract class Shims {
       global: Boolean,
       child: SparkPlan): NativeSortBase
 
+  def getLimitAndOffset(plan: TakeOrderedAndProjectExec): (Int, Int) = (plan.limit, 0)
+
   def createNativeTakeOrderedExec(
-      limit: Long,
+      limit: Int,
+      offset: Int,
       sortOrder: Seq[SortOrder],
       child: SparkPlan): NativeTakeOrderedBase
 
   def createNativePartialTakeOrderedExec(
-      limit: Long,
+      limit: Int,
       sortOrder: Seq[SortOrder],
       child: SparkPlan,
       metrics: Map[String, SQLMetric]): NativePartialTakeOrderedBase
