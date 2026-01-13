@@ -438,7 +438,7 @@ Input [5]: [i_item_id#16, avg(cs_quantity#5)#33, avg(UnscaledValue(cs_list_price
 
 (75) NativeTakeOrdered
 Input [5]: [i_item_id#16, agg1#37, agg2#38, agg3#39, agg4#40]
-Arguments: X, [i_item_id#16 ASC NULLS FIRST]
+Arguments: X, X, [i_item_id#16 ASC NULLS FIRST]
 
 (76) Scan parquet
 Output [8]: [cs_sold_date_sk#1, cs_bill_cdemo_sk#2, cs_item_sk#3, cs_promo_sk#4, cs_quantity#5, cs_list_price#6, cs_sales_price#7, cs_coupon_amt#8]

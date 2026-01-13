@@ -905,7 +905,7 @@ Input [5]: [item_id#15, sr_item_qty#16, cr_item_qty#26, item_id#35, wr_item_qty#
 
 (150) NativeTakeOrdered
 Input [8]: [item_id#15, sr_item_qty#16, sr_dev#37, cr_item_qty#26, cr_dev#38, wr_item_qty#36, wr_dev#39, average#40]
-Arguments: X, [item_id#15 ASC NULLS FIRST, sr_item_qty#16 ASC NULLS FIRST]
+Arguments: X, X, [item_id#15 ASC NULLS FIRST, sr_item_qty#16 ASC NULLS FIRST]
 
 (151) Scan parquet
 Output [3]: [sr_returned_date_sk#1, sr_item_sk#2, sr_return_quantity#3]

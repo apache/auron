@@ -1073,7 +1073,7 @@ Input [2]: [i_item_id#11, sum(total_sales#18)#45]
 
 (183) NativeTakeOrdered
 Input [2]: [i_item_id#11, total_sales#46]
-Arguments: X, [total_sales#46 ASC NULLS FIRST, i_item_id#11 ASC NULLS FIRST]
+Arguments: X, X, [total_sales#46 ASC NULLS FIRST, i_item_id#11 ASC NULLS FIRST]
 
 (184) Scan parquet
 Output [4]: [ss_sold_date_sk#1, ss_item_sk#2, ss_addr_sk#3, ss_ext_sales_price#4]

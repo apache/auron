@@ -20,8 +20,8 @@ import org.apache.spark.sql.execution.SparkPlan
 
 import org.apache.auron.sparkver
 
-case class NativeCollectLimitExec(limit: Int, override val child: SparkPlan)
-    extends NativeCollectLimitBase(limit, child) {
+case class NativeCollectLimitExec(limit: Int, offset: Int, override val child: SparkPlan)
+    extends NativeCollectLimitBase(limit, offset, child) {
 
   @sparkver("3.2 / 3.3 / 3.4 / 3.5")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

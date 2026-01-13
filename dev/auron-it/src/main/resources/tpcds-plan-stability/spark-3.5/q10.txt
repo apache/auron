@@ -687,7 +687,7 @@ Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purch
 
 (118) NativeTakeOrdered
 Input [14]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cnt1#31, cd_purchase_estimate#23, cnt2#32, cd_credit_rating#24, cnt3#33, cd_dep_count#25, cnt4#34, cd_dep_employed_count#26, cnt5#35, cd_dep_college_count#27, cnt6#36]
-Arguments: X, [cd_gender#20 ASC NULLS FIRST, cd_marital_status#21 ASC NULLS FIRST, cd_education_status#22 ASC NULLS FIRST, cd_purchase_estimate#23 ASC NULLS FIRST, cd_credit_rating#24 ASC NULLS FIRST, cd_dep_count#25 ASC NULLS FIRST, cd_dep_employed_count#26 ASC NULLS FIRST, cd_dep_college_count#27 ASC NULLS FIRST]
+Arguments: X, X, [cd_gender#20 ASC NULLS FIRST, cd_marital_status#21 ASC NULLS FIRST, cd_education_status#22 ASC NULLS FIRST, cd_purchase_estimate#23 ASC NULLS FIRST, cd_credit_rating#24 ASC NULLS FIRST, cd_dep_count#25 ASC NULLS FIRST, cd_dep_employed_count#26 ASC NULLS FIRST, cd_dep_college_count#27 ASC NULLS FIRST]
 
 (119) Scan parquet
 Output [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]

@@ -682,7 +682,7 @@ Input [16]: [ca_state#18, cd_gender#20, cd_marital_status#21, cd_dep_count#22, c
 
 (117) NativeTakeOrdered
 Input [18]: [ca_state#18, cd_gender#20, cd_marital_status#21, cnt1#49, min(cd_dep_count)#50, max(cd_dep_count)#51, avg(cd_dep_count)#52, cd_dep_employed_count#23, cnt2#53, min(cd_dep_employed_count)#54, max(cd_dep_employed_count)#55, avg(cd_dep_employed_count)#56, cd_dep_college_count#24, cnt3#57, min(cd_dep_college_count)#58, max(cd_dep_college_count)#59, avg(cd_dep_college_count)#60, cd_dep_count#22]
-Arguments: X, [ca_state#18 ASC NULLS FIRST, cd_gender#20 ASC NULLS FIRST, cd_marital_status#21 ASC NULLS FIRST, cd_dep_count#22 ASC NULLS FIRST, cd_dep_employed_count#23 ASC NULLS FIRST, cd_dep_college_count#24 ASC NULLS FIRST]
+Arguments: X, X, [ca_state#18 ASC NULLS FIRST, cd_gender#20 ASC NULLS FIRST, cd_marital_status#21 ASC NULLS FIRST, cd_dep_count#22 ASC NULLS FIRST, cd_dep_employed_count#23 ASC NULLS FIRST, cd_dep_college_count#24 ASC NULLS FIRST]
 
 (118) NativeProject
 Output [17]: [ca_state#18, cd_gender#20, cd_marital_status#21, cnt1#49, min(cd_dep_count)#50, max(cd_dep_count)#51, avg(cd_dep_count)#52, cd_dep_employed_count#23, cnt2#53, min(cd_dep_employed_count)#54, max(cd_dep_employed_count)#55, avg(cd_dep_employed_count)#56, cd_dep_college_count#24, cnt3#57, min(cd_dep_college_count)#58, max(cd_dep_college_count)#59, avg(cd_dep_college_count)#60]

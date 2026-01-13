@@ -920,7 +920,7 @@ Input [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#
 
 (157) NativeTakeOrdered
 Input [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Arguments: X, [channel#34 ASC NULLS FIRST, return_rank#32 ASC NULLS FIRST, currency_rank#33 ASC NULLS FIRST, item#29 ASC NULLS FIRST]
+Arguments: X, X, [channel#34 ASC NULLS FIRST, return_rank#32 ASC NULLS FIRST, currency_rank#33 ASC NULLS FIRST, item#29 ASC NULLS FIRST]
 
 (158) Scan parquet
 Output [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5, ws_net_profit#6]

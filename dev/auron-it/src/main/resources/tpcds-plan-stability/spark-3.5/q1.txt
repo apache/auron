@@ -566,7 +566,7 @@ Input [3]: [ctr_customer_sk#11, #29#29, #30#30]
 
 (96) NativeTakeOrdered
 Input [1]: [c_customer_id#30]
-Arguments: X, [c_customer_id#30 ASC NULLS FIRST]
+Arguments: X, X, [c_customer_id#30 ASC NULLS FIRST]
 
 (97) Scan parquet
 Output [4]: [sr_returned_date_sk#1, sr_customer_sk#2, sr_store_sk#3, sr_return_amt#4]

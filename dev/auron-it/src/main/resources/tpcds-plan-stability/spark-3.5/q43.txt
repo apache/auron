@@ -260,7 +260,7 @@ Input [9]: [s_store_name#9, s_store_id#8, sum(UnscaledValue(CASE WHEN (d_day_nam
 
 (44) NativeTakeOrdered
 Input [9]: [s_store_name#9, s_store_id#8, sun_sales#33, mon_sales#34, tue_sales#35, wed_sales#36, thu_sales#37, fri_sales#38, sat_sales#39]
-Arguments: X, [s_store_name#9 ASC NULLS FIRST, s_store_id#8 ASC NULLS FIRST, sun_sales#33 ASC NULLS FIRST, mon_sales#34 ASC NULLS FIRST, tue_sales#35 ASC NULLS FIRST, wed_sales#36 ASC NULLS FIRST, thu_sales#37 ASC NULLS FIRST, fri_sales#38 ASC NULLS FIRST, sat_sales#39 ASC NULLS FIRST]
+Arguments: X, X, [s_store_name#9 ASC NULLS FIRST, s_store_id#8 ASC NULLS FIRST, sun_sales#33 ASC NULLS FIRST, mon_sales#34 ASC NULLS FIRST, tue_sales#35 ASC NULLS FIRST, wed_sales#36 ASC NULLS FIRST, thu_sales#37 ASC NULLS FIRST, fri_sales#38 ASC NULLS FIRST, sat_sales#39 ASC NULLS FIRST]
 
 (45) Scan parquet
 Output [3]: [d_date_sk#1, d_year#2, d_day_name#3]

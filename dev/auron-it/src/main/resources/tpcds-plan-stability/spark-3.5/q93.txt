@@ -242,7 +242,7 @@ Input [2]: [ss_customer_sk#2, sum(act_sales#12)#16]
 
 (41) NativeTakeOrdered
 Input [2]: [ss_customer_sk#2, sumsales#17]
-Arguments: X, [sumsales#17 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST]
+Arguments: X, X, [sumsales#17 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST]
 
 (42) Scan parquet
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]

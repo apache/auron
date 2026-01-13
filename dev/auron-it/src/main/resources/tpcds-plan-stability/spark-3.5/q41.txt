@@ -204,7 +204,7 @@ Input [2]: [i_product_name#3, #10#10]
 
 (33) NativeTakeOrdered
 Input [1]: [i_product_name#3]
-Arguments: X, [i_product_name#3 ASC NULLS FIRST]
+Arguments: X, X, [i_product_name#3 ASC NULLS FIRST]
 
 (34) Scan parquet
 Output [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]

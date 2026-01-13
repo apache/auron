@@ -341,7 +341,7 @@ Input [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grou
 
 (58) NativeTakeOrdered
 Input [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#22]
-Arguments: X, [qoh#22 ASC NULLS FIRST, i_product_name#13 ASC NULLS FIRST, i_brand#14 ASC NULLS FIRST, i_class#15 ASC NULLS FIRST, i_category#16 ASC NULLS FIRST]
+Arguments: X, X, [qoh#22 ASC NULLS FIRST, i_product_name#13 ASC NULLS FIRST, i_brand#14 ASC NULLS FIRST, i_class#15 ASC NULLS FIRST, i_category#16 ASC NULLS FIRST]
 
 (59) Scan parquet
 Output [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]

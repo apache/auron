@@ -426,7 +426,7 @@ Input [5]: [rnk#15, item_sk#22, i_product_name#28, #29#29, #30#30]
 
 (72) NativeTakeOrdered
 Input [3]: [rnk#15, best_performing#31, worst_performing#32]
-Arguments: X, [rnk#15 ASC NULLS FIRST]
+Arguments: X, X, [rnk#15 ASC NULLS FIRST]
 
 (73) Scan parquet
 Output [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]

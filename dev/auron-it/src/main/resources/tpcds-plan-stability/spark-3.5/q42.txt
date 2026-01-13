@@ -260,7 +260,7 @@ Input [4]: [d_year#2, i_category_id#8, i_category#9, sum(UnscaledValue(ss_ext_sa
 
 (44) NativeTakeOrdered
 Input [4]: [d_year#2, i_category_id#8, i_category#9, sum(ss_ext_sales_price)#15]
-Arguments: X, [sum(ss_ext_sales_price)#15 DESC NULLS LAST, d_year#2 ASC NULLS FIRST, i_category_id#8 ASC NULLS FIRST, i_category#9 ASC NULLS FIRST]
+Arguments: X, X, [sum(ss_ext_sales_price)#15 DESC NULLS LAST, d_year#2 ASC NULLS FIRST, i_category_id#8 ASC NULLS FIRST, i_category#9 ASC NULLS FIRST]
 
 (45) Scan parquet
 Output [3]: [d_date_sk#1, d_year#2, d_moy#3]

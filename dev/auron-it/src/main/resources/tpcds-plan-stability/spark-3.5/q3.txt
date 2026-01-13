@@ -260,7 +260,7 @@ Input [4]: [d_year#2, i_brand#9, i_brand_id#8, sum(UnscaledValue(ss_ext_sales_pr
 
 (44) NativeTakeOrdered
 Input [4]: [d_year#2, brand_id#15, brand#16, sum_agg#17]
-Arguments: X, [d_year#2 ASC NULLS FIRST, sum_agg#17 DESC NULLS LAST, brand_id#15 ASC NULLS FIRST]
+Arguments: X, X, [d_year#2 ASC NULLS FIRST, sum_agg#17 DESC NULLS LAST, brand_id#15 ASC NULLS FIRST]
 
 (45) Scan parquet
 Output [3]: [d_date_sk#1, d_year#2, d_moy#3]

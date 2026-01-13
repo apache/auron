@@ -552,7 +552,7 @@ Condition : (cnt#26 >= 10)
 
 (94) NativeTakeOrdered
 Input [3]: [state#25, cnt#26, ca_state#2]
-Arguments: X, [cnt#26 ASC NULLS FIRST, ca_state#2 ASC NULLS FIRST]
+Arguments: X, X, [cnt#26 ASC NULLS FIRST, ca_state#2 ASC NULLS FIRST]
 
 (95) NativeProject
 Output [2]: [state#25, cnt#26]

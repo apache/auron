@@ -426,7 +426,7 @@ Input [8]: [_groupingexpression#14, sm_type#9, web_name#11, sum(CASE WHEN ((ws_s
 
 (73) NativeTakeOrdered
 Input [8]: [substr(w_warehouse_name, 1, 20)#31, sm_type#9, web_name#11, 30 days #32, 31 - 60 days #33, 61 - 90 days #34, 91 - 120 days #35, >120 days #36]
-Arguments: X, [substr(w_warehouse_name, 1, 20)#31 ASC NULLS FIRST, sm_type#9 ASC NULLS FIRST, web_name#11 ASC NULLS FIRST]
+Arguments: X, X, [substr(w_warehouse_name, 1, 20)#31 ASC NULLS FIRST, sm_type#9 ASC NULLS FIRST, web_name#11 ASC NULLS FIRST]
 
 (74) Scan parquet
 Output [5]: [ws_sold_date_sk#1, ws_ship_date_sk#2, ws_web_site_sk#3, ws_ship_mode_sk#4, ws_warehouse_sk#5]

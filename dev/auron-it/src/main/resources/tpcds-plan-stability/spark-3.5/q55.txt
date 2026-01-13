@@ -260,7 +260,7 @@ Input [3]: [i_brand#9, i_brand_id#8, sum(UnscaledValue(ss_ext_sales_price#6))#14
 
 (44) NativeTakeOrdered
 Input [3]: [brand_id#15, brand#16, ext_price#17]
-Arguments: X, [ext_price#17 DESC NULLS LAST, brand_id#15 ASC NULLS FIRST]
+Arguments: X, X, [ext_price#17 DESC NULLS LAST, brand_id#15 ASC NULLS FIRST]
 
 (45) Scan parquet
 Output [3]: [d_date_sk#1, d_year#2, d_moy#3]

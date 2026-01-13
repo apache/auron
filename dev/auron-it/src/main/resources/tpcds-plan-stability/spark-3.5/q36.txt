@@ -390,7 +390,7 @@ Input [8]: [gross_margin#23, i_category#13, i_class#14, lochierarchy#24, _w0#25,
 
 (67) NativeTakeOrdered
 Input [5]: [gross_margin#23, i_category#13, i_class#14, lochierarchy#24, rank_within_parent#28]
-Arguments: X, [lochierarchy#24 DESC NULLS LAST, CASE WHEN (lochierarchy#24 = 0) THEN i_category#13 END ASC NULLS FIRST, rank_within_parent#28 ASC NULLS FIRST]
+Arguments: X, X, [lochierarchy#24 DESC NULLS LAST, CASE WHEN (lochierarchy#24 = 0) THEN i_category#13 END ASC NULLS FIRST, rank_within_parent#28 ASC NULLS FIRST]
 
 (68) Scan parquet
 Output [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_ext_sales_price#4, ss_net_profit#5]

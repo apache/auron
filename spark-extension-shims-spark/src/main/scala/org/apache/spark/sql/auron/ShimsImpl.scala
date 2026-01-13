@@ -52,14 +52,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.CoalescedPartitionSpec
-import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.PartialMapperPartitionSpec
-import org.apache.spark.sql.execution.PartialReducerPartitionSpec
-import org.apache.spark.sql.execution.ShuffledRowRDD
-import org.apache.spark.sql.execution.ShufflePartitionSpec
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, BroadcastQueryStageExec, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.auron.plan._
 import org.apache.spark.sql.execution.auron.plan.ConvertToNativeExec
@@ -291,16 +284,38 @@ class ShimsImpl extends Shims with Logging {
       child: SparkPlan): NativeGenerateBase =
     NativeGenerateExec(generator, requiredChildOutput, outer, generatorOutput, child)
 
-  override def createNativeGlobalLimitExec(limit: Long, child: SparkPlan): NativeGlobalLimitBase =
-    NativeGlobalLimitExec(limit, child)
+  private def effectiveLimit(rawLimit: Int): Int =
+    if (rawLimit == -1) Int.MaxValue else rawLimit
 
-  override def createNativeLocalLimitExec(limit: Long, child: SparkPlan): NativeLocalLimitBase =
+  @sparkver("3.4 / 3.5")
+  override def getLimitAndOffset(plan: GlobalLimitExec): (Int, Int) = {
+    (effectiveLimit(plan.limit), plan.offset)
+  }
+
+  @sparkver("3.4 / 3.5")
+  override def getLimitAndOffset(plan: TakeOrderedAndProjectExec): (Int, Int) = {
+    (effectiveLimit(plan.limit), plan.offset)
+  }
+
+  override def createNativeGlobalLimitExec(
+      limit: Int,
+      offset: Int,
+      child: SparkPlan): NativeGlobalLimitBase =
+    NativeGlobalLimitExec(limit, offset, child)
+
+  override def createNativeLocalLimitExec(limit: Int, child: SparkPlan): NativeLocalLimitBase =
     NativeLocalLimitExec(limit, child)
+
+  @sparkver("3.4 / 3.5")
+  override def getLimitAndOffset(plan: CollectLimitExec): (Int, Int) = {
+    (effectiveLimit(plan.limit), plan.offset)
+  }
 
   override def createNativeCollectLimitExec(
       limit: Int,
+      offset: Int,
       child: SparkPlan): NativeCollectLimitBase =
-    NativeCollectLimitExec(limit, child)
+    NativeCollectLimitExec(limit, offset, child)
 
   override def createNativeParquetInsertIntoHiveTableExec(
       cmd: InsertIntoHiveTable,
@@ -337,13 +352,14 @@ class ShimsImpl extends Shims with Logging {
     NativeSortExec(sortOrder, global, child)
 
   override def createNativeTakeOrderedExec(
-      limit: Long,
+      limit: Int,
+      offset: Int,
       sortOrder: Seq[SortOrder],
       child: SparkPlan): NativeTakeOrderedBase =
-    NativeTakeOrderedExec(limit, sortOrder, child)
+    NativeTakeOrderedExec(limit, offset, sortOrder, child)
 
   override def createNativePartialTakeOrderedExec(
-      limit: Long,
+      limit: Int,
       sortOrder: Seq[SortOrder],
       child: SparkPlan,
       metrics: Map[String, SQLMetric]): NativePartialTakeOrderedBase =

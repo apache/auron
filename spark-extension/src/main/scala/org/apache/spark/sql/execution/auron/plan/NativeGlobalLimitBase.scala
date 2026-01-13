@@ -35,7 +35,7 @@ import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.LimitExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 
-abstract class NativeGlobalLimitBase(limit: Long, override val child: SparkPlan)
+abstract class NativeGlobalLimitBase(limit: Int, offset: Int, override val child: SparkPlan)
     extends UnaryExecNode
     with NativeSupports {
 
@@ -67,6 +67,7 @@ abstract class NativeGlobalLimitBase(limit: Long, override val child: SparkPlan)
           .newBuilder()
           .setInput(inputRDD.nativePlan(inputPartition, taskContext))
           .setLimit(limit)
+          .setOffset(offset)
           .build()
         PhysicalPlanNode.newBuilder().setLimit(nativeLimitExec).build()
       },

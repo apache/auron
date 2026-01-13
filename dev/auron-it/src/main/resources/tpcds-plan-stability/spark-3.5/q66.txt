@@ -848,7 +848,7 @@ Input [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w
 
 (147) NativeTakeOrdered
 Input [44]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14, ship_carriers#119, year#120, jan_sales#430, feb_sales#431, mar_sales#432, apr_sales#433, may_sales#434, jun_sales#435, jul_sales#436, aug_sales#437, sep_sales#438, oct_sales#439, nov_sales#440, dec_sales#441, jan_sales_per_sq_foot#442, feb_sales_per_sq_foot#443, mar_sales_per_sq_foot#444, apr_sales_per_sq_foot#445, may_sales_per_sq_foot#446, jun_sales_per_sq_foot#447, jul_sales_per_sq_foot#448, aug_sales_per_sq_foot#449, sep_sales_per_sq_foot#450, oct_sales_per_sq_foot#451, nov_sales_per_sq_foot#452, dec_sales_per_sq_foot#453, jan_net#454, feb_net#455, mar_net#456, apr_net#457, may_net#458, jun_net#459, jul_net#460, aug_net#461, sep_net#462, oct_net#463, nov_net#464, dec_net#465]
-Arguments: X, [w_warehouse_name#9 ASC NULLS FIRST]
+Arguments: X, X, [w_warehouse_name#9 ASC NULLS FIRST]
 
 (148) Scan parquet
 Output [7]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7]

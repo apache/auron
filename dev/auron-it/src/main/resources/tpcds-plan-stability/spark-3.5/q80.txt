@@ -1501,7 +1501,7 @@ Input [6]: [channel#101, id#102, spark_grouping_id#103, sum(sales#32)#110, sum(r
 
 (260) NativeTakeOrdered
 Input [5]: [channel#101, id#102, sales#113, returns#114, profit#115]
-Arguments: X, [channel#101 ASC NULLS FIRST, id#102 ASC NULLS FIRST]
+Arguments: X, X, [channel#101 ASC NULLS FIRST, id#102 ASC NULLS FIRST]
 
 (261) Scan parquet
 Output [7]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ticket_number#5, ss_ext_sales_price#6, ss_net_profit#7]

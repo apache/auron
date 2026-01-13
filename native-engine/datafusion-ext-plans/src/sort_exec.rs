@@ -86,7 +86,8 @@ const NUM_MAX_MERGING_BATCHES: usize = 32;
 pub struct SortExec {
     input: Arc<dyn ExecutionPlan>,
     exprs: Vec<PhysicalSortExpr>,
-    fetch: Option<usize>,
+    limit: Option<usize>,
+    offset: usize,
     metrics: ExecutionPlanMetricsSet,
     record_output: bool,
     props: OnceCell<PlanProperties>,
@@ -96,13 +97,15 @@ impl SortExec {
     pub fn new(
         input: Arc<dyn ExecutionPlan>,
         exprs: Vec<PhysicalSortExpr>,
-        fetch: Option<usize>,
+        limit: Option<usize>,
+        offset: usize,
     ) -> Self {
         let metrics = ExecutionPlanMetricsSet::new();
         Self {
             input,
             exprs,
-            fetch,
+            limit,
+            offset,
             metrics,
             record_output: true,
             props: OnceCell::new(),
@@ -130,6 +133,7 @@ pub fn create_default_ascending_sort_exec(
             })
             .collect(),
         None,
+        0,
     );
     if let Some(execution_plan_metrics) = execution_plan_metrics {
         sort_exec.metrics = execution_plan_metrics;
@@ -185,7 +189,8 @@ impl ExecutionPlan for SortExec {
         Ok(Arc::new(Self::new(
             children[0].clone(),
             self.exprs.clone(),
-            self.fetch,
+            self.limit,
+            self.offset,
         )))
     }
 
@@ -203,7 +208,13 @@ impl ExecutionPlan for SortExec {
     }
 
     fn statistics(&self) -> Result<Statistics> {
-        Statistics::with_fetch(self.input.statistics()?, self.schema(), self.fetch, 0, 1)
+        Statistics::with_fetch(
+            self.input.statistics()?,
+            self.schema(),
+            self.limit,
+            self.offset,
+            1,
+        )
     }
 }
 
@@ -223,7 +234,8 @@ impl SortExec {
             mem_consumer_info: None,
             weak: Weak::new(),
             prune_sort_keys_from_batch: prune_sort_keys_from_batch.clone(),
-            limit: self.fetch.unwrap_or(usize::MAX),
+            skip: self.offset,
+            limit: self.limit.unwrap_or(usize::MAX),
             record_output: self.record_output,
             in_mem_blocks: Default::default(),
             spills: Default::default(),
@@ -336,6 +348,7 @@ struct ExternalSorter {
     mem_consumer_info: Option<Weak<MemConsumerInfo>>,
     weak: Weak<Self>,
     prune_sort_keys_from_batch: Arc<PruneSortKeysFromBatch>,
+    skip: usize,
     limit: usize,
     record_output: bool,
     in_mem_blocks: Arc<Mutex<Vec<InMemSortedBlock>>>,
@@ -704,6 +717,9 @@ impl ExternalSorter {
             let in_mem_blocks = std::mem::take(&mut *self.in_mem_blocks.lock());
             if !in_mem_blocks.is_empty() {
                 let mut merger = Merger::try_new(self.clone(), in_mem_blocks)?;
+                if self.skip > 0 {
+                    merger.skip_rows::<InMemRowsKeyCollector>(self.skip, output_batch_size);
+                }
                 while let Some((key_collector, pruned_batch)) =
                     merger.next::<InMemRowsKeyCollector>(output_batch_size)?
                 {
@@ -727,6 +743,9 @@ impl ExternalSorter {
 
         let spill_blocks = spills.into_iter().map(|spill| spill.block).collect();
         let mut merger = Merger::try_new(self.to_arc(), spill_blocks)?;
+        if self.skip > 0 {
+            merger.skip_rows::<InMemRowsKeyCollector>(self.skip, output_batch_size);
+        }
         while let Some((key_collector, pruned_batch)) =
             merger.next::<InMemRowsKeyCollector>(output_batch_size)?
         {
@@ -1022,6 +1041,22 @@ impl<B: SortedBlock> Merger<B> {
             cursor.clear_finished_batches();
         }
         Ok(Some((key_collector, pruned_batch)))
+    }
+
+    pub fn skip_rows<KC: KeyCollector>(
+        &mut self,
+        skip: usize,
+        suggested_batch_size: usize,
+    ) -> Result<()> {
+        let mut remaining = skip;
+        while remaining > 0 {
+            let batch_size = remaining.min(suggested_batch_size);
+            if self.next::<KC>(batch_size)?.is_none() {
+                break;
+            }
+            remaining -= batch_size;
+        }
+        Ok(())
     }
 }
 
@@ -1472,7 +1507,7 @@ mod test {
             options: SortOptions::default(),
         }];
 
-        let sort = SortExec::new(input, sort_exprs, Some(6));
+        let sort = SortExec::new(input, sort_exprs, Some(6), 0);
         let output = sort.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
         let expected = vec![
@@ -1485,6 +1520,40 @@ mod test {
             "| 3 | 6 | 1 |",
             "| 4 | 5 | 0 |",
             "| 5 | 4 | 9 |",
+            "+---+---+---+",
+        ];
+        assert_batches_eq!(expected, &batches);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sort_i32_with_skip() -> Result<()> {
+        MemManager::init(100);
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+        let input = build_table(
+            ("a", &vec![9, 8, 7, 6, 5, 4, 3, 2, 1, 0]),
+            ("b", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+            ("c", &vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4]),
+        )?;
+        let sort_exprs = vec![PhysicalSortExpr {
+            expr: Arc::new(Column::new("a", 0)),
+            options: SortOptions::default(),
+        }];
+
+        let sort = SortExec::new(input, sort_exprs, Some(8), 3);
+        let output = sort.execute(0, task_ctx)?;
+        let batches = common::collect(output).await?;
+        let expected = vec![
+            "+---+---+---+",
+            "| a | b | c |",
+            "+---+---+---+",
+            "| 3 | 6 | 1 |",
+            "| 4 | 5 | 0 |",
+            "| 5 | 4 | 9 |",
+            "| 6 | 3 | 8 |",
+            "| 7 | 2 | 7 |",
             "+---+---+---+",
         ];
         assert_batches_eq!(expected, &batches);
@@ -1585,7 +1654,7 @@ mod fuzztest {
             schema.clone(),
             None,
         )?);
-        let sort = Arc::new(SortExec::new(input, sort_exprs.clone(), None));
+        let sort = Arc::new(SortExec::new(input, sort_exprs.clone(), None, 0));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
         let a = concat_batches(&schema, &output)?;
         let a_row_count = sort.clone().statistics()?.num_rows;

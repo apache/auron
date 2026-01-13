@@ -750,7 +750,7 @@ Input [15]: [ctr_total_return#15, c_customer_id#32, c_current_addr_sk#33, c_salu
 
 (129) NativeTakeOrdered
 Input [13]: [c_customer_id#32, c_salutation#34, c_first_name#35, c_last_name#36, c_preferred_cust_flag#37, c_birth_day#38, c_birth_month#39, c_birth_year#40, c_birth_country#41, c_login#42, c_email_address#43, c_last_review_date_sk#44, ctr_total_return#15]
-Arguments: X, [c_customer_id#32 ASC NULLS FIRST, c_salutation#34 ASC NULLS FIRST, c_first_name#35 ASC NULLS FIRST, c_last_name#36 ASC NULLS FIRST, c_preferred_cust_flag#37 ASC NULLS FIRST, c_birth_day#38 ASC NULLS FIRST, c_birth_month#39 ASC NULLS FIRST, c_birth_year#40 ASC NULLS FIRST, c_birth_country#41 ASC NULLS FIRST, c_login#42 ASC NULLS FIRST, c_email_address#43 ASC NULLS FIRST, c_last_review_date_sk#44 ASC NULLS FIRST, ctr_total_return#15 ASC NULLS FIRST]
+Arguments: X, X, [c_customer_id#32 ASC NULLS FIRST, c_salutation#34 ASC NULLS FIRST, c_first_name#35 ASC NULLS FIRST, c_last_name#36 ASC NULLS FIRST, c_preferred_cust_flag#37 ASC NULLS FIRST, c_birth_day#38 ASC NULLS FIRST, c_birth_month#39 ASC NULLS FIRST, c_birth_year#40 ASC NULLS FIRST, c_birth_country#41 ASC NULLS FIRST, c_login#42 ASC NULLS FIRST, c_email_address#43 ASC NULLS FIRST, c_last_review_date_sk#44 ASC NULLS FIRST, ctr_total_return#15 ASC NULLS FIRST]
 
 (130) Scan parquet
 Output [4]: [wr_returned_date_sk#1, wr_returning_customer_sk#2, wr_returning_addr_sk#3, wr_return_amt#4]

@@ -616,7 +616,7 @@ Input [12]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_group
 
 (106) NativeTakeOrdered
 Input [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#62, agg2#63, agg3#64, agg4#65, agg5#66, agg6#67, agg7#68]
-Arguments: X, [ca_country#29 DESC NULLS LAST, ca_state#30 DESC NULLS LAST, ca_county#31 DESC NULLS LAST, i_item_id#28 ASC NULLS FIRST]
+Arguments: X, X, [ca_country#29 DESC NULLS LAST, ca_state#30 DESC NULLS LAST, ca_county#31 DESC NULLS LAST, i_item_id#28 ASC NULLS FIRST]
 
 (107) Scan parquet
 Output [9]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_bill_cdemo_sk#3, cs_item_sk#4, cs_quantity#5, cs_list_price#6, cs_sales_price#7, cs_coupon_amt#8, cs_net_profit#9]

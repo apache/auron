@@ -589,7 +589,7 @@ Input [8]: [total_sum#28, s_state#22, s_county#23, lochierarchy#29, _w0#30, _w1#
 
 (101) NativeTakeOrdered
 Input [5]: [total_sum#28, s_state#22, s_county#23, lochierarchy#29, rank_within_parent#33]
-Arguments: X, [lochierarchy#29 DESC NULLS LAST, CASE WHEN (lochierarchy#29 = 0) THEN s_state#22 END ASC NULLS FIRST, rank_within_parent#33 ASC NULLS FIRST]
+Arguments: X, X, [lochierarchy#29 DESC NULLS LAST, CASE WHEN (lochierarchy#29 = 0) THEN s_state#22 END ASC NULLS FIRST, rank_within_parent#33 ASC NULLS FIRST]
 
 (102) Scan parquet
 Output [3]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3]

@@ -346,7 +346,7 @@ Condition : (CASE WHEN (inv_before#19 > 0) THEN ((cast(inv_after#20 as double) /
 
 (59) NativeTakeOrdered
 Input [4]: [w_warehouse_name#6, i_item_id#8, inv_before#19, inv_after#20]
-Arguments: X, [w_warehouse_name#6 ASC NULLS FIRST, i_item_id#8 ASC NULLS FIRST]
+Arguments: X, X, [w_warehouse_name#6 ASC NULLS FIRST, i_item_id#8 ASC NULLS FIRST]
 
 (60) Scan parquet
 Output [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]

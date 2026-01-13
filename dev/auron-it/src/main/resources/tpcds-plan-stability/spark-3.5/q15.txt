@@ -344,7 +344,7 @@ Input [2]: [ca_zip#8, sum(UnscaledValue(cs_sales_price#3))#15]
 
 (59) NativeTakeOrdered
 Input [2]: [ca_zip#8, sum(cs_sales_price)#16]
-Arguments: X, [ca_zip#8 ASC NULLS FIRST]
+Arguments: X, X, [ca_zip#8 ASC NULLS FIRST]
 
 (60) Scan parquet
 Output [3]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_sales_price#3]

@@ -674,7 +674,7 @@ Input [14]: [i_category#3, i_brand#2, cc_name#12, d_year#9, d_moy#10, sum_sales#
 
 (109) NativeTakeOrdered
 Input [9]: [i_category#3, i_brand#2, cc_name#12, d_year#9, d_moy#10, avg_monthly_sales#20, sum_sales#17, psum#38, nsum#39]
-Arguments: X, [(sum_sales#17 - avg_monthly_sales#20) ASC NULLS FIRST, cc_name#12 ASC NULLS FIRST]
+Arguments: X, X, [(sum_sales#17 - avg_monthly_sales#20) ASC NULLS FIRST, cc_name#12 ASC NULLS FIRST]
 
 (110) Scan parquet
 Output [3]: [i_item_sk#1, i_brand#2, i_category#3]

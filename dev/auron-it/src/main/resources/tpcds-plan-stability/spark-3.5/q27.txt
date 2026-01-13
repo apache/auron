@@ -438,7 +438,7 @@ Input [7]: [i_item_id#19, s_state#20, spark_grouping_id#21, avg(ss_quantity#5)#3
 
 (75) NativeTakeOrdered
 Input [7]: [i_item_id#19, s_state#20, g_state#39, agg1#40, agg2#41, agg3#42, agg4#43]
-Arguments: X, [i_item_id#19 ASC NULLS FIRST, s_state#20 ASC NULLS FIRST]
+Arguments: X, X, [i_item_id#19 ASC NULLS FIRST, s_state#20 ASC NULLS FIRST]
 
 (76) Scan parquet
 Output [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]

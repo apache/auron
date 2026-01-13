@@ -298,7 +298,7 @@ Input [8]: [total_sum#16, i_category#9, i_class#10, lochierarchy#17, _w0#18, _w1
 
 (51) NativeTakeOrdered
 Input [5]: [total_sum#16, i_category#9, i_class#10, lochierarchy#17, rank_within_parent#21]
-Arguments: X, [lochierarchy#17 DESC NULLS LAST, CASE WHEN (lochierarchy#17 = 0) THEN i_category#9 END ASC NULLS FIRST, rank_within_parent#21 ASC NULLS FIRST]
+Arguments: X, X, [lochierarchy#17 DESC NULLS LAST, CASE WHEN (lochierarchy#17 = 0) THEN i_category#9 END ASC NULLS FIRST, rank_within_parent#21 ASC NULLS FIRST]
 
 (52) Scan parquet
 Output [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_net_paid#3]

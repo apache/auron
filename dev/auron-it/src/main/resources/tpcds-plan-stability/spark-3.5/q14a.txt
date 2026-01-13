@@ -2161,7 +2161,7 @@ Input [7]: [channel#96, i_brand_id#97, i_class_id#98, i_category_id#99, spark_gr
 
 (309) NativeTakeOrdered
 Input [6]: [channel#96, i_brand_id#97, i_class_id#98, i_category_id#99, sum(sales)#106, sum(number_sales)#107]
-Arguments: X, [channel#96 ASC NULLS FIRST, i_brand_id#97 ASC NULLS FIRST, i_class_id#98 ASC NULLS FIRST, i_category_id#99 ASC NULLS FIRST]
+Arguments: X, X, [channel#96 ASC NULLS FIRST, i_brand_id#97 ASC NULLS FIRST, i_class_id#98 ASC NULLS FIRST, i_category_id#99 ASC NULLS FIRST]
 
 (310) Scan parquet
 Output [4]: [ss_sold_date_sk#1, ss_item_sk#2, ss_quantity#3, ss_list_price#4]

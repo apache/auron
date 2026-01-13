@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.{LimitExecNode, PhysicalPlanNode}
 
-abstract class NativeCollectLimitBase(limit: Int, override val child: SparkPlan)
+abstract class NativeCollectLimitBase(limit: Int, offset: Int, override val child: SparkPlan)
     extends UnaryExecNode
     with NativeSupports {
   override def output: Seq[Attribute] = child.output
@@ -51,7 +51,8 @@ abstract class NativeCollectLimitBase(limit: Int, override val child: SparkPlan)
       val row = it.next().copy()
       buf += row
     }
-    buf.toArray
+    val rows = buf.toArray
+    if (offset > 0) rows.drop(offset) else rows
   }
 
   override def doExecuteNative(): NativeRDD = {
@@ -78,6 +79,7 @@ abstract class NativeCollectLimitBase(limit: Int, override val child: SparkPlan)
           .newBuilder()
           .setInput(singlePartitionRDD.nativePlan(inputPartition, taskContext))
           .setLimit(limit)
+          .setOffset(offset)
           .build()
         PhysicalPlanNode.newBuilder().setLimit(nativeLimitExec).build()
       },

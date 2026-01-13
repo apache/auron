@@ -439,7 +439,7 @@ Input [8]: [ss_ticket_number#6, ss_customer_sk#2, s_city#14, amt#25, profit#26, 
 
 (75) NativeTakeOrdered
 Input [7]: [c_last_name#29, c_first_name#28, substr(s_city, 1, 30)#30, ss_ticket_number#6, amt#25, profit#26, s_city#14]
-Arguments: X, [c_last_name#29 ASC NULLS FIRST, c_first_name#28 ASC NULLS FIRST, substr(s_city#14, 1, 30) ASC NULLS FIRST, ss_ticket_number#6 ASC NULLS FIRST, profit#26 ASC NULLS FIRST]
+Arguments: X, X, [c_last_name#29 ASC NULLS FIRST, c_first_name#28 ASC NULLS FIRST, substr(s_city#14, 1, 30) ASC NULLS FIRST, ss_ticket_number#6 ASC NULLS FIRST, profit#26 ASC NULLS FIRST]
 
 (76) NativeProject
 Output [6]: [c_last_name#29, c_first_name#28, substr(s_city, 1, 30)#30, ss_ticket_number#6, amt#25, profit#26]

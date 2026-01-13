@@ -744,7 +744,7 @@ Input [18]: [ctr_total_return#15, c_customer_id#32, c_current_addr_sk#33, c_salu
 
 (128) NativeTakeOrdered
 Input [16]: [c_customer_id#32, c_salutation#34, c_first_name#35, c_last_name#36, ca_street_number#38, ca_street_name#39, ca_street_type#40, ca_suite_number#41, ca_city#42, ca_county#43, ca_state#44, ca_zip#45, ca_country#46, ca_gmt_offset#47, ca_location_type#48, ctr_total_return#15]
-Arguments: X, [c_customer_id#32 ASC NULLS FIRST, c_salutation#34 ASC NULLS FIRST, c_first_name#35 ASC NULLS FIRST, c_last_name#36 ASC NULLS FIRST, ca_street_number#38 ASC NULLS FIRST, ca_street_name#39 ASC NULLS FIRST, ca_street_type#40 ASC NULLS FIRST, ca_suite_number#41 ASC NULLS FIRST, ca_city#42 ASC NULLS FIRST, ca_county#43 ASC NULLS FIRST, ca_state#44 ASC NULLS FIRST, ca_zip#45 ASC NULLS FIRST, ca_country#46 ASC NULLS FIRST, ca_gmt_offset#47 ASC NULLS FIRST, ca_location_type#48 ASC NULLS FIRST, ctr_total_return#15 ASC NULLS FIRST]
+Arguments: X, X, [c_customer_id#32 ASC NULLS FIRST, c_salutation#34 ASC NULLS FIRST, c_first_name#35 ASC NULLS FIRST, c_last_name#36 ASC NULLS FIRST, ca_street_number#38 ASC NULLS FIRST, ca_street_name#39 ASC NULLS FIRST, ca_street_type#40 ASC NULLS FIRST, ca_suite_number#41 ASC NULLS FIRST, ca_city#42 ASC NULLS FIRST, ca_county#43 ASC NULLS FIRST, ca_state#44 ASC NULLS FIRST, ca_zip#45 ASC NULLS FIRST, ca_country#46 ASC NULLS FIRST, ca_gmt_offset#47 ASC NULLS FIRST, ca_location_type#48 ASC NULLS FIRST, ctr_total_return#15 ASC NULLS FIRST]
 
 (129) Scan parquet
 Output [4]: [cr_returned_date_sk#1, cr_returning_customer_sk#2, cr_returning_addr_sk#3, cr_return_amt_inc_tax#4]

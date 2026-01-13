@@ -524,7 +524,7 @@ Input [3]: [ca_zip#10, ca_city#9, sum(UnscaledValue(ws_sales_price#5))#21]
 
 (90) NativeTakeOrdered
 Input [3]: [ca_zip#10, ca_city#9, sum(ws_sales_price)#22]
-Arguments: X, [ca_zip#10 ASC NULLS FIRST, ca_city#9 ASC NULLS FIRST]
+Arguments: X, X, [ca_zip#10 ASC NULLS FIRST, ca_city#9 ASC NULLS FIRST]
 
 (91) Scan parquet
 Output [4]: [ws_sold_date_sk#2, ws_item_sk#3, ws_bill_customer_sk#4, ws_sales_price#5]

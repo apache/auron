@@ -777,7 +777,7 @@ Input [15]: [ss_sold_year#22, ss_item_sk#2, ss_customer_sk#3, ss_qty#23, ss_wc#2
 
 (132) NativeTakeOrdered
 Input [12]: [ratio#76, store_qty#77, store_wholesale_cost#78, store_sales_price#79, other_chan_qty#80, other_chan_wholesale_cost#81, other_chan_sales_price#82, ss_qty#23, ss_wc#24, ss_sp#25, ws_qty#48, cs_qty#73]
-Arguments: X, [ratio#76 ASC NULLS FIRST, ss_qty#23 DESC NULLS LAST, ss_wc#24 DESC NULLS LAST, ss_sp#25 DESC NULLS LAST, other_chan_qty#80 ASC NULLS FIRST, other_chan_wholesale_cost#81 ASC NULLS FIRST, other_chan_sales_price#82 ASC NULLS FIRST, round((cast(ss_qty#23 as double) / cast(coalesce((ws_qty#48 + cs_qty#73), 1) as double)), 2) ASC NULLS FIRST]
+Arguments: X, X, [ratio#76 ASC NULLS FIRST, ss_qty#23 DESC NULLS LAST, ss_wc#24 DESC NULLS LAST, ss_sp#25 DESC NULLS LAST, other_chan_qty#80 ASC NULLS FIRST, other_chan_wholesale_cost#81 ASC NULLS FIRST, other_chan_sales_price#82 ASC NULLS FIRST, round((cast(ss_qty#23 as double) / cast(coalesce((ws_qty#48 + cs_qty#73), 1) as double)), 2) ASC NULLS FIRST]
 
 (133) NativeProject
 Output [7]: [ratio#76, store_qty#77, store_wholesale_cost#78, store_sales_price#79, other_chan_qty#80, other_chan_wholesale_cost#81, other_chan_sales_price#82]
