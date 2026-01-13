@@ -42,7 +42,7 @@ jobs:
         flinkver: [ "1.18" ]
         javaver: [ "8" ]
         scalaver: [ "2.12" ]
-        module: [ "auron-flink-extension" ]
+        module: [ "auron-flink-extension/auron-flink-planner" ]
         sparkver: [ "spark-3.5" ]
 
     steps:
