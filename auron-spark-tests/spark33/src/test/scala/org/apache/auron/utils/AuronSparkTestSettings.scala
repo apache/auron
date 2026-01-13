@@ -31,7 +31,8 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronDataFrameAggregateSuite]
     // See https://github.com/apache/auron/issues/1840
     .excludeByPrefix("collect functions")
-    // Added a new test to handle this issue
+    // A custom version of the SPARK-19471 test has been added to AuronDataFrameAggregateSuite
+    // with modified plan checks for Auron's native aggregates, so we exclude the original here.
     .exclude(
       "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it")
     .exclude(
