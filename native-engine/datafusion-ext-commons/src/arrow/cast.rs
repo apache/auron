@@ -166,7 +166,11 @@ pub fn cast_impl(
                             col = struct_.column_by_name(adjust.as_str());
                         }
                         if col.is_some() {
-                            cast_impl(col.unwrap(), field.data_type(), match_struct_fields)
+                            cast_impl(
+                                col.expect("column missing"),
+                                field.data_type(),
+                                match_struct_fields,
+                            )
                         } else {
                             null_column_name.push(field.name().clone());
                             Ok(new_null_array(field.data_type(), struct_.len()))
@@ -322,7 +326,10 @@ pub fn cast_impl(
 }
 
 fn to_plain_string_array(array: &dyn Array) -> ArrayRef {
-    let array = array.as_any().downcast_ref::<StringArray>().unwrap();
+    let array = array
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .expect("Expected a StringArray");
     let mut converted_values: Vec<Option<String>> = Vec::with_capacity(array.len());
     for v in array.iter() {
         match v {
@@ -347,10 +354,13 @@ fn try_cast_string_array_to_integer(array: &dyn Array, cast_type: &DataType) -> 
     macro_rules! cast {
         ($target_type:ident) => {{
             type B = paste::paste! {[<$target_type Builder>]};
-            let array = array.as_any().downcast_ref::<StringArray>().unwrap();
+            let string_array = array
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("Expected a StringArray");
             let mut builder = B::new();
 
-            for v in array.iter() {
+            for v in string_array.iter() {
                 match v {
                     Some(s) => builder.append_option(to_integer(s)),
                     None => builder.append_null(),
@@ -400,7 +410,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
     }
 
     let separator = b'.';
-    let radix = T::from_usize(10).unwrap();
+    let radix = T::from_usize(10).expect("from_usize(10) failed");
     let stop_value = T::min_value() / radix;
     let mut result = T::zero();
 
@@ -428,7 +438,7 @@ fn to_integer<T: Bounded + FromPrimitive + Integer + Signed + Copy>(input: &str)
             return None;
         }
 
-        result = result * radix - T::from_u8(digit).unwrap();
+        result = result * radix - T::from_u8(digit).expect("digit must be in 0..=9");
         // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE /
         // radix), we can just use `result > 0` to check overflow. If result
         // overflows, we should stop.
@@ -520,23 +530,27 @@ fn to_date(s: &str) -> Option<i32> {
 
 #[cfg(test)]
 mod test {
-    use datafusion::common::cast::{as_decimal128_array, as_float64_array, as_int32_array};
+    use datafusion::common::{
+        Result,
+        cast::{as_decimal128_array, as_float64_array, as_int32_array},
+    };
 
     use super::*;
 
     #[test]
-    fn test_boolean_to_string() {
+    fn test_boolean_to_string() -> Result<()> {
         let bool_array: ArrayRef =
             Arc::new(BooleanArray::from_iter(vec![None, Some(true), Some(false)]));
-        let casted = cast(&bool_array, &DataType::Utf8).unwrap();
+        let casted = cast(&bool_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![None, Some("true"), Some("false")])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_float_to_int() {
+    fn test_float_to_int() -> Result<()> {
         let f64_array: ArrayRef = Arc::new(Float64Array::from_iter(vec![
             None,
             Some(123.456),
@@ -547,9 +561,9 @@ mod test {
             Some(f64::NEG_INFINITY),
             Some(f64::NAN),
         ]));
-        let casted = cast(&f64_array, &DataType::Int32).unwrap();
+        let casted = cast(&f64_array, &DataType::Int32)?;
         assert_eq!(
-            as_int32_array(&casted).unwrap(),
+            as_int32_array(&casted)?,
             &Int32Array::from_iter(vec![
                 None,
                 Some(123),
@@ -561,10 +575,11 @@ mod test {
                 Some(0),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_int_to_float() {
+    fn test_int_to_float() -> Result<()> {
         let i32_array: ArrayRef = Arc::new(Int32Array::from_iter(vec![
             None,
             Some(123),
@@ -572,9 +587,9 @@ mod test {
             Some(i32::MAX),
             Some(i32::MIN),
         ]));
-        let casted = cast(&i32_array, &DataType::Float64).unwrap();
+        let casted = cast(&i32_array, &DataType::Float64)?;
         assert_eq!(
-            as_float64_array(&casted).unwrap(),
+            as_float64_array(&casted)?,
             &Float64Array::from_iter(vec![
                 None,
                 Some(123.0),
@@ -583,10 +598,11 @@ mod test {
                 Some(i32::MIN as f64),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_int_to_decimal() {
+    fn test_int_to_decimal() -> Result<()> {
         let i32_array: ArrayRef = Arc::new(Int32Array::from_iter(vec![
             None,
             Some(123),
@@ -594,9 +610,9 @@ mod test {
             Some(i32::MAX),
             Some(i32::MIN),
         ]));
-        let casted = cast(&i32_array, &DataType::Decimal128(38, 18)).unwrap();
+        let casted = cast(&i32_array, &DataType::Decimal128(38, 18))?;
         assert_eq!(
-            as_decimal128_array(&casted).unwrap(),
+            as_decimal128_array(&casted)?,
             &Decimal128Array::from_iter(vec![
                 None,
                 Some(123000000000000000000),
@@ -604,13 +620,13 @@ mod test {
                 Some(i32::MAX as i128 * 1000000000000000000),
                 Some(i32::MIN as i128 * 1000000000000000000),
             ])
-            .with_precision_and_scale(38, 18)
-            .unwrap()
+            .with_precision_and_scale(38, 18)?
         );
+        Ok(())
     }
 
     #[test]
-    fn test_string_to_decimal() {
+    fn test_string_to_decimal() -> Result<()> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("1e-8"),
@@ -622,9 +638,9 @@ mod test {
             Some("123456789012345.678901234567890"),
             Some("-123456789012345.678901234567890"),
         ]));
-        let casted = cast(&string_array, &DataType::Decimal128(38, 18)).unwrap();
+        let casted = cast(&string_array, &DataType::Decimal128(38, 18))?;
         assert_eq!(
-            as_decimal128_array(&casted).unwrap(),
+            as_decimal128_array(&casted)?,
             &Decimal128Array::from_iter(vec![
                 None,
                 Some(10000000000),
@@ -636,13 +652,13 @@ mod test {
                 Some(123456789012345678901234567890000i128),
                 Some(-123456789012345678901234567890000i128),
             ])
-            .with_precision_and_scale(38, 18)
-            .unwrap()
+            .with_precision_and_scale(38, 18)?
         );
+        Ok(())
     }
 
     #[test]
-    fn test_decimal_to_string() {
+    fn test_decimal_to_string() -> Result<()> {
         let decimal_array: ArrayRef = Arc::new(
             Decimal128Array::from_iter(vec![
                 None,
@@ -652,12 +668,14 @@ mod test {
                 Some(i32::MAX as i128 * 1000000000000000000),
                 Some(i32::MIN as i128 * 1000000000000000000),
             ])
-            .with_precision_and_scale(38, 18)
-            .unwrap(),
+            .with_precision_and_scale(38, 18)?,
         );
-        let casted = cast(&decimal_array, &DataType::Utf8).unwrap();
+        let casted = cast(&decimal_array, &DataType::Utf8)?;
         assert_eq!(
-            casted.as_any().downcast_ref::<StringArray>().unwrap(),
+            casted
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("Expected a StringArray"),
             &StringArray::from_iter(vec![
                 None,
                 Some("123.000000000000000000"),
@@ -667,10 +685,11 @@ mod test {
                 Some("-2147483648.000000000000000000"),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_string_to_bigint() {
+    fn test_string_to_bigint() -> Result<()> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("123"),
@@ -680,9 +699,12 @@ mod test {
             Some("-123456789012345"),
             Some("999999999999999999999999999999999"),
         ]));
-        let casted = cast(&string_array, &DataType::Int64).unwrap();
+        let casted = cast(&string_array, &DataType::Int64)?;
         assert_eq!(
-            casted.as_any().downcast_ref::<Int64Array>().unwrap(),
+            casted
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .expect("Expected a Int64Array"),
             &Int64Array::from_iter(vec![
                 None,
                 Some(123),
@@ -693,10 +715,11 @@ mod test {
                 None,
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_string_to_date() {
+    fn test_string_to_date() -> Result<()> {
         let string_array: ArrayRef = Arc::new(StringArray::from_iter(vec![
             None,
             Some("2001-02-03"),
@@ -709,11 +732,9 @@ mod test {
             Some("9999-99"),
             Some("99999-01"),
         ]));
-        let casted = cast(&string_array, &DataType::Date32).unwrap();
+        let casted = cast(&string_array, &DataType::Date32)?;
         assert_eq!(
-            arrow::compute::cast(&casted, &DataType::Utf8)
-                .unwrap()
-                .as_string(),
+            arrow::compute::cast(&casted, &DataType::Utf8)?.as_string(),
             &StringArray::from_iter(vec![
                 None,
                 Some("2001-02-03"),
@@ -727,10 +748,11 @@ mod test {
                 None,
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_struct_to_string() {
+    fn test_struct_to_string() -> Result<()> {
         // Create a struct array with fields: (int32, string, boolean)
         let int_array = Int32Array::from(vec![Some(1), Some(2), None, Some(4), None]);
         let string_array = StringArray::from(vec![Some("a"), None, Some("c"), Some("d"), None]);
@@ -751,7 +773,7 @@ mod test {
             ),
         ]));
 
-        let casted = cast(&struct_array, &DataType::Utf8).unwrap();
+        let casted = cast(&struct_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![
@@ -762,10 +784,11 @@ mod test {
                 Some("{null, null, null}"),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_struct_to_string_with_null_struct() {
+    fn test_struct_to_string_with_null_struct() -> Result<()> {
         // Create a struct array where some rows are entirely null
         let int_array = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
         let string_array = StringArray::from(vec![Some("a"), Some("b"), Some("c")]);
@@ -786,27 +809,29 @@ mod test {
             Some(nulls),
         ));
 
-        let casted = cast(&struct_array_with_nulls, &DataType::Utf8).unwrap();
+        let casted = cast(&struct_array_with_nulls, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{1, a}"), None, Some("{3, c}"),])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_empty_struct_to_string() {
+    fn test_empty_struct_to_string() -> Result<()> {
         // Create a struct array with zero fields but 2 rows
         let struct_array: ArrayRef = Arc::new(StructArray::new_empty_fields(2, None));
 
-        let casted = cast(&struct_array, &DataType::Utf8).unwrap();
+        let casted = cast(&struct_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{}"), Some("{}")])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_nested_struct_to_string() {
+    fn test_nested_struct_to_string() -> Result<()> {
         // Create a nested struct: struct<int, struct<string, bool>>
         let inner_string = StringArray::from(vec![Some("x"), Some("y")]);
         let inner_bool = BooleanArray::from(vec![Some(true), None]);
@@ -835,15 +860,16 @@ mod test {
             ),
         ]));
 
-        let casted = cast(&outer_struct, &DataType::Utf8).unwrap();
+        let casted = cast(&outer_struct, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{100, {x, true}}"), Some("{200, {y, null}}"),])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_map_to_string() {
+    fn test_map_to_string() -> Result<()> {
         // Create a map array: Map<Int32, String>
         let key_field = Arc::new(Field::new("key", DataType::Int32, false));
         let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
@@ -873,7 +899,7 @@ mod test {
             false,
         ));
 
-        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        let casted = cast(&map_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![
@@ -882,10 +908,11 @@ mod test {
                 Some("{4 -> d, 5 -> e}"),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_map_to_string_with_null_map() {
+    fn test_map_to_string_with_null_map() -> Result<()> {
         // Create a map array with null rows
         let key_field = Arc::new(Field::new("key", DataType::Int32, false));
         let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
@@ -916,15 +943,16 @@ mod test {
             false,
         ));
 
-        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        let casted = cast(&map_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{1 -> a}"), None, Some("{3 -> c}"),])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_empty_map_to_string() {
+    fn test_empty_map_to_string() -> Result<()> {
         // Create an empty map array
         let key_field = Arc::new(Field::new("key", DataType::Int32, false));
         let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
@@ -955,15 +983,16 @@ mod test {
             false,
         ));
 
-        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        let casted = cast(&map_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{}"), Some("{}")])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_nested_map_to_string() {
+    fn test_nested_map_to_string() -> Result<()> {
         // Create a map with struct values: Map<Int32, Struct<String, Boolean>>
         let key_field = Arc::new(Field::new("key", DataType::Int32, false));
 
@@ -1007,10 +1036,11 @@ mod test {
             false,
         ));
 
-        let casted = cast(&map_array, &DataType::Utf8).unwrap();
+        let casted = cast(&map_array, &DataType::Utf8)?;
         assert_eq!(
             as_string_array(&casted),
             &StringArray::from_iter(vec![Some("{1 -> {x, true}, 2 -> {y, null}}")])
         );
+        Ok(())
     }
 }

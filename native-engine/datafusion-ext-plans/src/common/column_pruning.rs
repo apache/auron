@@ -114,7 +114,7 @@ pub fn extend_projection_by_expr(
             ))
         })
         .map(|r| r.data)
-        .unwrap()
+        .expect("expr transform failed")
 }
 
 pub fn map_columns(expr: &PhysicalExprRef, mapping: &HashMap<usize, usize>) -> PhysicalExprRef {
@@ -130,5 +130,5 @@ pub fn map_columns(expr: &PhysicalExprRef, mapping: &HashMap<usize, usize>) -> P
             ))
         })
         .map(|r| r.data)
-        .unwrap()
+        .expect("expr transform failed")
 }

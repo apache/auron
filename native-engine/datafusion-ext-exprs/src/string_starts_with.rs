@@ -83,7 +83,10 @@ impl PhysicalExpr for StringStartsWithExpr {
 
         match expr {
             ColumnarValue::Array(array) => {
-                let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+                let string_array = array
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .expect("Expected a StringArray");
                 let ret_array = Arc::new(BooleanArray::from_iter(string_array.iter().map(
                     |maybe_string| maybe_string.map(|string| string.starts_with(&self.prefix)),
                 )));
@@ -118,7 +121,7 @@ impl PhysicalExpr for StringStartsWithExpr {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
+    use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{ArrayRef, BooleanArray, StringArray},
@@ -130,7 +133,7 @@ mod test {
     use crate::string_starts_with::StringStartsWithExpr;
 
     #[test]
-    fn test_ok() {
+    fn test_ok() -> Result<(), Box<dyn Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             None,
             Some("rabaok".to_string()),
@@ -145,14 +148,13 @@ mod test {
 
         let pattern = "ra".to_string();
         let expr = Arc::new(StringStartsWithExpr::new(
-            phys_expr::col("col3", &batch.schema()).unwrap(),
+            phys_expr::col("col3", &batch.schema())?,
             pattern,
         ));
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            .unwrap();
+            .into_array(batch.num_rows())?;
 
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
             None,
@@ -163,10 +165,11 @@ mod test {
             // None
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 
     #[test]
-    fn test_scalar_string() {
+    fn test_scalar_string() -> Result<(), Box<dyn Error>> {
         let string_array: ArrayRef = Arc::new(StringArray::from(vec![
             Some("Hello, Rust".to_string()),
             Some("Hello, He".to_string()),
@@ -184,8 +187,7 @@ mod test {
         let ret = expr
             .evaluate(&batch)
             .expect("Error evaluating expr")
-            .into_array(batch.num_rows())
-            .unwrap();
+            .into_array(batch.num_rows())?;
 
         let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
             Some(true),
@@ -195,5 +197,6 @@ mod test {
             Some(true),
         ]));
         assert_eq!(&ret, &expected);
+        Ok(())
     }
 }

@@ -93,7 +93,10 @@ pub fn spark_null_if_zero(args: &[ColumnarValue]) -> Result<ColumnarValue> {
             macro_rules! handle_decimal {
                 ($dt:ident, $precision:expr, $scale:expr) => {{
                     type T = paste::paste! {arrow::datatypes::[<$dt Type>]};
-                    let array = array.as_any().downcast_ref::<PrimitiveArray<T>>().unwrap();
+                    let array = array
+                        .as_any()
+                        .downcast_ref::<PrimitiveArray<T>>()
+                        .expect("Expected a PrimitiveArray");
                     let _0 = <T as ArrowPrimitiveType>::Native::from_le_bytes([0; T::BYTE_LENGTH]);
                     let filtered = array.iter().map(|v| v.filter(|v| *v != _0));
                     Arc::new(
@@ -159,9 +162,8 @@ mod test {
         ))])?
         .into_array(1)?;
 
-        let expected = Decimal128Array::from(vec![Some(1230427389124691)])
-            .with_precision_and_scale(20, 2)
-            .unwrap();
+        let expected =
+            Decimal128Array::from(vec![Some(1230427389124691)]).with_precision_and_scale(20, 2)?;
         let expected: ArrayRef = Arc::new(expected);
 
         assert_eq!(&result, &expected);

@@ -724,7 +724,7 @@ impl<T: RecordBatchWithPayload> WrappedSender<T> {
         send_time.inspect(|send_time| {
             exclude_time
                 .as_ref()
-                .unwrap()
+                .expect("exclude_time must be set")
                 .sub_duration(send_time.elapsed());
         });
     }

@@ -75,9 +75,12 @@ impl RowNullChecker {
                 encoded_length: 0,
             },
             DataType::Boolean => FieldConfig::new_boolean(sort_options),
-            dt if dt.is_primitive() => {
-                FieldConfig::new_primitive(sort_options, 1 + dt.primitive_width().unwrap())
-            }
+            dt if dt.is_primitive() => FieldConfig::new_primitive(
+                sort_options,
+                1 + dt
+                    .primitive_width()
+                    .expect("primitive_width must be present"),
+            ),
             // DataType::Int8 => FieldConfig::new_primitive(sort_options, 2), // 1 byte null flag +
             // // 1 byte value
             // DataType::Int16 => FieldConfig::new_primitive(sort_options, 3), /* 1 byte null flag +
@@ -445,7 +448,7 @@ impl FieldConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{ArrayRef, BooleanArray, Int32Array, RecordBatch, StringArray},
@@ -539,7 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn test_roundtrip_with_record_batch() {
+    fn test_roundtrip_with_record_batch() -> Result<(), Box<dyn Error>> {
         // Create a schema with multiple data types
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
@@ -570,8 +573,7 @@ mod tests {
                 Arc::new(name_array),
                 Arc::new(active_array),
             ],
-        )
-        .unwrap();
+        )?;
 
         // Create RowNullChecker
         let checker = RowNullChecker::new(
@@ -618,6 +620,7 @@ mod tests {
         // Verify that row count matches RecordBatch
         assert_eq!(record_batch.num_rows(), 4);
         assert_eq!(record_batch.num_columns(), 3);
+        Ok(())
     }
 
     #[test]
@@ -691,7 +694,7 @@ mod tests {
     }
 
     #[test]
-    fn test_has_nulls_with_rows() {
+    fn test_has_nulls_with_rows() -> Result<(), Box<dyn Error>> {
         use arrow::{array::ArrayRef, row::RowConverter};
 
         // Create a schema
@@ -708,7 +711,7 @@ mod tests {
         let columns: Vec<ArrayRef> = vec![Arc::new(id_array), Arc::new(name_array)];
 
         // Create RecordBatch
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
         // Create sort fields for RowConverter
         let sort_fields: Vec<SortField> = schema
@@ -720,8 +723,8 @@ mod tests {
             .collect();
 
         // Convert RecordBatch to Rows
-        let converter = RowConverter::new(sort_fields.clone()).unwrap();
-        let rows = converter.convert_columns(&batch.columns()).unwrap();
+        let converter = RowConverter::new(sort_fields.clone())?;
+        let rows = converter.convert_columns(&batch.columns())?;
 
         // Create field configs for RowNullChecker
         let field_configs: Vec<(DataType, SortOptions)> = schema
@@ -746,10 +749,11 @@ mod tests {
         assert_eq!(null_buffer.is_valid(1), false); // Has null in name
         assert_eq!(null_buffer.is_valid(2), false); // Has null in id
         assert_eq!(null_buffer.is_valid(3), true); // No nulls
+        Ok(())
     }
 
     #[test]
-    fn test_has_nulls_empty_rows() {
+    fn test_has_nulls_empty_rows() -> Result<(), Box<dyn Error>> {
         // Test with empty rows
         let field_configs = vec![(DataType::Int32, SortOptions::default())];
         let checker = RowNullChecker::new(&field_configs);
@@ -760,7 +764,7 @@ mod tests {
 
         let id_array = Int32Array::from(Vec::<Option<i32>>::new());
         let columns: Vec<ArrayRef> = vec![Arc::new(id_array)];
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
         let sort_fields: Vec<SortField> = schema
             .fields()
@@ -770,21 +774,22 @@ mod tests {
             })
             .collect();
 
-        let converter = RowConverter::new(sort_fields.clone()).unwrap();
-        let rows = converter.convert_columns(&batch.columns()).unwrap();
+        let converter = RowConverter::new(sort_fields.clone())?;
+        let rows = converter.convert_columns(&batch.columns())?;
 
         let null_buffer = checker.has_nulls(&rows);
         assert_eq!(null_buffer.len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_has_nulls_all_nulls() {
+    fn test_has_nulls_all_nulls() -> Result<(), Box<dyn Error>> {
         // Test with all rows containing nulls
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, true)]));
 
         let id_array = Int32Array::from(vec![None, None, None]);
         let columns: Vec<ArrayRef> = vec![Arc::new(id_array)];
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
         let sort_fields: Vec<SortField> = schema
             .fields()
@@ -794,8 +799,8 @@ mod tests {
             })
             .collect();
 
-        let converter = RowConverter::new(sort_fields.clone()).unwrap();
-        let rows = converter.convert_columns(&batch.columns()).unwrap();
+        let converter = RowConverter::new(sort_fields.clone())?;
+        let rows = converter.convert_columns(&batch.columns())?;
 
         let field_configs: Vec<(DataType, SortOptions)> = schema
             .fields()
@@ -811,10 +816,11 @@ mod tests {
         for i in 0..3 {
             assert_eq!(null_buffer.is_valid(i), false);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_has_nulls_no_nulls() {
+    fn test_has_nulls_no_nulls() -> Result<(), Box<dyn Error>> {
         // Test with no nulls in any row
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, true),
@@ -824,7 +830,7 @@ mod tests {
         let id_array = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
         let name_array = StringArray::from(vec![Some("Alice"), Some("Bob"), Some("Charlie")]);
         let columns: Vec<ArrayRef> = vec![Arc::new(id_array), Arc::new(name_array)];
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
         let sort_fields: Vec<SortField> = schema
             .fields()
@@ -834,8 +840,8 @@ mod tests {
             })
             .collect();
 
-        let converter = RowConverter::new(sort_fields.clone()).unwrap();
-        let rows = converter.convert_columns(&batch.columns()).unwrap();
+        let converter = RowConverter::new(sort_fields.clone())?;
+        let rows = converter.convert_columns(&batch.columns())?;
 
         let field_configs: Vec<(DataType, SortOptions)> = schema
             .fields()
@@ -851,5 +857,6 @@ mod tests {
         for i in 0..3 {
             assert_eq!(null_buffer.is_valid(i), true);
         }
+        Ok(())
     }
 }

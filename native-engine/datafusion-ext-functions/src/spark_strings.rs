@@ -149,7 +149,7 @@ pub fn string_concat(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                         }
                         ColumnarValue::Array(v) => {
                             if v.is_valid(index) {
-                                let v = as_string_array(v).unwrap();
+                                let v = as_string_array(v).expect("Expected a StringArray");
                                 owned_string.push_str(v.value(index));
                             } else {
                                 is_not_null = false;
@@ -299,7 +299,8 @@ pub fn string_concat_ws(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                     }
                     Arg::List(list) => {
                         if list.is_valid(i) {
-                            let strings = as_string_array(list.values()).unwrap();
+                            let strings =
+                                as_string_array(list.values()).expect("Expected a StringArray");
                             let offsets = list.value_offsets();
                             let l = offsets[i] as usize;
                             let r = offsets[i + 1] as usize;

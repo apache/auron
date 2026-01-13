@@ -18,9 +18,8 @@ mod memory_profiling;
 #[cfg(feature = "jemalloc-pprof")]
 mod pprof;
 
-use std::sync::Mutex;
-
 use once_cell::sync::OnceCell;
+use parking_lot::Mutex;
 use poem::{Route, RouteMethod, Server, listener::TcpListener};
 
 pub static HTTP_SERVICE: OnceCell<HttpService> = OnceCell::new();
@@ -50,7 +49,7 @@ impl DefaultHTTPServer {
                 .worker_threads(1)
                 .enable_io()
                 .build()
-                .unwrap(),
+                .expect("fast fail: error initializing tokio runtime"),
             handlers: Mutex::new(vec![]),
         }
     }
@@ -66,7 +65,7 @@ impl HTTPServer for DefaultHTTPServer {
     fn start(&self) {
         if let Some(port) = find_available_port() {
             let mut app = Route::new();
-            let handlers = self.handlers.lock().unwrap();
+            let handlers = self.handlers.lock();
             for handler in handlers.iter() {
                 app = app.at(handler.get_route_path(), handler.get_route_method());
             }
@@ -83,7 +82,7 @@ impl HTTPServer for DefaultHTTPServer {
     }
 
     fn register_handler(&self, handler: Box<dyn Handler + Send + Sync>) {
-        let mut handlers = self.handlers.lock().unwrap();
+        let mut handlers = self.handlers.lock();
         handlers.push(handler);
     }
 }

@@ -137,7 +137,10 @@ impl PhysicalExpr for BloomFilterMightContainExpr {
         if bloom_filter.is_none() {
             return Ok(ColumnarValue::Scalar(ScalarValue::from(false)));
         }
-        let bloom_filter = bloom_filter.as_ref().as_ref().unwrap();
+        let bloom_filter = bloom_filter
+            .as_ref()
+            .as_ref()
+            .expect("bloom_filter must be present");
 
         // process with bloom filter
         let value = self.value_expr.evaluate(batch)?;

@@ -137,7 +137,7 @@ impl WindowContext {
         Ok(self
             .partition_row_converter
             .lock()
-            .unwrap()
+            .expect("partition_row_converter lock poisoned")
             .convert_columns(
                 &self
                     .partition_spec
@@ -151,16 +151,20 @@ impl WindowContext {
     }
 
     pub fn get_order_rows(&self, batch: &RecordBatch) -> Result<Rows> {
-        Ok(self.order_row_converter.lock().unwrap().convert_columns(
-            &self
-                .order_spec
-                .iter()
-                .map(|expr: &PhysicalSortExpr| {
-                    expr.expr
-                        .evaluate(batch)
-                        .and_then(|v| v.into_array(batch.num_rows()))
-                })
-                .collect::<Result<Vec<_>>>()?,
-        )?)
+        Ok(self
+            .order_row_converter
+            .lock()
+            .expect("order_row_converter lock poisoned")
+            .convert_columns(
+                &self
+                    .order_spec
+                    .iter()
+                    .map(|expr: &PhysicalSortExpr| {
+                        expr.expr
+                            .evaluate(batch)
+                            .and_then(|v| v.into_array(batch.num_rows()))
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            )?)
     }
 }

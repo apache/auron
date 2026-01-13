@@ -207,7 +207,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_spark_year() {
+    fn test_spark_year() -> Result<()> {
         let input = Arc::new(Date32Array::from(vec![
             Some(0),
             Some(1000),
@@ -221,26 +221,22 @@ mod tests {
             Some(1975),
             None,
         ]));
-        assert_eq!(
-            &spark_year(&args).unwrap().into_array(1).unwrap(),
-            &expected_ret
-        );
+        assert_eq!(&spark_year(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
     }
 
     #[test]
-    fn test_spark_month() {
+    fn test_spark_month() -> Result<()> {
         let input = Arc::new(Date32Array::from(vec![Some(0), Some(35), Some(65), None]));
         let args = vec![ColumnarValue::Array(input)];
         let expected_ret: ArrayRef =
             Arc::new(Int32Array::from(vec![Some(1), Some(2), Some(3), None]));
-        assert_eq!(
-            &spark_month(&args).unwrap().into_array(1).unwrap(),
-            &expected_ret
-        );
+        assert_eq!(&spark_month(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
     }
 
     #[test]
-    fn test_spark_day() {
+    fn test_spark_day() -> Result<()> {
         let input = Arc::new(Date32Array::from(vec![
             Some(0),
             Some(10),
@@ -258,14 +254,12 @@ mod tests {
             Some(10),
             None,
         ]));
-        assert_eq!(
-            &spark_day(&args).unwrap().into_array(1).unwrap(),
-            &expected_ret
-        );
+        assert_eq!(&spark_day(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
     }
 
     #[test]
-    fn test_spark_quarter_basic() {
+    fn test_spark_quarter_basic() -> Result<()> {
         // Date32 days relative to 1970-01-01:
         //  0   -> 1970-01-01 (Q1)
         //  40  -> ~1970-02-10 (Q1)
@@ -290,19 +284,21 @@ mod tests {
             None,
         ]));
 
-        let out = spark_quarter(&args).unwrap().into_array(1).unwrap();
+        let out = spark_quarter(&args)?.into_array(1)?;
         assert_eq!(&out, &expected);
+        Ok(())
     }
 
     #[test]
-    fn test_spark_quarter_null_only() {
+    fn test_spark_quarter_null_only() -> Result<()> {
         // Ensure NULL propagation
         let input = Arc::new(Date32Array::from(vec![None, None]));
         let args = vec![ColumnarValue::Array(input)];
         let expected: ArrayRef = Arc::new(Int32Array::from(vec![None, None]));
 
-        let out = spark_quarter(&args).unwrap().into_array(1).unwrap();
+        let out = spark_quarter(&args)?.into_array(1)?;
         assert_eq!(&out, &expected);
+        Ok(())
     }
 
     #[inline]

@@ -57,7 +57,7 @@ impl SingleShuffleRepartitioner {
                     .wrap_writer(open_shuffle_file(&self.output_data_file)?),
             ));
         }
-        Ok(output_data.as_mut().unwrap())
+        Ok(output_data.as_mut().expect("missing output writer"))
     }
 }
 

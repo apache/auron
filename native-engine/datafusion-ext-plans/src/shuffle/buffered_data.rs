@@ -311,7 +311,8 @@ fn sort_batches_by_partition_id(
                     part_ids
                 }
                 Partitioning::RangePartitioning(sort_expr, _, bounds) => {
-                    evaluate_range_partition_ids(&batch, sort_expr, bounds).unwrap()
+                    evaluate_range_partition_ids(&batch, sort_expr, bounds)
+                        .expect("failed to evaluate range partition ids")
                 }
                 _ => unreachable!("unsupported partitioning: {:?}", partitioning),
             };
@@ -373,22 +374,22 @@ mod test {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> RecordBatch {
+    ) -> Result<RecordBatch> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Int32, false),
             Field::new(b.0, DataType::Int32, false),
             Field::new(c.0, DataType::Int32, false),
         ]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![
                 Arc::new(Int32Array::from(a.1.clone())),
                 Arc::new(Int32Array::from(b.1.clone())),
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
     #[tokio::test]
@@ -397,7 +398,7 @@ mod test {
             ("a", &vec![19, 18, 17, 16, 15, 14, 13, 12, 11, 10]),
             ("b", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
             ("c", &vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4]),
-        );
+        )?;
 
         let round_robin_partitioning = Partitioning::RoundRobinPartitioning(4);
         let (_parts, sorted_batch) =
@@ -429,7 +430,7 @@ mod test {
             ("a", &vec![19, 18, 17, 16, 15, 14, 13, 12, 11, 10]),
             ("b", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
             ("c", &vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4]),
-        );
+        )?;
         let sort_exprs = vec![PhysicalSortExpr {
             expr: Arc::new(Column::new("a", 0)),
             options: SortOptions::default(),
@@ -449,7 +450,7 @@ mod test {
                 .collect::<Result<Vec<SortField>>>()?,
         )?));
 
-        let rows: Rows = sort_row_converter.lock().convert_columns(&bounds).unwrap();
+        let rows: Rows = sort_row_converter.lock().convert_columns(&bounds)?;
         let partition_num = rows.num_rows() + 1;
 
         let range_repartitioning =
@@ -483,7 +484,7 @@ mod test {
             ("a", &vec![19, 18, 17, 16, 15, 14, 13, 12, 11, 10]),
             ("b", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
             ("c", &vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4]),
-        );
+        )?;
         let sort_exprs = vec![
             PhysicalSortExpr {
                 expr: Arc::new(Column::new("a", 0)),
@@ -511,7 +512,7 @@ mod test {
                 .collect::<Result<Vec<SortField>>>()?,
         )?));
 
-        let rows: Rows = sort_row_converter.lock().convert_columns(&bounds).unwrap();
+        let rows: Rows = sort_row_converter.lock().convert_columns(&bounds)?;
         let partition_num = rows.num_rows() + 1;
 
         let range_repartitioning =

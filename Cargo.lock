@@ -360,6 +360,7 @@ dependencies = [
  "log",
  "once_cell",
  "panic-message",
+ "parking_lot",
  "poem",
  "pprof",
  "prost 0.14.3",

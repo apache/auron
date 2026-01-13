@@ -447,7 +447,7 @@ mod test {
         f: (&str, &Vec<i32>),
         g: (&str, &Vec<i32>),
         h: (&str, &Vec<i32>),
-    ) -> RecordBatch {
+    ) -> Result<RecordBatch> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Int32, false),
             Field::new(b.0, DataType::Int32, false),
@@ -459,7 +459,7 @@ mod test {
             Field::new(h.0, DataType::Int32, false),
         ]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![
                 Arc::new(Int32Array::from(a.1.clone())),
@@ -471,8 +471,8 @@ mod test {
                 Arc::new(Int32Array::from(g.1.clone())),
                 Arc::new(Int32Array::from(h.1.clone())),
             ],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
     fn build_table(
@@ -484,10 +484,11 @@ mod test {
         f: (&str, &Vec<i32>),
         g: (&str, &Vec<i32>),
         h: (&str, &Vec<i32>),
-    ) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_i32(a, b, c, d, e, f, g, h);
+    ) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_i32(a, b, c, d, e, f, g, h)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        let exec = TestMemoryExec::try_new(&[vec![batch]], schema, None)?;
+        Ok(Arc::new(exec))
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -503,7 +504,7 @@ mod test {
             ("f", &vec![0, 1, 2, 3, 4, 5, 6]),
             ("g", &vec![6, 3, 6, 3, 1, 5, 4]),
             ("h", &vec![6, 3, 6, 3, 1, 5, 4]),
-        );
+        )?;
 
         let agg_expr_sum = create_agg(
             AggFunction::Sum,

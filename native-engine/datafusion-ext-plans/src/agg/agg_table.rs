@@ -821,8 +821,8 @@ impl<'a> RecordsSpillCursor<'a> {
         )?;
 
         // load next bucket head
-        self.cur_bucket_idx = read_len(&mut self.input).unwrap();
-        self.cur_bucket_count = read_len(&mut self.input).unwrap();
+        self.cur_bucket_idx = read_len(&mut self.input).expect("read bucket index failed");
+        self.cur_bucket_count = read_len(&mut self.input).expect("read bucket count failed");
         Ok((acc_table, keys))
     }
 }

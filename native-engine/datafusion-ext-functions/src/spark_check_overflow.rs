@@ -55,7 +55,10 @@ pub fn spark_check_overflow(args: &[ColumnarValue]) -> Result<ColumnarValue> {
             _ => ColumnarValue::Scalar(ScalarValue::Decimal128(None, to_precision, to_scale)),
         },
         ColumnarValue::Array(array) => {
-            let array = array.as_any().downcast_ref::<Decimal128Array>().unwrap();
+            let array = array
+                .as_any()
+                .downcast_ref::<Decimal128Array>()
+                .expect("Expected a Decimal128Array");
             let mut output = Decimal128Builder::with_capacity(array.len());
 
             for v in array.into_iter() {

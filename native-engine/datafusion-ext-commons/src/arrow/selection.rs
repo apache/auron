@@ -248,7 +248,11 @@ pub fn create_array_interleaver(
                 let interleaver = Interleave::new(
                     values
                         .iter()
-                        .map(|v| downcast_any!(v, PrimitiveArray<$t>).unwrap().clone())
+                        .map(|v| {
+                            downcast_any!(v, PrimitiveArray<$t>)
+                                .expect("Excepted a PrimitiveArray")
+                                .clone()
+                        })
                         .collect::<Vec<_>>(),
                 );
                 let dt = $dt.clone();
@@ -266,7 +270,7 @@ pub fn create_array_interleaver(
             DataType::Utf8 => {
                 let interleaver = Interleave::new(values
                     .iter()
-                    .map(|v| downcast_any!(v, StringArray).unwrap().clone())
+                    .map(|v| downcast_any!(v, StringArray).expect("Excepted a StringArray").clone())
                     .collect::<Vec<_>>(),
                 );
                 return Ok(Box::new(move |indices| if with_prefetching {
@@ -278,7 +282,7 @@ pub fn create_array_interleaver(
             DataType::Binary => {
                 let interleaver = Interleave::new(values
                     .iter()
-                    .map(|v| downcast_any!(v, BinaryArray).unwrap().clone())
+                    .map(|v| downcast_any!(v, BinaryArray).expect("Excepted a BinaryArray").clone())
                     .collect::<Vec<_>>(),
                 );
                 return Ok(Box::new(move |indices| if with_prefetching {

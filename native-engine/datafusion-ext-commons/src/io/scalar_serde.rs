@@ -42,7 +42,7 @@ pub fn write_scalar<W: Write>(value: &ScalarValue, nullable: bool, output: &mut 
                     write_u8(0, output)?;
                 }
             } else {
-                output.write_all(&$v.unwrap().to_ne_bytes())?;
+                output.write_all(&$v.expect("non-null value required").to_ne_bytes())?;
             }
         }};
     }

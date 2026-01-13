@@ -460,7 +460,7 @@ impl SortedBlock for InMemSortedBlock {
         if let Some(batch) = batch {
             self.mem_used -= batch.get_batch_mem_size();
             self.mem_used -= self.sorted_keys[0].mem_size();
-            self.sorted_keys.pop_front().unwrap();
+            self.sorted_keys.pop_front().expect("missing key");
             self.cur_row_idx = usize::MAX;
             Ok(Some(batch))
         } else {
@@ -1049,7 +1049,7 @@ fn create_zero_column_batch(num_rows: usize) -> RecordBatch {
         vec![],
         &RecordBatchOptions::new().with_row_count(Some(num_rows)),
     )
-    .unwrap()
+    .expect("failed to create empty RecordBatch")
 }
 
 struct PruneSortKeysFromBatch {
@@ -1293,7 +1293,7 @@ impl KeyCollector for SqueezeKeyCollector {
     fn add_key(&mut self, key: &[u8]) {
         self.sorted_key_writer
             .write_key(key, &mut self.store)
-            .unwrap();
+            .expect("failed to write key");
     }
 
     fn freeze(&mut self) {
@@ -1425,32 +1425,36 @@ mod test {
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> RecordBatch {
+    ) -> Result<RecordBatch> {
         let schema = Schema::new(vec![
             Field::new(a.0, DataType::Int32, false),
             Field::new(b.0, DataType::Int32, false),
             Field::new(c.0, DataType::Int32, false),
         ]);
 
-        RecordBatch::try_new(
+        let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![
                 Arc::new(Int32Array::from(a.1.clone())),
                 Arc::new(Int32Array::from(b.1.clone())),
                 Arc::new(Int32Array::from(c.1.clone())),
             ],
-        )
-        .unwrap()
+        )?;
+        Ok(batch)
     }
 
     fn build_table(
         a: (&str, &Vec<i32>),
         b: (&str, &Vec<i32>),
         c: (&str, &Vec<i32>),
-    ) -> Arc<dyn ExecutionPlan> {
-        let batch = build_table_i32(a, b, c);
+    ) -> Result<Arc<dyn ExecutionPlan>> {
+        let batch = build_table_i32(a, b, c)?;
         let schema = batch.schema();
-        Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None).unwrap())
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
     }
 
     #[tokio::test]
@@ -1462,7 +1466,7 @@ mod test {
             ("a", &vec![9, 8, 7, 6, 5, 4, 3, 2, 1, 0]),
             ("b", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
             ("c", &vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4]),
-        );
+        )?;
         let sort_exprs = vec![PhysicalSortExpr {
             expr: Arc::new(Column::new("a", 0)),
             options: SortOptions::default(),
@@ -1592,7 +1596,7 @@ mod fuzztest {
             None,
         )?);
         let sort = Arc::new(datafusion::physical_plan::sorts::sort::SortExec::new(
-            LexOrdering::new(sort_exprs.iter().cloned()).unwrap(),
+            LexOrdering::new(sort_exprs.iter().cloned()).expect("invalid sort exprs"),
             input,
         ));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
