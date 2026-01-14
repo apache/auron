@@ -374,7 +374,10 @@
           <target>${javaVersion}</target>
           <scalaVersion>${scalaLongVersion}</scalaVersion>
           <args>
+            <arg>-deprecation</arg>
+            <arg>-feature</arg>
             <arg>-Ywarn-unused</arg>
+            <arg>-Xfatal-warnings</arg>
           </args>
         </configuration>
         <dependencies>
@@ -834,11 +837,15 @@
             <artifactId>scala-maven-plugin</artifactId>
             <configuration>
               <args>
+                <arg>-deprecation</arg>
+                <arg>-feature</arg>
                 <arg>-Ywarn-unused</arg>
                 <!-- https://github.com/scalamacros/paradise is no longer actively developed. -->
                 <!-- In Scala 2.13, the plugin's functionality has been included in the compiler -->
                 <!-- directly under the -Ymacro-annotations flag.  -->
                 <arg>-Ymacro-annotations</arg>
+                <arg>-Xfatal-warnings</arg>
+                <arg>-Wconf:cat=deprecation:w</arg>
               </args>
               <compilerPlugins>
                 <compilerPlugin>

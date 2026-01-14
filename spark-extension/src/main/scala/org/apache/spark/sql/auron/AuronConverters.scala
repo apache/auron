@@ -18,7 +18,7 @@ package org.apache.spark.sql.auron
 
 import java.util.ServiceLoader
 
-import scala.annotation.tailrec
+import scala.annotation.{nowarn, tailrec}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -155,14 +156,6 @@ object AuronConverters extends Logging {
     val name = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
     supportedShuffleManagers.exists(name.contains)
   }
-
-  // format: off
-  // scalafix:off
-  // necessary imports for cross spark versions build
-  import org.apache.spark.sql.catalyst.plans._
-  import org.apache.spark.sql.catalyst.optimizer._
-  // scalafix:on
-  // format: on
 
   def convertSparkPlanRecursively(exec: SparkPlan): SparkPlan = {
     // convert
@@ -427,12 +420,14 @@ object AuronConverters extends Logging {
   @sparkver(" 3.2 / 3.3 / 3.4 / 3.5")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
 
+  @nowarn("cat=unused")
   @sparkver("3.0 / 3.1")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
 
+  @nowarn("cat=unused")
   @sparkver("3.0")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = None
 
@@ -554,7 +549,7 @@ object AuronConverters extends Logging {
           org.apache.spark.sql.execution.auron.plan.BuildLeft
         case Some(org.apache.spark.sql.execution.auron.plan.BuildRight) =>
           org.apache.spark.sql.execution.auron.plan.BuildRight
-        case None =>
+        case _ =>
           logWarning("JoinSmallerSideTag is missing, defaults to BuildRight")
           org.apache.spark.sql.execution.auron.plan.BuildRight
       }

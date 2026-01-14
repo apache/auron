@@ -21,6 +21,7 @@ import java.security.PrivilegedExceptionAction
 import java.util
 import java.util.UUID
 
+import scala.annotation.nowarn
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -80,7 +81,7 @@ abstract class NativeParquetSinkBase(
       hiveQlTable.getMetadata)
     val tableSchema = table.schema
     val hadoopConf = newHadoopConf(tableDesc)
-    val job = new Job(hadoopConf)
+    val job = Job.getInstance(hadoopConf)
     val parquetFileFormat = new ParquetFileFormat()
     parquetFileFormat.prepareWrite(sparkSession, job, Map(), tableSchema)
 
@@ -114,7 +115,7 @@ abstract class NativeParquetSinkBase(
           })
 
         // init parquet schema
-        val job = new Job(new JobConf(serializableConf.value))
+        val job = Job.getInstance(new JobConf(serializableConf.value))
         val tableProperties = tableDesc.getProperties
         val columnNameProperty: String = tableProperties.getProperty(IOConstants.COLUMNS)
         val columnTypeProperty: String = tableProperties.getProperty(IOConstants.COLUMNS_TYPES)
@@ -157,6 +158,7 @@ abstract class NativeParquetSinkBase(
       friendlyName = "NativeRDD.ParquetSink")
   }
 
+  @nowarn("cat=unused") // _tableDesc temporarily unused
   protected def newHadoopConf(_tableDesc: TableDesc): Configuration =
     sparkSession.sessionState.newHadoopConf()
 }
