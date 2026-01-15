@@ -18,6 +18,7 @@ package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.AuronConf
+import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
 import org.apache.auron.util.AuronTestUtils
 
@@ -660,6 +661,22 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
           |""".stripMargin
 
       checkSparkAnswer(query)
+    }
+  }
+
+  test("NOT IN subquery with NULL values") {
+    val row = identity[(java.lang.Integer, java.lang.Integer)] _
+    Seq(row((1, 1)), row((2, 2)), row((3, null)))
+      .toDF("a", "b")
+      .createOrReplaceTempView("tbl")
+    val df = checkSparkAnswer("select * from tbl where a not in (select b from tbl)")
+
+    // Spark 3.0: NOT IN subquery is converted to BroadcastNestedLoopJoinExec, and falls back due to unsupported join condition
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      assert(collectFirst(df.queryExecution.executedPlan) { case bhj: NativeBroadcastJoinExec =>
+        assert(bhj.isNullAwareAntiJoin)
+        bhj
+      }.isDefined)
     }
   }
 }

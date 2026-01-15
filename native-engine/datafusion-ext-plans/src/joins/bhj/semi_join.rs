@@ -188,6 +188,13 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
         let _probed_side_compare_timer = probed_side_compare_time.timer();
         let mut hashes_idx = 0;
 
+        // Whether the build side contains any NULL join keys
+        let build_has_null_keys = if map.data_batch().num_rows() == 0 {
+            false
+        } else {
+            map.key_columns().iter().any(|col| col.null_count() > 0)
+        };
+
         for row_idx in 0..probed_batch.num_rows() {
             let key_is_valid = probed_valids
                 .as_ref()
@@ -195,7 +202,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                 .unwrap_or(true);
             if P.mode == Anti
                 && P.probe_is_join_side
-                && !key_is_valid
+                && (!key_is_valid || build_has_null_keys) // Filter if probe row is NULL or build side has any NULL
                 && self.join_params.is_null_aware_anti_join
             {
                 probed_joined.set(row_idx, true);
