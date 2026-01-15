@@ -42,6 +42,21 @@ class AuronSparkTestSettings extends SparkTestSettings {
 
   enableSuite[AuronTypedImperativeAggregateSuite]
 
+  enableSuite[AuronDataFrameSuite]
+    // Auron-specific implementations of these tests are provided above
+    .exclude("repartitionByRange")
+    .exclude("distributeBy and localSort")
+    .exclude("reuse exchange")
+    .exclude("SPARK-22520: support code generation for large CaseWhen")
+    .exclude("SPARK-27439: Explain result should match collected result after view change")
+    // These tests fail due to Auron native execution differences
+    .exclude("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow")
+    .exclude("SPARK-35955: Aggregate avg should not return wrong results for decimal overflow")
+    .exclude("NaN is greater than all other non-NaN numeric values")
+    .exclude("SPARK-20897: cached self-join should not fail")
+    .exclude("SPARK-22271: mean overflows and returns null for some decimal variables")
+    .exclude("SPARK-32764: -0.0 and 0.0 should be equal")
+
   // Will be implemented in the future.
   override def getSQLQueryTestSettings = new SQLQueryTestSettings {
     override def getResourceFilePath: String = ???
