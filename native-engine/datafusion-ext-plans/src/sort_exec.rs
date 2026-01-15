@@ -1266,7 +1266,7 @@ impl KeyCollector for InMemRowsKeyCollector {
         assert_eq!(self.offsets.len() - 1, num_rows);
         let mut rows = row_converter.empty_rows(0, 0);
         unsafe {
-            // safety: acces rows.buffer/offsets
+            // safety: access rows.buffer/offsets
             struct XRows {
                 buffer: Vec<u8>,
                 offsets: Vec<usize>,

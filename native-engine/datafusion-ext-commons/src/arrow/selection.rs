@@ -216,7 +216,7 @@ pub fn create_array_interleaver(
                     NonNull::new_unchecked(take_value_ptrs[take_value_ptr_idx] as *mut u8);
                 take_value_ptr_idx += 1;
 
-                // for continous elements, just extend the area to copy
+                // for continuous elements, just extend the area to copy
                 // otherwise, copy current area end move to the next area
                 if src_end_ptr != value_ptr {
                     prefetch_read_data!(value_ptr.as_ptr()); // prefetch next while copying current

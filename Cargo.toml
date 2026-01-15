@@ -23,7 +23,7 @@ members = [
     "native-engine/datafusion-ext-plans",
     "native-engine/auron",
     "native-engine/auron-jni-bridge",
-    "native-engine/auron-serde",
+    "native-engine/auron-planner",
     "native-engine/auron-memmgr",
 ]
 
@@ -48,7 +48,7 @@ overflow-checks = false
 [workspace.dependencies]
 auron = { path = "./native-engine/auron" }
 auron-jni-bridge = { path = "./native-engine/auron-jni-bridge" }
-auron-serde = { path = "./native-engine/auron-serde" }
+auron-planner = { path = "./native-engine/auron-planner" }
 auron-memmgr = { path = "./native-engine/auron-memmgr" }
 datafusion-ext-commons = { path = "./native-engine/datafusion-ext-commons" }
 datafusion-ext-exprs = { path = "./native-engine/datafusion-ext-exprs" }
@@ -99,12 +99,12 @@ panic-message = "0.3.0"
 parking_lot = "0.12.5"
 paste = "1.0.15"
 procfs = "0.18.0"
-prost = "0.14.1"
+prost = "0.14.3"
 rand = "0.9.2"
 smallvec = "2.0.0-alpha.11"
 sonic-rs = "0.5.6"
 tempfile = "3"
-tokio = "1.48.0"
+tokio = "1.49.0"
 tonic-build = "0.13.1"
 transpose = "0.2.3"
 unchecked-index = "0.2.2"

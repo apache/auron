@@ -35,7 +35,8 @@ case class NativeBroadcastJoinExec(
     override val leftKeys: Seq[Expression],
     override val rightKeys: Seq[Expression],
     override val joinType: JoinType,
-    broadcastSide: BroadcastSide)
+    broadcastSide: BroadcastSide,
+    isNullAwareAntiJoin: Boolean)
     extends NativeBroadcastJoinBase(
       left,
       right,
@@ -43,7 +44,8 @@ case class NativeBroadcastJoinExec(
       leftKeys,
       rightKeys,
       joinType,
-      broadcastSide)
+      broadcastSide,
+      isNullAwareAntiJoin)
     with HashJoin {
 
   override val condition: Option[Expression] = None

@@ -540,7 +540,7 @@ impl JavaClasses<'static> {
 
     pub fn get() -> &'static JavaClasses<'static> {
         unsafe {
-            // safety: JNI_JAVA_CLASSES must be initialized frist
+            // safety: JNI_JAVA_CLASSES must be initialized first
             JNI_JAVA_CLASSES.get_unchecked()
         }
     }

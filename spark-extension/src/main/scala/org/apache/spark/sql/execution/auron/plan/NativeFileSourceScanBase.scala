@@ -32,11 +32,11 @@ import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{FileSourceScanExec, LeafExecNode, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.datasources.PartitionedFile
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DecimalType, NullType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -48,7 +48,9 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
     with NativeSupports {
 
   override lazy val metrics: Map[String, SQLMetric] =
-    NativeHelper.getNativeFileScanMetrics(sparkContext)
+    NativeHelper.getNativeFileScanMetrics(sparkContext) ++ Seq(
+      "numPartitions" -> SQLMetrics.createMetric(sparkContext, "Native.partitions_read"),
+      "numFiles" -> SQLMetrics.createMetric(sparkContext, "Native.files_read"))
 
   override val output: Seq[Attribute] = basedFileScan.output
   override val outputPartitioning: Partitioning = basedFileScan.outputPartitioning
@@ -56,10 +58,21 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
   protected val inputFileScanRDD: FileScanRDD = {
     MethodUtils.invokeMethod(basedFileScan, true, "prepare")
     MethodUtils.invokeMethod(basedFileScan, true, "waitForSubqueries")
-    basedFileScan.inputRDDs().head match {
+    val fileScanRDD = basedFileScan.inputRDDs().head match {
       case rdd: FileScanRDD => rdd
       case rdd: MapPartitionsRDD[_, _] => rdd.prev.asInstanceOf[FileScanRDD]
     }
+    val numPartitions = fileScanRDD.filePartitions.length
+    metrics("numPartitions").add(numPartitions)
+    val numFiles = fileScanRDD.filePartitions.foldLeft(0L)(_ + _.files.length)
+    metrics("numFiles").add(numFiles)
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(
+      sparkContext,
+      executionId,
+      Seq(metrics("numPartitions"), metrics("numFiles")))
+
+    fileScanRDD
   }
 
   private val partitionSchema = basedFileScan.relation.partitionSchema

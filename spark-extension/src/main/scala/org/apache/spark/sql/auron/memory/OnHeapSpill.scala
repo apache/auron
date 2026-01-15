@@ -17,20 +17,32 @@
 package org.apache.spark.sql.auron.memory
 
 import java.nio.ByteBuffer
+import java.util.concurrent.locks.ReentrantLock
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.memory.MemoryConsumer
 
 case class OnHeapSpill(hsm: SparkOnHeapSpillManager, id: Int) extends Logging {
   private var spillBuf: SpillBuf = new MemBasedSpillBuf
+  private val lock = new ReentrantLock
 
   def memUsed: Long = spillBuf.memUsed
   def diskUsed: Long = spillBuf.diskUsed
   def size: Long = spillBuf.size
   def diskIOTime: Long = spillBuf.diskIOTime
 
+  private def withLock[T](f: => T): T = {
+    lock.lock()
+    try {
+      f
+    } finally {
+      lock.unlock()
+    }
+  }
+
   def write(buf: ByteBuffer): Unit = {
     var needSpill = false
-    synchronized {
+    withLock {
       spillBuf match {
         case _: MemBasedSpillBuf =>
           val acquiredMemory = hsm.acquireMemory(buf.capacity())
@@ -46,13 +58,13 @@ case class OnHeapSpill(hsm: SparkOnHeapSpillManager, id: Int) extends Logging {
       spillInternal()
     }
 
-    synchronized {
+    withLock {
       spillBuf.write(buf)
     }
   }
 
   def read(buf: ByteBuffer): Int = {
-    synchronized {
+    withLock {
       val oldMemUsed = memUsed
       val startPosition = buf.position()
       spillBuf.read(buf)
@@ -69,7 +81,7 @@ case class OnHeapSpill(hsm: SparkOnHeapSpillManager, id: Int) extends Logging {
   }
 
   def release(): Unit = {
-    synchronized {
+    withLock {
       val oldMemUsed = memUsed
       spillBuf = new ReleasedSpillBuf(spillBuf)
 
@@ -79,8 +91,20 @@ case class OnHeapSpill(hsm: SparkOnHeapSpillManager, id: Int) extends Logging {
     }
   }
 
-  def spill(): Long = {
-    synchronized {
+  def spill(trigger: MemoryConsumer): Long = {
+    // this might have been locked if the spilling is triggered by OnHeapSpill.write
+    if (trigger == this.hsm) {
+      if (lock.tryLock()) {
+        try {
+          return spillInternal()
+        } finally {
+          lock.unlock()
+        }
+      }
+      return 0L
+    }
+
+    withLock {
       spillInternal()
     }
   }

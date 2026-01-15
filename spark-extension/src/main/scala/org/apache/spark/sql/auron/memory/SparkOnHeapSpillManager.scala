@@ -168,7 +168,7 @@ class SparkOnHeapSpillManager(taskContext: TaskContext)
         val sortedSpills = spills.seq.sortBy(0 - _.map(_.memUsed).getOrElse(0L))
         sortedSpills.foreach {
           case Some(spill) if spill.memUsed > 0 =>
-            totalFreed += spill.spill()
+            totalFreed += spill.spill(trigger)
             if (totalFreed >= size) {
               return totalFreed
             }

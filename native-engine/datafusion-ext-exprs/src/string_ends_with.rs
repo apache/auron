@@ -139,10 +139,10 @@ mod test {
             Some("rr".to_string()),
             Some("roser r".to_string()),
         ]));
-        // create a shema with the field
+        // create a schema with the field
         let schema = Arc::new(Schema::new(vec![Field::new("col2", DataType::Utf8, true)]));
 
-        // create a RecordBatch with the shema and StringArray
+        // create a RecordBatch with the schema and StringArray
         let batch =
             RecordBatch::try_new(schema, vec![string_array]).expect("Error creating RecordBatch");
 

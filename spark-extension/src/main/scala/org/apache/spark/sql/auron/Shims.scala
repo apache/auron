@@ -86,7 +86,8 @@ abstract class Shims {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      broadcastSide: BroadcastSide): NativeBroadcastJoinBase
+      broadcastSide: BroadcastSide,
+      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase
 
   def createNativeSortMergeJoinExec(
       left: SparkPlan,

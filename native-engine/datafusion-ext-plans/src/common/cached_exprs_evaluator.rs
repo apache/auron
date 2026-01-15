@@ -402,7 +402,7 @@ impl PhysicalExpr for CachedExpr {
     }
 }
 
-/// A struct holding all evaluated values of cachable expressions
+/// A struct holding all evaluated values of cacheable expressions
 #[derive(Clone)]
 struct Cache {
     values: Arc<Mutex<Vec<Option<ColumnarValue>>>>,
