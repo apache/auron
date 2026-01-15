@@ -28,7 +28,19 @@ class AuronSparkTestSettings extends SparkTestSettings {
     // See https://github.com/apache/auron/issues/1724
     .exclude("string / binary substring function")
 
-  enableSuite[AuronDataFrameSuite]
+  enableSuite[AuronDataFrameAggregateSuite]
+    // See https://github.com/apache/auron/issues/1840
+    .excludeByPrefix("collect functions")
+    // A custom version of the SPARK-19471 test has been added to AuronDataFrameAggregateSuite
+    // with modified plan checks for Auron's native aggregates, so we exclude the original here.
+    .exclude(
+      "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it")
+    .exclude(
+      "SPARK-24788: RelationalGroupedDataset.toString with unresolved exprs should not fail")
+
+  enableSuite[AuronDatasetAggregatorSuite]
+
+  enableSuite[AuronTypedImperativeAggregateSuite]
 
   // Will be implemented in the future.
   override def getSQLQueryTestSettings = new SQLQueryTestSettings {

@@ -219,6 +219,7 @@ mod tests {
                     JoinSide::Right,
                     true,
                     None,
+                    false,
                 )?)
             }
             BHJRightProbed => {
@@ -235,6 +236,7 @@ mod tests {
                     JoinSide::Left,
                     true,
                     None,
+                    false,
                 )?)
             }
             SHJLeftProbed => Arc::new(BroadcastJoinExec::try_new(
@@ -246,6 +248,7 @@ mod tests {
                 JoinSide::Right,
                 false,
                 None,
+                false,
             )?),
             SHJRightProbed => Arc::new(BroadcastJoinExec::try_new(
                 schema,
@@ -256,6 +259,7 @@ mod tests {
                 JoinSide::Left,
                 false,
                 None,
+                false,
             )?),
         };
         let columns = columns(&join.schema());
@@ -595,6 +599,40 @@ mod tests {
                 "+----+----+----+",
             ];
             // The output order is important as SMJ preserves sortedness
+            assert_batches_sorted_eq!(expected, &batches);
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn join_anti_with_null_keys() -> Result<()> {
+        let left = build_table_i32_nullable(
+            ("a1", &vec![Some(1), Some(2), None, Some(4), Some(5)]),
+            ("b1", &vec![Some(4), Some(5), Some(6), None, Some(8)]),
+            ("c1", &vec![Some(7), Some(8), Some(9), Some(10), Some(11)]),
+        );
+        let right = build_table_i32_nullable(
+            ("a2", &vec![Some(10), Some(20), Some(30)]),
+            ("b1", &vec![Some(4), Some(5), Some(7)]),
+            ("c2", &vec![Some(70), Some(80), Some(90)]),
+        );
+        let on: JoinOn = vec![(
+            Arc::new(Column::new_with_schema("b1", &left.schema())?),
+            Arc::new(Column::new_with_schema("b1", &right.schema())?),
+        )];
+
+        for test_type in ALL_TEST_TYPE {
+            let (_, batches) =
+                join_collect(test_type, left.clone(), right.clone(), on.clone(), LeftAnti).await?;
+            let expected = vec![
+                "+----+----+----+",
+                "| a1 | b1 | c1 |",
+                "+----+----+----+",
+                "|    | 6  | 9  |",
+                "| 4  |    | 10 |",
+                "| 5  | 8  | 11 |",
+                "+----+----+----+",
+            ];
             assert_batches_sorted_eq!(expected, &batches);
         }
         Ok(())

@@ -42,15 +42,15 @@ jobs:
         flinkver: [ "1.18" ]
         javaver: [ "8" ]
         scalaver: [ "2.12" ]
-        module: [ "auron-flink-extension" ]
+        module: [ "auron-flink-extension/auron-flink-planner" ]
         sparkver: [ "spark-3.5" ]
 
     steps:
     - name: Checkout Auron
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Setup Java and Maven cache
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: 'adopt-hotspot'
         java-version: ${{ matrix.javaver }}
@@ -61,7 +61,7 @@ jobs:
 
     - name: Upload reports
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.module }}-test-report
         path: ${{ matrix.module }}/target/surefire-reports

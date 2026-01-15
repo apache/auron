@@ -93,20 +93,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Cache TPC-DS Validator
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-tpcds-validator
         with:
           key: tpcds-validator_${{ inputs.scalaver }}
           path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
 
       - name: Checkout TPC-DS Validator
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
         with:
           repository: auron-project/tpcds-validator
 
       - name: Setup Java and Maven cache
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
         with:
           distribution: 'adopt-hotspot'
@@ -118,7 +118,7 @@ jobs:
         run: ./build/mvn package -DskipTests -Pscala-${{ inputs.scalaver }}
 
       - name: Upload TPC-DS Validator
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: >
             tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
@@ -132,19 +132,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Setup Java and Maven cache
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
           cache: 'maven'
 
       - name: Setup protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           version: "21.7"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -198,18 +198,18 @@ jobs:
 
       - name: Upload unit test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: unit-tests-reports-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: "**/target/surefire-reports/*.xml"
       - name: Upload unit tests log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: unit-tests-logs-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: "**/target/unit-tests.log"
       - name: Upload auron (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: >
             auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
@@ -228,7 +228,7 @@ jobs:
         query: ${{ fromJson(inputs.queries) }}
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get dependency version from pom
         id: get-dependency-version
@@ -250,7 +250,7 @@ jobs:
           fi
 
       - name: Cache Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }})
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-spark-bin
         with:
           path: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
@@ -273,7 +273,7 @@ jobs:
           cd spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }} && tar -xf ../spark-*.tgz --strip-component=1
 
       - name: Download Auron JAR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: >
             auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
@@ -281,7 +281,7 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Download TPC-DS Validator JAR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: >
             tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
@@ -289,7 +289,7 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Checkout TPC-DS Data
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: auron-project/tpcds_1g
           path: dev/tpcds_1g
@@ -300,14 +300,14 @@ jobs:
           cp auron-*${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Setup Java and Maven cache
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
           cache: 'maven'
 
       - name: Cache Celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         if: ${{ inputs.celebornver != '' }}
         id: cache-celeborn-bin
         with:
@@ -343,7 +343,7 @@ jobs:
           cp celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }}/spark/celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Cache Uniffle-${{ steps.get-dependency-version.outputs.uniffleversion }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         if: ${{ inputs.unifflever != '' }}
         id: cache-uniffle-bin
         with:
@@ -363,7 +363,7 @@ jobs:
           tar -xf ./$UNIFFLE_FILE -C uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} --strip-component=1
 
       - name: Cache hadoop-${{ inputs.hadoopver }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         if: ${{ inputs.hadoopver != '' }}
         id: cache-hadoop-bin
         with:
@@ -413,10 +413,19 @@ jobs:
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: >
             rss-log${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: |
             /tmp/rss/logs/*
+
+      - name: Clean up injected JARs to keep Spark bin cache pure
+        if: steps.cache-spark-bin.outputs.cache-hit != 'true'
+        run: |
+          cd spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
+          rm -f auron-*${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar
+          rm -f celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar
+          rm -f rss-client-spark*.jar
+          ls -la ./

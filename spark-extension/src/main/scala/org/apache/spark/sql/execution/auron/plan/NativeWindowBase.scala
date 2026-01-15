@@ -212,7 +212,7 @@ abstract class NativeWindowBase(
           .addAllPartitionSpec(nativePartitionSpecExprs.asJava)
           .addAllOrderSpec(nativeOrderSpecExprs.asJava)
 
-        // WindowGrupLimitExec does not output window cols
+        // WindowGroupLimitExec does not output window cols
         groupLimit match {
           case Some(limit) =>
             nativeWindowExec.setGroupLimit(WindowGroupLimit.newBuilder().setK(limit))

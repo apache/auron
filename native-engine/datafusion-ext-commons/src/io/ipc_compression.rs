@@ -204,7 +204,7 @@ impl<W: Write> IoCompressionWriter<W> {
         match self {
             IoCompressionWriter::LZ4(w) => {
                 w.try_finish()
-                    .or_else(|_| df_execution_err!("ipc compresion error"))?;
+                    .or_else(|_| df_execution_err!("ipc compression error"))?;
             }
             IoCompressionWriter::ZSTD(w) => {
                 w.do_finish()?;

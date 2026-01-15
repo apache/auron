@@ -29,7 +29,7 @@ use auron_jni_bridge::{
     is_task_running, jni_call, jni_call_static, jni_convert_byte_array, jni_exception_check,
     jni_exception_occurred, jni_new_global_ref, jni_new_object, jni_new_string,
 };
-use auron_serde::protobuf::TaskDefinition;
+use auron_planner::{planner::PhysicalPlanner, protobuf::TaskDefinition};
 use datafusion::{
     common::Result,
     error::DataFusionError,
@@ -83,9 +83,11 @@ impl NativeExecutionRuntime {
         let plan = &task_definition.plan.expect("plan is empty");
         drop(raw_task_definition);
 
+        let planner = PhysicalPlanner::new(partition_id);
+
         // get execution plan
-        let execution_plan: Arc<dyn ExecutionPlan> = plan
-            .try_into()
+        let execution_plan: Arc<dyn ExecutionPlan> = planner
+            .create_plan(plan)
             .or_else(|err| df_execution_err!("cannot create execution plan: {err:?}"))?;
 
         let exec_ctx = ExecutionContext::new(

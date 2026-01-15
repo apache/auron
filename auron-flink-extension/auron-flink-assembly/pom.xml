@@ -17,58 +17,62 @@
   -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-
   <parent>
     <groupId>org.apache.auron</groupId>
-    <artifactId>auron-parent_${scalaVersion}</artifactId>
+    <artifactId>auron-flink-extension</artifactId>
     <version>${project.version}</version>
-    <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>proto</artifactId>
-  <packaging>jar</packaging>
-  <name>Apache Auron Proto</name>
-  <description>Apache Auron Proto Project</description>
-
+  <artifactId>auron-flink-assembly</artifactId>
+  <name>Apache Auron Flink Assembly ${flink.version}</name>
+  <description>Apache Auron Flink Project</description>
   <dependencies>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <version>${protobufVersion}</version>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>auron-flink-runtime</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>auron-flink-planner</artifactId>
+      <version>${project.version}</version>
     </dependency>
   </dependencies>
 
   <build>
-
-    <!-- compile proto -->
     <plugins>
       <plugin>
-        <groupId>org.xolstice.maven.plugins</groupId>
-        <artifactId>protobuf-maven-plugin</artifactId>
-        <version>0.6.1</version>
-        <extensions>true</extensions>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${maven.plugin.shade.version}</version>
         <configuration>
-          <protoSourceRoot>../../../native-engine/auron-planner/proto</protoSourceRoot>
-          <protocArtifact>com.google.protobuf:protoc:${protobufVersion}:exe:${os.detected.classifier}</protocArtifact>
-          <checkStaleness>true</checkStaleness>
-          <clearOutputDirectory>true</clearOutputDirectory>
+          <!-- put your configurations here -->
+          <transformers>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+              <resource>META-INF/services/org.apache.flink.table.factories.TableFactory</resource>
+            </transformer>
+          </transformers>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+              </excludes>
+            </filter>
+          </filters>
         </configuration>
         <executions>
           <execution>
             <goals>
-              <goal>compile</goal>
-              <goal>test-compile</goal>
+              <goal>shade</goal>
             </goals>
+            <phase>package</phase>
           </execution>
         </executions>
       </plugin>
     </plugins>
-    <extensions>
-      <extension>
-        <groupId>kr.motd.maven</groupId>
-        <artifactId>os-maven-plugin</artifactId>
-        <version>${os-maven-plugin.version}</version>
-      </extension>
-    </extensions>
   </build>
+
 </project>

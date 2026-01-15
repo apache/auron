@@ -229,7 +229,8 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
-      broadcastSide: BroadcastSide): NativeBroadcastJoinBase =
+      broadcastSide: BroadcastSide,
+      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase =
     NativeBroadcastJoinExec(
       left,
       right,
@@ -237,7 +238,8 @@ class ShimsImpl extends Shims with Logging {
       leftKeys,
       rightKeys,
       joinType,
-      broadcastSide)
+      broadcastSide,
+      isNullAwareAntiJoin)
 
   override def createNativeSortMergeJoinExec(
       left: SparkPlan,
