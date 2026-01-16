@@ -725,7 +725,7 @@
       <properties>
         <shimName>spark-3.5</shimName>
         <scalaTestVersion>3.2.9</scalaTestVersion>
-        <sparkVersion>3.5.7</sparkVersion>
+        <sparkVersion>3.5.8</sparkVersion>
         <shortSparkVersion>3.5</shortSparkVersion>
         <nettyVersion>4.1.96.Final</nettyVersion>
       </properties>
