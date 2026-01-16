@@ -102,9 +102,7 @@ import org.apache.spark.sql.execution.joins.auron.plan.NativeSortMergeJoinExecPr
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
 import org.apache.spark.sql.execution.ui.{AuronEventUtils, AuronSQLAppStatusListener, AuronSQLAppStatusStore, AuronSQLTab}
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
-import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, StringType}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.storage.FileSegment
@@ -524,8 +522,9 @@ class ShimsImpl extends Shims with Logging {
       case StringSplit(str, pat @ Literal(_, StringType), Literal(-1, IntegerType))
           // native StringSplit implementation does not support regex, so only most frequently
           // used cases without regex are supported
-          if Seq(",", ", ", ":", ";", "#", "@", "_", "-", "\\|", "\\.").contains(pat.value) =>
-        val nativePat = pat.value match {
+          if Seq(",", ", ", ":", ";", "#", "@", "_", "-", "\\|", "\\.").contains(
+            pat.value.toString) =>
+        val nativePat = pat.value.toString match {
           case "\\|" => "|"
           case "\\." => "."
           case other => other
@@ -541,7 +540,7 @@ class ShimsImpl extends Shims with Logging {
                 .addArgs(NativeConverters.convertExprWithFallback(str, isPruningExpr, fallback))
                 .addArgs(NativeConverters
                   .convertExprWithFallback(Literal(nativePat), isPruningExpr, fallback))
-                .setReturnType(NativeConverters.convertDataType(StringType)))
+                .setReturnType(NativeConverters.convertDataType(ArrayType(StringType))))
             .build())
 
       case e: TaggingExpression =>
