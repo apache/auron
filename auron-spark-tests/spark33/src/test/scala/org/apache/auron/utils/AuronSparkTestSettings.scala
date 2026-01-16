@@ -17,6 +17,7 @@
 package org.apache.auron.utils
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.joins.AuronExistenceJoinSuite
 
 class AuronSparkTestSettings extends SparkTestSettings {
   {
@@ -41,6 +42,8 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronDatasetAggregatorSuite]
 
   enableSuite[AuronTypedImperativeAggregateSuite]
+
+  enableSuite[AuronExistenceJoinSuite]
 
   // Will be implemented in the future.
   override def getSQLQueryTestSettings = new SQLQueryTestSettings {
