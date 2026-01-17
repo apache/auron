@@ -16,16 +16,17 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.{NamedExpression, SortOrder}
 import org.apache.spark.sql.execution.SparkPlan
 
 import org.apache.auron.sparkver
 
-case class NativeTakeOrderedExec(
+case class NativeTakeOrderedAndProjectExec(
     limit: Long,
     sortOrder: Seq[SortOrder],
+    projectList: Seq[NamedExpression],
     override val child: SparkPlan)
-    extends NativeTakeOrderedBase(limit, sortOrder, child) {
+    extends NativeTakeOrderedAndProjectBase(limit, sortOrder, projectList, child) {
 
   @sparkver("3.2 / 3.3 / 3.4 / 3.5")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
