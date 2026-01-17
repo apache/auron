@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.auron.sparkver
 
 case class NativePartialTakeOrderedExec(
-    limit: Long,
+    limit: Int,
     sortOrder: Seq[SortOrder],
     override val child: SparkPlan,
     override val metrics: Map[String, SQLMetric])
