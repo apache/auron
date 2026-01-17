@@ -1317,13 +1317,13 @@ Input [2]: [ca_county#55, web_sales#58]
 Input [2]: [ca_county#55, web_sales#58]
 Arguments: [ca_county#55 ASC NULLS FIRST], false
 
-(217) SortMergeJoin [codegen id : 1]
+(217) SortMergeJoin [codegen id : X]
 Left keys [1]: [ca_county#43]
 Right keys [1]: [ca_county#55]
 Join type: Inner
 Join condition: (CASE WHEN (web_sales#47 > 0.00) THEN (web_sales#58 / web_sales#47) END > CASE WHEN (store_sales#13 > 0.00) THEN (store_sales#24 / store_sales#13) END)
 
-(218) Project [codegen id : 1]
+(218) Project [codegen id : X]
 Output [8]: [ca_county#8, d_year#5, store_sales#13, store_sales#24, store_sales#35, ca_county#43, web_sales#47, web_sales#58]
 Input [9]: [ca_county#8, d_year#5, store_sales#13, store_sales#24, store_sales#35, ca_county#43, web_sales#47, ca_county#55, web_sales#58]
 
@@ -1488,13 +1488,13 @@ Input [2]: [ca_county#66, web_sales#69]
 Input [2]: [ca_county#66, web_sales#69]
 Arguments: [ca_county#66 ASC NULLS FIRST], false
 
-(259) SortMergeJoin [codegen id : 2]
+(259) SortMergeJoin [codegen id : X]
 Left keys [1]: [ca_county#43]
 Right keys [1]: [ca_county#66]
 Join type: Inner
 Join condition: (CASE WHEN (web_sales#58 > 0.00) THEN (web_sales#69 / web_sales#58) END > CASE WHEN (store_sales#24 > 0.00) THEN (store_sales#35 / store_sales#24) END)
 
-(260) Project [codegen id : 2]
+(260) Project [codegen id : X]
 Output [6]: [ca_county#8, d_year#5, (web_sales#58 / web_sales#47) AS web_q1_q2_increase#70, (store_sales#24 / store_sales#13) AS store_q1_q2_increase#71, (web_sales#69 / web_sales#58) AS web_q2_q3_increase#72, (store_sales#35 / store_sales#24) AS store_q2_q3_increase#73]
 Input [10]: [ca_county#8, d_year#5, store_sales#13, store_sales#24, store_sales#35, ca_county#43, web_sales#47, web_sales#58, ca_county#66, web_sales#69]
 

@@ -466,17 +466,17 @@ Input [2]: [#19#19, #20#20]
 Input [2]: [#19#19, #20#20]
 Arguments: [s_store_sk#19 ASC NULLS FIRST], false
 
-(79) SortMergeJoin [codegen id : 1]
+(79) SortMergeJoin [codegen id : X]
 Left keys [1]: [ss_store_sk#7]
 Right keys [1]: [s_store_sk#19]
 Join type: Inner
 Join condition: NOT (substr(ca_zip#18, 1, 5) = substr(s_zip#20, 1, 5))
 
-(80) Project [codegen id : 1]
+(80) Project [codegen id : X]
 Output [5]: [ss_ext_sales_price#8, i_brand_id#10, i_brand#11, i_manufact_id#12, i_manufact#13]
 Input [9]: [ss_store_sk#7, ss_ext_sales_price#8, i_brand_id#10, i_brand#11, i_manufact_id#12, i_manufact#13, ca_zip#18, #19#19, #20#20]
 
-(81) HashAggregate [codegen id : 1]
+(81) HashAggregate [codegen id : X]
 Input [5]: [ss_ext_sales_price#8, i_brand_id#10, i_brand#11, i_manufact_id#12, i_manufact#13]
 Keys [4]: [i_brand#11, i_brand_id#10, i_manufact_id#12, i_manufact#13]
 Functions [1]: [partial_sum(UnscaledValue(ss_ext_sales_price#8))]
@@ -495,7 +495,7 @@ Arguments: X
 Input [5]: [i_brand#11, i_brand_id#10, i_manufact_id#12, i_manufact#13, sum#22]
 Arguments: coalesced
 
-(85) HashAggregate [codegen id : 2]
+(85) HashAggregate [codegen id : X]
 Input [5]: [i_brand#11, i_brand_id#10, i_manufact_id#12, i_manufact#13, sum#22]
 Keys [4]: [i_brand#11, i_brand_id#10, i_manufact_id#12, i_manufact#13]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#8))]

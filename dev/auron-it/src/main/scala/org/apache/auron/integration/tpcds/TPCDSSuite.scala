@@ -76,7 +76,7 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
         }
       }
 
-    if (args.enablePlanCheck) {
+    if (args.enablePlanCheck || args.regenGoldenFiles) {
       baseComparisons.foreach(comparisonResult => {
         val testResult = auronResults(comparisonResult.queryId)
         val planStable = planStabilityChecker.validate(testResult)
