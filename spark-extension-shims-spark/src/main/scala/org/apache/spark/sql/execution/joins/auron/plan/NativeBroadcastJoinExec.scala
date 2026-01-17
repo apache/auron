@@ -62,7 +62,8 @@ case class NativeBroadcastJoinExec(
   }
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-  override def requiredChildDistribution = {
+  override def requiredChildDistribution
+      : List[org.apache.spark.sql.catalyst.plans.physical.Distribution] = {
     import org.apache.spark.sql.catalyst.plans.physical.BroadcastDistribution
     import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
     import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
@@ -83,7 +84,7 @@ case class NativeBroadcastJoinExec(
   override def supportCodegen: Boolean = false
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-  override def inputRDDs() = {
+  override def inputRDDs(): Nothing = {
     throw new NotImplementedError("NativeBroadcastJoin dose not support codegen")
   }
 

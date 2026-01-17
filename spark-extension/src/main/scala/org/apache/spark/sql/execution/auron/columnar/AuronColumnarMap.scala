@@ -33,5 +33,5 @@ class AuronColumnarMap(
 
   override def valueArray: ArrayData = new AuronColumnarArray(values, offset, length)
 
-  override def copy = new ArrayBasedMapData(keyArray.copy, valueArray.copy)
+  override def copy: ArrayBasedMapData = new ArrayBasedMapData(keyArray.copy, valueArray.copy)
 }
