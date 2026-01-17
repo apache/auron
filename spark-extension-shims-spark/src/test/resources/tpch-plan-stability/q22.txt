@@ -1,0 +1,353 @@
+== Physical Plan ==
+AdaptiveSparkPlan (44)
++- == Final Plan ==
+   NativeSort (29)
+   +- InputAdapter (28)
+      +- AQEShuffleRead (27)
+         +- ShuffleQueryStage (26), Statistics(sizeInBytes=896.0 B, rowCount=7)
+            +- NativeShuffleExchange (25)
+               +- NativeProject (24)
+                  +- NativeHashAggregate (23)
+                     +- InputAdapter (22)
+                        +- AQEShuffleRead (21)
+                           +- ShuffleQueryStage (20), Statistics(sizeInBytes=760.0 B, rowCount=7)
+                              +- NativeShuffleExchange (19)
+                                 +- NativeHashAggregate (18)
+                                    +- NativeProject (17)
+                                       +- NativeSortMergeJoin LeftAnti (16)
+                                          :- NativeSort (8)
+                                          :  +- InputAdapter (7)
+                                          :     +- AQEShuffleRead (6)
+                                          :        +- ShuffleQueryStage (5), Statistics(sizeInBytes=8.6 KiB, rowCount=190)
+                                          :           +- NativeShuffleExchange (4)
+                                          :              +- NativeFilter (3)
+                                          :                 +- InputAdapter (2)
+                                          :                    +- NativeParquetScan  (1)
+                                          +- NativeSort (15)
+                                             +- InputAdapter (14)
+                                                +- AQEShuffleRead (13)
+                                                   +- ShuffleQueryStage (12), Statistics(sizeInBytes=117.6 KiB, rowCount=1.50E+4)
+                                                      +- NativeShuffleExchange (11)
+                                                         +- InputAdapter (10)
+                                                            +- NativeParquetScan  (9)
++- == Initial Plan ==
+   Sort (43)
+   +- Exchange (42)
+      +- HashAggregate (41)
+         +- Exchange (40)
+            +- HashAggregate (39)
+               +- Project (38)
+                  +- SortMergeJoin LeftAnti (37)
+                     :- Sort (33)
+                     :  +- Exchange (32)
+                     :     +- Filter (31)
+                     :        +- Scan parquet  (30)
+                     +- Sort (36)
+                        +- Exchange (35)
+                           +- Scan parquet  (34)
+
+
+(30) Scan parquet 
+Output [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(c_acctbal)]
+ReadSchema: struct<c_custkey:bigint,c_phone:string,c_acctbal:decimal(12,2)>
+
+(2) InputAdapter
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Arguments: [#4, #2, #3]
+
+(3) NativeFilter
+Input [3]: [#4#1, #2#2, #3#3]
+Condition : ((isnotnull(c_acctbal#3) AND substring(c_phone#2, 1, 2) IN (13,31,23,29,30,18,17)) AND (cast(c_acctbal#3 as decimal(16,6)) > Subquery subquery#5, [id=#6]))
+
+(4) NativeShuffleExchange
+Input [3]: [#4#1, #2#2, #3#3]
+Arguments: hashpartitioning(c_custkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(5) ShuffleQueryStage
+Output [3]: [#4#1, #2#2, #3#3]
+Arguments: X
+
+(6) AQEShuffleRead
+Input [3]: [#4#1, #2#2, #3#3]
+Arguments: coalesced
+
+(7) InputAdapter
+Input [3]: [#4#1, #2#2, #3#3]
+
+(8) NativeSort
+Input [3]: [#4#1, #2#2, #3#3]
+Arguments: [c_custkey#1 ASC NULLS FIRST], false
+
+(34) Scan parquet 
+Output [1]: [o_custkey#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+ReadSchema: struct<o_custkey:bigint>
+
+(10) InputAdapter
+Input [1]: [o_custkey#7]
+Arguments: [#8]
+
+(11) NativeShuffleExchange
+Input [1]: [#8#7]
+Arguments: hashpartitioning(o_custkey#7, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(12) ShuffleQueryStage
+Output [1]: [#8#7]
+Arguments: X
+
+(13) AQEShuffleRead
+Input [1]: [#8#7]
+Arguments: coalesced
+
+(14) InputAdapter
+Input [1]: [#8#7]
+
+(15) NativeSort
+Input [1]: [#8#7]
+Arguments: [o_custkey#7 ASC NULLS FIRST], false
+
+(16) NativeSortMergeJoin
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#7]
+Join type: LeftAnti
+Join condition: None
+
+(17) NativeProject
+Output [2]: [substring(c_phone#2, 1, 2) AS cntrycode#9, c_acctbal#3]
+Input [3]: [#4#1, #2#2, #3#3]
+
+(18) NativeHashAggregate
+Input [2]: [cntrycode#9, c_acctbal#3]
+Keys [1]: [cntrycode#9]
+Functions [2]: [partial_count(1), partial_sum(c_acctbal#3)]
+Aggregate Attributes [3]: [count#10, sum#11, isEmpty#12]
+Results [2]: [cntrycode#9, #13#13]
+
+(19) NativeShuffleExchange
+Input [2]: [cntrycode#9, #13#13]
+Arguments: hashpartitioning(cntrycode#9, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(20) ShuffleQueryStage
+Output [2]: [cntrycode#9, #13#13]
+Arguments: X
+
+(21) AQEShuffleRead
+Input [2]: [cntrycode#9, #13#13]
+Arguments: coalesced
+
+(22) InputAdapter
+Input [2]: [cntrycode#9, #13#13]
+
+(23) NativeHashAggregate
+Input [2]: [cntrycode#9, #13#13]
+Keys [1]: [cntrycode#9]
+Functions [2]: [count(1), sum(c_acctbal#3)]
+Aggregate Attributes [2]: [count(1)#14, sum(c_acctbal#3)#15]
+Results [3]: [cntrycode#9, count(1)#14, sum(c_acctbal#3)#15]
+
+(24) NativeProject
+Output [3]: [cntrycode#9, count(1)#14 AS numcust#16, sum(c_acctbal#3)#15 AS totacctbal#17]
+Input [3]: [cntrycode#9, count(1)#14, sum(c_acctbal#3)#15]
+
+(25) NativeShuffleExchange
+Input [3]: [cntrycode#9, numcust#16, totacctbal#17]
+Arguments: rangepartitioning(cntrycode#9 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(26) ShuffleQueryStage
+Output [3]: [cntrycode#9, numcust#16, totacctbal#17]
+Arguments: X
+
+(27) AQEShuffleRead
+Input [3]: [cntrycode#9, numcust#16, totacctbal#17]
+Arguments: coalesced
+
+(28) InputAdapter
+Input [3]: [cntrycode#9, numcust#16, totacctbal#17]
+
+(29) NativeSort
+Input [3]: [cntrycode#9, numcust#16, totacctbal#17]
+Arguments: [cntrycode#9 ASC NULLS FIRST], true
+
+(30) Scan parquet 
+Output [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(c_acctbal)]
+ReadSchema: struct<c_custkey:bigint,c_phone:string,c_acctbal:decimal(12,2)>
+
+(31) Filter
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Condition : ((isnotnull(c_acctbal#3) AND substring(c_phone#2, 1, 2) IN (13,31,23,29,30,18,17)) AND (cast(c_acctbal#3 as decimal(16,6)) > Subquery subquery#5, [id=#6]))
+
+(32) Exchange
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Arguments: hashpartitioning(c_custkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(33) Sort
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Arguments: [c_custkey#1 ASC NULLS FIRST], false, 0
+
+(34) Scan parquet 
+Output [1]: [o_custkey#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+ReadSchema: struct<o_custkey:bigint>
+
+(35) Exchange
+Input [1]: [o_custkey#7]
+Arguments: hashpartitioning(o_custkey#7, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(36) Sort
+Input [1]: [o_custkey#7]
+Arguments: [o_custkey#7 ASC NULLS FIRST], false, 0
+
+(37) SortMergeJoin
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#7]
+Join type: LeftAnti
+Join condition: None
+
+(38) Project
+Output [2]: [substring(c_phone#2, 1, 2) AS cntrycode#9, c_acctbal#3]
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+
+(39) HashAggregate
+Input [2]: [cntrycode#9, c_acctbal#3]
+Keys [1]: [cntrycode#9]
+Functions [2]: [partial_count(1), partial_sum(c_acctbal#3)]
+Aggregate Attributes [3]: [count#10, sum#11, isEmpty#12]
+Results [4]: [cntrycode#9, count#18, sum#19, isEmpty#20]
+
+(40) Exchange
+Input [4]: [cntrycode#9, count#18, sum#19, isEmpty#20]
+Arguments: hashpartitioning(cntrycode#9, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(41) HashAggregate
+Input [4]: [cntrycode#9, count#18, sum#19, isEmpty#20]
+Keys [1]: [cntrycode#9]
+Functions [2]: [count(1), sum(c_acctbal#3)]
+Aggregate Attributes [2]: [count(1)#14, sum(c_acctbal#3)#15]
+Results [3]: [cntrycode#9, count(1)#14 AS numcust#16, sum(c_acctbal#3)#15 AS totacctbal#17]
+
+(42) Exchange
+Input [3]: [cntrycode#9, numcust#16, totacctbal#17]
+Arguments: rangepartitioning(cntrycode#9 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=8]
+
+(43) Sort
+Input [3]: [cntrycode#9, numcust#16, totacctbal#17]
+Arguments: [cntrycode#9 ASC NULLS FIRST], true, 0
+
+(44) AdaptiveSparkPlan
+Output [3]: [cntrycode#9, numcust#16, totacctbal#17]
+Arguments: isFinalPlan=true
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery subquery#5, [id=#6]
+AdaptiveSparkPlan (60)
++- == Final Plan ==
+   NativeProject (53)
+   +- NativeHashAggregate (52)
+      +- ShuffleQueryStage (51), Statistics(sizeInBytes=360.0 B, rowCount=1)
+         +- NativeShuffleExchange (50)
+            +- NativeHashAggregate (49)
+               +- NativeProject (48)
+                  +- NativeFilter (47)
+                     +- InputAdapter (46)
+                        +- NativeParquetScan  (45)
++- == Initial Plan ==
+   HashAggregate (59)
+   +- Exchange (58)
+      +- HashAggregate (57)
+         +- Project (56)
+            +- Filter (55)
+               +- Scan parquet  (54)
+
+
+(54) Scan parquet 
+Output [2]: [c_phone#21, c_acctbal#22]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(c_acctbal), GreaterThan(c_acctbal,0.00)]
+ReadSchema: struct<c_phone:string,c_acctbal:decimal(12,2)>
+
+(46) InputAdapter
+Input [2]: [c_phone#21, c_acctbal#22]
+Arguments: [#21, #22]
+
+(47) NativeFilter
+Input [2]: [#21#21, #22#22]
+Condition : ((isnotnull(c_acctbal#22) AND (c_acctbal#22 > 0.00)) AND substring(c_phone#21, 1, 2) IN (13,31,23,29,30,18,17))
+
+(48) NativeProject
+Output [1]: [c_acctbal#22]
+Input [2]: [#21#21, #22#22]
+
+(49) NativeHashAggregate
+Input [1]: [c_acctbal#22]
+Keys: []
+Functions [1]: [partial_avg(c_acctbal#22)]
+Aggregate Attributes [2]: [sum#23, count#24]
+Results [1]: [#13#13]
+
+(50) NativeShuffleExchange
+Input [1]: [#13#13]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
+
+(51) ShuffleQueryStage
+Output [1]: [#13#13]
+Arguments: X
+
+(52) NativeHashAggregate
+Input [1]: [#13#13]
+Keys: []
+Functions [1]: [avg(c_acctbal#22)]
+Aggregate Attributes [1]: [avg(c_acctbal#22)#25]
+Results [1]: [avg(c_acctbal#22)#25]
+
+(53) NativeProject
+Output [1]: [avg(c_acctbal#22)#25 AS avg(c_acctbal)#26]
+Input [1]: [avg(c_acctbal#22)#25]
+
+(54) Scan parquet 
+Output [2]: [c_phone#21, c_acctbal#22]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(c_acctbal), GreaterThan(c_acctbal,0.00)]
+ReadSchema: struct<c_phone:string,c_acctbal:decimal(12,2)>
+
+(55) Filter
+Input [2]: [c_phone#21, c_acctbal#22]
+Condition : ((isnotnull(c_acctbal#22) AND (c_acctbal#22 > 0.00)) AND substring(c_phone#21, 1, 2) IN (13,31,23,29,30,18,17))
+
+(56) Project
+Output [1]: [c_acctbal#22]
+Input [2]: [c_phone#21, c_acctbal#22]
+
+(57) HashAggregate
+Input [1]: [c_acctbal#22]
+Keys: []
+Functions [1]: [partial_avg(c_acctbal#22)]
+Aggregate Attributes [2]: [sum#23, count#24]
+Results [2]: [sum#27, count#28]
+
+(58) Exchange
+Input [2]: [sum#27, count#28]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+
+(59) HashAggregate
+Input [2]: [sum#27, count#28]
+Keys: []
+Functions [1]: [avg(c_acctbal#22)]
+Aggregate Attributes [1]: [avg(c_acctbal#22)#25]
+Results [1]: [avg(c_acctbal#22)#25 AS avg(c_acctbal)#26]
+
+(60) AdaptiveSparkPlan
+Output [1]: [avg(c_acctbal)#26]
+Arguments: isFinalPlan=true
+
+
