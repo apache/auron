@@ -323,6 +323,7 @@ mod tests {
                     JoinSide::Right,
                     true,
                     None,
+                    false,
                 )?)
             }
             BHJRightProbed => {
@@ -339,6 +340,7 @@ mod tests {
                     JoinSide::Left,
                     true,
                     None,
+                    false,
                 )?)
             }
             SHJLeftProbed => Arc::new(BroadcastJoinExec::try_new(
@@ -350,6 +352,7 @@ mod tests {
                 JoinSide::Right,
                 false,
                 None,
+                false,
             )?),
             SHJRightProbed => Arc::new(BroadcastJoinExec::try_new(
                 schema,
@@ -360,6 +363,7 @@ mod tests {
                 JoinSide::Left,
                 false,
                 None,
+                false,
             )?),
         };
         let columns = columns(&join.schema());
@@ -539,12 +543,12 @@ mod tests {
                 ("a1", &vec![1, 1, 1, 1, 1]),
                 ("b1", &vec![1, 2, 3, 4, 5]),
                 ("c1", &vec![1, 2, 3, 4, 5]),
-            );
+            )?;
             let right = build_table(
                 ("a2", &vec![1, 1, 1, 1, 1, 1, 1]),
                 ("b2", &vec![1, 2, 3, 4, 5, 6, 7]),
                 ("c2", &vec![1, 2, 3, 4, 5, 6, 7]),
-            );
+            )?;
             let on: JoinOn = vec![(
                 Arc::new(Column::new_with_schema("a1", &left.schema())?),
                 Arc::new(Column::new_with_schema("a2", &right.schema())?),
