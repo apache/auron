@@ -272,7 +272,7 @@ fn io_compression_codec() -> &'static str {
             if is_jni_bridge_inited() {
                 conf::SPARK_IO_COMPRESSION_CODEC.value()
             } else {
-                Ok(format!("lz4")) // for testing
+                Ok("lz4".to_string()) // for testing
             }
         })
         .expect("error reading spark.io.compression.codec")

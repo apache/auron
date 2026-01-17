@@ -741,7 +741,7 @@ mod test {
         ])?;
 
         assert_batches_eq!(
-            vec![
+            [
                 "+-----------+-----------+",
                 "| list1     | list2     |",
                 "+-----------+-----------+",
@@ -761,7 +761,7 @@ mod test {
         let (decoded_num_rows, decoded_cols) =
             read_batch(&mut cursor, &batch.schema())?.expect("non-empty batch");
         assert_batches_eq!(
-            vec![
+            [
                 "+-----------+-----------+",
                 "| list1     | list2     |",
                 "+-----------+-----------+",
@@ -786,7 +786,7 @@ mod test {
         let (decoded_num_rows, decoded_cols) =
             read_batch(&mut cursor, &batch.schema())?.expect("non-empty batch");
         assert_batches_eq!(
-            vec![
+            [
                 "+----------+----------+",
                 "| list1    | list2    |",
                 "+----------+----------+",

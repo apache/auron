@@ -471,7 +471,7 @@ impl JavaClasses<'static> {
     pub fn init(env: &JNIEnv) {
         if let Err(err) = JNI_JAVA_CLASSES.get_or_try_init(|| -> Result<_, Box<dyn Error>> {
             log::info!("Initializing JavaClasses...");
-            let env = unsafe { std::mem::transmute::<_, &'static JNIEnv>(env) };
+            let env = unsafe { std::mem::transmute::<&JNIEnv, &'static JNIEnv>(env) };
             let jni_bridge = JniBridge::new(env)?;
             let classloader = env
                 .call_static_method_unchecked(
@@ -1677,7 +1677,7 @@ fn get_global_ref_jobject<'a>(env: &JNIEnv<'a>, obj: JObject<'a>) -> JniResult<J
     //  as all global refs to jclass in JavaClasses should never be GC'd during
     // the whole jvm lifetime, we put GlobalRef into ManuallyDrop to prevent
     // deleting these global refs.
-    let global_obj = unsafe { std::mem::transmute::<_, JObject<'static>>(global.as_obj()) };
+    let global_obj = unsafe { std::mem::transmute::<JObject, JObject<'static>>(global.as_obj()) };
     let _ = std::mem::ManuallyDrop::new(global);
     Ok(global_obj)
 }

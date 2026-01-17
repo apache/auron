@@ -40,10 +40,10 @@ fn main() -> Result<(), String> {
         }
     }
     if let Some(path) = protoc_file {
-        eprintln!("Using protoc executable: {:?}", path);
+        eprintln!("Using protoc executable: {path:?}");
         prost_build.protoc_executable(path);
     }
     prost_build
         .compile_protos(&["proto/auron.proto"], &["proto"])
-        .map_err(|e| format!("protobuf compilation failed: {}", e))
+        .map_err(|e| format!("protobuf compilation failed: {e}"))
 }

@@ -523,7 +523,7 @@ mod tests {
         let value_data = ArrayData::builder(DataType::Int32)
             .len(6)
             .add_buffer(Buffer::from_slice_ref(
-                &[1i32, 2, 3, 4, 5, 6].to_byte_slice(),
+                [1i32, 2, 3, 4, 5, 6].to_byte_slice(),
             ))
             .build()?;
 
@@ -531,7 +531,7 @@ mod tests {
         let list_data_type = DataType::new_list(DataType::Int32, false);
         let list_data = ArrayData::builder(list_data_type)
             .len(3)
-            .add_buffer(Buffer::from_slice_ref(&[0i32, 2, 5, 6].to_byte_slice()))
+            .add_buffer(Buffer::from_slice_ref([0i32, 2, 5, 6].to_byte_slice()))
             .add_child_data(value_data)
             .build()?;
 
@@ -550,20 +550,20 @@ mod tests {
         let key_data = ArrayData::builder(DataType::Int32)
             .len(8)
             .add_buffer(Buffer::from_slice_ref(
-                &[0, 1, 2, 3, 4, 5, 6, 7].to_byte_slice(),
+                [0, 1, 2, 3, 4, 5, 6, 7].to_byte_slice(),
             ))
             .build()?;
         let value_data = ArrayData::builder(DataType::UInt32)
             .len(8)
             .add_buffer(Buffer::from_slice_ref(
-                &[0u32, 10, 20, 0, 40, 0, 60, 70].to_byte_slice(),
+                [0u32, 10, 20, 0, 40, 0, 60, 70].to_byte_slice(),
             ))
             .null_bit_buffer(Some(Buffer::from(&[0b11010110])))
             .build()?;
 
         // Construct a buffer for value offsets, for the nested array:
         //  [[0, 1, 2], [3, 4, 5], [6, 7]]
-        let entry_offsets = Buffer::from_slice_ref(&[0, 3, 6, 8].to_byte_slice());
+        let entry_offsets = Buffer::from_slice_ref([0, 3, 6, 8].to_byte_slice());
 
         let keys_field = Arc::new(Field::new("keys", DataType::Int32, false));
         let values_field = Arc::new(Field::new("values", DataType::UInt32, true));
