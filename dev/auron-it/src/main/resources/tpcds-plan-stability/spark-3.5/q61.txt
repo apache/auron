@@ -1040,7 +1040,7 @@ Input [1]: [sum(UnscaledValue(ss_ext_sales_price#31))#40]
 Join type: Inner
 Join condition: None
 
-(180) Project [codegen id : 1]
+(180) Project [codegen id : X]
 Output [3]: [promotions#26, total#41, ((cast(promotions#26 as decimal(15,4)) / cast(total#41 as decimal(15,4))) * 100) AS ((CAST(promotions AS DECIMAL(15,4)) / CAST(total AS DECIMAL(15,4))) * 100)#42]
 Input [2]: [promotions#26, total#41]
 

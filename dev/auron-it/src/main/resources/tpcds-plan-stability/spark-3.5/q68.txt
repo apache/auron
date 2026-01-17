@@ -564,13 +564,13 @@ Input [2]: [#38#38, #39#39]
 Input [2]: [#38#38, #39#39]
 Arguments: [ca_address_sk#38 ASC NULLS FIRST], false
 
-(97) SortMergeJoin [codegen id : 1]
+(97) SortMergeJoin [codegen id : X]
 Left keys [1]: [c_current_addr_sk#35]
 Right keys [1]: [ca_address_sk#38]
 Join type: Inner
 Join condition: NOT (ca_city#39 = bought_city#30)
 
-(98) Project [codegen id : 1]
+(98) Project [codegen id : X]
 Output [8]: [c_last_name#37, c_first_name#36, ca_city#39, bought_city#30, ss_ticket_number#6, extended_price#31, extended_tax#33, list_price#32]
 Input [10]: [ss_ticket_number#6, bought_city#30, extended_price#31, list_price#32, extended_tax#33, c_current_addr_sk#35, c_first_name#36, c_last_name#37, #38#38, #39#39]
 

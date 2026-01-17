@@ -272,13 +272,13 @@ Input [2]: [ca_address_sk#12, ca_state#13]
 Input [2]: [ca_address_sk#12, ca_state#13]
 Arguments: [ca_address_sk#12 ASC NULLS FIRST], false
 
-(33) SortMergeJoin [codegen id : 1]
+(33) SortMergeJoin [codegen id : X]
 Left keys [1]: [ss_addr_sk#4]
 Right keys [1]: [ca_address_sk#12]
 Join type: Inner
 Join condition: ((((ca_state#13 IN (TX,OH) AND (ss_net_profit#10 >= 100.00)) AND (ss_net_profit#10 <= 200.00)) OR ((ca_state#13 IN (OR,NM,KY) AND (ss_net_profit#10 >= 150.00)) AND (ss_net_profit#10 <= 300.00))) OR ((ca_state#13 IN (VA,TX,MS) AND (ss_net_profit#10 >= 50.00)) AND (ss_net_profit#10 <= 250.00)))
 
-(34) Project [codegen id : 1]
+(34) Project [codegen id : X]
 Output [7]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Input [11]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_addr_sk#4, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, ss_net_profit#10, ca_address_sk#12, ca_state#13]
 
@@ -405,13 +405,13 @@ Input [3]: [#17#17, #18#18, #19#19]
 Input [3]: [#17#17, #18#18, #19#19]
 Arguments: [cd_demo_sk#17 ASC NULLS FIRST], false
 
-(65) SortMergeJoin [codegen id : 2]
+(65) SortMergeJoin [codegen id : X]
 Left keys [1]: [ss_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#17]
 Join type: Inner
 Join condition: ((((((cd_marital_status#18 = M) AND (cd_education_status#19 = Advanced Degree)) AND (ss_sales_price#7 >= 100.00)) AND (ss_sales_price#7 <= 150.00)) OR ((((cd_marital_status#18 = S) AND (cd_education_status#19 = College)) AND (ss_sales_price#7 >= 50.00)) AND (ss_sales_price#7 <= 100.00))) OR ((((cd_marital_status#18 = W) AND (cd_education_status#19 = 2 yr Degree)) AND (ss_sales_price#7 >= 150.00)) AND (ss_sales_price#7 <= 200.00)))
 
-(66) Project [codegen id : 2]
+(66) Project [codegen id : X]
 Output [7]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19]
 Input [9]: [ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, #17#17, #18#18, #19#19]
 
@@ -471,17 +471,17 @@ Input [2]: [#20#20, #21#21]
 Input [2]: [#20#20, #21#21]
 Arguments: [hd_demo_sk#20 ASC NULLS FIRST], false
 
-(81) SortMergeJoin [codegen id : 3]
+(81) SortMergeJoin [codegen id : X]
 Left keys [1]: [ss_hdemo_sk#3]
 Right keys [1]: [hd_demo_sk#20]
 Join type: Inner
 Join condition: (((((((cd_marital_status#18 = M) AND (cd_education_status#19 = Advanced Degree)) AND (ss_sales_price#7 >= 100.00)) AND (ss_sales_price#7 <= 150.00)) AND (hd_dep_count#21 = 3)) OR (((((cd_marital_status#18 = S) AND (cd_education_status#19 = College)) AND (ss_sales_price#7 >= 50.00)) AND (ss_sales_price#7 <= 100.00)) AND (hd_dep_count#21 = 1))) OR (((((cd_marital_status#18 = W) AND (cd_education_status#19 = 2 yr Degree)) AND (ss_sales_price#7 >= 150.00)) AND (ss_sales_price#7 <= 200.00)) AND (hd_dep_count#21 = 1)))
 
-(82) Project [codegen id : 3]
+(82) Project [codegen id : X]
 Output [3]: [ss_quantity#6, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Input [9]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19, #20#20, #21#21]
 
-(83) HashAggregate [codegen id : 3]
+(83) HashAggregate [codegen id : X]
 Input [3]: [ss_quantity#6, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Keys: []
 Functions [4]: [partial_avg(ss_quantity#6), partial_avg(UnscaledValue(ss_ext_sales_price#8)), partial_avg(UnscaledValue(ss_ext_wholesale_cost#9)), partial_sum(UnscaledValue(ss_ext_wholesale_cost#9))]
@@ -496,7 +496,7 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
 Output [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
 Arguments: X
 
-(86) HashAggregate [codegen id : 4]
+(86) HashAggregate [codegen id : X]
 Input [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
 Keys: []
 Functions [4]: [avg(ss_quantity#6), avg(UnscaledValue(ss_ext_sales_price#8)), avg(UnscaledValue(ss_ext_wholesale_cost#9)), sum(UnscaledValue(ss_ext_wholesale_cost#9))]

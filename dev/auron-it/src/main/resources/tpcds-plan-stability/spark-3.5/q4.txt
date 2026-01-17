@@ -1008,13 +1008,13 @@ Input [2]: [customer_id#88, year_total#89]
 Input [2]: [customer_id#88, year_total#89]
 Arguments: [customer_id#88 ASC NULLS FIRST], false
 
-(150) SortMergeJoin [codegen id : 1]
+(150) SortMergeJoin [codegen id : X]
 Left keys [1]: [customer_id#22]
 Right keys [1]: [customer_id#88]
 Join type: Inner
 Join condition: (CASE WHEN (year_total#70 > 0.000000) THEN (year_total#89 / year_total#70) END > CASE WHEN (year_total#23 > 0.000000) THEN (year_total#48 / year_total#23) END)
 
-(151) Project [codegen id : 1]
+(151) Project [codegen id : X]
 Output [10]: [customer_id#22, customer_id#41, customer_first_name#42, customer_last_name#43, customer_preferred_cust_flag#44, customer_birth_country#45, customer_login#46, customer_email_address#47, year_total#70, year_total#89]
 Input [13]: [customer_id#22, year_total#23, customer_id#41, customer_first_name#42, customer_last_name#43, customer_preferred_cust_flag#44, customer_birth_country#45, customer_login#46, customer_email_address#47, year_total#48, year_total#70, customer_id#88, year_total#89]
 
@@ -1318,13 +1318,13 @@ Input [2]: [customer_id#129, year_total#130]
 Input [2]: [customer_id#129, year_total#130]
 Arguments: [customer_id#129 ASC NULLS FIRST], false
 
-(225) SortMergeJoin [codegen id : 2]
+(225) SortMergeJoin [codegen id : X]
 Left keys [1]: [customer_id#22]
 Right keys [1]: [customer_id#129]
 Join type: Inner
 Join condition: (CASE WHEN (year_total#70 > 0.000000) THEN (year_total#89 / year_total#70) END > CASE WHEN (year_total#111 > 0.000000) THEN (year_total#130 / year_total#111) END)
 
-(226) Project [codegen id : 2]
+(226) Project [codegen id : X]
 Output [7]: [customer_id#41, customer_first_name#42, customer_last_name#43, customer_preferred_cust_flag#44, customer_birth_country#45, customer_login#46, customer_email_address#47]
 Input [13]: [customer_id#22, customer_id#41, customer_first_name#42, customer_last_name#43, customer_preferred_cust_flag#44, customer_birth_country#45, customer_login#46, customer_email_address#47, year_total#70, year_total#89, year_total#111, customer_id#129, year_total#130]
 

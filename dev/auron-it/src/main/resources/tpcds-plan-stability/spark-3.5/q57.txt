@@ -498,11 +498,11 @@ Condition : (isnotnull(d_year#9) AND (d_year#9 = 1999))
 Input [8]: [i_category#3, i_brand#2, cc_name#12, d_year#9, d_moy#10, sum_sales#17, _w0#18, rn#19]
 Arguments: [avg(_w0#18) windowspecdefinition(i_category#3, i_brand#2, cc_name#12, d_year#9, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_monthly_sales#20], [i_category#3, i_brand#2, cc_name#12, d_year#9]
 
-(65) Filter [codegen id : 1]
+(65) Filter [codegen id : X]
 Input [9]: [i_category#3, i_brand#2, cc_name#12, d_year#9, d_moy#10, sum_sales#17, _w0#18, rn#19, avg_monthly_sales#20]
 Condition : ((isnotnull(avg_monthly_sales#20) AND (avg_monthly_sales#20 > 0.000000)) AND CASE WHEN (avg_monthly_sales#20 > 0.000000) THEN ((abs((sum_sales#17 - avg_monthly_sales#20)) / avg_monthly_sales#20) > 0.1000000000000000) END)
 
-(66) Project [codegen id : 1]
+(66) Project [codegen id : X]
 Output [8]: [i_category#3, i_brand#2, cc_name#12, d_year#9, d_moy#10, sum_sales#17, avg_monthly_sales#20, rn#19]
 Input [9]: [i_category#3, i_brand#2, cc_name#12, d_year#9, d_moy#10, sum_sales#17, _w0#18, rn#19, avg_monthly_sales#20]
 

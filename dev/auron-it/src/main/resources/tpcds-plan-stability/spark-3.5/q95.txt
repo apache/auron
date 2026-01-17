@@ -271,13 +271,13 @@ Input [2]: [#9#9, #10#10]
 Input [2]: [#9#9, #10#10]
 Arguments: [ws_order_number#10 ASC NULLS FIRST], false
 
-(23) SortMergeJoin [codegen id : 1]
+(23) SortMergeJoin [codegen id : X]
 Left keys [1]: [ws_order_number#8]
 Right keys [1]: [ws_order_number#10]
 Join type: Inner
 Join condition: NOT (ws_warehouse_sk#7 = ws_warehouse_sk#9)
 
-(24) Project [codegen id : 1]
+(24) Project [codegen id : X]
 Output [1]: [ws_order_number#8]
 Input [4]: [#7#7, #8#8, #9#9, #10#10]
 
@@ -368,13 +368,13 @@ Input [2]: [#14#14, #15#15]
 Input [2]: [#14#14, #15#15]
 Arguments: [ws_order_number#15 ASC NULLS FIRST], false
 
-(47) SortMergeJoin [codegen id : 2]
+(47) SortMergeJoin [codegen id : X]
 Left keys [1]: [ws_order_number#13]
 Right keys [1]: [ws_order_number#15]
 Join type: Inner
 Join condition: NOT (ws_warehouse_sk#12 = ws_warehouse_sk#14)
 
-(48) Project [codegen id : 2]
+(48) Project [codegen id : X]
 Output [1]: [ws_order_number#13]
 Input [4]: [#12#12, #13#13, #14#14, #15#15]
 

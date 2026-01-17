@@ -570,13 +570,13 @@ Condition : isnotnull(ave#31)
 Input [2]: [ss_store_sk#21, ave#31]
 Arguments: [ss_store_sk#21 ASC NULLS FIRST], false
 
-(97) SortMergeJoin [codegen id : 1]
+(97) SortMergeJoin [codegen id : X]
 Left keys [1]: [ss_store_sk#5]
 Right keys [1]: [ss_store_sk#21]
 Join type: Inner
 Join condition: (cast(revenue#13 as decimal(23,7)) <= (0.1 * ave#31))
 
-(98) Project [codegen id : 1]
+(98) Project [codegen id : X]
 Output [6]: [s_store_name#2, i_item_desc#15, revenue#13, i_current_price#16, i_wholesale_cost#17, i_brand#18]
 Input [9]: [s_store_name#2, ss_store_sk#5, revenue#13, i_item_desc#15, i_current_price#16, i_wholesale_cost#17, i_brand#18, ss_store_sk#21, ave#31]
 

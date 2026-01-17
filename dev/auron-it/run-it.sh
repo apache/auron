@@ -70,8 +70,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 exec $SPARK_HOME/bin/spark-submit \
-  --driver-memory 5g \
-  --conf spark.driver.memoryOverhead=3072 \
+  --driver-memory 8g \
+  --conf spark.driver.memoryOverhead=4g \
   --conf spark.auron.memoryFraction=0.8 \
   --conf spark.driver.extraJavaOptions=-XX:+UseG1GC \
   --conf spark.ui.enabled=false \

@@ -1553,13 +1553,13 @@ Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufac
 Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#113, sales_amt#114]
 Arguments: [i_brand_id#70 ASC NULLS FIRST, i_class_id#71 ASC NULLS FIRST, i_category_id#72 ASC NULLS FIRST, i_manufact_id#73 ASC NULLS FIRST], false
 
-(267) SortMergeJoin [codegen id : 1]
+(267) SortMergeJoin [codegen id : X]
 Left keys [4]: [i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11]
 Right keys [4]: [i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73]
 Join type: Inner
 Join condition: ((cast(sales_cnt#63 as decimal(17,2)) / cast(sales_cnt#113 as decimal(17,2))) < 0.90000000000000000000)
 
-(268) Project [codegen id : 1]
+(268) Project [codegen id : X]
 Output [10]: [d_year#75 AS prev_year#115, d_year#13 AS year#116, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#113 AS prev_yr_cnt#117, sales_cnt#63 AS curr_yr_cnt#118, (sales_cnt#63 - sales_cnt#113) AS sales_cnt_diff#119, (sales_amt#64 - sales_amt#114) AS sales_amt_diff#120]
 Input [14]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#63, sales_amt#64, d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#113, sales_amt#114]
 

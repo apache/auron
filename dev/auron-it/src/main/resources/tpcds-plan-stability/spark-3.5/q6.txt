@@ -471,13 +471,13 @@ Condition : isnotnull(avg(i_current_price)#22)
 Input [2]: [avg(i_current_price)#22, i_category#16]
 Arguments: [i_category#16 ASC NULLS FIRST], false
 
-(76) SortMergeJoin [codegen id : 1]
+(76) SortMergeJoin [codegen id : X]
 Left keys [1]: [i_category#14]
 Right keys [1]: [i_category#16]
 Join type: Inner
 Join condition: (cast(i_current_price#13 as decimal(14,7)) > (1.2 * avg(i_current_price)#22))
 
-(77) Project [codegen id : 1]
+(77) Project [codegen id : X]
 Output [1]: [i_item_sk#12]
 Input [5]: [#12#12, #13#13, #14#14, avg(i_current_price)#22, i_category#16]
 
