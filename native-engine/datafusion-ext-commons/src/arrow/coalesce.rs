@@ -217,17 +217,17 @@ mod tests {
     #[test]
     fn test_coalesce_string_with_offsets() -> Result<()> {
         let array: ArrayRef = Arc::new(StringArray::from(vec![
-            Some(format!("000")),
-            Some(format!("111")),
-            Some(format!("222")),
-            Some(format!("333")),
-            Some(format!("444")),
+            Some("000".to_string()),
+            Some("111".to_string()),
+            Some("222".to_string()),
+            Some("333".to_string()),
+            Some("444".to_string()),
             None,
-            Some(format!("666666")),
-            Some(format!("777")),
-            Some(format!("888")),
-            Some(format!("999")),
-            Some(format!("101010")),
+            Some("666666".to_string()),
+            Some("777".to_string()),
+            Some("888".to_string()),
+            Some("999".to_string()),
+            Some("101010".to_string()),
         ]));
         let test = vec![array.slice(0, 6), array.slice(2, 6), array.slice(4, 6)];
         let coalesced = coalesce_arrays_unchecked(&DataType::Utf8, &test);

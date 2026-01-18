@@ -35,6 +35,7 @@ mod spark_round;
 mod spark_strings;
 mod spark_unscaled_value;
 
+#[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 pub fn create_auron_ext_function(
     name: &str,
     spark_partition_id: usize,

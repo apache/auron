@@ -79,7 +79,7 @@ fn spill_compression_codec() -> &'static str {
             if is_jni_bridge_inited() {
                 conf::SPILL_COMPRESSION_CODEC.value()
             } else {
-                Ok(format!("lz4")) // for testing
+                Ok("lz4".to_string()) // for testing
             }
         })
         .expect("error reading spark.auron.spill.compression.codec")
@@ -168,10 +168,7 @@ impl Drop for FileSpill {
             .add_duration(Duration::from_nanos(self.1.mem_spill_iotime.value() as u64));
         if let Some(file_path) = &self.2 {
             if let Err(e) = fs::remove_file(file_path) {
-                warn!(
-                    "Was unable to delete spill file: {}. error: {}",
-                    file_path, e
-                );
+                warn!("Was unable to delete spill file: {file_path}. error: {e}");
             }
         }
     }

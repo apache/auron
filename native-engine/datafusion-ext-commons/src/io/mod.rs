@@ -49,7 +49,7 @@ pub fn recover_named_batch(
     let cols = cols
         .iter()
         .zip(schema.fields())
-        .map(|(col, field)| Ok(cast(&col, field.data_type())?))
+        .map(|(col, field)| cast(&col, field.data_type()))
         .collect::<Result<Vec<_>>>()?;
     Ok(RecordBatch::try_new_with_options(
         schema,

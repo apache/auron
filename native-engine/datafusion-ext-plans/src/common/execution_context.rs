@@ -76,6 +76,7 @@ pub struct ExecutionContext {
     input_stat_metrics: Arc<OnceCell<Option<InputBatchStatistics>>>,
 }
 
+#[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 impl ExecutionContext {
     pub fn new(
         task_ctx: Arc<TaskContext>,
@@ -690,6 +691,7 @@ pub struct WrappedSender<T: RecordBatchWithPayload> {
     exclude_time: OnceCell<Time>,
 }
 
+#[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 impl<T: RecordBatchWithPayload> WrappedSender<T> {
     pub fn new(exec_ctx: Arc<ExecutionContext>, sender: Sender<Result<T>>) -> Arc<Self> {
         let wrapped = Arc::new(Self {

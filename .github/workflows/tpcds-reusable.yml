@@ -120,9 +120,8 @@ jobs:
             clippy
 
       - name: Cargo clippy
-        # First eliminate unwrap; then enable -D warnings to enforce all default lints.
         run: |
-          cargo clippy --all-targets --workspace -- -A warnings  -A clippy::all  -D clippy::unwrap_used
+          cargo clippy --all-targets --workspace -- -D warnings
 
       - name: Cargo test
         run: |

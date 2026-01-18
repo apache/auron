@@ -356,6 +356,7 @@ impl AccUDAFBufferRowsColumn {
     }
 }
 
+#[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 impl AccColumn for AccUDAFBufferRowsColumn {
     fn as_any(&self) -> &dyn Any {
         self

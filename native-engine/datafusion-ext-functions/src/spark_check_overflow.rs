@@ -33,8 +33,7 @@ pub fn spark_check_overflow(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     };
     assert!(
         to_precision >= 1,
-        "check_overflow: illegal precision: {}",
-        to_precision
+        "check_overflow: illegal precision: {to_precision}"
     );
 
     Ok(match &args[0] {

@@ -116,6 +116,7 @@ mod tests {
 
     /// Helper function to run a test for a given hash function and scalar
     /// input.
+    #[allow(clippy::panic)]
     fn run_scalar_test(
         // Accepts any function that matches the signature of the spark_sha* functions.
         hash_fn: impl Fn(&[ColumnarValue]) -> DataFusionResult<ColumnarValue>,

@@ -64,9 +64,9 @@ pub extern "system" fn Java_org_apache_auron_jni_JniBridge_callNative(
             eprintln!("------ initializing auron native environment ------");
             let log_level = env
                 .get_string(log_level)
-                .map(|s| String::from(s))
+                .map(String::from)
                 .expect("init: failed to read log_level from env");
-            eprintln!("initializing logging with level: {}", log_level);
+            eprintln!("initializing logging with level: {log_level}");
             init_logging(log_level.as_str());
 
             // init jni java classes

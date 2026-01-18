@@ -69,7 +69,7 @@ pub fn write_scalar<W: Write>(value: &ScalarValue, nullable: bool, output: &mut 
         ScalarValue::TimestampNanosecond(v, ..) => write_prim!(v),
         ScalarValue::Utf8(v) => {
             if let Some(v) = v {
-                write_len(v.as_bytes().len() + 1, output)?;
+                write_len(v.len() + 1, output)?;
                 output.write_all(v.as_bytes())?;
             } else {
                 write_len(0, output)?;

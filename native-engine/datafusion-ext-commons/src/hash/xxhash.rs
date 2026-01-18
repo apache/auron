@@ -35,7 +35,7 @@ fn xxhash64(input: &[u8], seed: u64) -> u64 {
     if remaining >= 32 {
         let mut acc1 = seed + PRIME64_1 + PRIME64_2;
         let mut acc2 = seed + PRIME64_2;
-        let mut acc3 = seed + 0;
+        let mut acc3 = seed;
         let mut acc4 = seed - PRIME64_1;
 
         while remaining >= 32 {

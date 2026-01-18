@@ -211,7 +211,7 @@ impl<T: Sized + Copy> SliceAsRawBytes for [T] {
         let bytes_ptr = self.as_ptr() as *const u8;
         unsafe {
             // safety: access raw bytes
-            std::slice::from_raw_parts(bytes_ptr, size_of::<T>() * self.len())
+            std::slice::from_raw_parts(bytes_ptr, std::mem::size_of_val(self))
         }
     }
 
@@ -219,7 +219,7 @@ impl<T: Sized + Copy> SliceAsRawBytes for [T] {
         let bytes_ptr = self.as_mut_ptr() as *mut u8;
         unsafe {
             // safety: access raw bytes
-            std::slice::from_raw_parts_mut(bytes_ptr, size_of::<T>() * self.len())
+            std::slice::from_raw_parts_mut(bytes_ptr, std::mem::size_of_val(self))
         }
     }
 }

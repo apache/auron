@@ -209,8 +209,10 @@ fn round_half_even_f32(x: f32) -> f32 {
         f + 1.0
     } else if diff < 0.5 {
         f
+    } else if ((f as i32) & 1) == 0 {
+        f
     } else {
-        if ((f as i32) & 1) == 0 { f } else { f + 1.0 }
+        f + 1.0
     };
 
     rounded.copysign(sign)

@@ -163,7 +163,7 @@ mod test {
         let output_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("cccccc1", output_array, true)])?;
 
-        let expected = vec![
+        let expected = [
             "+--------------------------------------------------------+",
             "| cccccc1                                                |",
             "+--------------------------------------------------------+",

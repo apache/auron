@@ -27,7 +27,7 @@ pub fn spark_murmur3_hash(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     spark_hash(args, |len, is_scalar, arrays| {
         // use identical seed as spark hash partition
         let spark_murmur3_default_seed = 42i32;
-        let hash_buffer = create_murmur3_hashes(len, &arrays, spark_murmur3_default_seed);
+        let hash_buffer = create_murmur3_hashes(len, arrays, spark_murmur3_default_seed);
         if is_scalar {
             ColumnarValue::Scalar(ScalarValue::from(hash_buffer[0]))
         } else {

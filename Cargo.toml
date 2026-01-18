@@ -27,9 +27,94 @@ members = [
     "native-engine/auron-memmgr",
 ]
 
+[workspace.lints.rust]
+# Pending processing (temporarily allow)
+unused_variables = "allow"
+dead_code = "allow"
+unused_imports = "allow"
+unused_must_use = "allow"
+deprecated = "allow"
+
 [workspace.lints.clippy]
 unwrap_used = "deny"
 panic = "deny"
+
+# Pending processing (temporarily allow)
+# Unwrap/Error Handling
+unnecessary_unwrap = "allow"
+needless_question_mark = "allow"
+unnecessary_literal_unwrap = "allow"
+bind_instead_of_map = "allow"
+expect_fun_call = "allow"
+io_other_error = "allow"
+unnecessary_fallible_conversions = "allow"
+
+# Unsafe/Memory
+missing_transmute_annotations = "allow"
+declare_interior_mutable_const = "allow"
+borrow_interior_mutable_const = "allow"
+uninit_vec = "allow"
+macro_metavars_in_unsafe = "allow"
+ptr_arg = "allow"
+borrowed_box = "allow"
+
+# Iterator/Collection
+manual_flatten = "allow"
+iter_cloned_collect = "allow"
+into_iter_on_ref = "allow"
+box_collection = "allow"
+useless_vec = "allow"
+len_without_is_empty = "allow"
+len_zero = "allow"
+mem_replace_option_with_none = "allow"
+get_first = "allow"
+
+# Loop/Control Flow
+needless_range_loop = "allow"
+while_let_loop = "allow"
+while_let_on_iterator = "allow"
+explicit_counter_loop = "allow"
+
+# Format/String
+useless_format = "allow"
+uninlined_format_args = "allow"
+to_string_in_format_args = "allow"
+
+# Code Style/Redundancy (Part 1)
+needless_borrow = "allow"
+needless_return = "allow"
+redundant_closure = "allow"
+redundant_locals = "allow"
+redundant_pattern_matching = "allow"
+
+# Code Style/Redundancy (Part 2)
+unnecessary_cast = "allow"
+unnecessary_to_owned = "allow"
+useless_asref = "allow"
+clone_on_copy = "allow"
+unit_arg = "allow"
+manual_repeat_n = "allow"
+manual_div_ceil = "allow"
+
+# Condition/Logic
+collapsible_if = "allow"
+collapsible_else_if = "allow"
+if_same_then_else = "allow"
+match_like_matches_macro = "allow"
+explicit_auto_deref = "allow"
+bool_assert_comparison = "allow"
+
+# Naming/Structure/Remaining
+upper_case_acronyms = "allow"
+module_inception = "allow"
+too_many_arguments = "allow"
+should_implement_trait = "allow"
+extra_unused_lifetimes = "allow"
+crate_in_macro_def = "allow"
+int_plus_one = "allow"
+derived_hash_with_manual_eq = "allow"
+approx_constant = "allow"
+op_ref = "allow"
 
 [profile.release]
 opt-level = 3

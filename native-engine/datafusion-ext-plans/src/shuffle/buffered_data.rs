@@ -246,6 +246,7 @@ impl<'a> PartitionedBatchesIterator<'a> {
     }
 
     /// all iterators returned should have been fully consumed
+    #[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
     pub fn next_partition_chunk(
         &mut self,
     ) -> Option<(usize, impl Iterator<Item = RecordBatch> + 'a)> {

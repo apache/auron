@@ -27,7 +27,7 @@ pub fn string_initcap(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         ColumnarValue::Array(array) => {
             let input_array = as_string_array(array)?;
             let output_array =
-                StringArray::from_iter(input_array.into_iter().map(|s| s.map(|s| initcap(s))));
+                StringArray::from_iter(input_array.into_iter().map(|s| s.map(initcap)));
             Ok(ColumnarValue::Array(Arc::new(output_array) as ArrayRef))
         }
         ColumnarValue::Scalar(ScalarValue::Utf8(Some(str))) => {

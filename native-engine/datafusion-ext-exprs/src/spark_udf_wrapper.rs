@@ -193,7 +193,7 @@ impl PhysicalExpr for SparkUDFWrapperExpr {
         Ok(Arc::new(Self::try_new(
             self.serialized.clone(),
             self.return_type.clone(),
-            self.return_nullable.clone(),
+            self.return_nullable,
             children,
             self.expr_string.clone(),
         )?))
