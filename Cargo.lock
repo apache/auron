@@ -1227,6 +1227,7 @@ dependencies = [
  "log",
  "num",
  "paste",
+ "rand",
  "serde_json",
  "sonic-rs",
 ]
