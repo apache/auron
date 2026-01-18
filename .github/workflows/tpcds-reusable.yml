@@ -183,14 +183,17 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: target/auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-pre-*.jar
           overwrite: true
-      - name: Upload auron maven artifacts (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
+
+      - name: Build auron-it (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
+        run: |
+          cd dev/auron-it
+          ${{ github.workspace }}/build/mvn package -P${{ inputs.sparkver }} -Pscala-${{ inputs.scalaver }}
+      - name: Upload auron it (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
         uses: actions/upload-artifact@v6
         with:
-          name: auron-artifacts-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver
-            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || ''
-            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
-          path: ~/.m2/repository/org/apache/auron
-          if-no-files-found: error
+          name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
+          path: dev/auron-it/target/auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}*-jar-with-dependencies.jar
+          overwrite: true
 
   run-tpcds-test:
     name: Run TPC-DS test ${{ matrix.query }}
@@ -254,14 +257,10 @@ jobs:
             }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
-      - name: Download auron maven artifacts
+      - name: Download auron-it JAR
         uses: actions/download-artifact@v7
         with:
-          name: >
-            auron-artifacts-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver
-            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || ''
-            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
-          path: ~/.m2/repository/org/apache/auron
+          name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
 
       - name: Checkout TPC-DS Data
         uses: actions/checkout@v6
@@ -283,6 +282,13 @@ jobs:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
           cache: 'maven'
+
+      - name: Install auron-it JAR
+        run: |
+          ls -la
+          jar=$(ls -1 auron-it-*-jar-with-dependencies.jar | head -n1)
+          [ -n "$jar" ] || { echo "No jar matched: auron-it-*-jar-with-dependencies.jar"; exit 1; }
+          echo "AURON_IT_JAR=$jar" >> "$GITHUB_ENV"
 
       - name: Cache Celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}
         uses: actions/cache@v5
@@ -386,7 +392,6 @@ jobs:
           SPARK_HOME: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
         run: |
           ls -la
-          ls -la ~/.m2/repository/org/apache/auron
           dev/auron-it/run-it.sh  \
             ${{ inputs.extrasparkconf }} \
             --type tpcds \
@@ -413,3 +418,4 @@ jobs:
           rm -f celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar
           rm -f rss-client-spark*.jar
           ls -la ./
+

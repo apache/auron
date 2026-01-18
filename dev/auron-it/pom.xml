@@ -24,7 +24,7 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>auron-it</artifactId>
+  <artifactId>auron-it-${shimName}_${scalaVersion}</artifactId>
   <packaging>jar</packaging>
   <name>Apache Auron Integration Tests</name>
   <description>Apache Auron Integration Tests Project</description>
