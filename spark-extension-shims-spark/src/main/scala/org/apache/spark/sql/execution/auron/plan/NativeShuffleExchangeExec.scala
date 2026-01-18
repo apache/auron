@@ -124,6 +124,7 @@ case class NativeShuffleExchangeExec(
         new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
       }
 
+      @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
       override def write(
           rdd: RDD[_],
           dep: ShuffleDependency[_, _, _],
@@ -157,13 +158,53 @@ case class NativeShuffleExchangeExec(
         }
         writer.stop(true).get
       }
+
+      @sparkver("4.0")
+      override def write(
+          inputs: Iterator[_],
+          dep: ShuffleDependency[_, _, _],
+          mapId: Long,
+          mapIndex: Int,
+          context: TaskContext): MapStatus = {
+
+        // [SPARK-44605][CORE] Refined the internal ShuffleWriteProcessor API.
+        // Due to the restructuring of the write method in the API, we optimized and refactored the original Partition.
+        val rdd = dep.rdd
+        val partition = rdd.partitions(mapIndex)
+
+        val writer = SparkEnv.get.shuffleManager.getWriter(
+          dep.shuffleHandle,
+          mapId,
+          context,
+          createMetricsReporter(context))
+
+        writer match {
+          case writer: AuronRssShuffleWriterBase[_, _] =>
+            writer.nativeRssShuffleWrite(
+              rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
+              dep,
+              mapId.toInt,
+              context,
+              partition,
+              numPartitions)
+
+          case writer: AuronShuffleWriterBase[_, _] =>
+            writer.nativeShuffleWrite(
+              rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
+              dep,
+              mapId.toInt,
+              context,
+              partition)
+        }
+        writer.stop(true).get
+      }
     }
   }
 
   // for databricks testing
   val causedBroadcastJoinBuildOOM = false
 
-  @sparkver("3.5")
+  @sparkver("3.5 / 4.0")
   override def advisoryPartitionSize: Option[Long] = None
 
   // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
@@ -172,17 +213,22 @@ case class NativeShuffleExchangeExec(
   override def canChangeNumPartitions: Boolean =
     outputPartitioning != SinglePartition
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def shuffleOrigin = {
     import org.apache.spark.sql.execution.exchange.ShuffleOrigin;
     _shuffleOrigin.get.asInstanceOf[ShuffleOrigin]
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
   @sparkver("3.0 / 3.1")
   override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
     copy(child = newChildren.head)
+
+  @sparkver("4.0")
+  override def shuffleId: Int = {
+    shuffleDependency.shuffleId;
+  }
 }

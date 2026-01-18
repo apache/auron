@@ -415,13 +415,13 @@ object AuronConverters extends Logging {
       getShuffleOrigin(exec))
   }
 
-  @sparkver(" 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver(" 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
 
   @sparkver("3.0 / 3.1")
   def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
 
   @sparkver("3.0")
@@ -646,7 +646,7 @@ object AuronConverters extends Logging {
     }
   }
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = exec.isNullAwareAntiJoin
 
   @sparkver("3.0")

@@ -63,7 +63,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.BinaryType
 
-import org.apache.auron.{protobuf => pb}
+import org.apache.auron.{protobuf => pb, sparkver}
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.metric.SparkMetricNode
 
@@ -137,9 +137,21 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
     dummyBroadcasted.asInstanceOf[Broadcast[T]]
   }
 
-  def doExecuteBroadcastNative[T](): broadcast.Broadcast[T] = {
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  def getBroadcastTimeout: Long = {
     val conf = SparkSession.getActiveSession.map(_.sqlContext.conf).orNull
-    val timeout: Long = conf.broadcastTimeout
+    conf.broadcastTimeout
+  }
+
+  @sparkver("4.0")
+  def getBroadcastTimeout: Long = {
+    SparkSession.getActiveSession
+      .map(_.conf.get("spark.sql.broadcastTimeout").toLong)
+      .getOrElse(300L)
+  }
+
+  def doExecuteBroadcastNative[T](): broadcast.Broadcast[T] = {
+    val timeout: Long = getBroadcastTimeout
     try {
       relationFuture.get(timeout, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
     } catch {
@@ -258,7 +270,31 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
   lazy val relationFuturePromise: Promise[Broadcast[Any]] = Promise[Broadcast[Any]]()
 
   @transient
-  lazy val relationFuture: Future[Broadcast[Any]] = {
+  lazy val relationFuture: Future[Broadcast[Any]] = getRelationFuture
+
+  @sparkver("4.0")
+  private def getRelationFuture = {
+    SQLExecution.withThreadLocalCaptured[Broadcast[Any]](
+      this.session.sqlContext.sparkSession,
+      BroadcastExchangeExec.executionContext) {
+      try {
+        sparkContext.setJobGroup(
+          getRunId.toString,
+          s"native broadcast exchange (runId $getRunId)",
+          interruptOnCancel = true)
+        val broadcasted = sparkContext.broadcast(collectNative().asInstanceOf[Any])
+        relationFuturePromise.trySuccess(broadcasted)
+        broadcasted
+      } catch {
+        case e: Throwable =>
+          relationFuturePromise.tryFailure(e)
+          throw e
+      }
+    }
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  private def getRelationFuture = {
     SQLExecution.withThreadLocalCaptured[Broadcast[Any]](
       Shims.get.getSqlContext(this).sparkSession,
       BroadcastExchangeExec.executionContext) {

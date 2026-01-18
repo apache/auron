@@ -23,7 +23,7 @@ import org.apache.auron.sparkver
 
 object InterceptedValidateSparkPlan extends Logging {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   def validate(plan: SparkPlan): Unit = {
     import org.apache.spark.sql.execution.adaptive.BroadcastQueryStageExec
     import org.apache.spark.sql.execution.auron.plan.NativeRenameColumnsBase
@@ -76,7 +76,7 @@ object InterceptedValidateSparkPlan extends Logging {
     throw new UnsupportedOperationException("validate is not supported in spark 3.0.3 or 3.1.3")
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   private def errorOnInvalidBroadcastQueryStage(plan: SparkPlan): Unit = {
     import org.apache.spark.sql.execution.adaptive.InvalidAQEPlanException
     throw InvalidAQEPlanException("Invalid broadcast query stage", plan)

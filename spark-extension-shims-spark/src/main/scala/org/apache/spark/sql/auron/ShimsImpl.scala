@@ -128,8 +128,10 @@ class ShimsImpl extends Shims with Logging {
   override def shimVersion: String = "spark-3.4"
   @sparkver("3.5")
   override def shimVersion: String = "spark-3.5"
+  @sparkver("4.0")
+  override def shimVersion: String = "spark-4.0"
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def initExtension(): Unit = {
     ValidateSparkPlanInjector.inject()
 
@@ -437,7 +439,7 @@ class ShimsImpl extends Shims with Logging {
       length: Long,
       numRecords: Long): FileSegment = new FileSegment(file, offset, length)
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def commit(
       dep: ShuffleDependency[_, _, _],
       shuffleBlockResolver: IndexShuffleBlockResolver,
@@ -598,7 +600,7 @@ class ShimsImpl extends Shims with Logging {
     expr.asInstanceOf[AggregateExpression].filter
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   private def isAQEShuffleRead(exec: SparkPlan): Boolean = {
     import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
     exec.isInstanceOf[AQEShuffleReadExec]
@@ -610,7 +612,7 @@ class ShimsImpl extends Shims with Logging {
     exec.isInstanceOf[CustomShuffleReaderExec]
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   private def executeNativeAQEShuffleReader(exec: SparkPlan): NativeRDD = {
     import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
     import org.apache.spark.sql.execution.CoalescedMapperPartitionSpec
@@ -910,7 +912,7 @@ class ShimsImpl extends Shims with Logging {
     }
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def getSqlContext(sparkPlan: SparkPlan): SQLContext =
     sparkPlan.session.sqlContext
 
@@ -932,7 +934,7 @@ class ShimsImpl extends Shims with Logging {
       size: Long): PartitionedFile =
     PartitionedFile(partitionValues, filePath, offset, size)
 
-  @sparkver("3.4 / 3.5")
+  @sparkver("3.4 / 3.5 / 4.0")
   override def getPartitionedFile(
       partitionValues: InternalRow,
       filePath: String,
@@ -943,7 +945,7 @@ class ShimsImpl extends Shims with Logging {
     PartitionedFile(partitionValues, SparkPath.fromPath(new Path(filePath)), offset, size)
   }
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def getMinPartitionNum(sparkSession: SparkSession): Int =
     sparkSession.sessionState.conf.filesMinPartitionNum
       .getOrElse(sparkSession.sparkContext.defaultParallelism)
@@ -965,13 +967,13 @@ class ShimsImpl extends Shims with Logging {
     }
   }
 
-  @sparkver("3.4 / 3.5")
+  @sparkver("3.4 / 3.5 / 4.0")
   private def convertPromotePrecision(
       e: Expression,
       isPruningExpr: Boolean,
       fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = None
 
-  @sparkver("3.3 / 3.4 / 3.5")
+  @sparkver("3.3 / 3.4 / 3.5 / 4.0")
   private def convertBloomFilterAgg(agg: AggregateFunction): Option[pb.PhysicalAggExprNode] = {
     import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
     agg match {
@@ -1000,7 +1002,7 @@ class ShimsImpl extends Shims with Logging {
   @sparkver("3.0 / 3.1 / 3.2")
   private def convertBloomFilterAgg(agg: AggregateFunction): Option[pb.PhysicalAggExprNode] = None
 
-  @sparkver("3.3 / 3.4 / 3.5")
+  @sparkver("3.3 / 3.4 / 3.5 / 4.0")
   private def convertBloomFilterMightContain(
       e: Expression,
       isPruningExpr: Boolean,
@@ -1034,7 +1036,7 @@ class ShimsImpl extends Shims with Logging {
     exec.initialPlan
   }
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def getAdaptiveInputPlan(exec: AdaptiveSparkPlanExec): SparkPlan = {
     exec.inputPlan
   }
@@ -1064,7 +1066,7 @@ class ShimsImpl extends Shims with Logging {
       })
   }
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def getJoinBuildSide(exec: SparkPlan): JoinBuildSide = {
     import org.apache.spark.sql.catalyst.optimizer.BuildLeft
     convertJoinBuildSide(
@@ -1079,7 +1081,7 @@ class ShimsImpl extends Shims with Logging {
 case class ForceNativeExecutionWrapper(override val child: SparkPlan)
     extends ForceNativeExecutionWrapperBase(child) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
@@ -1094,6 +1096,6 @@ case class NativeExprWrapper(
     override val nullable: Boolean)
     extends NativeExprWrapperBase(nativeExpr, dataType, nullable) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = copy()
 }
