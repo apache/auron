@@ -102,3 +102,88 @@ impl PhysicalExpr for SparkPartitionIdExpr {
         write!(f, "fmt_sql not used")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use arrow::{
+        array::Int32Array,
+        datatypes::{Field, Schema},
+        record_batch::RecordBatch,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_data_type_and_nullable() {
+        let expr = SparkPartitionIdExpr::new(0);
+        let schema = Schema::new(vec![] as Vec<Field>);
+        assert_eq!(
+            expr.data_type(&schema).expect("data_type failed"),
+            DataType::Int32
+        );
+        assert!(!expr.nullable(&schema).expect("nullable failed"));
+    }
+
+    #[test]
+    fn test_evaluate_returns_constant_partition_id() {
+        let expr = SparkPartitionIdExpr::new(5);
+        let schema = Schema::new(vec![Field::new("col", DataType::Int32, false)]);
+        let batch = RecordBatch::try_new(
+            Arc::new(schema),
+            vec![Arc::new(Int32Array::from(vec![1, 2, 3]))],
+        )
+        .expect("RecordBatch creation failed");
+
+        let result = expr.evaluate(&batch).expect("evaluate failed");
+        match result {
+            ColumnarValue::Array(arr) => {
+                let int_arr = arr
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .expect("downcast failed");
+                assert_eq!(int_arr.len(), 3);
+                for i in 0..3 {
+                    assert_eq!(int_arr.value(i), 5);
+                }
+            }
+            _ => panic!("Expected Array result"),
+        }
+    }
+
+    #[test]
+    fn test_evaluate_different_partition_ids() {
+        let schema = Schema::new(vec![Field::new("col", DataType::Int32, false)]);
+        let batch = RecordBatch::try_new(
+            Arc::new(schema),
+            vec![Arc::new(Int32Array::from(vec![1, 2]))],
+        )
+        .expect("RecordBatch creation failed");
+
+        for partition_id in [0, 1, 100, 999] {
+            let expr = SparkPartitionIdExpr::new(partition_id);
+            let result = expr.evaluate(&batch).expect("evaluate failed");
+            match result {
+                ColumnarValue::Array(arr) => {
+                    let int_arr = arr
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .expect("downcast failed");
+                    for i in 0..int_arr.len() {
+                        assert_eq!(int_arr.value(i), partition_id as i32);
+                    }
+                }
+                _ => panic!("Expected Array result"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_equality() {
+        let expr1 = SparkPartitionIdExpr::new(5);
+        let expr2 = SparkPartitionIdExpr::new(5);
+        let expr3 = SparkPartitionIdExpr::new(3);
+
+        assert_eq!(expr1, expr2);
+        assert_ne!(expr1, expr3);
+    }
+}
