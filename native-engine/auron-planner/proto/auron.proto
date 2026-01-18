@@ -113,6 +113,9 @@ message PhysicalExprNode {
     // RowNum
     RowNumExprNode row_num_expr = 20100;
 
+    // SparkPartitionID
+    SparkPartitionIdExprNode spark_partition_id_expr = 20101;
+
     // BloomFilterMightContain
     BloomFilterMightContainExprNode bloom_filter_might_contain_expr = 20200;
   }
@@ -914,3 +917,5 @@ message ArrowType {
 //   }
 //}
 message EmptyMessage{}
+
+message SparkPartitionIdExprNode {}

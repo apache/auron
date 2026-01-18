@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.expressions.Like
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.SparkPartitionID
 import org.apache.spark.sql.catalyst.expressions.StringSplit
 import org.apache.spark.sql.catalyst.expressions.TaggingExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -521,6 +522,13 @@ class ShimsImpl extends Shims with Logging {
       isPruningExpr: Boolean,
       fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = {
     e match {
+      case _: SparkPartitionID =>
+        Some(
+          pb.PhysicalExprNode
+            .newBuilder()
+            .setSparkPartitionIdExpr(pb.SparkPartitionIdExprNode.newBuilder())
+            .build())
+
       case StringSplit(str, pat @ Literal(_, StringType), Literal(-1, IntegerType))
           // native StringSplit implementation does not support regex, so only most frequently
           // used cases without regex are supported

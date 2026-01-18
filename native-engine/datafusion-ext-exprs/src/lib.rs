@@ -23,6 +23,7 @@ pub mod get_indexed_field;
 pub mod get_map_value;
 pub mod named_struct;
 pub mod row_num;
+pub mod spark_partition_id;
 pub mod spark_scalar_subquery_wrapper;
 pub mod spark_udf_wrapper;
 pub mod string_contains;
