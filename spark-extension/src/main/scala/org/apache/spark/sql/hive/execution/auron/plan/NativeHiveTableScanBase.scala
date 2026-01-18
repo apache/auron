@@ -143,7 +143,7 @@ abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
 
   override protected def doCanonicalize(): SparkPlan = basedHiveScan.canonicalized
 
-  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def simpleString(maxFields: Int): String =
     s"$nodeName (${basedHiveScan.simpleString(maxFields)})"
 }

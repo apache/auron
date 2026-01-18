@@ -38,7 +38,7 @@ class AuronBlockStoreShuffleReader[K, C](
     with Logging {
 
   override def readBlocks(): Iterator[InputStream] = {
-    @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+    @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
     def fetchIterator = new ShuffleBlockFetcherIterator(
       context,
       blockManager.blockStoreClient,

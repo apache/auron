@@ -28,7 +28,7 @@ case class NativeExpandExec(
     override val child: SparkPlan)
     extends NativeExpandBase(projections, output, child) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 

@@ -35,6 +35,7 @@ class SessionManager(val extraSparkConf: Map[String, String]) {
   private lazy val commonConf: Map[String, String] = Map(
     "spark.master" -> resolveMaster(),
     "spark.sql.shuffle.partitions" -> "100",
+    "spark.sql.unionOutputPartitioning" -> "false",
     "spark.ui.enabled" -> "false",
     "spark.sql.sources.useV1SourceList" -> "parquet",
     "spark.sql.autoBroadcastJoinThreshold" -> "-1")
@@ -77,7 +78,7 @@ class SessionManager(val extraSparkConf: Map[String, String]) {
       .appName(appName)
       .config(conf)
       .getOrCreate()
-    session.sparkContext.setLogLevel("WARN")
+    // session.sparkContext.setLogLevel("WARN")
     session
   }
 

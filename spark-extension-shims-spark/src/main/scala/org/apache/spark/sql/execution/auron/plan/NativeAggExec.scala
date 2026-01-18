@@ -44,22 +44,22 @@ case class NativeAggExec(
       child)
     with BaseAggregateExec {
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override val requiredChildDistributionExpressions: Option[Seq[Expression]] =
     theRequiredChildDistributionExpressions
 
-  @sparkver("3.3 / 3.4 / 3.5")
+  @sparkver("3.3 / 3.4 / 3.5 / 4.1")
   override val initialInputBufferOffset: Int = theInitialInputBufferOffset
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def isStreaming: Boolean = false
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def numShufflePartitions: Option[Int] = None
 
   override def resultExpressions: Seq[NamedExpression] = outputAttributes
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 

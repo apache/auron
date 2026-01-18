@@ -36,6 +36,19 @@
       <artifactId>spark-sql_${scalaVersion}</artifactId>
       <scope>provided</scope>
     </dependency>
+    <!-- Required for XML processing (Scala 2.12+ split module, compatible with Spark 4.x) -->
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-xml_${scalaVersion}</artifactId>
+      <version>${scala-xml.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>spark-version-annotation-macros_${scalaVersion}</artifactId>
+      <version>${project.version}</version>
+      <scope>compile</scope>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

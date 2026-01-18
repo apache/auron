@@ -20,19 +20,14 @@ import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark._
-import org.apache.spark.rdd.MapPartitionsRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.shuffle.ShuffleWriteProcessor
 import org.apache.spark.sql.auron.NativeHelper
-import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.auron.shuffle.AuronRssShuffleWriterBase
-import org.apache.spark.sql.execution.auron.shuffle.AuronShuffleWriterBase
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
@@ -126,12 +121,46 @@ case class NativeShuffleExchangeExec(
         new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
       }
 
+      @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
       override def write(
           rdd: RDD[_],
           dep: ShuffleDependency[_, _, _],
           mapId: Long,
           context: TaskContext,
-          partition: Partition): MapStatus = {
+          partition: Partition): org.apache.spark.scheduler.MapStatus = {
+        internalWrite(rdd, dep, mapId, context, partition)
+      }
+
+      @sparkver("4.1")
+      override def write(
+          inputs: Iterator[_],
+          dep: ShuffleDependency[_, _, _],
+          mapId: Long,
+          mapIndex: Int,
+          context: TaskContext): org.apache.spark.scheduler.MapStatus = {
+        import org.apache.spark.sql.execution.auron.shuffle.AuronShuffleDependency
+
+        // SPARK-44605: Spark 4+ refines ShuffleWriteProcessor API, leading to early execution of NativeRDD.ShuffleWrite iterator
+        // Adaptation: Return empty iterator in NativeRDD.compute() to defer execution to ShuffleWriteProcessor.write() (align with Spark 3.x logic)
+        assert(
+          inputs.isEmpty,
+          "Input iterator must be empty (SPARK-44605: adapt to Spark 4+ ShuffleWriteProcessor API changes)")
+
+        val rdd = dep.asInstanceOf[AuronShuffleDependency[_, _, _]].inputRdd
+        val partition = rdd.partitions(mapIndex)
+        internalWrite(rdd, dep, mapId, context, partition)
+      }
+
+      private def internalWrite(
+          rdd: RDD[_],
+          dep: ShuffleDependency[_, _, _],
+          mapId: Long,
+          context: TaskContext,
+          partition: Partition): org.apache.spark.scheduler.MapStatus = {
+        import org.apache.spark.rdd.MapPartitionsRDD
+        import org.apache.spark.sql.auron.NativeRDD
+        import org.apache.spark.sql.execution.auron.shuffle.AuronRssShuffleWriterBase
+        import org.apache.spark.sql.execution.auron.shuffle.AuronShuffleWriterBase
 
         val writer = SparkEnv.get.shuffleManager.getWriter(
           dep.shuffleHandle,
@@ -165,7 +194,7 @@ case class NativeShuffleExchangeExec(
   // for databricks testing
   val causedBroadcastJoinBuildOOM = false
 
-  @sparkver("3.5")
+  @sparkver("3.5 / 4.1")
   override def advisoryPartitionSize: Option[Long] = None
 
   // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
@@ -174,17 +203,22 @@ case class NativeShuffleExchangeExec(
   override def canChangeNumPartitions: Boolean =
     outputPartitioning != SinglePartition
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def shuffleOrigin: org.apache.spark.sql.execution.exchange.ShuffleOrigin = {
     import org.apache.spark.sql.execution.exchange.ShuffleOrigin;
     _shuffleOrigin.get.asInstanceOf[ShuffleOrigin]
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
   @sparkver("3.0 / 3.1")
   override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
     copy(child = newChildren.head)
+
+  @sparkver("4.1")
+  override def shuffleId: Int = {
+    shuffleDependency.shuffleId
+  }
 }
