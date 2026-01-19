@@ -156,6 +156,7 @@ trait TPCDSFeatures {
     "time_dim",
     "web_page")
 
+  // scalastyle:off
   def setupTables(dataLocation: String, spark: SparkSession): Map[String, Long] = {
     println(s"Setting up TPC-DS tables from: $dataLocation")
     tpcdsTables.map { tableName =>
@@ -211,3 +212,4 @@ trait TPCDSFeatures {
     path.toFile
   }
 }
+// scalastyle:on

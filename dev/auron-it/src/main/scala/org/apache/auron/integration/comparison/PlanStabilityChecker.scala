@@ -33,6 +33,7 @@ class PlanStabilityChecker(
     regenGoldenFiles: Boolean = false,
     planCheck: Boolean = false) {
 
+  // scalastyle:off println
   private lazy val isSupported: Boolean = Shims.get.shimVersion match {
     case "spark-3.5" => true
     case other =>
@@ -122,4 +123,5 @@ class PlanStabilityChecker(
 
     normalizeLocation(argumentsNormalized)
   }
+  // scalastyle:on
 }

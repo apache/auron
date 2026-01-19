@@ -71,6 +71,7 @@ object Main {
     OParser.parse(parser, args, SuiteArgs())
   }
 
+  // scalastyle:off
   def main(mainArgs: Array[String]): Unit = {
     parseArgs(mainArgs) match {
       case Some(args) =>
@@ -124,3 +125,4 @@ object Main {
     println("")
   }
 }
+// scalastyle:on
