@@ -185,7 +185,7 @@ jobs:
           path: target/auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-pre-*.jar
           overwrite: true
       - name: Upload auron maven artifacts (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auron-artifacts-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver
             }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || ''
