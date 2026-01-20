@@ -17,6 +17,7 @@
 package org.apache.auron.flink.arrow;
 
 import java.util.List;
+
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.ValueVector;
@@ -48,7 +49,9 @@ import org.apache.flink.table.types.logical.TinyIntType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 
-/** Writer that converts Flink RowData to Arrow VectorSchemaRoot. */
+/**
+ * Writer that converts Flink RowData to Arrow VectorSchemaRoot.
+ */
 public class FlinkArrowWriter {
 
     private final VectorSchemaRoot root;
@@ -62,6 +65,18 @@ public class FlinkArrowWriter {
     /**
      * Creates a FlinkArrowWriter from a Flink RowType.
      *
+     * <p><b>Resource Management:</b> This method creates an internal VectorSchemaRoot
+     * that the caller is responsible for closing. Call {@link #getRoot()} to obtain
+     * the root and close it when done:
+     * <pre>{@code
+     * FlinkArrowWriter writer = FlinkArrowWriter.create(rowType);
+     * try {
+     *     // use writer
+     * } finally {
+     *     writer.getRoot().close();
+     * }
+     * }</pre>
+     *
      * @param rowType The Flink row type
      * @return A new FlinkArrowWriter instance
      */
@@ -73,6 +88,10 @@ public class FlinkArrowWriter {
 
     /**
      * Creates a FlinkArrowWriter from a Flink RowType with a custom allocator.
+     *
+     * <p><b>Resource Management:</b> This method creates an internal VectorSchemaRoot
+     * that the caller is responsible for closing. Call {@link #getRoot()} to obtain
+     * the root and close it when done.
      *
      * @param rowType   The Flink row type
      * @param allocator The buffer allocator to use
@@ -96,11 +115,7 @@ public class FlinkArrowWriter {
         List<FieldVector> vectors = root.getFieldVectors();
 
         if (fields.size() != vectors.size()) {
-            throw new IllegalArgumentException("Field count mismatch: RowType has "
-                    + fields.size()
-                    + " fields but VectorSchemaRoot has "
-                    + vectors.size()
-                    + " vectors");
+            throw new IllegalArgumentException("Field count mismatch: RowType has " + fields.size() + " fields but VectorSchemaRoot has " + vectors.size() + " vectors");
         }
 
         // Initialize vectors with small initial capacity
@@ -148,37 +163,30 @@ public class FlinkArrowWriter {
             return new FlinkArrowFieldWriter.BinaryWriter((org.apache.arrow.vector.VarBinaryVector) vector);
         } else if (logicalType instanceof DecimalType) {
             DecimalType decimalType = (DecimalType) logicalType;
-            return new FlinkArrowFieldWriter.DecimalWriter(
-                    (org.apache.arrow.vector.DecimalVector) vector, decimalType.getPrecision(), decimalType.getScale());
+            return new FlinkArrowFieldWriter.DecimalWriter((org.apache.arrow.vector.DecimalVector) vector, decimalType.getPrecision(), decimalType.getScale());
         } else if (logicalType instanceof DateType) {
             return new FlinkArrowFieldWriter.DateWriter((org.apache.arrow.vector.DateDayVector) vector);
         } else if (logicalType instanceof TimeType) {
             return new FlinkArrowFieldWriter.TimeWriter((org.apache.arrow.vector.TimeMicroVector) vector);
         } else if (logicalType instanceof TimestampType) {
             TimestampType timestampType = (TimestampType) logicalType;
-            return new FlinkArrowFieldWriter.TimestampWriter(
-                    (org.apache.arrow.vector.TimeStampMicroVector) vector, timestampType.getPrecision());
+            return new FlinkArrowFieldWriter.TimestampWriter((org.apache.arrow.vector.TimeStampMicroVector) vector, timestampType.getPrecision());
         } else if (logicalType instanceof LocalZonedTimestampType) {
             LocalZonedTimestampType lzType = (LocalZonedTimestampType) logicalType;
-            return new FlinkArrowFieldWriter.LocalZonedTimestampWriter(
-                    (org.apache.arrow.vector.TimeStampMicroTZVector) vector, lzType.getPrecision());
+            return new FlinkArrowFieldWriter.LocalZonedTimestampWriter((org.apache.arrow.vector.TimeStampMicroTZVector) vector, lzType.getPrecision());
         } else if (logicalType instanceof ArrayType) {
             ArrayType arrayType = (ArrayType) logicalType;
             ListVector listVector = (ListVector) vector;
             // Use recursive createFieldWriter for nested types support
-            FlinkArrowFieldWriter elementWriter =
-                    createFieldWriter(listVector.getDataVector(), arrayType.getElementType());
+            FlinkArrowFieldWriter elementWriter = createFieldWriter(listVector.getDataVector(), arrayType.getElementType());
             return new FlinkArrowFieldWriter.ArrayWriter(listVector, elementWriter);
         } else if (logicalType instanceof MapType) {
             MapType mapType = (MapType) logicalType;
             MapVector mapVector = (MapVector) vector;
             StructVector structVector = (StructVector) mapVector.getDataVector();
             // Use recursive createFieldWriter for nested types support
-            FlinkArrowFieldWriter keyWriter = createFieldWriter(
-                    structVector.getChild(org.apache.arrow.vector.complex.MapVector.KEY_NAME), mapType.getKeyType());
-            FlinkArrowFieldWriter valueWriter = createFieldWriter(
-                    structVector.getChild(org.apache.arrow.vector.complex.MapVector.VALUE_NAME),
-                    mapType.getValueType());
+            FlinkArrowFieldWriter keyWriter = createFieldWriter(structVector.getChild(org.apache.arrow.vector.complex.MapVector.KEY_NAME), mapType.getKeyType());
+            FlinkArrowFieldWriter valueWriter = createFieldWriter(structVector.getChild(org.apache.arrow.vector.complex.MapVector.VALUE_NAME), mapType.getValueType());
             return new FlinkArrowFieldWriter.MapWriter(mapVector, structVector, keyWriter, valueWriter);
         } else if (logicalType instanceof RowType) {
             RowType rowType = (RowType) logicalType;
@@ -186,8 +194,7 @@ public class FlinkArrowWriter {
             List<RowType.RowField> fields = rowType.getFields();
             FlinkArrowFieldWriter[] fieldWriters = new FlinkArrowFieldWriter[fields.size()];
             for (int i = 0; i < fields.size(); i++) {
-                fieldWriters[i] = createFieldWriter(
-                        structVector.getChildByOrdinal(i), fields.get(i).getType());
+                fieldWriters[i] = createFieldWriter(structVector.getChildByOrdinal(i), fields.get(i).getType());
             }
             return new FlinkArrowFieldWriter.RowWriter(structVector, fieldWriters);
         } else {

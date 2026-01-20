@@ -19,6 +19,7 @@ package org.apache.auron.flink.arrow;
 import java.util.Iterator;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+
 import org.apache.arrow.c.ArrowArray;
 import org.apache.arrow.c.ArrowSchema;
 import org.apache.arrow.c.Data;
@@ -52,7 +53,9 @@ import org.apache.flink.table.types.logical.RowType;
  */
 public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
 
-    /** Queue state representing a data batch ready for export. */
+    /**
+     * Queue state representing a data batch ready for export.
+     */
     private static final class NextBatch {
         final VectorSchemaRoot root;
         final BufferAllocator allocator;
@@ -63,7 +66,9 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
         }
     }
 
-    /** Queue state representing end of data or an error. */
+    /**
+     * Queue state representing end of data or an error.
+     */
     private static final class Finished {
         final Throwable error; // null means normal completion
 
@@ -118,51 +123,61 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
      * Starts the producer thread that creates batches asynchronously.
      */
     private Thread startProducerThread() {
-        Thread thread = new Thread(
-                () -> {
-                    try {
-                        while (!closed && !Thread.currentThread().isInterrupted()) {
-                            if (!rowIterator.hasNext()) {
-                                outputQueue.put(new Finished(null));
-                                return;
-                            }
-
-                            // Create a new batch
-                            BufferAllocator allocator =
-                                    FlinkArrowUtils.createChildAllocator("FlinkArrowFFIExporter-producer");
-                            VectorSchemaRoot root = VectorSchemaRoot.create(arrowSchema, allocator);
-                            FlinkArrowWriter writer = FlinkArrowWriter.create(root, rowType);
-
-                            // Fill the batch with data
-                            while (!closed
-                                    && rowIterator.hasNext()
-                                    && allocator.getAllocatedMemory() < maxBatchMemorySize
-                                    && writer.currentCount() < maxBatchNumRows) {
-                                writer.write(rowIterator.next());
-                            }
-                            writer.finish();
-
-                            // Put batch in output queue for consumer
-                            outputQueue.put(new NextBatch(root, allocator));
-
-                            // Wait for consumer to confirm it's done with previous batch
-                            // This is critical for safe resource management!
-                            processingQueue.take();
-                        }
+        Thread thread = new Thread(() -> {
+            try {
+                while (!closed && !Thread.currentThread().isInterrupted()) {
+                    if (!rowIterator.hasNext()) {
                         outputQueue.put(new Finished(null));
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        // Normal interruption, not an error
-                    } catch (Throwable e) {
-                        outputQueue.clear();
-                        try {
-                            outputQueue.put(new Finished(e));
-                        } catch (InterruptedException ignored) {
-                            Thread.currentThread().interrupt();
+                        return;
+                    }
+
+                    // Create a new batch with try-finally for resource safety
+                    boolean batchEnqueued = false;
+                    BufferAllocator allocator = null;
+                    VectorSchemaRoot root = null;
+                    try {
+                        allocator = FlinkArrowUtils.createChildAllocator("FlinkArrowFFIExporter-producer");
+                        root = VectorSchemaRoot.create(arrowSchema, allocator);
+                        FlinkArrowWriter writer = FlinkArrowWriter.create(root, rowType);
+
+                        // Fill the batch with data
+                        while (!closed && rowIterator.hasNext() && allocator.getAllocatedMemory() < maxBatchMemorySize && writer.currentCount() < maxBatchNumRows) {
+                            writer.write(rowIterator.next());
+                        }
+                        writer.finish();
+
+                        // Put batch in output queue for consumer
+                        outputQueue.put(new NextBatch(root, allocator));
+                        batchEnqueued = true;
+                    } finally {
+                        // Clean up resources if batch was not successfully enqueued
+                        if (!batchEnqueued) {
+                            if (root != null) {
+                                root.close();
+                            }
+                            if (allocator != null) {
+                                allocator.close();
+                            }
                         }
                     }
-                },
-                "FlinkArrowFFIExporter-producer");
+
+                    // Wait for consumer to confirm it's done with previous batch
+                    // This is critical for safe resource management!
+                    processingQueue.take();
+                }
+                outputQueue.put(new Finished(null));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                // Normal interruption, not an error
+            } catch (Throwable e) {
+                outputQueue.clear();
+                try {
+                    outputQueue.put(new Finished(e));
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }, "FlinkArrowFFIExporter-producer");
 
         thread.setDaemon(true);
         thread.setUncaughtExceptionHandler((t, e) -> {
@@ -230,8 +245,7 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
 
         // Export data via Arrow FFI
         try (ArrowArray exportArray = ArrowArray.wrap(exportArrowArrayPtr)) {
-            Data.exportVectorSchemaRoot(
-                    FlinkArrowUtils.ROOT_ALLOCATOR, batch.root, emptyDictionaryProvider, exportArray);
+            Data.exportVectorSchemaRoot(FlinkArrowUtils.ROOT_ALLOCATOR, batch.root, emptyDictionaryProvider, exportArray);
         }
 
         // Save references for cleanup on next call
@@ -243,6 +257,8 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
             processingQueue.put(new Object());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            // Failed to signal producer; return false to avoid potential deadlock
+            return false;
         }
 
         return true;

@@ -166,7 +166,7 @@ public class FlinkArrowWriterTest {
 
             // Create timestamp with microsecond precision
             long millis = 1705622400000L; // 2024-01-19 00:00:00.000
-            int nanos = 123456; // 123.456 microseconds
+            int nanos = 123456; // 123456 nanoseconds (123.456 microseconds)
 
             GenericRowData row = new GenericRowData(1);
             row.setField(0, TimestampData.fromEpochMillis(millis, nanos));
@@ -353,7 +353,7 @@ public class FlinkArrowWriterTest {
 
             // Create timestamp with microsecond precision
             long millis = 1705622400000L; // 2024-01-19 00:00:00.000
-            int nanos = 123456; // 123.456 microseconds
+            int nanos = 123456; // 123456 nanoseconds (123.456 microseconds)
 
             GenericRowData row = new GenericRowData(1);
             row.setField(0, TimestampData.fromEpochMillis(millis, nanos));

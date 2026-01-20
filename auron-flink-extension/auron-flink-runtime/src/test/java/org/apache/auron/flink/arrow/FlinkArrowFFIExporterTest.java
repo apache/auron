@@ -16,15 +16,6 @@
  */
 package org.apache.auron.flink.arrow;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
 import org.apache.arrow.c.ArrowArray;
 import org.apache.arrow.c.ArrowSchema;
 import org.apache.arrow.c.Data;
@@ -44,11 +35,18 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Unit tests for FlinkArrowFFIExporter. */
+import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
+/**
+ * Unit tests for FlinkArrowFFIExporter.
+ */
 public class FlinkArrowFFIExporterTest {
 
-    private BufferAllocator testAllocator;
     private static Boolean nativeLibrariesAvailable;
+    private BufferAllocator testAllocator;
 
     /**
      * Check if Arrow FFI native libraries are available.
@@ -80,8 +78,7 @@ public class FlinkArrowFFIExporterTest {
 
     @Test
     public void testExportSchemaCreatesExporter() {
-        RowType rowType =
-                RowType.of(new LogicalType[] {new IntType(), new VarCharType(100)}, new String[] {"id", "name"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType(), new VarCharType(100)}, new String[]{"id", "name"});
 
         Iterator<RowData> emptyIter = Collections.emptyIterator();
 
@@ -92,7 +89,7 @@ public class FlinkArrowFFIExporterTest {
 
     @Test
     public void testExporterWithEmptyIterator() {
-        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType()}, new String[]{"id"});
         Iterator<RowData> emptyIter = Collections.emptyIterator();
 
         try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(emptyIter, rowType)) {
@@ -102,7 +99,7 @@ public class FlinkArrowFFIExporterTest {
 
     @Test
     public void testExporterWithMultipleRows() {
-        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType()}, new String[]{"id"});
 
         GenericRowData row1 = new GenericRowData(1);
         row1.setField(0, 1);
@@ -118,8 +115,7 @@ public class FlinkArrowFFIExporterTest {
 
     @Test
     public void testExporterWithComplexTypes() {
-        RowType rowType =
-                RowType.of(new LogicalType[] {new IntType(), new VarCharType(100)}, new String[] {"id", "name"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType(), new VarCharType(100)}, new String[]{"id", "name"});
 
         GenericRowData row = new GenericRowData(2);
         row.setField(0, 42);
@@ -134,7 +130,7 @@ public class FlinkArrowFFIExporterTest {
 
     @Test
     public void testExporterCloseIsIdempotent() {
-        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType()}, new String[]{"id"});
         Iterator<RowData> emptyIter = Collections.emptyIterator();
 
         FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(emptyIter, rowType);
@@ -146,11 +142,9 @@ public class FlinkArrowFFIExporterTest {
     public void testExportSchemaWithArrowFFI() {
         assumeTrue(isNativeLibraryAvailable(), "Skipping test: Arrow FFI native libraries not available");
 
-        RowType rowType =
-                RowType.of(new LogicalType[] {new IntType(), new VarCharType(100)}, new String[] {"id", "name"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType(), new VarCharType(100)}, new String[]{"id", "name"});
 
-        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(Collections.emptyIterator(), rowType);
-                ArrowSchema arrowSchema = ArrowSchema.allocateNew(testAllocator)) {
+        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(Collections.emptyIterator(), rowType); ArrowSchema arrowSchema = ArrowSchema.allocateNew(testAllocator)) {
 
             exporter.exportSchema(arrowSchema.memoryAddress());
 
@@ -165,8 +159,7 @@ public class FlinkArrowFFIExporterTest {
     public void testExportNextBatchEndToEnd() {
         assumeTrue(isNativeLibraryAvailable(), "Skipping test: Arrow FFI native libraries not available");
 
-        RowType rowType =
-                RowType.of(new LogicalType[] {new IntType(), new VarCharType(100)}, new String[] {"id", "name"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType(), new VarCharType(100)}, new String[]{"id", "name"});
 
         List<RowData> rows = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
@@ -176,9 +169,7 @@ public class FlinkArrowFFIExporterTest {
             rows.add(row);
         }
 
-        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(rows.iterator(), rowType);
-                ArrowArray arrowArray = ArrowArray.allocateNew(testAllocator);
-                ArrowSchema arrowSchema = ArrowSchema.allocateNew(testAllocator)) {
+        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(rows.iterator(), rowType); ArrowArray arrowArray = ArrowArray.allocateNew(testAllocator); ArrowSchema arrowSchema = ArrowSchema.allocateNew(testAllocator)) {
 
             // Export schema
             exporter.exportSchema(arrowSchema.memoryAddress());
@@ -204,10 +195,9 @@ public class FlinkArrowFFIExporterTest {
     public void testExportEmptyIteratorReturnsFalse() {
         assumeTrue(isNativeLibraryAvailable(), "Skipping test: Arrow FFI native libraries not available");
 
-        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType()}, new String[]{"id"});
 
-        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(Collections.emptyIterator(), rowType);
-                ArrowArray arrowArray = ArrowArray.allocateNew(testAllocator)) {
+        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(Collections.emptyIterator(), rowType); ArrowArray arrowArray = ArrowArray.allocateNew(testAllocator)) {
 
             // Empty iterator should return false on first call
             assertFalse(exporter.exportNextBatch(arrowArray.memoryAddress()));
@@ -218,7 +208,7 @@ public class FlinkArrowFFIExporterTest {
     public void testExportMultipleBatches() {
         assumeTrue(isNativeLibraryAvailable(), "Skipping test: Arrow FFI native libraries not available");
 
-        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType()}, new String[]{"id"});
 
         // Create enough rows to potentially span multiple batches
         List<RowData> rows = new ArrayList<>();
@@ -230,15 +220,16 @@ public class FlinkArrowFFIExporterTest {
 
         int totalRowsExported = 0;
 
-        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(rows.iterator(), rowType);
-                ArrowSchema arrowSchema = ArrowSchema.allocateNew(testAllocator)) {
+        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(rows.iterator(), rowType); ArrowSchema arrowSchema = ArrowSchema.allocateNew(testAllocator)) {
 
             exporter.exportSchema(arrowSchema.memoryAddress());
 
             // Export all batches
+            // Note: ArrowSchema is consumed by importVectorSchemaRoot, so we need to
+            // re-export schema for each batch. This is a limitation of the Arrow C Data
+            // Interface where ownership is transferred during import operations.
             while (true) {
-                try (ArrowArray arrowArray = ArrowArray.allocateNew(testAllocator);
-                        ArrowSchema batchSchema = ArrowSchema.allocateNew(testAllocator)) {
+                try (ArrowArray arrowArray = ArrowArray.allocateNew(testAllocator); ArrowSchema batchSchema = ArrowSchema.allocateNew(testAllocator)) {
                     // Re-export schema for each batch since ArrowSchema is consumed
                     exporter.exportSchema(batchSchema.memoryAddress());
 
@@ -246,8 +237,7 @@ public class FlinkArrowFFIExporterTest {
                         break;
                     }
 
-                    try (VectorSchemaRoot root =
-                            Data.importVectorSchemaRoot(testAllocator, arrowArray, batchSchema, null)) {
+                    try (VectorSchemaRoot root = Data.importVectorSchemaRoot(testAllocator, arrowArray, batchSchema, null)) {
                         totalRowsExported += root.getRowCount();
                     }
                 }
@@ -261,7 +251,7 @@ public class FlinkArrowFFIExporterTest {
     public void testProducerExceptionPropagation() {
         assumeTrue(isNativeLibraryAvailable(), "Skipping test: Arrow FFI native libraries not available");
 
-        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType()}, new String[]{"id"});
 
         // Create an iterator that throws an exception
         Iterator<RowData> failingIterator = new Iterator<RowData>() {
@@ -283,8 +273,7 @@ public class FlinkArrowFFIExporterTest {
             }
         };
 
-        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(failingIterator, rowType);
-                ArrowArray arrowArray = ArrowArray.allocateNew(testAllocator)) {
+        try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(failingIterator, rowType); ArrowArray arrowArray = ArrowArray.allocateNew(testAllocator)) {
 
             // First batch might succeed if it doesn't hit the error
             // Eventually we should get a RuntimeException
@@ -302,7 +291,7 @@ public class FlinkArrowFFIExporterTest {
     public void testCloseWhileProducerIsRunning() throws InterruptedException {
         assumeTrue(isNativeLibraryAvailable(), "Skipping test: Arrow FFI native libraries not available");
 
-        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType()}, new String[]{"id"});
 
         // Create a slow iterator to ensure producer is still running when we close
         Iterator<RowData> slowIterator = new Iterator<RowData>() {
@@ -349,7 +338,7 @@ public class FlinkArrowFFIExporterTest {
     public void testExportAfterClose() {
         assumeTrue(isNativeLibraryAvailable(), "Skipping test: Arrow FFI native libraries not available");
 
-        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        RowType rowType = RowType.of(new LogicalType[]{new IntType()}, new String[]{"id"});
 
         GenericRowData row = new GenericRowData(1);
         row.setField(0, 1);
