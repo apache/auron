@@ -1,0 +1,72 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Rust Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - branch-*
+  pull_request:
+    branches:
+      - master
+      - branch-*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-test:
+    name: Rust Lint & Test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Auron
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "21.7"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Rust toolchain
+        uses:  ./.github/actions/setup-rust-toolchain
+        with:
+          rustflags: --allow warnings -C target-feature=+aes
+          components:
+            cargo
+            rustfmt
+            clippy
+
+      - name: Cargo fmt
+        shell: bash
+        run: |
+          cargo fmt --all -- --check
+
+      - name: Cargo clippy
+        run: |
+          cargo clippy --all-targets --workspace -- -D warnings
+
+      - name: Cargo test
+        run: |
+          cargo --version
+          cargo test --workspace --all-features

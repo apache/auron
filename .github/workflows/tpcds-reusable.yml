@@ -117,17 +117,6 @@ jobs:
           rustflags: --allow warnings -C target-feature=+aes
           components:
             cargo
-            rustfmt
-            clippy
-
-      - name: Cargo clippy
-        run: |
-          cargo clippy --all-targets --workspace -- -D warnings
-
-      - name: Cargo test
-        run: |
-          cargo --version
-          cargo test --workspace --all-features
 
       - name: Build auron (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
         run: |
