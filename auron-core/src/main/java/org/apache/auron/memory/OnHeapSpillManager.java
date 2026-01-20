@@ -83,7 +83,7 @@ public interface OnHeapSpillManager {
      *
      * @return the disabled on-heap spill manager instance
      */
-    public static OnHeapSpillManager getDisabledOnHeapSpillManager() {
+    static OnHeapSpillManager getDisabledOnHeapSpillManager() {
         return new OnHeapSpillManager() {
 
             @Override

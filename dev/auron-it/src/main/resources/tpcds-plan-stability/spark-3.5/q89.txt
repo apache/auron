@@ -374,11 +374,11 @@ Arguments: [i_category#4 ASC NULLS FIRST, i_brand#2 ASC NULLS FIRST, s_store_nam
 Input [8]: [i_category#4, i_class#3, i_brand#2, s_store_name#13, s_company_name#14, d_moy#11, sum_sales#19, _w0#20]
 Arguments: [avg(_w0#20) windowspecdefinition(i_category#4, i_brand#2, s_store_name#13, s_company_name#14, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_monthly_sales#21], [i_category#4, i_brand#2, s_store_name#13, s_company_name#14]
 
-(64) Filter [codegen id : 1]
+(64) Filter [codegen id : X]
 Input [9]: [i_category#4, i_class#3, i_brand#2, s_store_name#13, s_company_name#14, d_moy#11, sum_sales#19, _w0#20, avg_monthly_sales#21]
 Condition : CASE WHEN NOT (avg_monthly_sales#21 = 0.000000) THEN ((abs((sum_sales#19 - avg_monthly_sales#21)) / avg_monthly_sales#21) > 0.1000000000000000) END
 
-(65) Project [codegen id : 1]
+(65) Project [codegen id : X]
 Output [8]: [i_category#4, i_class#3, i_brand#2, s_store_name#13, s_company_name#14, d_moy#11, sum_sales#19, avg_monthly_sales#21]
 Input [9]: [i_category#4, i_class#3, i_brand#2, s_store_name#13, s_company_name#14, d_moy#11, sum_sales#19, _w0#20, avg_monthly_sales#21]
 

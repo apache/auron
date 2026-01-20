@@ -34,6 +34,7 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
     regenGoldenFiles = args.regenGoldenFiles,
     planCheck = args.enablePlanCheck)
 
+  // scalastyle:off println
   override def run(): Int = {
     val queries = filterQueries(args.queryFilter)
     if (queries.isEmpty) {
@@ -76,7 +77,7 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
         }
       }
 
-    if (args.enablePlanCheck) {
+    if (args.enablePlanCheck || args.regenGoldenFiles) {
       baseComparisons.foreach(comparisonResult => {
         val testResult = auronResults(comparisonResult.queryId)
         val planStable = planStabilityChecker.validate(testResult)
@@ -135,7 +136,7 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
   private def printPlanStability(results: Seq[ComparisonResult]): Unit = {
     println("\n" + "=" * 60)
     println(s"Auron Plan Stability (${Shims.get.shimVersion})")
-    println("−" * 60)
+    println("-" * 60)
     println(f"${"Query"}%-6s ${"Stable"}%-7s")
     println("-" * 60)
     results.foreach { r =>
@@ -153,11 +154,12 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
     val totalUpdated = ids.size
     println("\n" + "=" * 60)
     println(s"Auron Golden Files (${Shims.get.shimVersion})")
-    println("−" * 60)
+    println("-" * 60)
     println(s"Updated queries: $totalUpdated")
     println(ids.mkString("- ", ", ", ""))
     println(s"Output directory: ${goldenOutputDir}")
   }
+  // scalastyle:on
 }
 
 object TPCDSSuite {

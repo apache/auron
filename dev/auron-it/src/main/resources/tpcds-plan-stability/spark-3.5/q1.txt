@@ -440,13 +440,13 @@ Condition : isnotnull((avg(ctr_total_return) * 1.2)#26)
 Input [2]: [(avg(ctr_total_return) * 1.2)#26, ctr_store_sk#21]
 Arguments: [ctr_store_sk#21 ASC NULLS FIRST], false
 
-(67) SortMergeJoin [codegen id : 1]
+(67) SortMergeJoin [codegen id : X]
 Left keys [1]: [ctr_store_sk#12]
 Right keys [1]: [ctr_store_sk#21]
 Join type: Inner
 Join condition: (cast(ctr_total_return#13 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#26)
 
-(68) Project [codegen id : 1]
+(68) Project [codegen id : X]
 Output [2]: [ctr_customer_sk#11, ctr_store_sk#12]
 Input [5]: [ctr_customer_sk#11, ctr_store_sk#12, ctr_total_return#13, (avg(ctr_total_return) * 1.2)#26, ctr_store_sk#21]
 

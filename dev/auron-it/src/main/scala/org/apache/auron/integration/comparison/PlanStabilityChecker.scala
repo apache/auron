@@ -33,6 +33,7 @@ class PlanStabilityChecker(
     regenGoldenFiles: Boolean = false,
     planCheck: Boolean = false) {
 
+  // scalastyle:off println
   private lazy val isSupported: Boolean = Shims.get.shimVersion match {
     case "spark-3.5" => true
     case other =>
@@ -118,7 +119,9 @@ class PlanStabilityChecker(
       .replaceAll("Arguments: [0-9]+", "Arguments: X")
       .replaceAll("Scan parquet ", "Scan parquet")
       .replaceAll("Statistics[(A-Za-z0-9=. ,+)]*", "Statistics(X)")
+      .replaceAll("\\[codegen id : [0-9]+\\]", "[codegen id : X]")
 
     normalizeLocation(argumentsNormalized)
   }
+  // scalastyle:on
 }

@@ -882,13 +882,13 @@ Input [2]: [customer_id#52, year_total#53]
 Input [2]: [customer_id#52, year_total#53]
 Arguments: [customer_id#52 ASC NULLS FIRST], false
 
-(150) SortMergeJoin [codegen id : 1]
+(150) SortMergeJoin [codegen id : X]
 Left keys [1]: [customer_id#14]
 Right keys [1]: [customer_id#52]
 Join type: Inner
 Join condition: (CASE WHEN (year_total#42 > 0.00) THEN (year_total#53 / year_total#42) END > CASE WHEN (year_total#15 > 0.00) THEN (year_total#28 / year_total#15) END)
 
-(151) Project [codegen id : 1]
+(151) Project [codegen id : X]
 Output [3]: [customer_id#25, customer_first_name#26, customer_last_name#27]
 Input [9]: [customer_id#14, year_total#15, customer_id#25, customer_first_name#26, customer_last_name#27, year_total#28, year_total#42, customer_id#52, year_total#53]
 

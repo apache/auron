@@ -250,8 +250,9 @@ class AuronUniffleShuffleReader[K, C](
       var readBytes = 0
       while (readBytes < len) {
         while (byteBuffer == null || !byteBuffer.hasRemaining()) {
-          if (!this.toNextBuffer)
+          if (!this.toNextBuffer) {
             return if (readBytes > 0) readBytes else -1
+          }
         }
         val bytesToRead = Math.min(byteBuffer.remaining(), len - readBytes)
         byteBuffer.get(arrayBytes, off + readBytes, bytesToRead)
