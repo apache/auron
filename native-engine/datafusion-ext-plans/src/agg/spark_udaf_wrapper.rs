@@ -21,14 +21,17 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, ArrayRef, StructArray, as_struct_array, make_array},
+    array::{
+        Array, ArrayAccessor, ArrayRef, BinaryArray, BinaryBuilder, StructArray, as_struct_array,
+        make_array,
+    },
     datatypes::{DataType, Field, Schema, SchemaRef},
-    ffi::{FFI_ArrowArray, FFI_ArrowSchema, from_ffi},
+    ffi::{FFI_ArrowArray, FFI_ArrowSchema, from_ffi, from_ffi_and_data_type},
     record_batch::{RecordBatch, RecordBatchOptions},
 };
 use auron_jni_bridge::{
-    jni_bridge::LocalRef, jni_call, jni_get_byte_array_len, jni_get_byte_array_region,
-    jni_new_direct_byte_buffer, jni_new_global_ref, jni_new_object, jni_new_prim_array,
+    jni_bridge::LocalRef, jni_call, jni_new_direct_byte_buffer, jni_new_global_ref, jni_new_object,
+    jni_new_prim_array,
 };
 use auron_memmgr::spill::{SpillCompressedReader, SpillCompressedWriter};
 use datafusion::{
@@ -238,6 +241,10 @@ impl Agg for SparkUDAFWrapper {
         Box::new(AccUDAFBufferRowsColumn { obj, jcontext })
     }
 
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &[DataType::Binary]
+    }
+
     fn with_new_exprs(&self, _exprs: Vec<PhysicalExprRef>) -> Result<Arc<dyn Agg>> {
         Ok(Arc::new(Self::try_new(
             self.serialized.clone(),
@@ -289,33 +296,32 @@ pub struct AccUDAFBufferRowsColumn {
 }
 
 impl AccUDAFBufferRowsColumn {
-    pub fn freeze_to_rows_with_indices_cache(
+    pub fn freeze_to_array_with_indices_cache(
         &self,
         idx: IdxSelection<'_>,
-        array: &mut [Vec<u8>],
         cache: &OnceCell<LocalRef>,
-    ) -> Result<()> {
+    ) -> Result<ArrayRef> {
+        let mut ffi_exported_rows = FFI_ArrowArray::empty();
         let idx_array =
             cache.get_or_try_init(move || jni_new_prim_array!(int, &idx.to_int32_vec()[..]))?;
-        let serialized = jni_call!(
-            SparkUDAFWrapperContext(self.jcontext.as_obj()).serializeRows(
+        jni_call!(
+            SparkUDAFWrapperContext(self.jcontext.as_obj()).exportRows(
                 self.obj.as_obj(),
                 idx_array.as_obj(),
-            ) -> JObject)?;
-        let serialized_len = jni_get_byte_array_len!(serialized.as_obj())?;
-        let mut serialized_bytes = Vec::uninitialized_init(serialized_len);
-        jni_get_byte_array_region!(serialized.as_obj(), 0, &mut serialized_bytes[..])?;
+                &mut ffi_exported_rows as *mut FFI_ArrowArray as i64,
+            ) -> ())?;
+        let exported_rows_data = unsafe {
+            // safety: import output binary array from
+            // SparkUDAFWrapperContext.exportedRows()
+            from_ffi_and_data_type(ffi_exported_rows, DataType::Binary)?
+        };
+        let exported_rows = make_array(exported_rows_data);
+        assert_eq!(exported_rows.len(), self.num_records());
 
-        // UnsafeRow is serialized with big-endian i32 length prefix
-        let mut cursor = Cursor::new(&serialized_bytes);
-        for i in 0..array.len() {
-            let mut bytes_len_buf = [0; 4];
-            cursor.read_exact(&mut bytes_len_buf)?;
-            let bytes_len = i32::from_be_bytes(bytes_len_buf) as usize;
-            write_len(bytes_len, &mut array[i])?;
-            std::io::copy(&mut (&mut cursor).take(bytes_len as u64), &mut array[i])?;
-        }
-        Ok(())
+        // clear in-memory rows
+        jni_call!(SparkUDAFWrapperContext(self.jcontext.as_obj())
+            .resize(self.obj.as_obj(), 0i32)-> ())?;
+        Ok(exported_rows)
     }
 
     pub fn spill_with_indices_cache(
@@ -390,32 +396,23 @@ impl AccColumn for AccUDAFBufferRowsColumn {
         0 // memory is managed in jvm side
     }
 
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
-        self.freeze_to_rows_with_indices_cache(idx, array, &OnceCell::new())
+    fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
+        let array = self.freeze_to_array_with_indices_cache(idx, &OnceCell::new())?;
+        Ok(vec![array])
     }
 
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
+    fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
         assert_eq!(self.num_records(), 0, "expect empty AccColumn");
-        let mut data = vec![];
-        for cursor in cursors.iter_mut() {
-            let bytes_len = read_len(cursor)?;
-            data.write_all((bytes_len as i32).to_be_bytes().as_ref())?;
-            std::io::copy(&mut cursor.take(bytes_len as u64), &mut data)?;
-        }
-
-        let data_buffer = jni_new_direct_byte_buffer!(data)?;
+        let num_rows = arrays[0].len();
+        let ffi_imported_rows = FFI_ArrowArray::new(&arrays[0].to_data());
         let rows = jni_call!(SparkUDAFWrapperContext(self.jcontext.as_obj())
-            .deserializeRows(data_buffer.as_obj()) -> JObject)?;
+            .importRows(&ffi_imported_rows as *const FFI_ArrowArray as i64) -> JObject)?;
         self.obj = jni_new_global_ref!(rows.as_obj())?;
-        assert_eq!(
-            self.num_records(),
-            cursors.len(),
-            "unfreeze rows count mismatch"
-        );
+        assert_eq!(self.num_records(), num_rows, "unfreeze rows count mismatch");
         Ok(())
     }
 
-    fn spill(&self, _idx: IdxSelection<'_>, _buf: &mut SpillCompressedWriter) -> Result<()> {
+    fn spill(&mut self, _idx: IdxSelection<'_>, _buf: &mut SpillCompressedWriter) -> Result<()> {
         unimplemented!("should call spill_with_indices_cache instead")
     }
 

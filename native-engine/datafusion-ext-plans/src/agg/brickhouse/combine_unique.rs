@@ -81,6 +81,10 @@ impl Agg for AggCombineUnique {
         self.inner_collect_set.create_acc_column(num_rows)
     }
 
+    fn acc_array_data_types(&self) -> &[DataType] {
+        self.inner_collect_set.acc_array_data_types()
+    }
+
     fn partial_update(
         &self,
         accs: &mut AccColumnRef,

@@ -461,7 +461,7 @@ object AuronConverters extends Logging {
           assert(
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
             s"Parquet scan with timestamp type is not supported for table: ${tableIdentifier
-              .getOrElse("unknown")}. " +
+                .getOrElse("unknown")}. " +
               "Set spark.auron.enable.scan.parquet.timestamp=true to enable timestamp support " +
               "or remove timestamp columns from the query.")
         }
@@ -472,7 +472,7 @@ object AuronConverters extends Logging {
           assert(
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
             s"ORC scan with timestamp type is not supported for tableIdentifier: ${tableIdentifier
-              .getOrElse("unknown")}. " +
+                .getOrElse("unknown")}. " +
               "Set spark.auron.enable.scan.orc.timestamp=true to enable timestamp support " +
               "or remove timestamp columns from the query.")
         }
@@ -480,7 +480,7 @@ object AuronConverters extends Logging {
       case p =>
         throw new NotImplementedError(
           s"Cannot convert FileSourceScanExec tableIdentifier: ${tableIdentifier.getOrElse(
-            "unknown")}, class: ${p.getClass.getName}")
+              "unknown")}, class: ${p.getClass.getName}")
     }
   }
 
@@ -836,8 +836,7 @@ object AuronConverters extends Logging {
           addRenameColumnsExec(convertToNative(exec.child))
         case _ =>
           if (needRenameColumns(exec.child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(exec.child), newNames)
           } else {
             convertToNative(exec.child)
@@ -893,8 +892,7 @@ object AuronConverters extends Logging {
           addRenameColumnsExec(convertToNative(exec.child))
         case _ =>
           if (needRenameColumns(exec.child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(exec.child), newNames)
           } else {
             convertToNative(exec.child)
@@ -947,8 +945,7 @@ object AuronConverters extends Logging {
           addRenameColumnsExec(convertToNative(child))
         case _ =>
           if (needRenameColumns(child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(child), newNames)
           } else {
             convertToNative(child)

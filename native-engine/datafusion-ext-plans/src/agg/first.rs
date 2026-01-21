@@ -16,7 +16,6 @@
 use std::{
     any::Any,
     fmt::{Debug, Formatter},
-    io::Cursor,
     sync::Arc,
 };
 
@@ -33,7 +32,7 @@ use crate::{
         Agg,
         acc::{
             AccBooleanColumn, AccBytes, AccBytesColumn, AccColumn, AccColumnRef, AccPrimColumn,
-            AccScalarValueColumn, acc_generic_column_to_array, create_acc_generic_column,
+            AccScalarValueColumn, create_acc_generic_column,
         },
         agg::IdxSelection,
     },
@@ -43,11 +42,17 @@ use crate::{
 pub struct AggFirst {
     child: PhysicalExprRef,
     data_type: DataType,
+    acc_array_data_types: Vec<DataType>,
 }
 
 impl AggFirst {
     pub fn try_new(child: PhysicalExprRef, data_type: DataType) -> Result<Self> {
-        Ok(Self { child, data_type })
+        let acc_array_data_types = vec![data_type.clone(), DataType::Boolean];
+        Ok(Self {
+            child,
+            data_type,
+            acc_array_data_types,
+        })
     }
 }
 
@@ -83,9 +88,13 @@ impl Agg for AggFirst {
 
     fn create_acc_column(&self, num_rows: usize) -> AccColumnRef {
         Box::new(AccFirstColumn {
-            values: create_acc_generic_column(&self.data_type, num_rows),
+            values: create_acc_generic_column(self.data_type.clone(), num_rows),
             flags: AccBooleanColumn::new(num_rows),
         })
+    }
+
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &self.acc_array_data_types
     }
 
     fn partial_update(
@@ -267,8 +276,7 @@ impl Agg for AggFirst {
     }
 
     fn final_merge(&self, accs: &mut AccColumnRef, acc_idx: IdxSelection<'_>) -> Result<ArrayRef> {
-        let accs = downcast_any!(accs, mut AccFirstColumn)?;
-        acc_generic_column_to_array(&mut accs.values, &self.data_type, acc_idx)
+        Ok(accs.freeze_to_arrays(acc_idx)?[0].clone())
     }
 }
 
@@ -312,19 +320,19 @@ impl AccColumn for AccFirstColumn {
         self.values.mem_used() + self.flags.mem_used()
     }
 
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
-        self.values.freeze_to_rows(idx, array)?;
-        self.flags.freeze_to_rows(idx, array)?;
+    fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
+        let value_array = self.values.freeze_to_arrays(idx)?[0].clone();
+        let flags_array = self.flags.freeze_to_arrays(idx)?[0].clone();
+        Ok(vec![value_array, flags_array])
+    }
+
+    fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
+        self.values.unfreeze_from_arrays(&arrays[0..1])?;
+        self.flags.unfreeze_from_arrays(&arrays[1..2])?;
         Ok(())
     }
 
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
-        self.values.unfreeze_from_rows(cursors)?;
-        self.flags.unfreeze_from_rows(cursors)?;
-        Ok(())
-    }
-
-    fn spill(&self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
+    fn spill(&mut self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
         self.values.spill(idx, w)?;
         self.flags.spill(idx, w)?;
         Ok(())
