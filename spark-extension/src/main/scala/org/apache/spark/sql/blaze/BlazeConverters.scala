@@ -369,7 +369,7 @@ object BlazeConverters extends Logging {
       case p =>
         throw new NotImplementedError(
           s"Cannot convert FileSourceScanExec tableIdentifier: ${tableIdentifier.getOrElse(
-            "unknown")}, class: ${p.getClass.getName}")
+              "unknown")}, class: ${p.getClass.getName}")
     }
   }
 
@@ -734,8 +734,7 @@ object BlazeConverters extends Logging {
           addRenameColumnsExec(convertToNative(exec.child))
         case _ =>
           if (needRenameColumns(exec.child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(exec.child), newNames)
           } else {
             convertToNative(exec.child)
@@ -791,8 +790,7 @@ object BlazeConverters extends Logging {
           addRenameColumnsExec(convertToNative(exec.child))
         case _ =>
           if (needRenameColumns(exec.child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(exec.child), newNames)
           } else {
             convertToNative(exec.child)
@@ -845,8 +843,7 @@ object BlazeConverters extends Logging {
           addRenameColumnsExec(convertToNative(child))
         case _ =>
           if (needRenameColumns(child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(child), newNames)
           } else {
             convertToNative(child)

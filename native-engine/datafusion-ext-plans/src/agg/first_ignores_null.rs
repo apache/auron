@@ -27,7 +27,7 @@ use crate::{
         Agg,
         acc::{
             AccBooleanColumn, AccBytes, AccBytesColumn, AccColumnRef, AccPrimColumn,
-            AccScalarValueColumn, acc_generic_column_to_array, create_acc_generic_column,
+            AccScalarValueColumn, create_acc_generic_column,
         },
         agg::IdxSelection,
     },
@@ -37,11 +37,17 @@ use crate::{
 pub struct AggFirstIgnoresNull {
     child: PhysicalExprRef,
     data_type: DataType,
+    acc_array_data_types: Vec<DataType>,
 }
 
 impl AggFirstIgnoresNull {
     pub fn try_new(child: PhysicalExprRef, data_type: DataType) -> Result<Self> {
-        Ok(Self { child, data_type })
+        let acc_array_data_types = vec![data_type.clone()];
+        Ok(Self {
+            child,
+            data_type,
+            acc_array_data_types,
+        })
     }
 }
 
@@ -76,7 +82,11 @@ impl Agg for AggFirstIgnoresNull {
     }
 
     fn create_acc_column(&self, num_rows: usize) -> AccColumnRef {
-        create_acc_generic_column(&self.data_type, num_rows)
+        create_acc_generic_column(self.data_type.clone(), num_rows)
+    }
+
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &self.acc_array_data_types
     }
 
     fn partial_update(
@@ -216,6 +226,6 @@ impl Agg for AggFirstIgnoresNull {
     }
 
     fn final_merge(&self, accs: &mut AccColumnRef, acc_idx: IdxSelection<'_>) -> Result<ArrayRef> {
-        acc_generic_column_to_array(accs, &self.data_type, acc_idx)
+        Ok(accs.freeze_to_arrays(acc_idx)?[0].clone())
     }
 }

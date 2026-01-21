@@ -20,7 +20,10 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, ArrayRef, StructArray, as_struct_array, make_array},
+    array::{
+        Array, ArrayAccessor, ArrayRef, BinaryArray, BinaryBuilder, StructArray, as_struct_array,
+        make_array,
+    },
     datatypes::{DataType, Field, Schema, SchemaRef},
     ffi::{FFI_ArrowArray, FFI_ArrowSchema, from_ffi},
     record_batch::{RecordBatch, RecordBatchOptions},
@@ -237,6 +240,10 @@ impl Agg for SparkUDAFWrapper {
         Box::new(AccUDAFBufferRowsColumn { obj, jcontext })
     }
 
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &[DataType::Binary]
+    }
+
     fn with_new_exprs(&self, _exprs: Vec<PhysicalExprRef>) -> Result<Arc<dyn Agg>> {
         Ok(Arc::new(Self::try_new(
             self.serialized.clone(),
@@ -288,12 +295,11 @@ pub struct AccUDAFBufferRowsColumn {
 }
 
 impl AccUDAFBufferRowsColumn {
-    pub fn freeze_to_rows_with_indices_cache(
+    pub fn freeze_to_array_with_indices_cache(
         &self,
         idx: IdxSelection<'_>,
-        array: &mut [Vec<u8>],
         cache: &OnceCell<LocalRef>,
-    ) -> Result<()> {
+    ) -> Result<ArrayRef> {
         let idx_array =
             cache.get_or_try_init(move || jni_new_prim_array!(int, &idx.to_int32_vec()[..]))?;
         let serialized = jni_call!(
@@ -306,15 +312,18 @@ impl AccUDAFBufferRowsColumn {
         jni_get_byte_array_region!(serialized.as_obj(), 0, &mut serialized_bytes[..])?;
 
         // UnsafeRow is serialized with big-endian i32 length prefix
-        let mut cursor = Cursor::new(&serialized_bytes);
-        for i in 0..array.len() {
-            let mut bytes_len_buf = [0; 4];
-            cursor.read_exact(&mut bytes_len_buf)?;
+        let mut serialized_pos = 0;
+        let mut binary_builder = BinaryBuilder::with_capacity(idx.len(), 0);
+        for i in 0..idx.len() {
+            let mut bytes_len_buf = [0u8; 4];
+            bytes_len_buf.copy_from_slice(&serialized_bytes[serialized_pos..][..4]);
             let bytes_len = i32::from_be_bytes(bytes_len_buf) as usize;
-            write_len(bytes_len, &mut array[i])?;
-            std::io::copy(&mut (&mut cursor).take(bytes_len as u64), &mut array[i])?;
+            serialized_pos += 4;
+
+            binary_builder.append_value(&serialized_bytes[serialized_pos..][..bytes_len]);
+            serialized_pos += bytes_len;
         }
-        Ok(())
+        Ok(Arc::new(binary_builder.finish()))
     }
 
     pub fn spill_with_indices_cache(
@@ -388,15 +397,23 @@ impl AccColumn for AccUDAFBufferRowsColumn {
         0 // memory is managed in jvm side
     }
 
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
-        self.freeze_to_rows_with_indices_cache(idx, array, &OnceCell::new())
+    fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
+        let array = self.freeze_to_array_with_indices_cache(idx, &OnceCell::new())?;
+        Ok(vec![array])
     }
 
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
+    fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
         assert_eq!(self.num_records(), 0, "expect empty AccColumn");
+        let array = downcast_any!(arrays[0], BinaryArray)?;
+
+        let mut cursors = vec![];
+        for i in 0..array.len() {
+            cursors.push(Cursor::new(array.value(i)));
+        }
+
         let mut data = vec![];
-        for cursor in cursors.iter_mut() {
-            let bytes_len = read_len(cursor)?;
+        for (i, cursor) in cursors.iter_mut().enumerate() {
+            let bytes_len = array.value(i).len();
             data.write_all((bytes_len as i32).to_be_bytes().as_ref())?;
             std::io::copy(&mut cursor.take(bytes_len as u64), &mut data)?;
         }
@@ -413,7 +430,7 @@ impl AccColumn for AccUDAFBufferRowsColumn {
         Ok(())
     }
 
-    fn spill(&self, _idx: IdxSelection<'_>, _buf: &mut SpillCompressedWriter) -> Result<()> {
+    fn spill(&mut self, _idx: IdxSelection<'_>, _buf: &mut SpillCompressedWriter) -> Result<()> {
         unimplemented!("should call spill_with_indices_cache instead")
     }
 

@@ -85,7 +85,7 @@ case class BlazeColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
         dumpSimpleSparkPlanTreeNode(sparkPlanTransformed)
 
         logInfo(s"Transformed spark plan after preColumnarTransitions:\n${sparkPlanTransformed
-          .treeString(verbose = true, addSuffix = true)}")
+            .treeString(verbose = true, addSuffix = true)}")
 
         // post-transform
         Shims.get.postTransform(sparkPlanTransformed, sparkSession.sparkContext)

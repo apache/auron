@@ -15,24 +15,19 @@
 use std::{
     any::Any,
     fmt::{Debug, Formatter},
-    io::Cursor,
     sync::Arc,
 };
 
 use arrow::{array::*, datatypes::*};
 use datafusion::{common::Result, physical_expr::PhysicalExprRef};
-use datafusion_ext_commons::{
-    downcast_any,
-    io::{read_len, write_len},
-};
+use datafusion_ext_commons::downcast_any;
 
 use crate::{
     agg::{
-        acc::{AccColumn, AccColumnRef},
+        acc::{AccColumn, AccColumnRef, AccPrimColumn},
         agg::{Agg, IdxSelection},
     },
-    idx_for, idx_for_zipped, idx_with_iter,
-    memmgr::spill::{SpillCompressedReader, SpillCompressedWriter},
+    idx_for_zipped,
 };
 
 pub struct AggCount {
@@ -81,9 +76,11 @@ impl Agg for AggCount {
     }
 
     fn create_acc_column(&self, num_rows: usize) -> Box<dyn AccColumn> {
-        Box::new(AccCountColumn {
-            values: vec![0; num_rows],
-        })
+        Box::new(AccPrimColumn::<i64>::new(num_rows, DataType::Int64))
+    }
+
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &[DataType::Int64]
     }
 
     fn partial_update(
@@ -93,32 +90,15 @@ impl Agg for AggCount {
         partial_args: &[ArrayRef],
         partial_arg_idx: IdxSelection<'_>,
     ) -> Result<()> {
-        let accs = downcast_any!(accs, mut AccCountColumn)?;
+        let accs = downcast_any!(accs, mut AccPrimColumn<i64>)?;
         accs.ensure_size(acc_idx);
 
-        if partial_args.is_empty() {
-            idx_for_zipped! {
-                ((acc_idx, _partial_arg_idx) in (acc_idx, partial_arg_idx)) => {
-                    if acc_idx >= accs.values.len() {
-                        accs.values.push(1);
-                    } else {
-                        accs.values[acc_idx] += 1;
-                    }
-                }
-            }
-        } else {
-            idx_for_zipped! {
-                ((acc_idx, partial_arg_idx) in (acc_idx, partial_arg_idx)) => {
-                    let add = partial_args
-                        .iter()
-                        .all(|arg| arg.is_valid(partial_arg_idx)) as i64;
-
-                    if acc_idx >= accs.values.len() {
-                        accs.values.push(add);
-                    } else {
-                        accs.values[acc_idx] += add;
-                    }
-                }
+        idx_for_zipped! {
+            ((acc_idx, partial_arg_idx) in (acc_idx, partial_arg_idx)) => {
+                let add = partial_args
+                    .iter()
+                    .all(|arg| arg.is_valid(partial_arg_idx)) as i64;
+                accs.set_value(acc_idx, Some(accs.value(acc_idx).unwrap_or(0) + add));
             }
         }
         Ok(())
@@ -131,98 +111,25 @@ impl Agg for AggCount {
         merging_accs: &mut AccColumnRef,
         merging_acc_idx: IdxSelection<'_>,
     ) -> Result<()> {
-        let accs = downcast_any!(accs, mut AccCountColumn)?;
-        let merging_accs = downcast_any!(merging_accs, mut AccCountColumn)?;
+        let accs = downcast_any!(accs, mut AccPrimColumn<i64>)?;
+        let merging_accs = downcast_any!(merging_accs, mut AccPrimColumn<i64>)?;
         accs.ensure_size(acc_idx);
 
         idx_for_zipped! {
             ((acc_idx, merging_acc_idx) in (acc_idx, merging_acc_idx)) => {
-                if acc_idx < accs.values.len() {
-                    accs.values[acc_idx] += merging_accs.values[merging_acc_idx];
-                } else {
-                    accs.values.push(merging_accs.values[merging_acc_idx]);
-                }
+                let v = match (accs.value(acc_idx), merging_accs.value(merging_acc_idx)) {
+                    (Some(a), Some(b)) => Some(a + b),
+                    (Some(a), _) => Some(a),
+                    (_, Some(b)) => Some(b),
+                    _ => Some(0),
+                };
+                accs.set_value(acc_idx, v);
             }
         }
         Ok(())
     }
 
     fn final_merge(&self, accs: &mut AccColumnRef, acc_idx: IdxSelection<'_>) -> Result<ArrayRef> {
-        let accs = downcast_any!(accs, mut AccCountColumn)?;
-
-        idx_with_iter! {
-            (acc_idx_iter @ acc_idx) => {
-                Ok(Arc::new(Int64Array::from_iter_values(
-                    acc_idx_iter.map(|idx| accs.values[idx])
-                )))
-            }
-        }
-    }
-}
-
-pub struct AccCountColumn {
-    pub values: Vec<i64>,
-}
-
-impl AccColumn for AccCountColumn {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
-    fn resize(&mut self, num_accs: usize) {
-        self.values.resize(num_accs, 0);
-    }
-
-    fn shrink_to_fit(&mut self) {
-        self.values.shrink_to_fit();
-    }
-
-    fn num_records(&self) -> usize {
-        self.values.len()
-    }
-
-    fn mem_used(&self) -> usize {
-        self.values.capacity() * 2 * size_of::<i64>()
-    }
-
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
-        let mut array_idx = 0;
-
-        idx_for! {
-            (idx in idx) => {
-                write_len(self.values[idx] as usize, &mut array[array_idx])?;
-                array_idx += 1;
-            }
-        }
-        Ok(())
-    }
-
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
-        assert_eq!(self.num_records(), 0, "expect empty AccColumn");
-        for cursor in cursors {
-            self.values.push(read_len(cursor)? as i64);
-        }
-        Ok(())
-    }
-
-    fn spill(&self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
-        idx_for! {
-            (idx in idx) => {
-                write_len(self.values[idx] as usize, w)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn unspill(&mut self, num_rows: usize, r: &mut SpillCompressedReader) -> Result<()> {
-        assert_eq!(self.num_records(), 0, "expect empty AccColumn");
-        for _ in 0..num_rows {
-            self.values.push(read_len(r)? as i64);
-        }
-        Ok(())
+        Ok(accs.freeze_to_arrays(acc_idx)?[0].clone())
     }
 }

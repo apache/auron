@@ -61,7 +61,8 @@ object NativeHelper extends Logging {
   val nativeMemory: Long = {
     val heapMemory = Runtime.getRuntime.maxMemory()
     val offheapMemory = totalMemory - heapMemory
-    logWarning(s"memory total: $totalMemory, onheap: $heapMemory, offheap: $offheapMemory")
+    logWarning(s"memory total: ${Utils.bytesToString(totalMemory)}, onheap: ${Utils.bytesToString(
+        heapMemory)}, offheap: ${Utils.bytesToString(offheapMemory)}")
     offheapMemory
   }
 

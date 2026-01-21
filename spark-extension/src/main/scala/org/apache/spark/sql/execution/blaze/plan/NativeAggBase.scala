@@ -55,7 +55,7 @@ import org.apache.spark.sql.execution.blaze.plan.NativeAggBase.HashAgg
 import org.apache.spark.sql.execution.blaze.plan.NativeAggBase.NativeAggrInfo
 import org.apache.spark.sql.execution.blaze.plan.NativeAggBase.SortAgg
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.BinaryType
+import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, LongType}
 
 abstract class NativeAggBase(
     execMode: AggExecMode,
@@ -143,9 +143,10 @@ abstract class NativeAggBase(
     if (nativeAggrModes.contains(pb.AggMode.FINAL)) {
       groupingExpressions.map(_.toAttribute) ++ aggregateAttributes
     } else {
-      groupingExpressions.map(_.toAttribute) :+
-        AttributeReference(NativeAggBase.AGG_BUF_COLUMN_NAME, BinaryType, nullable = false)(
-          ExprId.apply(NativeAggBase.AGG_BUF_COLUMN_EXPR_ID))
+      val aggBufferAttrs = nativeAggrInfos
+        .flatMap(_.aggBufferDataTypes)
+        .map(AttributeReference("", _, nullable = false)(ExprId.apply(0)))
+      groupingExpressions.map(_.toAttribute) ++ aggBufferAttrs
     }
 
   override def outputPartitioning: Partitioning =
@@ -205,38 +206,18 @@ abstract class NativeAggBase(
 }
 
 object NativeAggBase extends Logging {
-
-  val AGG_BUF_COLUMN_EXPR_ID = 9223372036854775807L
-  val AGG_BUF_COLUMN_NAME = s"#$AGG_BUF_COLUMN_EXPR_ID"
-
   trait AggExecMode;
   case object HashAgg extends AggExecMode
   case object SortAgg extends AggExecMode
 
-  case class NativeAggrPartialState(stateAttr: Attribute, arrowType: pb.ArrowType)
-
-  object NativeAggrPartialState {
-    def apply(
-        aggrAttr: Attribute,
-        stateFieldName: String,
-        dataType: DataType,
-        nullable: Boolean,
-        arrowType: pb.ArrowType = null): NativeAggrPartialState = {
-
-      val fieldName = s"${Util.getFieldNameByExprId(aggrAttr)}[$stateFieldName]"
-      val stateAttr = AttributeReference(fieldName, dataType, nullable)(aggrAttr.exprId)
-      NativeAggrPartialState(
-        stateAttr,
-        arrowType = Option(arrowType).getOrElse(NativeConverters.convertDataType(dataType)))
-    }
-  }
-
   case class NativeAggrInfo(
       mode: AggregateMode,
       nativeAggrs: Seq[pb.PhysicalExprNode],
+      aggBufferDataTypes: Seq[DataType],
       outputAttr: Attribute)
 
   def getNativeAggrInfo(aggr: AggregateExpression, aggrAttr: Attribute): NativeAggrInfo = {
+    val aggBufferDataTypes = computeNativeAggBufferDataTypes(aggr.aggregateFunction)
     val reducedAggr = AggregateExpression(
       aggr.aggregateFunction
         .mapChildren(e => createPlaceholder(e))
@@ -249,12 +230,17 @@ object NativeAggBase extends Logging {
 
     aggr.mode match {
       case Partial =>
-        NativeAggrInfo(aggr.mode, NativeConverters.convertAggregateExpr(aggr) :: Nil, outputAttr)
+        NativeAggrInfo(
+          aggr.mode,
+          NativeConverters.convertAggregateExpr(aggr) :: Nil,
+          aggBufferDataTypes,
+          outputAttr)
 
       case PartialMerge | Final =>
         NativeAggrInfo(
           aggr.mode,
           NativeConverters.convertAggregateExpr(reducedAggr) :: Nil,
+          aggBufferDataTypes,
           outputAttr)
 
       case Complete =>
@@ -305,5 +291,18 @@ object NativeAggBase extends Logging {
       return None
     }
     findRecursive(exec.children.head)
+  }
+
+  def computeNativeAggBufferDataTypes(aggr: AggregateFunction): Seq[DataType] = {
+    aggr match {
+      case _: Count => Seq(LongType)
+      case f: Max => Seq(f.dataType)
+      case f: Min => Seq(f.dataType)
+      case f: Sum => Seq(f.dataType)
+      case f: Average => Seq(f.dataType, LongType)
+      case f @ First(_, true) => Seq(f.dataType)
+      case f @ First(_, false) => Seq(f.dataType, BooleanType)
+      case _ => Seq(BinaryType)
+    }
   }
 }
