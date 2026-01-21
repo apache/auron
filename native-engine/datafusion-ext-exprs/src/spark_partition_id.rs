@@ -146,7 +146,7 @@ mod tests {
                     assert_eq!(int_arr.value(i), 5);
                 }
             }
-            _ => panic!("Expected Array result"),
+            _ => unreachable!("Expected Array result"),
         }
     }
 
@@ -172,7 +172,7 @@ mod tests {
                         assert_eq!(int_arr.value(i), partition_id as i32);
                     }
                 }
-                _ => panic!("Expected Array result"),
+                _ => unreachable!("Expected Array result"),
             }
         }
     }
