@@ -21,9 +21,8 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand_distr::{Distribution, StandardNormal};
 
-/// Spark-style `randn(seed)` implementation.
-/// Generates a random column with independent and identically distributed (i.i.d.)
-/// samples from the standard normal distribution N(0, 1).
+/// Returns a random value with independent and identically distributed (i.i.d.) values drawn
+///from the standard normal distribution
 ///
 /// - Takes an optional seed (i64) for reproducibility
 /// - If no seed is provided, uses a random seed
