@@ -36,3 +36,4 @@ sonic-rs = { workspace = true }
 chrono = "0.4.43"
 chrono-tz = "0.10.4"
 rand = { workspace = true }
+rand_distr = { workspace = true }

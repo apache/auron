@@ -17,8 +17,9 @@ use datafusion::{
     common::{Result, ScalarValue},
     logical_expr::ColumnarValue,
 };
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 use rand::rngs::StdRng;
+use rand_distr::{Distribution, StandardNormal};
 
 /// Spark-style `randn(seed)` implementation.
 /// Generates a random column with independent and identically distributed (i.i.d.)
@@ -26,7 +27,6 @@ use rand::rngs::StdRng;
 ///
 /// - Takes an optional seed (i64) for reproducibility
 /// - If no seed is provided, uses a random seed
-/// - Uses Box-Muller transform to generate normal distribution from uniform
 pub fn spark_randn(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     // Parse seed argument, or generate random seed if not provided
     let seed: u64 = if args.is_empty() {
@@ -40,24 +40,9 @@ pub fn spark_randn(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     };
 
     let mut rng = StdRng::seed_from_u64(seed);
-
-    // Generate a single standard normal value using Box-Muller transform
-    let value = box_muller_single(&mut rng);
+    let value: f64 = StandardNormal.sample(&mut rng);
 
     Ok(ColumnarValue::Scalar(ScalarValue::Float64(Some(value))))
-}
-
-/// Box-Muller transform to generate a single standard normal random value.
-/// Takes two uniform random numbers in (0, 1) and produces a standard normal value.
-fn box_muller_single<R: Rng>(rng: &mut R) -> f64 {
-    // Generate two uniform random numbers in (0, 1)
-    // We use gen_range to exclude 0 to avoid log(0)
-    let u1: f64 = rng.random_range(f64::MIN_POSITIVE..1.0);
-    let u2: f64 = rng.random_range(0.0..1.0);
-
-    // Box-Muller transform
-    let two_pi = 2.0 * std::f64::consts::PI;
-    (-2.0 * u1.ln()).sqrt() * (two_pi * u2).cos()
 }
 
 #[cfg(test)]
