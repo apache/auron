@@ -31,23 +31,18 @@ use rand::rngs::StdRng;
 /// - If no seed is provided, uses a random seed
 /// - Uses Box-Muller transform to generate normal distribution from uniform
 pub fn spark_randn(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    // Parse optional seed argument
-    let seed: Option<i64> = if args.is_empty() {
-        None
+    // Parse seed argument, or generate random seed if not provided
+    let seed: u64 = if args.is_empty() {
+        rand::random()
     } else {
         match &args[0] {
-            ColumnarValue::Scalar(ScalarValue::Int64(s)) => *s,
-            ColumnarValue::Scalar(ScalarValue::Int32(Some(s))) => Some(*s as i64),
-            ColumnarValue::Scalar(ScalarValue::Null) => None,
-            _ => None,
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(s))) => *s as u64,
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(s))) => *s as u64,
+            _ => rand::random(),
         }
     };
 
-    // Create RNG - seeded if seed provided, otherwise random
-    let mut rng: StdRng = match seed {
-        Some(s) => StdRng::seed_from_u64(s as u64),
-        None => StdRng::from_os_rng(),
-    };
+    let mut rng = StdRng::seed_from_u64(seed);
 
     // Generate a single standard normal value using Box-Muller transform
     let value = box_muller_single(&mut rng);
@@ -62,11 +57,8 @@ pub fn spark_randn_array(
     len: usize,
     seed: Option<i64>,
 ) -> Result<ColumnarValue> {
-    // Create RNG - seeded if seed provided, otherwise random
-    let mut rng: StdRng = match seed {
-        Some(s) => StdRng::seed_from_u64(s as u64),
-        None => StdRng::from_os_rng(),
-    };
+    let seed: u64 = seed.map(|s| s as u64).unwrap_or_else(rand::random);
+    let mut rng = StdRng::seed_from_u64(seed);
 
     // Generate `len` standard normal values
     let values: Vec<f64> = (0..len)
