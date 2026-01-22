@@ -1406,18 +1406,19 @@ object NativeConverters extends Logging {
       serialized: Array[Byte]): (E with Serializable, S) = {
     Utils.tryWithResource(new ByteArrayInputStream(serialized)) { bis =>
       Utils.tryWithResource(new ObjectInputStream(bis)) { ois =>
+        def read(): (E with Serializable, S) = {
+          val expr = ois.readObject().asInstanceOf[E with Serializable]
+          val payload = ois.readObject().asInstanceOf[S with Serializable]
+          (expr, payload)
+        }
         // Spark TaskMetrics#externalAccums is not thread-safe
         val taskContext = TaskContext.get()
         if (taskContext != null) {
           taskContext.taskMetrics().synchronized {
-            val expr = ois.readObject().asInstanceOf[E with Serializable]
-            val payload = ois.readObject().asInstanceOf[S with Serializable]
-            (expr, payload)
+            read()
           }
         } else {
-          val expr = ois.readObject().asInstanceOf[E with Serializable]
-          val payload = ois.readObject().asInstanceOf[S with Serializable]
-          (expr, payload)
+          read()
         }
       }
     }
