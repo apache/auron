@@ -17,12 +17,11 @@ use datafusion::{
     common::{Result, ScalarValue},
     logical_expr::ColumnarValue,
 };
-use rand::SeedableRng;
-use rand::rngs::StdRng;
+use rand::{SeedableRng, rngs::StdRng};
 use rand_distr::{Distribution, StandardNormal};
 
-/// Returns a random value with independent and identically distributed (i.i.d.) values drawn
-///from the standard normal distribution
+/// Returns a random value with independent and identically distributed (i.i.d.)
+/// values drawn from the standard normal distribution
 ///
 /// - Takes an optional seed (i64) for reproducibility
 /// - If no seed is provided, uses a random seed
@@ -138,5 +137,4 @@ mod test {
         }
         Ok(())
     }
-
 }
