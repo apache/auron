@@ -168,6 +168,7 @@ jobs:
         with:
           name: unit-tests-reports-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: "**/target/surefire-reports/*.xml"
+          overwrite: true
       - name: Upload unit tests log
         if: failure()
         uses: actions/upload-artifact@v6
@@ -191,6 +192,7 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: ~/.m2/repository/org/apache/auron
           if-no-files-found: error
+          overwrite: true
 
   run-tpcds-test:
     name: Run TPC-DS test ${{ matrix.query }}

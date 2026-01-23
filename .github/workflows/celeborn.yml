@@ -37,11 +37,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - celebornver: "celeborn-0.6"
-          - celebornver: "celeborn-0.5"
+        celebornver: [ "celeborn-0.6", "celeborn-0.5" ]
+        writer: ["hash", "sort"]
     uses: ./.github/workflows/tpcds-reusable.yml
-    name: Test Celeborn ${{ matrix.celebornver }}
+    name: Test Celeborn ${{ matrix.celebornver }}, writer=${{ matrix.writer }}
     with:
       celebornver: ${{ matrix.celebornver }}
       sparkver: "spark-3.5"
@@ -50,6 +49,6 @@ jobs:
       extrasparkconf: >-
         --conf spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.celeborn.AuronCelebornShuffleManager
         --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
-        --conf spark.celeborn.client.spark.shuffle.writer=hash
+        --conf spark.celeborn.client.spark.shuffle.writer=${{ matrix.writer }}
         --conf spark.celeborn.client.push.replicate.enabled=false
       queries: '["q1,q2,q3,q4,q5,q6,q7,q8,q9"]'
