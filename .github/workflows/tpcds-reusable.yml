@@ -44,6 +44,11 @@ on:
         required: false
         type: string
         default: '2.12'
+      skip-unit-tests:
+        description: 'Whether to skip unit tests (true/false)'
+        required: false
+        type: string
+        default: 'false'
       celebornver:
         description: 'Optional Celeborn version'
         required: false
@@ -146,7 +151,7 @@ jobs:
             UNIFFLE_NUMBER="${UNIFFLE_NUMBER#uniffle-}"
           fi
           
-          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }} --skiptests false"
+          CMD="./auron-build.sh --pre --sparkver $SPARK_NUMBER --scalaver ${{ inputs.scalaver }} --skiptests ${{ inputs.skip-unit-tests }}"
           if [ -n "${{ inputs.celebornver }}" ]; then
             CMD="$CMD --celeborn $CELEBORN_NUMBER"
           fi
@@ -155,7 +160,7 @@ jobs:
           fi
 
           SPARK_TESTS="${{ inputs.sparktests }}"
-          if [[ "$SPARK_TESTS" == "true" ]]; then
+          if [[ "${{ inputs.skip-unit-tests }}" != "true" && "$SPARK_TESTS" == "true" ]]; then
             CMD="$CMD --sparktests true"
           fi
 

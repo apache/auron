@@ -48,6 +48,7 @@ jobs:
       scalaver: "2.12"
       hadoopver: ${{ matrix.hadoopver }}
       unifflever: ${{ matrix.unifflever }}
+      skip-unit-tests: true
       extrasparkconf: >-
         --conf spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.uniffle.AuronUniffleShuffleManager
         --conf spark.serializer=org.apache.spark.serializer.KryoSerializer

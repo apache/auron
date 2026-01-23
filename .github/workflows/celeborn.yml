@@ -44,6 +44,7 @@ jobs:
     name: Test Celeborn ${{ matrix.celebornver }}
     with:
       celebornver: ${{ matrix.celebornver }}
+      skip-unit-tests: true
       sparkver: "spark-3.5"
       hadoop-profile: 'hadoop3'
       scalaver: "2.12"
