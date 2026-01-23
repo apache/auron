@@ -23,7 +23,7 @@ SELECT
 FROM
   catalog_sales, warehouse, ship_mode, call_center, date_dim
 WHERE
-  d_month_seq BETWEEN 1200 AND 1200 + 11 and cs_sold_date_sk>0
+  d_month_seq BETWEEN 1200 AND 1200 + 11 and cs_sold_date_sk
     AND cs_ship_date_sk = d_date_sk
     AND cs_warehouse_sk = w_warehouse_sk
     AND cs_ship_mode_sk = sm_ship_mode_sk
