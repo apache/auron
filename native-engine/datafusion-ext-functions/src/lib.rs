@@ -19,6 +19,7 @@ use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
 use datafusion_ext_commons::df_unimplemented_err;
 
 mod brickhouse;
+mod spark_case_when;
 mod spark_bround;
 mod spark_check_overflow;
 mod spark_crypto;
@@ -85,6 +86,7 @@ pub fn create_auron_ext_function(
             Arc::new(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
         "Spark_IsNaN" => Arc::new(spark_isnan::spark_isnan),
+        "Spark_CaseWhen" => Arc::new(spark_case_when::spark_case_when),
         _ => df_unimplemented_err!("spark ext function not implemented: {name}")?,
     })
 }
