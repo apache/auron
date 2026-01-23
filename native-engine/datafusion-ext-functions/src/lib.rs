@@ -19,8 +19,8 @@ use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
 use datafusion_ext_commons::df_unimplemented_err;
 
 mod brickhouse;
-mod spark_case_when;
 mod spark_bround;
+mod spark_case_when;
 mod spark_check_overflow;
 mod spark_crypto;
 mod spark_dates;

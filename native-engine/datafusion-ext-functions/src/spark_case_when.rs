@@ -15,26 +15,19 @@
 
 use std::sync::Arc;
 
-use arrow::{
-    array::*,
-    compute::kernels::zip::zip,
-    datatypes::DataType,
-};
-use datafusion::{
-    common::Result,
-    physical_plan::ColumnarValue,
-};
+use arrow::{array::*, compute::kernels::zip::zip, datatypes::DataType};
+use datafusion::{common::Result, physical_plan::ColumnarValue};
 use datafusion_ext_commons::df_execution_err;
 
 /// CASE WHEN function implementation
-/// 
+///
 /// Syntax: case_when(condition1, value1, condition2, value2, ..., else_value)
-/// 
+///
 /// Arguments:
 /// - Must have odd number of arguments (at least 3)
 /// - Pairs of (condition, value), with optional else_value at the end
 /// - If no else_value provided and no conditions match, returns NULL
-/// 
+///
 /// Example:
 /// - case_when(x > 10, 'big', x > 5, 'medium', 'small')
 /// - case_when(x IS NULL, 0, x)
@@ -107,10 +100,20 @@ pub fn spark_case_when(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let output_type = values[0].data_type().clone();
 
     // Build the result array
-    let result = evaluate_case_when(&conditions, &values, else_array.as_ref(), batch_size, &output_type)?;
+    let result = evaluate_case_when(
+        &conditions,
+        &values,
+        else_array.as_ref(),
+        batch_size,
+        &output_type,
+    )?;
 
     // If all inputs were scalars, return a scalar
-    if batch_size == 1 && args.iter().all(|arg| matches!(arg, ColumnarValue::Scalar(_))) {
+    if batch_size == 1
+        && args
+            .iter()
+            .all(|arg| matches!(arg, ColumnarValue::Scalar(_)))
+    {
         let scalar = datafusion::common::ScalarValue::try_from_array(&result, 0)?;
         Ok(ColumnarValue::Scalar(scalar))
     } else {
@@ -140,7 +143,8 @@ fn evaluate_case_when(
         let condition = &conditions[i];
         let value = &values[i];
 
-        // Use arrow's zip kernel to select between current result and value based on condition
+        // Use arrow's zip kernel to select between current result and value based on
+        // condition
         result = zip(condition, value, &result)?;
     }
 
@@ -173,7 +177,10 @@ mod test {
         let result_array = result.into_array(4)?;
 
         assert_eq!(
-            result_array.as_any().downcast_ref::<StringArray>().unwrap(),
+            result_array
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("Failed to downcast to StringArray"),
             &expected
         );
         Ok(())
@@ -183,17 +190,17 @@ mod test {
     fn test_case_when_multiple_conditions() -> Result<()> {
         // case_when(x > 10, 100, x > 5, 50, 0)
         let x = vec![15, 8, 3, 12, 5];
-        
+
         let condition1 = Arc::new(BooleanArray::from(
-            x.iter().map(|&v| v > 10).collect::<Vec<_>>()
+            x.iter().map(|&v| v > 10).collect::<Vec<_>>(),
         ));
         let value1 = Arc::new(Int32Array::from(vec![100, 100, 100, 100, 100]));
-        
+
         let condition2 = Arc::new(BooleanArray::from(
-            x.iter().map(|&v| v > 5).collect::<Vec<_>>()
+            x.iter().map(|&v| v > 5).collect::<Vec<_>>(),
         ));
         let value2 = Arc::new(Int32Array::from(vec![50, 50, 50, 50, 50]));
-        
+
         let else_value = Arc::new(Int32Array::from(vec![0, 0, 0, 0, 0]));
 
         let result = spark_case_when(&[
@@ -208,7 +215,10 @@ mod test {
         let result_array = result.into_array(5)?;
 
         assert_eq!(
-            result_array.as_any().downcast_ref::<Int32Array>().unwrap(),
+            result_array
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .expect("Failed to downcast to Int32Array"),
             &expected
         );
         Ok(())
@@ -220,16 +230,17 @@ mod test {
         let condition = Arc::new(BooleanArray::from(vec![true, false, true, false]));
         let value = Arc::new(Int32Array::from(vec![100, 100, 100, 100]));
 
-        let result = spark_case_when(&[
-            ColumnarValue::Array(condition),
-            ColumnarValue::Array(value),
-        ])?;
+        let result =
+            spark_case_when(&[ColumnarValue::Array(condition), ColumnarValue::Array(value)])?;
 
         let expected = Int32Array::from(vec![Some(100), None, Some(100), None]);
         let result_array = result.into_array(4)?;
 
         assert_eq!(
-            result_array.as_any().downcast_ref::<Int32Array>().unwrap(),
+            result_array
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .expect("Failed to downcast to Int32Array"),
             &expected
         );
         Ok(())
@@ -238,7 +249,12 @@ mod test {
     #[test]
     fn test_case_when_with_nulls() -> Result<()> {
         // Test handling of NULL conditions
-        let condition = Arc::new(BooleanArray::from(vec![Some(true), None, Some(false), Some(true)]));
+        let condition = Arc::new(BooleanArray::from(vec![
+            Some(true),
+            None,
+            Some(false),
+            Some(true),
+        ]));
         let value = Arc::new(Int32Array::from(vec![10, 10, 10, 10]));
         let else_value = Arc::new(Int32Array::from(vec![20, 20, 20, 20]));
 
@@ -253,7 +269,10 @@ mod test {
         let result_array = result.into_array(4)?;
 
         assert_eq!(
-            result_array.as_any().downcast_ref::<Int32Array>().unwrap(),
+            result_array
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .expect("Failed to downcast to Int32Array"),
             &expected
         );
         Ok(())
@@ -272,7 +291,9 @@ mod test {
             ColumnarValue::Scalar(ScalarValue::Float64(Some(v))) => {
                 assert_eq!(v, 1.5);
             }
-            _ => panic!("Expected scalar float64"),
+            _ => {
+                return df_execution_err!("Expected scalar float64");
+            }
         }
         Ok(())
     }
@@ -288,7 +309,9 @@ mod test {
             ColumnarValue::Scalar(ScalarValue::Int32(Some(v))) => {
                 assert_eq!(v, 42);
             }
-            _ => panic!("Expected scalar int32"),
+            _ => {
+                return df_execution_err!("Expected scalar int32");
+            }
         }
         Ok(())
     }
@@ -310,7 +333,10 @@ mod test {
         let result_array = result.into_array(3)?;
 
         assert_eq!(
-            result_array.as_any().downcast_ref::<Int32Array>().unwrap(),
+            result_array
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .expect("Failed to downcast to Int32Array"),
             &expected
         );
         Ok(())
