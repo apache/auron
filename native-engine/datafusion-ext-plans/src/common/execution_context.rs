@@ -593,7 +593,7 @@ impl ExecutionContext {
                 if !task_running {
                     panic!("output_with_sender[{desc}] canceled due to task finished/killed");
                 } else {
-                    panic!("output_with_sender[{desc}] error: {}", err.to_string());
+                    panic!("output_with_sender[{desc}] error: {err}");
                 }
             }
             Ok::<_, DataFusionError>(())

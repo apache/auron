@@ -146,7 +146,7 @@ impl DisplayAs for SortExec {
             .map(|e| e.to_string())
             .collect::<Vec<_>>()
             .join(", ");
-        write!(f, "SortExec: {}", exprs)
+        write!(f, "SortExec: {exprs}")
     }
 }
 

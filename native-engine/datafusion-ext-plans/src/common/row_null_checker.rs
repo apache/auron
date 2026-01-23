@@ -127,7 +127,7 @@ impl RowNullChecker {
             }
             other => {
                 // For unsupported types, panic
-                panic!("unsupported data type in RowNullChecker: {:?}", other)
+                panic!("unsupported data type in RowNullChecker: {other:?}")
             }
         }
     }

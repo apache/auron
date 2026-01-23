@@ -176,7 +176,7 @@ pub fn string_concat(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         }
 
         // concat
-        let initial = Some("".to_string());
+        let initial = Some(String::new());
         let result = args.iter().fold(initial, |mut acc, rhs| {
             if let Some(ref mut inner) = acc {
                 match rhs {
@@ -401,8 +401,8 @@ mod test {
         // positive case
         let r = string_repeat(&vec![
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("123")),
-                Some(format!("a")),
+                Some("123".to_string()),
+                Some("a".to_string()),
                 None,
             ]))),
             ColumnarValue::Scalar(ScalarValue::from(3_i32)),
@@ -416,8 +416,8 @@ mod test {
         // repeat with n < 0
         let r = string_repeat(&vec![
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("123")),
-                Some(format!("a")),
+                Some("123".to_string()),
+                Some("a".to_string()),
                 None,
             ]))),
             ColumnarValue::Scalar(ScalarValue::from(-1_i32)),
@@ -431,8 +431,8 @@ mod test {
         // repeat with n = null
         let r = string_repeat(&vec![
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("123")),
-                Some(format!("a")),
+                Some("123".to_string()),
+                Some("a".to_string()),
                 None,
             ]))),
             ColumnarValue::Scalar(ScalarValue::Int32(None)),
@@ -450,9 +450,9 @@ mod test {
         // positive case
         let r = string_split(&vec![
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("123,456,,,789,")),
-                Some(format!("123")),
-                Some(format!("")),
+                Some("123,456,,,789,".to_string()),
+                Some("123".to_string()),
+                Some(String::new()),
                 None,
             ]))),
             ColumnarValue::Scalar(ScalarValue::from(",")),
@@ -485,16 +485,16 @@ mod test {
         // positive case
         let r = string_concat(&vec![
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("123")),
+                Some("123".to_string()),
                 None,
             ]))),
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("444")),
-                Some(format!("456")),
+                Some("444".to_string()),
+                Some("456".to_string()),
             ]))),
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("")),
-                Some(format!("")),
+                Some(String::new()),
+                Some(String::new()),
             ]))),
             ColumnarValue::Scalar(ScalarValue::from("SomeScalar")),
         ])?;
@@ -511,16 +511,16 @@ mod test {
         let r = string_concat_ws(&vec![
             ColumnarValue::Scalar(ScalarValue::from("||")),
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("123")),
+                Some("123".to_string()),
                 None,
             ]))),
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
                 None,
-                Some(format!("456")),
+                Some("456".to_string()),
             ]))),
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some(format!("")),
-                Some(format!("")),
+                Some(String::new()),
+                Some(String::new()),
             ]))),
             ColumnarValue::Array(Arc::new({
                 let mut list_builder = ListBuilder::new(StringBuilder::new());
