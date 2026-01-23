@@ -30,7 +30,7 @@ use datafusion_ext_commons::df_execution_err;
 ///
 /// Example:
 /// - case_when(x > 10, 'big', x > 5, 'medium', 'small')
-/// - case_when(x IS NULL, 0, x)
+/// - case_when(x IS NULL, 0, x )
 pub fn spark_case_when(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.is_empty() {
         return df_execution_err!("case_when requires at least 1 argument (else value)");
