@@ -95,8 +95,7 @@ public class AuronFlinkPlannerExtension {
             List<RexNode> filterPredicates,
             int parallelism) {
 
-        LOG.info("Creating Auron Parquet scan for {} files with parallelism {}",
-                filePaths.size(), parallelism);
+        LOG.info("Creating Auron Parquet scan for {} files with parallelism {}", filePaths.size(), parallelism);
 
         // Build the native plan
         PhysicalPlanNode nativePlan = AuronFlinkConverters.convertParquetScan(
@@ -107,21 +106,18 @@ public class AuronFlinkPlannerExtension {
                 filterPredicates,
                 parallelism,
                 0 // partitionIndex will be set per parallel instance
-        );
+                );
 
         // Create source function
-        AuronBatchExecutionWrapperOperator sourceFunction =
-                new AuronBatchExecutionWrapperOperator(
-                        nativePlan,
-                        outputSchema,
-                        0, // partitionId
-                        1  // stageId
+        AuronBatchExecutionWrapperOperator sourceFunction = new AuronBatchExecutionWrapperOperator(
+                nativePlan,
+                outputSchema,
+                0, // partitionId
+                1 // stageId
                 );
 
         // Add source to environment
-        return env.addSource(sourceFunction)
-                .name("AuronParquetScan")
-                .setParallelism(parallelism);
+        return env.addSource(sourceFunction).name("AuronParquetScan").setParallelism(parallelism);
     }
 
     /**
@@ -147,24 +143,19 @@ public class AuronFlinkPlannerExtension {
 
         // Build projection plan
         PhysicalPlanNode projectionPlan = AuronFlinkConverters.convertProjection(
-                inputPlan,
-                projections,
-                outputFieldNames,
-                new ArrayList<>(outputSchema.getChildren()),
-                inputFieldNames
-        );
+                inputPlan, projections, outputFieldNames, new ArrayList<>(outputSchema.getChildren()), inputFieldNames);
 
         // For MVP, we'll need to create a new source wrapping this plan
         // In a full implementation, this would be a transformation operator
-        AuronBatchExecutionWrapperOperator operator =
-                new AuronBatchExecutionWrapperOperator(
-                        projectionPlan,
-                        outputSchema,
-                        0, // partitionId
-                        2  // stageId for projection
+        AuronBatchExecutionWrapperOperator operator = new AuronBatchExecutionWrapperOperator(
+                projectionPlan,
+                outputSchema,
+                0, // partitionId
+                2 // stageId for projection
                 );
 
-        return inputStream.getExecutionEnvironment()
+        return inputStream
+                .getExecutionEnvironment()
                 .addSource(operator)
                 .name("AuronProjection")
                 .setParallelism(inputStream.getParallelism());
@@ -190,22 +181,18 @@ public class AuronFlinkPlannerExtension {
         LOG.info("Creating Auron filter with {} conditions", filterConditions.size());
 
         // Build filter plan
-        PhysicalPlanNode filterPlan = AuronFlinkConverters.convertFilter(
-                inputPlan,
-                filterConditions,
-                inputFieldNames
-        );
+        PhysicalPlanNode filterPlan = AuronFlinkConverters.convertFilter(inputPlan, filterConditions, inputFieldNames);
 
         // For MVP, create source wrapping the filter plan
-        AuronBatchExecutionWrapperOperator operator =
-                new AuronBatchExecutionWrapperOperator(
-                        filterPlan,
-                        inputSchema,
-                        0, // partitionId
-                        3  // stageId for filter
+        AuronBatchExecutionWrapperOperator operator = new AuronBatchExecutionWrapperOperator(
+                filterPlan,
+                inputSchema,
+                0, // partitionId
+                3 // stageId for filter
                 );
 
-        return inputStream.getExecutionEnvironment()
+        return inputStream
+                .getExecutionEnvironment()
                 .addSource(operator)
                 .name("AuronFilter")
                 .setParallelism(inputStream.getParallelism());
@@ -236,13 +223,12 @@ public class AuronFlinkPlannerExtension {
      * @throws IllegalStateException if runtime mode is not BATCH.
      */
     public static void validateBatchMode(Configuration config) {
-        String runtimeMode = config.getString(
-                org.apache.flink.configuration.ExecutionOptions.RUNTIME_MODE);
+        org.apache.flink.api.common.RuntimeExecutionMode runtimeMode =
+                config.get(org.apache.flink.configuration.ExecutionOptions.RUNTIME_MODE);
 
-        if (!"BATCH".equalsIgnoreCase(runtimeMode)) {
-            throw new IllegalStateException(
-                    "Auron MVP only supports BATCH execution mode. Current mode: " + runtimeMode +
-                    ". Set 'execution.runtime-mode' to 'BATCH'.");
+        if (runtimeMode != org.apache.flink.api.common.RuntimeExecutionMode.BATCH) {
+            throw new IllegalStateException("Auron MVP only supports BATCH execution mode. Current mode: " + runtimeMode
+                    + ". Set 'execution.runtime-mode' to 'BATCH'.");
         }
     }
 }

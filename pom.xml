@@ -43,6 +43,8 @@
     <module>dev/mvn-build-helper/assembly</module>
     <module>dev/mvn-build-helper/proto</module>
     <module>auron-spark-ui</module>
+    <module>auron-flink-extension/auron-flink-runtime</module>
+    <module>auron-flink-extension/auron-flink-planner</module>
   </modules>
 
   <properties>
@@ -57,6 +59,9 @@
     <scalaVersion>2.12</scalaVersion>
     <scalaLongVersion>2.12.18</scalaLongVersion>
     <scalaJava8CompatVersion>1.0.2</scalaJava8CompatVersion>
+    <sparkVersion>3.5.8</sparkVersion>
+    <shortSparkVersion>3.5</shortSparkVersion>
+    <flink.version>1.18.1</flink.version>
     <maven.version>3.9.12</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
     <maven.plugin.scalatest.version>2.2.0</maven.plugin.scalatest.version>
@@ -70,6 +75,7 @@
     <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
 
     <scalamacros.paradise.version>2.1.1</scalamacros.paradise.version>
+    <scalaTestVersion>3.2.14</scalaTestVersion>
     <junit.jupiter.version>5.13.4</junit.jupiter.version>
     <restrict-imports.enforcer.version>2.6.0</restrict-imports.enforcer.version>
 
@@ -895,10 +901,14 @@
 
     <profile>
       <id>flink-1.18</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <modules>
         <module>auron-flink-extension</module>
       </modules>
       <properties>
+        <scalaTestVersion>3.2.9</scalaTestVersion>
         <flink.version>1.18.1</flink.version>
       </properties>
     </profile>

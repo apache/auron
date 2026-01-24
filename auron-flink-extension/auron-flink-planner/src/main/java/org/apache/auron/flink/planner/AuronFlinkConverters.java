@@ -18,7 +18,6 @@ package org.apache.auron.flink.planner;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.Field;
 import org.apache.auron.protobuf.FileGroup;
@@ -106,8 +105,7 @@ public class AuronFlinkConverters {
             List<String> fieldNames = fullSchema.getFieldNames();
             for (RexNode predicate : predicates) {
                 try {
-                    PhysicalExprNode nativePredicate =
-                            FlinkExpressionConverter.convertRexNode(predicate, fieldNames);
+                    PhysicalExprNode nativePredicate = FlinkExpressionConverter.convertRexNode(predicate, fieldNames);
                     pruningPredicates.add(nativePredicate);
                 } catch (UnsupportedOperationException e) {
                     // Skip unsupported predicates
@@ -121,9 +119,7 @@ public class AuronFlinkConverters {
                 .setFsResourceId("flink-parquet-scan-" + partitionIndex)
                 .addAllPruningPredicates(pruningPredicates);
 
-        return PhysicalPlanNode.newBuilder()
-                .setParquetScan(scanBuilder.build())
-                .build();
+        return PhysicalPlanNode.newBuilder().setParquetScan(scanBuilder.build()).build();
     }
 
     /**
@@ -146,8 +142,7 @@ public class AuronFlinkConverters {
         // Convert projection expressions
         List<PhysicalExprNode> nativeExprs = new ArrayList<>();
         for (RexNode projection : projections) {
-            PhysicalExprNode nativeExpr =
-                    FlinkExpressionConverter.convertRexNode(projection, inputFieldNames);
+            PhysicalExprNode nativeExpr = FlinkExpressionConverter.convertRexNode(projection, inputFieldNames);
             nativeExprs.add(nativeExpr);
         }
 
@@ -179,26 +174,20 @@ public class AuronFlinkConverters {
      * @return The PhysicalPlanNode containing the FilterExecNode.
      */
     public static PhysicalPlanNode convertFilter(
-            PhysicalPlanNode input,
-            List<RexNode> filterConditions,
-            List<String> inputFieldNames) {
+            PhysicalPlanNode input, List<RexNode> filterConditions, List<String> inputFieldNames) {
 
         // Convert filter expressions
         List<PhysicalExprNode> nativeFilters = new ArrayList<>();
         for (RexNode condition : filterConditions) {
-            PhysicalExprNode nativeFilter =
-                    FlinkExpressionConverter.convertRexNode(condition, inputFieldNames);
+            PhysicalExprNode nativeFilter = FlinkExpressionConverter.convertRexNode(condition, inputFieldNames);
             nativeFilters.add(nativeFilter);
         }
 
         // Build FilterExecNode
-        FilterExecNode.Builder filterBuilder = FilterExecNode.newBuilder()
-                .setInput(input)
-                .addAllExpr(nativeFilters);
+        FilterExecNode.Builder filterBuilder =
+                FilterExecNode.newBuilder().setInput(input).addAllExpr(nativeFilters);
 
-        return PhysicalPlanNode.newBuilder()
-                .setFilter(filterBuilder.build())
-                .build();
+        return PhysicalPlanNode.newBuilder().setFilter(filterBuilder.build()).build();
     }
 
     /**

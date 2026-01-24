@@ -81,18 +81,16 @@ public class AuronFlinkMVPExample {
         StreamTableEnvironment tEnv = StreamTableEnvironment.create(env, settings);
 
         // Step 5: Create Parquet table
-        tEnv.executeSql(
-                "CREATE TABLE parquet_table ("
+        tEnv.executeSql("CREATE TABLE parquet_table ("
                 + "  id BIGINT,"
                 + "  name STRING,"
                 + "  value DOUBLE,"
                 + "  created_date DATE"
                 + ") WITH ("
                 + "  'connector' = 'filesystem',"
-                + "  'path' = 'file:///path/to/parquet/files',"  // Update with actual path
+                + "  'path' = 'file:///path/to/parquet/files'," // Update with actual path
                 + "  'format' = 'parquet'"
-                + ")"
-        );
+                + ")");
 
         // Step 6: Execute queries
 
@@ -113,8 +111,7 @@ public class AuronFlinkMVPExample {
 
         // Example 4: Scan with filter and projection
         Table result4 = tEnv.sqlQuery(
-                "SELECT id, name, value FROM parquet_table WHERE value > 100 AND created_date > DATE '2024-01-01'"
-        );
+                "SELECT id, name, value FROM parquet_table WHERE value > 100 AND created_date > DATE '2024-01-01'");
         System.out.println("\n=== Example 4: Scan with Filter and Projection ===");
         result4.execute().print();
 
@@ -134,10 +131,7 @@ public class AuronFlinkMVPExample {
         config.setBoolean("table.exec.auron.enable", true);
 
         // Define Parquet files
-        List<String> parquetFiles = Arrays.asList(
-                "/path/to/file1.parquet",
-                "/path/to/file2.parquet"
-        );
+        List<String> parquetFiles = Arrays.asList("/path/to/file1.parquet", "/path/to/file2.parquet");
 
         // Define schema (would typically come from Flink's planner)
         // org.apache.flink.table.types.logical.RowType outputSchema = ...;

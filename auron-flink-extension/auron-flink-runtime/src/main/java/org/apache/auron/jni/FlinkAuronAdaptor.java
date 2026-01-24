@@ -131,7 +131,19 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
     @Override
     public String getDirectWriteSpillToDiskFile() throws IOException {
         // Create temp file with Auron prefix for easy identification
-        File tempFile = File.createTempFile("auron-flink-spill-", ".tmp");
+        // First try to get the system temp directory
+        String tmpDir = System.getProperty("java.io.tmpdir");
+        File tempDirFile = (tmpDir != null) ? new File(tmpDir) : null;
+
+        // Ensure the temp directory exists
+        if (tempDirFile == null || !tempDirFile.exists()) {
+            tempDirFile = new File(System.getProperty("user.dir"), "tmp");
+            if (!tempDirFile.exists()) {
+                tempDirFile.mkdirs();
+            }
+        }
+
+        File tempFile = File.createTempFile("auron-flink-spill-", ".tmp", tempDirFile);
         tempFile.deleteOnExit();
         return tempFile.getAbsolutePath();
     }

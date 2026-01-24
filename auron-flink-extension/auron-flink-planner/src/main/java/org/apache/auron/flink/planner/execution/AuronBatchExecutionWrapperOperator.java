@@ -26,7 +26,6 @@ import org.apache.auron.metric.MetricNode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
-import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
@@ -61,10 +60,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
      * @param stageId The stage ID for this task.
      */
     public AuronBatchExecutionWrapperOperator(
-            PhysicalPlanNode nativePlan,
-            RowType outputSchema,
-            int partitionId,
-            int stageId) {
+            PhysicalPlanNode nativePlan, RowType outputSchema, int partitionId, int stageId) {
         this.nativePlan = nativePlan;
         this.outputSchema = outputSchema;
         this.partitionId = partitionId;
@@ -83,22 +79,15 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
         // Create Arrow allocator
         allocator = new RootAllocator(Long.MAX_VALUE);
 
-        // Create native wrapper with empty metrics (can be enhanced later)
-        MetricNode emptyMetrics = new MetricNode(null, null);
+        // Create native wrapper with null metrics (metrics support can be added later)
+        MetricNode emptyMetrics = null;
         int taskId = getRuntimeContext().getIndexOfThisSubtask();
         long nativeMemory = Runtime.getRuntime().maxMemory(); // Use JVM max memory
 
-        LOG.info("Initializing Auron native execution for partition {} stage {} task {}",
-                partitionId, stageId, taskId);
+        LOG.info("Initializing Auron native execution for partition {} stage {} task {}", partitionId, stageId, taskId);
 
         nativeWrapper = new AuronCallNativeWrapper(
-                allocator,
-                nativePlan,
-                emptyMetrics,
-                partitionId,
-                stageId,
-                taskId,
-                nativeMemory);
+                allocator, nativePlan, emptyMetrics, partitionId, stageId, taskId, nativeMemory);
 
         LOG.info("Auron native execution initialized successfully");
     }
@@ -106,13 +95,14 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
     @Override
     public void run(SourceContext<RowData> ctx) throws Exception {
         // Load and process batches from native engine
-        while (isRunning && nativeWrapper.loadNextBatch(root -> {
-            try {
-                processBatch(root, ctx);
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to process Arrow batch", e);
-            }
-        })) {
+        while (isRunning
+                && nativeWrapper.loadNextBatch(root -> {
+                    try {
+                        processBatch(root, ctx);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to process Arrow batch", e);
+                    }
+                })) {
             // Continue loading batches
         }
 
@@ -185,8 +175,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
                 // For MVP, we can throw an exception or return null
                 throw new UnsupportedOperationException("Decimal conversion not yet implemented in MVP");
             default:
-                throw new UnsupportedOperationException(
-                        "Type not supported: " + fieldType.getTypeRoot());
+                throw new UnsupportedOperationException("Type not supported: " + fieldType.getTypeRoot());
         }
     }
 

@@ -19,8 +19,8 @@ package org.apache.auron.flink.planner;
 import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.Decimal;
 import org.apache.auron.protobuf.EmptyMessage;
-import org.apache.auron.protobuf.Timestamp;
 import org.apache.auron.protobuf.TimeUnit;
+import org.apache.auron.protobuf.Timestamp;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.CharType;
@@ -73,15 +73,13 @@ public class FlinkTypeConverter {
         } else if (flinkType instanceof TimestampType) {
             TimestampType timestampType = (TimestampType) flinkType;
             // Flink timestamps can have different precisions, but Auron uses microseconds
-            Timestamp timestamp = Timestamp.newBuilder()
-                    .setTimeUnit(TimeUnit.Microsecond)
-                    .build();
+            Timestamp timestamp =
+                    Timestamp.newBuilder().setTimeUnit(TimeUnit.Microsecond).build();
             return builder.setTIMESTAMP(timestamp).build();
         } else if (flinkType instanceof LocalZonedTimestampType) {
             // LocalZonedTimestamp is similar to Timestamp
-            Timestamp timestamp = Timestamp.newBuilder()
-                    .setTimeUnit(TimeUnit.Microsecond)
-                    .build();
+            Timestamp timestamp =
+                    Timestamp.newBuilder().setTimeUnit(TimeUnit.Microsecond).build();
             return builder.setTIMESTAMP(timestamp).build();
         } else if (flinkType instanceof DecimalType) {
             DecimalType decimalType = (DecimalType) flinkType;

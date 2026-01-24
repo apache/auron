@@ -201,7 +201,7 @@
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-core</artifactId>
       <version>${flink.version}</version>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
@@ -228,6 +228,12 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>org.apache.flink</groupId>
+      <artifactId>flink-streaming-java</artifactId>
+      <version>${flink.version}</version>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-streaming-java</artifactId>
@@ -282,6 +288,22 @@
 
   <build>
     <plugins>
+      <!-- Disable Scala plugin since this module only contains Java files -->
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>scala-compile-first</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>scala-test-compile</id>
+            <phase>none</phase>
+          </execution>
+        </executions>
+      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
@@ -291,6 +313,8 @@
           <includes>
             <include>**/*ITCase.java</include>
           </includes>
+          <!-- Add native library path for Auron integration tests -->
+          <argLine>-Djava.library.path=${project.basedir}/../../native-engine/_build/release</argLine>
         </configuration>
       </plugin>
     </plugins>

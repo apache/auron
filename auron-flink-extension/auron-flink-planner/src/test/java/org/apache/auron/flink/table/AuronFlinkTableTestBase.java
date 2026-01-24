@@ -16,8 +16,12 @@
  */
 package org.apache.auron.flink.table;
 
+import java.io.File;
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.List;
 import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ExecutionOptions;
@@ -30,11 +34,13 @@ import org.junit.jupiter.api.BeforeEach;
 
 /**
  * Base class for Flink Table Tests.
+ * Enhanced with Parquet test utilities for Auron integration testing.
  */
 public class AuronFlinkTableTestBase {
 
     protected StreamExecutionEnvironment environment;
     protected StreamTableEnvironment tableEnvironment;
+    protected File tempParquetDir;
 
     @BeforeEach
     public void before() {
@@ -68,5 +74,123 @@ public class AuronFlinkTableTestBase {
             row.setField(i, values[i]);
         }
         return row;
+    }
+
+    /**
+     * Creates a temporary directory for Parquet test files.
+     */
+    protected File createTempParquetDir() throws IOException {
+        tempParquetDir = Files.createTempDirectory("auron-flink-test-parquet-").toFile();
+        tempParquetDir.deleteOnExit();
+        return tempParquetDir;
+    }
+
+    /**
+     * Writes test data to a Parquet file using Flink's FileSystem connector.
+     *
+     * @param targetDir Directory to write Parquet files
+     * @param tableName Name of the table to create
+     * @param schema Table schema as a SQL string
+     * @param data Test data rows
+     * @throws Exception if write fails
+     */
+    protected void writeParquetTestData(File targetDir, String tableName, String schema, List<Row> data)
+            throws Exception {
+        // Register test data
+        String dataId = TestValuesTableFactory.registerData(data);
+
+        // Create source table with test data
+        tableEnvironment.executeSql("CREATE TABLE " + tableName + "_source " + schema + " WITH ("
+                + "  'connector' = 'values',"
+                + "  'data-id' = '"
+                + dataId + "'" + ")");
+
+        // Create sink table that writes to Parquet
+        tableEnvironment.executeSql("CREATE TABLE " + tableName + "_sink " + schema + " WITH ("
+                + "  'connector' = 'filesystem',"
+                + "  'path' = 'file://"
+                + targetDir.getAbsolutePath() + "/" + tableName + "'," + "  'format' = 'parquet'"
+                + ")");
+
+        // Insert data into Parquet sink
+        tableEnvironment
+                .executeSql("INSERT INTO " + tableName + "_sink SELECT * FROM " + tableName + "_source")
+                .await();
+    }
+
+    /**
+     * Creates a Parquet table source for testing.
+     *
+     * @param tableName Name of the table
+     * @param schema Table schema as SQL string
+     * @param parquetPath Path to Parquet files
+     */
+    protected void createParquetTable(String tableName, String schema, String parquetPath) {
+        tableEnvironment.executeSql("CREATE TABLE " + tableName + " " + schema + " WITH ("
+                + "  'connector' = 'filesystem',"
+                + "  'path' = '"
+                + parquetPath + "'," + "  'format' = 'parquet'"
+                + ")");
+    }
+
+    /**
+     * Cleans up temporary Parquet files.
+     */
+    protected void cleanupParquetDir() {
+        if (tempParquetDir != null && tempParquetDir.exists()) {
+            deleteDirectory(tempParquetDir);
+        }
+    }
+
+    private void deleteDirectory(File directory) {
+        File[] files = directory.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    deleteDirectory(file);
+                } else {
+                    file.delete();
+                }
+            }
+        }
+        directory.delete();
+    }
+
+    /**
+     * Enables Auron native execution in the table environment.
+     */
+    protected void enableAuron() {
+        Configuration config = tableEnvironment.getConfig().getConfiguration();
+        config.setBoolean("table.exec.auron.enable", true);
+        config.setBoolean("table.exec.auron.enable.scan", true);
+        config.setBoolean("table.exec.auron.enable.project", true);
+        config.setBoolean("table.exec.auron.enable.filter", true);
+        config.setInteger("table.exec.auron.batch-size", 8192);
+    }
+
+    /**
+     * Collects all results from a TableResult into a List of Rows.
+     *
+     * @param result The TableResult to collect
+     * @return List of Row objects
+     */
+    protected List<Row> collectResults(org.apache.flink.table.api.TableResult result) {
+        List<Row> results = new java.util.ArrayList<>();
+        try (org.apache.flink.util.CloseableIterator<Row> iterator = result.collect()) {
+            while (iterator.hasNext()) {
+                results.add(iterator.next());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to collect results", e);
+        }
+        return results;
+    }
+
+    /**
+     * Sets the execution mode to BATCH (required for Auron MVP).
+     */
+    protected void setBatchMode() {
+        Configuration config = tableEnvironment.getConfig().getConfiguration();
+        config.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.BATCH);
     }
 }
