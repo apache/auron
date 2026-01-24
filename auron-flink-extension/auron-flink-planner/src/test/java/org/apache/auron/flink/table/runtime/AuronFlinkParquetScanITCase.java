@@ -49,8 +49,20 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
         environment = StreamExecutionEnvironment.getExecutionEnvironment();
         Configuration configuration = new Configuration();
         configuration.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.BATCH);
+
+        // Enable Auron native execution
+        configuration.setBoolean("table.exec.auron.enable", true);
+        configuration.setBoolean("table.exec.auron.enable.scan", true);
+        configuration.setBoolean("table.exec.auron.enable.project", true);
+        configuration.setBoolean("table.exec.auron.enable.filter", true);
+        configuration.setInteger("table.exec.auron.batch-size", 8192);
+        configuration.setDouble("table.exec.auron.memory-fraction", 0.7);
+        configuration.setString("table.exec.auron.log-level", "INFO");
+
         tableEnvironment =
                 StreamTableEnvironment.create(environment, EnvironmentSettings.fromConfiguration(configuration));
+
+        System.out.println("🚀 Auron native execution ENABLED in configuration");
     }
 
     @BeforeEach
@@ -64,6 +76,10 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
             System.loadLibrary("auron");
             auronAvailable = true;
             System.out.println("✅ Auron native library loaded successfully");
+
+            // Log Auron configuration
+            org.apache.auron.flink.planner.AuronFlinkPlannerExtension.logAuronConfiguration(
+                    tableEnvironment.getConfig().getConfiguration());
         } catch (UnsatisfiedLinkError e) {
             auronAvailable = false;
             System.out.println("⚠️  Auron native library not available - tests will be skipped");
@@ -279,5 +295,79 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
         List<Row> results = collectResults(result);
         // Should return rows 1 and 3 (Alice and Charlie)
         assertEquals(2, results.size());
+    }
+
+    @Test
+    public void testNativeExecutionExplicitAPI() throws Exception {
+        if (!auronAvailable) {
+            System.out.println("⏭️  Skipping testNativeExecutionExplicitAPI - Auron not available");
+            return;
+        }
+
+        System.out.println("\n🔥 Testing EXPLICIT Native Execution API");
+
+        // Create test data
+        List<Row> testData = Arrays.asList(
+                row(1, "Alice", 100.5, LocalDate.of(2024, 1, 1)),
+                row(2, "Bob", 200.5, LocalDate.of(2024, 1, 2)),
+                row(3, "Charlie", 300.5, LocalDate.of(2024, 1, 3)));
+
+        String schema = "(" + "  id INT," + "  name STRING," + "  amount DOUBLE," + "  created_date DATE" + ")";
+
+        // Write Parquet test data
+        File parquetDir = createTempParquetDir();
+        writeParquetTestData(parquetDir, "native_test", schema, testData);
+
+        // Get file paths for native execution
+        File parquetFile = new File(parquetDir, "native_test");
+        assertTrue(parquetFile.exists(), "Parquet file should exist");
+
+        // Build schema for native execution
+        org.apache.flink.table.types.logical.LogicalType[] fieldTypes = {
+            new org.apache.flink.table.types.logical.IntType(),
+            new org.apache.flink.table.types.logical.VarCharType(
+                    org.apache.flink.table.types.logical.VarCharType.MAX_LENGTH),
+            new org.apache.flink.table.types.logical.DoubleType(),
+            new org.apache.flink.table.types.logical.DateType()
+        };
+        String[] fieldNames = {"id", "name", "amount", "created_date"};
+        org.apache.flink.table.types.logical.RowType rowType =
+                org.apache.flink.table.types.logical.RowType.of(fieldTypes, fieldNames);
+
+        // Get all Parquet files
+        File[] parquetFiles = parquetFile.listFiles((dir, name) -> name.endsWith(".parquet"));
+        assertNotNull(parquetFiles, "Should find parquet files");
+        assertTrue(parquetFiles.length > 0, "Should have at least one parquet file");
+
+        List<String> filePaths = new java.util.ArrayList<>();
+        for (File f : parquetFiles) {
+            filePaths.add("file://" + f.getAbsolutePath());
+        }
+
+        System.out.println("📁 Parquet files for native scan: " + filePaths);
+
+        // Create native Parquet scan using explicit API
+        org.apache.flink.streaming.api.datastream.DataStream<org.apache.flink.table.data.RowData> nativeStream =
+                org.apache.auron.flink.planner.AuronFlinkPlannerExtension.createAuronParquetScan(
+                        environment,
+                        filePaths,
+                        rowType,
+                        rowType,
+                        null, // project all fields
+                        null, // no filter predicates
+                        1 // parallelism
+                        );
+
+        System.out.println("✅ Native Parquet scan DataStream created");
+
+        // NOTE: For MVP, we can verify the stream was created successfully
+        // Full execution and result verification would require:
+        // 1. Converting DataStream<RowData> back to Table
+        // 2. Or collecting results via DataStream.executeAndCollect()
+        // 3. Handling the execution properly
+
+        assertNotNull(nativeStream, "Native stream should be created");
+        System.out.println("✅ Native execution API test passed - DataStream created successfully");
+        System.out.println("⚠️  Full end-to-end execution verification pending automatic SQL interception");
     }
 }

@@ -248,33 +248,55 @@ tableConfig.setDouble("table.exec.auron.memory-fraction", 0.7);
 
 ## Usage Example
 
+### MVP Usage (Explicit API)
+
+For the MVP, Auron native execution is invoked using explicit API calls:
+
 ```java
-// Create Parquet table
-tEnv.executeSql(
-    "CREATE TABLE sales_data (" +
-    "  order_id INT," +
-    "  customer_name STRING," +
-    "  amount DOUBLE," +
-    "  order_date DATE" +
-    ") WITH (" +
-    "  'connector' = 'filesystem'," +
-    "  'path' = 'file:///data/sales'," +
-    "  'format' = 'parquet'" +
-    ")"
+import org.apache.auron.flink.planner.AuronFlinkPlannerExtension;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.types.logical.RowType;
+
+// Create Parquet scan with native execution
+List<String> filePaths = Arrays.asList("file:///data/sales/part-0.parquet");
+RowType schema = RowType.of(
+    new LogicalType[] {
+        new IntType(),
+        new VarCharType(VarCharType.MAX_LENGTH),
+        new DoubleType(),
+        new DateType()
+    },
+    new String[] {"order_id", "customer_name", "amount", "order_date"}
 );
 
-// Query with Auron native execution
-Table result = tEnv.sqlQuery(
-    "SELECT customer_name, SUM(amount) as total " +
-    "FROM sales_data " +
-    "WHERE order_date >= DATE '2024-01-01' " +
-    "GROUP BY customer_name " +
-    "HAVING total > 1000"
+DataStream<RowData> results = AuronFlinkPlannerExtension.createAuronParquetScan(
+    env,
+    filePaths,
+    schema,
+    schema,
+    null, // project all fields
+    null, // no filter predicates
+    1     // parallelism
 );
 
-// Execute and print results
-result.execute().print();
+// Process results
+results.print();
+env.execute("Auron Parquet Scan");
 ```
+
+### Future: Automatic SQL Interception
+
+In a future release, enabling Auron configuration will automatically convert SQL queries:
+
+```java
+// Future functionality (not yet implemented)
+tEnv.executeSql("CREATE TABLE sales_data (...) WITH ('connector' = 'filesystem', 'format' = 'parquet')");
+Table result = tEnv.sqlQuery("SELECT * FROM sales_data WHERE amount > 100");
+result.execute().print(); // Will automatically use Auron native execution
+```
+
+**Note**: Automatic SQL query interception via Calcite optimizer rules is planned for a future release.
 
 ## Performance
 
