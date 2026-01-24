@@ -327,7 +327,7 @@ fn eq_struct(
             }
             return false;
         }
-        return true;
+        true
     });
     Ok(f)
 }
@@ -402,7 +402,7 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(false, eq(0, 1));
+        assert!(!eq(0, 1));
         Ok(())
     }
 
@@ -415,7 +415,7 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array1, &array2, false)?;
 
-        assert_eq!(false, eq(0, 0));
+        assert!(!eq(0, 0));
         Ok(())
     }
 
@@ -425,7 +425,7 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(false, (eq)(0, 1));
+        assert!(!(eq)(0, 1));
         Ok(())
     }
 
@@ -436,7 +436,7 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array1, &array2, false)?;
 
-        assert_eq!(false, eq(0, 0));
+        assert!(!eq(0, 0));
         Ok(())
     }
 
@@ -446,7 +446,7 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(false, eq(0, 1));
+        assert!(!eq(0, 1));
         Ok(())
     }
 
@@ -456,9 +456,9 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(true, eq(0, 0));
-        assert_eq!(false, eq(0, 1));
-        assert_eq!(false, eq(1, 1)); // NaN != NaN
+        assert!(eq(0, 0));
+        assert!(!eq(0, 1));
+        assert!(!eq(1, 1)); // NaN != NaN
         Ok(())
     }
 
@@ -468,8 +468,8 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(true, eq(0, 1)); // -0.0 == 0.0
-        assert_eq!(true, eq(1, 0));
+        assert!(eq(0, 1)); // -0.0 == 0.0
+        assert!(eq(1, 0));
         Ok(())
     }
 
@@ -486,14 +486,14 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(false, eq(0, 1));
-        assert_eq!(false, eq(1, 0));
+        assert!(!eq(0, 1));
+        assert!(!eq(1, 0));
 
         // somewhat confusingly, while 90M milliseconds is more than 1 day,
         // it will compare less as the comparison is done on the underlying
         // values not field by field
-        assert_eq!(false, eq(1, 2));
-        assert_eq!(false, eq(2, 1));
+        assert!(!eq(1, 2));
+        assert!(!eq(2, 1));
         Ok(())
     }
 
@@ -510,12 +510,12 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(false, eq(0, 1));
-        assert_eq!(false, eq(1, 0));
+        assert!(!eq(0, 1));
+        assert!(!eq(1, 0));
 
         // the underlying representation is months, so both quantities are the same
-        assert_eq!(true, eq(1, 2));
-        assert_eq!(true, eq(2, 1));
+        assert!(eq(1, 2));
+        assert!(eq(2, 1));
         Ok(())
     }
 
@@ -532,14 +532,14 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(false, eq(0, 1));
-        assert_eq!(false, eq(1, 0));
+        assert!(!eq(0, 1));
+        assert!(!eq(1, 0));
 
         // somewhat confusingly, while 100 days is more than 1 month in all cases
         // it will compare less as the comparison is done on the underlying
         // values not field by field
-        assert_eq!(false, eq(1, 2));
-        assert_eq!(false, eq(2, 1));
+        assert!(!eq(1, 2));
+        assert!(!eq(2, 1));
         Ok(())
     }
 
@@ -551,8 +551,8 @@ pub mod tests {
             .with_precision_and_scale(23, 6)?;
 
         let eq = make_eq_comparator(&array, &array, false)?;
-        assert_eq!(false, eq(1, 0));
-        assert_eq!(false, eq(0, 2));
+        assert!(!eq(1, 0));
+        assert!(!eq(0, 2));
         Ok(())
     }
 
@@ -568,8 +568,8 @@ pub mod tests {
         .with_precision_and_scale(53, 6)?;
 
         let eq = make_eq_comparator(&array, &array, false)?;
-        assert_eq!(false, eq(1, 0));
-        assert_eq!(false, eq(0, 2));
+        assert!(!eq(1, 0));
+        assert!(!eq(0, 2));
         Ok(())
     }
 
@@ -580,9 +580,9 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array, &array, false)?;
 
-        assert_eq!(false, eq(0, 1));
-        assert_eq!(true, eq(3, 4));
-        assert_eq!(false, eq(2, 3));
+        assert!(!eq(0, 1));
+        assert!(eq(3, 4));
+        assert!(!eq(2, 3));
         Ok(())
     }
 
@@ -595,9 +595,9 @@ pub mod tests {
 
         let eq = make_eq_comparator(&a1, &a2, false)?;
 
-        assert_eq!(false, eq(0, 0));
-        assert_eq!(true, eq(0, 3));
-        assert_eq!(false, eq(1, 3));
+        assert!(!eq(0, 0));
+        assert!(eq(0, 3));
+        assert!(!eq(1, 3));
         Ok(())
     }
 
@@ -613,11 +613,11 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array1, &array2, false)?;
 
-        assert_eq!(false, eq(0, 0));
-        assert_eq!(false, eq(0, 3));
-        assert_eq!(true, eq(3, 3));
-        assert_eq!(false, eq(3, 1));
-        assert_eq!(false, eq(3, 2));
+        assert!(!eq(0, 0));
+        assert!(!eq(0, 3));
+        assert!(eq(3, 3));
+        assert!(!eq(3, 1));
+        assert!(!eq(3, 2));
         Ok(())
     }
 
@@ -633,11 +633,11 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array1, &array2, false)?;
 
-        assert_eq!(false, eq(0, 0));
-        assert_eq!(false, eq(0, 3));
-        assert_eq!(true, eq(3, 3));
-        assert_eq!(false, eq(3, 1));
-        assert_eq!(false, eq(3, 2));
+        assert!(!eq(0, 0));
+        assert!(!eq(0, 3));
+        assert!(eq(3, 3));
+        assert!(!eq(3, 1));
+        assert!(!eq(3, 2));
         Ok(())
     }
 
@@ -653,11 +653,11 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array1, &array2, false)?;
 
-        assert_eq!(false, eq(0, 0));
-        assert_eq!(false, eq(0, 3));
-        assert_eq!(true, eq(3, 3));
-        assert_eq!(false, eq(3, 1));
-        assert_eq!(false, eq(3, 2));
+        assert!(!eq(0, 0));
+        assert!(!eq(0, 3));
+        assert!(eq(3, 3));
+        assert!(!eq(3, 1));
+        assert!(!eq(3, 2));
         Ok(())
     }
 
@@ -673,11 +673,11 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array1, &array2, false)?;
 
-        assert_eq!(false, eq(0, 0));
-        assert_eq!(false, eq(0, 3));
-        assert_eq!(true, eq(3, 3));
-        assert_eq!(false, eq(3, 1));
-        assert_eq!(false, eq(3, 2));
+        assert!(!eq(0, 0));
+        assert!(!eq(0, 3));
+        assert!(eq(3, 3));
+        assert!(!eq(3, 1));
+        assert!(!eq(3, 2));
         Ok(())
     }
 
@@ -693,11 +693,11 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array1, &array2, false)?;
 
-        assert_eq!(false, eq(0, 0));
-        assert_eq!(false, eq(0, 3));
-        assert_eq!(true, eq(3, 3));
-        assert_eq!(false, eq(3, 1));
-        assert_eq!(false, eq(3, 2));
+        assert!(!eq(0, 0));
+        assert!(!eq(0, 3));
+        assert!(eq(3, 3));
+        assert!(!eq(3, 1));
+        assert!(!eq(3, 2));
         Ok(())
     }
 
@@ -723,11 +723,11 @@ pub mod tests {
 
         let eq = make_eq_comparator(&array1, &array2, false)?;
 
-        assert_eq!(false, eq(0, 0));
-        assert_eq!(false, eq(0, 3));
-        assert_eq!(true, eq(3, 3));
-        assert_eq!(false, eq(3, 1));
-        assert_eq!(false, eq(3, 2));
+        assert!(!eq(0, 0));
+        assert!(!eq(0, 3));
+        assert!(eq(3, 3));
+        assert!(!eq(3, 1));
+        assert!(!eq(3, 2));
         Ok(())
     }
 
@@ -736,9 +736,9 @@ pub mod tests {
         let a = GenericByteArray::<T>::new(offsets, b"abcdefa".into(), None);
         let eq = make_eq_comparator(&a, &a, false)?;
 
-        assert_eq!(false, eq(0, 1));
-        assert_eq!(false, eq(0, 2));
-        assert_eq!(true, eq(1, 1));
+        assert!(!eq(0, 1));
+        assert!(!eq(0, 2));
+        assert!(eq(1, 1));
         Ok(())
     }
 
@@ -781,13 +781,13 @@ pub mod tests {
         let b = b.finish();
 
         let eq = make_eq_comparator(&a, &b, false)?;
-        assert_eq!(eq(0, 0), false); // lists contains null never equal
-        assert_eq!(eq(0, 1), false);
-        assert_eq!(eq(0, 2), false);
-        assert_eq!(eq(1, 2), false);
-        assert_eq!(eq(1, 3), false);
-        assert_eq!(eq(2, 0), false);
-        assert_eq!(eq(4, 4), true);
+        assert!(!eq(0, 0)); // lists contains null never equal
+        assert!(!eq(0, 1));
+        assert!(!eq(0, 2));
+        assert!(!eq(1, 2));
+        assert!(!eq(1, 3));
+        assert!(!eq(2, 0));
+        assert!(eq(4, 4));
         Ok(())
     }
 
@@ -816,13 +816,13 @@ pub mod tests {
         let s2 = StructArray::new(fields.clone(), values, None);
 
         let eq = make_eq_comparator(&s1, &s2, false)?;
-        assert_eq!(eq(0, 1), false); // (1, [1, 2]) eq (2, None)
-        assert_eq!(eq(0, 0), false); // (1, [1, 2]) eq (None, None)
-        assert_eq!(eq(1, 1), false); // (2, [None]) eq (2, None)
-        assert_eq!(eq(2, 2), false); // (None, None) eq (None, [])
-        assert_eq!(eq(3, 0), false); // None eq (None, [])
-        assert_eq!(eq(2, 0), false); // (None, None) eq (None, None)
-        assert_eq!(eq(3, 0), false); // None eq (None, None)
+        assert!(!eq(0, 1)); // (1, [1, 2]) eq (2, None)
+        assert!(!eq(0, 0)); // (1, [1, 2]) eq (None, None)
+        assert!(!eq(1, 1)); // (2, [None]) eq (2, None)
+        assert!(!eq(2, 2)); // (None, None) eq (None, [])
+        assert!(!eq(3, 0)); // None eq (None, [])
+        assert!(!eq(2, 0)); // (None, None) eq (None, None)
+        assert!(!eq(3, 0)); // None eq (None, None)
         Ok(())
     }
 }

@@ -199,13 +199,13 @@ Input [2]: [#8#8, #9#9]
 Input [2]: [#8#8, #9#9]
 Arguments: [ws_order_number#9 ASC NULLS FIRST], false
 
-(16) SortMergeJoin [codegen id : 1]
+(16) SortMergeJoin [codegen id : X]
 Left keys [1]: [ws_order_number#5]
 Right keys [1]: [ws_order_number#9]
 Join type: LeftSemi
 Join condition: NOT (ws_warehouse_sk#4 = ws_warehouse_sk#8)
 
-(17) Project [codegen id : 1]
+(17) Project [codegen id : X]
 Output [6]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
 Input [7]: [#1#1, #2#2, #3#3, #4#4, #5#5, #6#6, #7#7]
 

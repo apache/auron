@@ -228,7 +228,7 @@ pub fn string_concat_ws(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                         return Ok(Arg::Ignore);
                     }
                     if let ScalarValue::Utf8(Some(s)) = scalar {
-                        return Ok(Arg::Literal(&s));
+                        return Ok(Arg::Literal(s));
                     }
                     if let ScalarValue::List(l) = scalar
                         && l.data_type() == &DataType::Utf8

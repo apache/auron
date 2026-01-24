@@ -38,6 +38,8 @@ trait QueryComparator {
 
 class QueryResultComparator extends QueryComparator {
   private val colSep = "<|COL|>"
+
+  // scalastyle:off println
   override def compare(
       baseline: QueryExecutionResult,
       test: QueryExecutionResult): ComparisonResult = {
@@ -136,4 +138,5 @@ class QueryResultComparator extends QueryComparator {
     }
     true
   }
+  // scalastyle:on
 }

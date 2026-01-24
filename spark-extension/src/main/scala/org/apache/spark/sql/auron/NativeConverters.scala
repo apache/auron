@@ -1125,6 +1125,11 @@ object NativeConverters extends Logging {
           _.setRowNumExpr(pb.RowNumExprNode.newBuilder())
         }
 
+      case StubExpr("SparkPartitionID", _, _) =>
+        buildExprNode {
+          _.setSparkPartitionIdExpr(pb.SparkPartitionIdExprNode.newBuilder())
+        }
+
       // hive UDFJson
       case e
           if udfJsonEnabled && (

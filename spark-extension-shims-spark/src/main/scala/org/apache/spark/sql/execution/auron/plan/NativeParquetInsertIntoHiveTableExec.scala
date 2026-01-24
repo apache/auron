@@ -122,7 +122,8 @@ case class NativeParquetInsertIntoHiveTableExec(
     }
 
     @sparkver("3.2 / 3.3")
-    override def basicWriteJobStatsTracker(hadoopConf: org.apache.hadoop.conf.Configuration) = {
+    override def basicWriteJobStatsTracker(hadoopConf: org.apache.hadoop.conf.Configuration)
+        : org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker = {
       import org.apache.spark.sql.catalyst.InternalRow
       import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
       import org.apache.spark.sql.execution.datasources.BasicWriteTaskStatsTracker
@@ -156,7 +157,8 @@ case class NativeParquetInsertIntoHiveTableExec(
     }
 
     @sparkver("3.1")
-    override def basicWriteJobStatsTracker(hadoopConf: org.apache.hadoop.conf.Configuration) = {
+    override def basicWriteJobStatsTracker(hadoopConf: org.apache.hadoop.conf.Configuration)
+        : org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker = {
       import org.apache.spark.sql.catalyst.InternalRow
       import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
       import org.apache.spark.sql.execution.datasources.BasicWriteTaskStats
@@ -205,7 +207,8 @@ case class NativeParquetInsertIntoHiveTableExec(
     }
 
     @sparkver("3.0")
-    override def basicWriteJobStatsTracker(hadoopConf: org.apache.hadoop.conf.Configuration) = {
+    override def basicWriteJobStatsTracker(hadoopConf: org.apache.hadoop.conf.Configuration)
+        : org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker = {
       import org.apache.spark.sql.catalyst.InternalRow
       import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
       import org.apache.spark.sql.execution.datasources.BasicWriteTaskStats

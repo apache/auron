@@ -190,7 +190,7 @@ object AuronArrowColumnVector {
 
   private class NullAccessor(vector: NullVector)
       extends AuronArrowColumnVector.ArrowVectorAccessor(vector) {
-    override def isNullAt(rowId: Int) = true
+    override def isNullAt(rowId: Int): Boolean = true
   }
 
   private class BooleanAccessor(vector: BitVector)
@@ -215,7 +215,7 @@ object AuronArrowColumnVector {
 
   private class UInt4Accessor(vector: UInt4Vector)
       extends AuronArrowColumnVector.ArrowVectorAccessor(vector) {
-    final override def getInt(rowId: Int) = vector.get(rowId)
+    final override def getInt(rowId: Int): Int = vector.get(rowId)
   }
 
   private class UInt8Accessor(vector: UInt8Vector)
@@ -260,14 +260,15 @@ object AuronArrowColumnVector {
       extends AuronArrowColumnVector.ArrowVectorAccessor(vector) {
     final private val stringResult = new NullableVarCharHolder
 
-    final override def getUTF8String(rowId: Int) = {
+    final override def getUTF8String(rowId: Int): UTF8String = {
       vector.get(rowId, stringResult)
       if (stringResult.isSet == 0) null
-      else
+      else {
         UTF8String.fromAddress(
           null,
           stringResult.buffer.memoryAddress + stringResult.start,
           stringResult.end - stringResult.start)
+      }
     }
   }
 

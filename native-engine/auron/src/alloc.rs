@@ -61,7 +61,7 @@ impl<T: GlobalAlloc> DebugAlloc<T> {
         let last_updated = self.last_updated.load(SeqCst);
         let delta = (current as isize - last_updated as isize).abs();
         if delta > 104857600 {
-            eprintln!(" * ALLOC {} -> {}", last_updated, current);
+            eprintln!(" * ALLOC {last_updated} -> {current}");
             self.last_updated.store(current, SeqCst);
         }
     }

@@ -77,22 +77,22 @@ impl Display for PlanSerDeError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             PlanSerDeError::NotImplemented(desc) => {
-                write!(f, "Not implemented: {}", desc)
+                write!(f, "Not implemented: {desc}")
             }
-            PlanSerDeError::General(desc) => write!(f, "General error: {}", desc),
-            PlanSerDeError::ArrowError(desc) => write!(f, "Arrow error: {}", desc),
+            PlanSerDeError::General(desc) => write!(f, "General error: {desc}"),
+            PlanSerDeError::ArrowError(desc) => write!(f, "Arrow error: {desc}"),
             PlanSerDeError::DataFusionError(desc) => {
-                write!(f, "DataFusion error: {:?}", desc)
+                write!(f, "DataFusion error: {desc:?}")
             }
-            PlanSerDeError::IoError(desc) => write!(f, "IO error: {}", desc),
+            PlanSerDeError::IoError(desc) => write!(f, "IO error: {desc}"),
             PlanSerDeError::Internal(desc) => {
-                write!(f, "Internal error: {}", desc)
+                write!(f, "Internal error: {desc}")
             }
             Self::MissingRequiredField(name) => {
-                write!(f, "Missing required field {}", name)
+                write!(f, "Missing required field {name}")
             }
             Self::UnknownEnumVariant { name, value } => {
-                write!(f, "Unknown i32 value for {} enum: {}", name, value)
+                write!(f, "Unknown i32 value for {name} enum: {value}")
             }
         }
     }

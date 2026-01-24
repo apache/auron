@@ -280,7 +280,7 @@ Arguments: [ws_item_sk#2 ASC NULLS FIRST, d_date#5 ASC NULLS FIRST], false
 Input [4]: [item_sk#11, d_date#5, _w0#12, ws_item_sk#2]
 Arguments: [sum(_w0#12) windowspecdefinition(ws_item_sk#2, d_date#5 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS cume_sales#13], [ws_item_sk#2], [d_date#5 ASC NULLS FIRST]
 
-(34) Project [codegen id : 1]
+(34) Project [codegen id : X]
 Output [3]: [item_sk#11, d_date#5, cume_sales#13]
 Input [5]: [item_sk#11, d_date#5, _w0#12, ws_item_sk#2, cume_sales#13]
 
@@ -432,7 +432,7 @@ Arguments: [ss_item_sk#15 ASC NULLS FIRST, d_date#18 ASC NULLS FIRST], false
 Input [4]: [item_sk#22, d_date#18, _w0#23, ss_item_sk#15]
 Arguments: [sum(_w0#23) windowspecdefinition(ss_item_sk#15, d_date#18 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS cume_sales#24], [ss_item_sk#15], [d_date#18 ASC NULLS FIRST]
 
-(71) Project [codegen id : 2]
+(71) Project [codegen id : X]
 Output [3]: [item_sk#22, d_date#18, cume_sales#24]
 Input [5]: [item_sk#22, d_date#18, _w0#23, ss_item_sk#15, cume_sales#24]
 
@@ -491,7 +491,7 @@ Arguments: [item_sk#25 ASC NULLS FIRST, d_date#26 ASC NULLS FIRST], false
 Input [4]: [item_sk#25, d_date#26, web_sales#27, store_sales#28]
 Arguments: [max(web_sales#27) windowspecdefinition(item_sk#25, d_date#26 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS web_cumulative#29, max(store_sales#28) windowspecdefinition(item_sk#25, d_date#26 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS store_cumulative#30], [item_sk#25], [d_date#26 ASC NULLS FIRST]
 
-(86) Filter [codegen id : 3]
+(86) Filter [codegen id : X]
 Input [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
 Condition : ((isnotnull(web_cumulative#29) AND isnotnull(store_cumulative#30)) AND (web_cumulative#29 > store_cumulative#30))
 

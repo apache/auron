@@ -324,13 +324,13 @@ Condition : isnotnull((1.3 * avg(ws_ext_discount_amt))#16)
 Input [2]: [(1.3 * avg(ws_ext_discount_amt))#16, ws_item_sk#7]
 Arguments: [ws_item_sk#7 ASC NULLS FIRST], false
 
-(49) SortMergeJoin [codegen id : 1]
+(49) SortMergeJoin [codegen id : X]
 Left keys [1]: [i_item_sk#4]
 Right keys [1]: [ws_item_sk#7]
 Join type: Inner
 Join condition: (cast(ws_ext_discount_amt#3 as decimal(14,7)) > (1.3 * avg(ws_ext_discount_amt))#16)
 
-(50) Project [codegen id : 1]
+(50) Project [codegen id : X]
 Output [2]: [ws_sold_date_sk#1, ws_ext_discount_amt#3]
 Input [5]: [ws_sold_date_sk#1, ws_ext_discount_amt#3, i_item_sk#4, (1.3 * avg(ws_ext_discount_amt))#16, ws_item_sk#7]
 

@@ -293,6 +293,7 @@ mod tests {
 
     /// Unit test for `spark_round()` verifying Spark-style half-away-from-zero
     /// rounding on scalar Float64.
+    #[allow(clippy::panic)]
     #[test]
     fn test_round_scalar() -> Result<()> {
         let s = ColumnarValue::Scalar(ScalarValue::Float64(Some(-1.5)));

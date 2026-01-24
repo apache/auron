@@ -151,7 +151,7 @@ pub fn spark_get_parsed_json_object(args: &[ColumnarValue]) -> Result<ColumnarVa
         }
     };
 
-    let fallback_results = parse_fallback(&path_string, json_array)?;
+    let fallback_results = parse_fallback(path_string, json_array)?;
     let mut fallback_results_iter = fallback_results.iter();
 
     let output = StringArray::from_iter(json_array.iter().map(|value| {
@@ -187,7 +187,7 @@ pub fn spark_get_parsed_json_simple_field(
     field: &String,
 ) -> Result<ArrayRef> {
     let json_array = downcast_any!(parsed_json_array, UserDefinedArray)?;
-    let fallback_results = parse_fallback(&field, json_array)?;
+    let fallback_results = parse_fallback(field, json_array)?;
     let mut fallback_results_iter = fallback_results.iter();
 
     let output = StringArray::from_iter(json_array.iter().map(|value| {
@@ -482,7 +482,7 @@ impl HiveGetJsonObjectMatcher {
                     };
                 } else if let serde_json::Value::Array(array) = value {
                     let vs = array
-                        .into_iter()
+                        .iter()
                         .map(|item| {
                             if let serde_json::Value::Object(object) = item {
                                 match object.get(child) {

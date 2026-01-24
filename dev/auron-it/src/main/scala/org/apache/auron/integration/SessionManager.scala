@@ -53,6 +53,7 @@ class SessionManager(val extraSparkConf: Map[String, String]) {
 
   def auronSession: SparkSession = getOrSwitch("auron", "auron-app")
 
+  // scalastyle:off println
   private def getOrSwitch(mode: String, appName: String): SparkSession = synchronized {
     if (currentMode.contains(mode) && currentSession.isDefined) {
       currentSession.get
@@ -98,4 +99,5 @@ class SessionManager(val extraSparkConf: Map[String, String]) {
     stopCurrentSession()
     println("SparkSession closed.")
   }
+  // scalastyle:on
 }
