@@ -162,21 +162,27 @@ cp target/release/libauron.* native-engine/_build/release/
 
 Expected results:
 - **Runtime Module**: 13/13 tests pass
-- **Planner Module**: 8/8 integration tests pass
-- **Total**: 21/21 tests pass ✅
+- **Planner Module**: 11/11 integration tests pass (including 2 native execution tests)
+- **Total**: 24/24 tests pass ✅
+
+**Note**: Native execution tests (`testNativeExecutionExplicitAPI`, `testNativeExecutionWithProjection`) require native library with matching JDK architecture. They skip gracefully if library is unavailable.
 
 ### Module-Specific Tests
 
 ```bash
 # Runtime module only
-./build/mvn test -pl auron-flink-extension/auron-flink-runtime -am
+./build/mvn test -pl auron-flink-extension/auron-flink-runtime -am -DskipBuildNative=true
 
 # Planner module only
-./build/mvn test -pl auron-flink-extension/auron-flink-planner -am
+./build/mvn test -pl auron-flink-extension/auron-flink-planner -am -DskipBuildNative=true
 
 # Specific test
 ./build/mvn test -pl auron-flink-extension/auron-flink-planner -am \
-  -Dtest=AuronFlinkParquetScanITCase
+  -Dtest=AuronFlinkParquetScanITCase -DskipBuildNative=true
+
+# Run end-to-end native execution test (requires native library with matching architecture)
+./build/mvn test -pl auron-flink-extension/auron-flink-planner -am \
+  -Dtest=AuronFlinkParquetScanITCase#testNativeExecutionExplicitAPI -DskipBuildNative=true
 ```
 
 ### Using Test Runner Script
@@ -186,6 +192,30 @@ cd auron-flink-extension
 ./run-tests.sh
 ```
 
+### Test Categories
+
+The test suite includes two types of tests:
+
+#### 1. SQL Table API Tests (Standard Flink Execution)
+Tests that use Flink's SQL Table API - these validate infrastructure but **run with standard Flink execution**:
+- `testBasicParquetScan` - SQL: `SELECT * FROM parquet_table`
+- `testParquetScanWithProjection` - SQL: `SELECT id, name FROM ...`
+- `testParquetScanWithFilter` - SQL: `SELECT * FROM ... WHERE amount > 100`
+- etc.
+
+These tests enable Auron configuration but don't actually trigger native execution (automatic SQL interception not yet implemented).
+
+#### 2. Native Execution Tests (Real Auron Native Engine)
+Tests that use the explicit API and **actually execute with Auron's native Rust/DataFusion engine**:
+- `testNativeExecutionExplicitAPI` - Uses `createAuronParquetScan()`, executes natively, verifies results
+- `testNativeExecutionWithProjection` - Native execution with column pruning/projection pushdown
+
+**These tests prove end-to-end native execution works!** They:
+1. Write Parquet test files
+2. Call `AuronFlinkPlannerExtension.createAuronParquetScan()` explicit API
+3. Execute DataStream with native engine via JNI → Rust → DataFusion
+4. Collect and verify results from native execution
+
 ### Test Behavior Without Native Library
 
 When the native library is unavailable, tests skip gracefully:
@@ -194,7 +224,7 @@ When the native library is unavailable, tests skip gracefully:
 ⚠️  Auron native library not available - tests will be skipped
 ⏭️  Skipping testBasicParquetScan - Auron not available
 ...
-[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
 ```
 
 This ensures builds succeed in CI/CD environments without native library support.

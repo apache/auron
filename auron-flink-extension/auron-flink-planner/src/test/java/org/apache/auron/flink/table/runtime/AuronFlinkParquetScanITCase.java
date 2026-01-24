@@ -360,14 +360,152 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
 
         System.out.println("✅ Native Parquet scan DataStream created");
 
-        // NOTE: For MVP, we can verify the stream was created successfully
-        // Full execution and result verification would require:
-        // 1. Converting DataStream<RowData> back to Table
-        // 2. Or collecting results via DataStream.executeAndCollect()
-        // 3. Handling the execution properly
-
         assertNotNull(nativeStream, "Native stream should be created");
-        System.out.println("✅ Native execution API test passed - DataStream created successfully");
-        System.out.println("⚠️  Full end-to-end execution verification pending automatic SQL interception");
+
+        // Execute the native DataStream and collect results
+        System.out.println("🚀 Executing native DataStream...");
+
+        try {
+            // Collect results from the native execution
+            List<org.apache.flink.table.data.RowData> rowDataResults = new java.util.ArrayList<>();
+            org.apache.flink.util.CloseableIterator<org.apache.flink.table.data.RowData> iterator =
+                    nativeStream.executeAndCollect();
+
+            while (iterator.hasNext()) {
+                org.apache.flink.table.data.RowData rowData = iterator.next();
+                rowDataResults.add(rowData);
+
+                // Debug: print row data
+                System.out.println("  Row: " + rowData.toString());
+            }
+            iterator.close();
+
+            System.out.println("✅ Native execution completed successfully!");
+            System.out.println("📊 Results collected: " + rowDataResults.size() + " rows");
+
+            // Verify results
+            assertEquals(3, rowDataResults.size(), "Should return 3 rows from native execution");
+
+            // Verify each row has correct structure (4 fields)
+            for (org.apache.flink.table.data.RowData rowData : rowDataResults) {
+                assertEquals(4, rowData.getArity(), "Each row should have 4 fields");
+            }
+
+            System.out.println("✅✅✅ NATIVE EXECUTION VERIFIED - End-to-end test passed!");
+            System.out.println("🎉 Auron native engine successfully executed Parquet scan!");
+
+        } catch (Exception e) {
+            System.err.println("❌ Native execution failed: " + e.getMessage());
+            e.printStackTrace();
+            fail("Native execution should succeed: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testNativeExecutionWithProjection() throws Exception {
+        if (!auronAvailable) {
+            System.out.println("⏭️  Skipping testNativeExecutionWithProjection - Auron not available");
+            return;
+        }
+
+        System.out.println("\n🔥 Testing NATIVE Execution with Projection");
+
+        // Create test data
+        List<Row> testData = Arrays.asList(
+                row(1, "Alice", 100.5, LocalDate.of(2024, 1, 1)),
+                row(2, "Bob", 200.5, LocalDate.of(2024, 1, 2)),
+                row(3, "Charlie", 300.5, LocalDate.of(2024, 1, 3)));
+
+        String schema = "(" + "  id INT," + "  name STRING," + "  amount DOUBLE," + "  created_date DATE" + ")";
+
+        // Write Parquet test data
+        File parquetDir = createTempParquetDir();
+        writeParquetTestData(parquetDir, "native_projection_test", schema, testData);
+
+        File parquetFile = new File(parquetDir, "native_projection_test");
+        File[] parquetFiles = parquetFile.listFiles((dir, name) -> name.endsWith(".parquet"));
+        assertNotNull(parquetFiles);
+        assertTrue(parquetFiles.length > 0);
+
+        List<String> filePaths = new java.util.ArrayList<>();
+        for (File f : parquetFiles) {
+            filePaths.add("file://" + f.getAbsolutePath());
+        }
+
+        // Full schema
+        org.apache.flink.table.types.logical.LogicalType[] fullFieldTypes = {
+            new org.apache.flink.table.types.logical.IntType(),
+            new org.apache.flink.table.types.logical.VarCharType(
+                    org.apache.flink.table.types.logical.VarCharType.MAX_LENGTH),
+            new org.apache.flink.table.types.logical.DoubleType(),
+            new org.apache.flink.table.types.logical.DateType()
+        };
+        String[] fullFieldNames = {"id", "name", "amount", "created_date"};
+        org.apache.flink.table.types.logical.RowType fullSchema =
+                org.apache.flink.table.types.logical.RowType.of(fullFieldTypes, fullFieldNames);
+
+        // Projected schema - only id and name
+        org.apache.flink.table.types.logical.LogicalType[] projectedFieldTypes = {
+            new org.apache.flink.table.types.logical.IntType(),
+            new org.apache.flink.table.types.logical.VarCharType(
+                    org.apache.flink.table.types.logical.VarCharType.MAX_LENGTH)
+        };
+        String[] projectedFieldNames = {"id", "name"};
+        org.apache.flink.table.types.logical.RowType projectedSchema =
+                org.apache.flink.table.types.logical.RowType.of(projectedFieldTypes, projectedFieldNames);
+
+        // Projection: select only fields 0 and 1 (id and name)
+        int[] projectedFields = {0, 1};
+
+        System.out.println("📁 Parquet files: " + filePaths);
+        System.out.println("📋 Projecting fields: [0, 1] (id, name)");
+
+        // Create native Parquet scan with projection
+        org.apache.flink.streaming.api.datastream.DataStream<org.apache.flink.table.data.RowData> nativeStream =
+                org.apache.auron.flink.planner.AuronFlinkPlannerExtension.createAuronParquetScan(
+                        environment,
+                        filePaths,
+                        projectedSchema, // output schema (projected)
+                        fullSchema, // full Parquet schema
+                        projectedFields, // fields to project
+                        null, // no filter predicates
+                        1 // parallelism
+                        );
+
+        System.out.println("✅ Native Parquet scan with projection created");
+
+        try {
+            // Execute and collect results
+            System.out.println("🚀 Executing native projection...");
+            List<org.apache.flink.table.data.RowData> results = new java.util.ArrayList<>();
+            org.apache.flink.util.CloseableIterator<org.apache.flink.table.data.RowData> iterator =
+                    nativeStream.executeAndCollect();
+
+            while (iterator.hasNext()) {
+                org.apache.flink.table.data.RowData rowData = iterator.next();
+                results.add(rowData);
+                System.out.println("  Projected Row: " + rowData.toString());
+            }
+            iterator.close();
+
+            System.out.println("✅ Native projection execution completed!");
+            System.out.println("📊 Results: " + results.size() + " rows");
+
+            // Verify results
+            assertEquals(3, results.size(), "Should return 3 rows");
+
+            // Verify each row has only 2 fields (projection worked)
+            for (org.apache.flink.table.data.RowData rowData : results) {
+                assertEquals(2, rowData.getArity(), "Projected rows should have only 2 fields");
+            }
+
+            System.out.println("✅✅✅ NATIVE PROJECTION VERIFIED!");
+            System.out.println("🎉 Column pruning/projection pushdown worked!");
+
+        } catch (Exception e) {
+            System.err.println("❌ Native projection failed: " + e.getMessage());
+            e.printStackTrace();
+            fail("Native projection should succeed: " + e.getMessage());
+        }
     }
 }
