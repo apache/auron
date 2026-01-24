@@ -131,18 +131,28 @@ Build and test without native execution (tests skip gracefully):
 Build native library first, then build Flink modules:
 
 ```bash
-# Step 1: Build native library
-cargo build --release -p auron
+# Option 1: Build native library via Maven (builds automatically)
+./build/mvn clean install \
+  -pl auron-flink-extension/auron-flink-runtime,auron-flink-extension/auron-flink-planner \
+  -am -Dscalafix.skip=true
 
-# Step 2: Copy to expected location
+# Option 2: Build native library manually with cargo
+cargo build --release -p auron
 mkdir -p native-engine/_build/release
 cp target/release/libauron.* native-engine/_build/release/
 
-# Step 3: Build Flink modules
-./auron-build.sh --flinkver 1.18 --scalaver 2.12
+# Then build Flink modules
+./auron-build.sh --flinkver 1.18 --scalaver 2.12 -DskipBuildNative
+```
 
-# Or with Maven
-./build/mvn clean install \
+**Cross-Compilation for x86_64 on ARM64 Mac** (or vice versa):
+
+```bash
+# Install target architecture
+rustup target add x86_64-apple-darwin
+
+# Build with target specification
+CARGO_BUILD_TARGET=x86_64-apple-darwin ./build/mvn clean install \
   -pl auron-flink-extension/auron-flink-runtime,auron-flink-extension/auron-flink-planner \
   -am -Dscalafix.skip=true
 ```

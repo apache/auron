@@ -31,6 +31,16 @@ if [ -n "$2" ]; then
     features_arg="--features $2"
 fi
 
+# Support cross-compilation via CARGO_BUILD_TARGET environment variable
+# Example: CARGO_BUILD_TARGET=x86_64-apple-darwin mvn package
+target_arg=""
+target_subdir=""
+if [ -n "$CARGO_BUILD_TARGET" ]; then
+    echo "Cross-compiling for target: $CARGO_BUILD_TARGET"
+    target_arg="--target $CARGO_BUILD_TARGET"
+    target_subdir="$CARGO_BUILD_TARGET/"
+fi
+
 libname=libauron
 if [ "$(uname)" == "Darwin" ]; then
     libsuffix=dylib
@@ -46,8 +56,10 @@ fi
 
 cache_dir="native-engine/_build/$profile"
 cache_libpath="$cache_dir/$libname.$libsuffix"
-cache_checksum_file="./.build-checksum.$profile.$libname.$libsuffix.cache"
-cargo_libpath="target/$profile/$libname.$libsuffix"
+# Include target in checksum file name to avoid conflicts between architectures
+target_suffix="${CARGO_BUILD_TARGET:+-$CARGO_BUILD_TARGET}"
+cache_checksum_file="./.build-checksum.$profile.$libname.$libsuffix$target_suffix.cache"
+cargo_libpath="target/${target_subdir}$profile/$libname.$libsuffix"
 
 checksum() {
     # Determine whether to use md5sum or md5
@@ -86,15 +98,21 @@ if [ -f "$cache_libpath" ]; then
 fi
 
 if [ ! -f "$cache_libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
-    export RUSTFLAGS=${RUSTFLAGS:-"-C target-cpu=native"}
+    # Set RUSTFLAGS only if not cross-compiling
+    if [ -z "$CARGO_BUILD_TARGET" ]; then
+        export RUSTFLAGS=${RUSTFLAGS:-"-C target-cpu=native"}
+    else
+        echo "Cross-compiling: skipping target-cpu=native flag"
+    fi
+
     echo "Running cargo fix..."
     cargo fix --all --allow-dirty --allow-staged --allow-no-vcs  2>&1
 
     echo "Running cargo fmt..."
     cargo fmt --all -q -- 2>&1
 
-    echo "Building native with [$profile] profile..."
-    cargo build --profile="$profile" $features_arg --verbose --locked --frozen 2>&1
+    echo "Building native with [$profile] profile${target_arg:+ for target $CARGO_BUILD_TARGET}..."
+    cargo build --profile="$profile" $target_arg $features_arg --verbose --locked --frozen 2>&1
 
     mkdir -p "$cache_dir"
     cp -f "$cargo_libpath" "$cache_libpath"

@@ -59,6 +59,24 @@ file $(which java)
 
 If you need to use an x86_64 JDK:
 
+**Method A: Using Maven with CARGO_BUILD_TARGET (Recommended)**
+
+```bash
+cd /Users/vsowrira/git/auron
+
+# Install x86_64 Rust toolchain
+rustup target add x86_64-apple-darwin
+
+# Build via Maven with cross-compilation
+CARGO_BUILD_TARGET=x86_64-apple-darwin ./build/mvn clean package \
+  -pl auron-core -am -Dscalafix.skip=true
+
+# Native library will be automatically placed at:
+# native-engine/_build/release/libauron.dylib
+```
+
+**Method B: Manual cargo build**
+
 ```bash
 cd /Users/vsowrira/git/auron
 
