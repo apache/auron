@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn test_evaluate_generates_monotonic_ids() {
         let expr = SparkMonotonicallyIncreasingIdExpr::new(0);
-        let schema = Schema::new(vec![Field::new("col", DataType::Int32, false)]);
+        let schema = Schema::new(vec![Field::new("col", DataType::Int64, false)]);
         let batch = RecordBatch::try_new(
             Arc::new(schema.clone()),
             vec![Arc::new(Int64Array::from(vec![1, 2, 3]))],
@@ -187,7 +187,7 @@ mod tests {
     fn test_evaluate_with_partition_offset() {
         let partition_id = 5;
         let expr = SparkMonotonicallyIncreasingIdExpr::new(partition_id);
-        let schema = Schema::new(vec![Field::new("col", DataType::Int32, false)]);
+        let schema = Schema::new(vec![Field::new("col", DataType::Int64, false)]);
         let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![Arc::new(Int64Array::from(vec![1, 2]))],
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_different_partitions_have_different_ranges() {
-        let schema = Schema::new(vec![Field::new("col", DataType::Int32, false)]);
+        let schema = Schema::new(vec![Field::new("col", DataType::Int64, false)]);
         let batch = RecordBatch::try_new(
             Arc::new(schema),
             vec![Arc::new(Int64Array::from(vec![1, 2]))],
