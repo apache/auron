@@ -16,6 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.SparkQueryTestsBase
+import org.apache.spark.sql.SparkTestsSharedSessionBase
 
-class AuronParquetIOSuite extends ParquetIOSuite with SparkQueryTestsBase {}
+class AuronParquetTest extends ParquetTest with SparkTestsSharedSessionBase {}

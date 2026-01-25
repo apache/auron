@@ -18,4 +18,4 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.sql.SparkQueryTestsBase
 
-class AuronParquetIOSuite extends ParquetIOSuite with SparkQueryTestsBase {}
+class AuronParquetV2FilterSuite extends ParquetV2FilterSuite with SparkQueryTestsBase {}
