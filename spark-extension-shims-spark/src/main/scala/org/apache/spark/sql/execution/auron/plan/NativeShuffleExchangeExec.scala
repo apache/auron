@@ -126,14 +126,12 @@ case class NativeShuffleExchangeExec(
         new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
       }
 
-      @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-      override def write(
-          rdd: RDD[_],
+      private def doWrite(
+          nativeRDD: NativeRDD,
           dep: ShuffleDependency[_, _, _],
           mapId: Long,
           context: TaskContext,
           partition: Partition): MapStatus = {
-
         val writer = SparkEnv.get.shuffleManager.getWriter(
           dep.shuffleHandle,
           mapId,
@@ -141,24 +139,41 @@ case class NativeShuffleExchangeExec(
           createMetricsReporter(context))
 
         writer match {
-          case writer: AuronRssShuffleWriterBase[_, _] =>
-            writer.nativeRssShuffleWrite(
-              rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
+          case w: AuronRssShuffleWriterBase[_, _] =>
+            w.nativeRssShuffleWrite(
+              nativeRDD,
               dep,
               mapId.toInt,
               context,
               partition,
               numPartitions)
 
-          case writer: AuronShuffleWriterBase[_, _] =>
-            writer.nativeShuffleWrite(
-              rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
-              dep,
-              mapId.toInt,
-              context,
-              partition)
+          case w: AuronShuffleWriterBase[_, _] =>
+            w.nativeShuffleWrite(nativeRDD, dep, mapId.toInt, context, partition)
+          case _ =>
+            throw new SparkException(
+              s"Unsupported shuffle writer type: ${writer.getClass.getName}")
         }
-        writer.stop(true).get
+        writer.stop(success = true).getOrElse {
+          throw new SparkException("Shuffle writer stop returned None MapStatus")
+        }
+      }
+
+      @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+      override def write(
+          rdd: RDD[_],
+          dep: ShuffleDependency[_, _, _],
+          mapId: Long,
+          context: TaskContext,
+          partition: Partition): MapStatus = {
+        val nativeRDD = rdd match {
+          case m: MapPartitionsRDD[_, _] => m.prev.asInstanceOf[NativeRDD]
+          case n: NativeRDD => n
+          case _ =>
+            throw new SparkException(
+              s"Expected NativeRDD or MapPartitionsRDD, but got ${rdd.getClass.getName}")
+        }
+        doWrite(nativeRDD, dep, mapId, context, partition)
       }
 
       @sparkver("4.0")
@@ -169,36 +184,15 @@ case class NativeShuffleExchangeExec(
           mapIndex: Int,
           context: TaskContext): MapStatus = {
 
-        // [SPARK-44605][CORE] Refined the internal ShuffleWriteProcessor API.
-        // Due to the restructuring of the write method in the API, we optimized and refactored the original Partition.
-        val rdd = dep.rdd
-        val partition = rdd.partitions(mapIndex)
-
-        val writer = SparkEnv.get.shuffleManager.getWriter(
-          dep.shuffleHandle,
-          mapId,
-          context,
-          createMetricsReporter(context))
-
-        writer match {
-          case writer: AuronRssShuffleWriterBase[_, _] =>
-            writer.nativeRssShuffleWrite(
-              rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
-              dep,
-              mapId.toInt,
-              context,
-              partition,
-              numPartitions)
-
-          case writer: AuronShuffleWriterBase[_, _] =>
-            writer.nativeShuffleWrite(
-              rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
-              dep,
-              mapId.toInt,
-              context,
-              partition)
+        // [SPARK-44605][CORE] Consuming 'inputs' iterator to trigger the underlying RDD compute.
+        // In Native execution, this triggers the native plan which handles the actual shuffle write.
+        while (inputs.hasNext) {
+          inputs.next()
         }
-        writer.stop(true).get
+
+        // Use inputRDD and partitionId for accurate metadata access.
+        val partition = inputRDD.partitions(context.partitionId())
+        doWrite(inputRDD, dep, mapId, context, partition)
       }
     }
   }

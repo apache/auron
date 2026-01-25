@@ -293,6 +293,7 @@ case class NativeParquetInsertIntoHiveTableExec(
     }
   }
 
+  @sparkver("4.0")
   class AuronInsertIntoHiveTable40(
       table: CatalogTable,
       partition: Map[String, Option[String]],
