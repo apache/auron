@@ -20,6 +20,10 @@ name = "auron-memmgr"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+flink = []  # Feature flag for Flink integration - disables Spark-specific code
+
 [dependencies]
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }

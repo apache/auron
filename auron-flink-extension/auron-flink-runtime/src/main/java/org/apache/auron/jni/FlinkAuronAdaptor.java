@@ -47,17 +47,29 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
     private static final ThreadLocal<Configuration> CONFIG = new ThreadLocal<>();
 
     /**
-     * Loads the Auron native library from classpath resources.
-     * Extracts the library to a temporary file and loads it via System.load().
+     * Loads the Auron native library.
+     * First tries System.loadLibrary() using java.library.path.
+     * If that fails, extracts from classpath resources to a temporary file.
      */
     @Override
     public void loadAuronLib() {
+        // First, try to load using java.library.path (for development and testing)
+        try {
+            System.loadLibrary("auron");
+            return; // Successfully loaded
+        } catch (UnsatisfiedLinkError e) {
+            // Library not found in java.library.path, try classpath extraction
+        }
+
+        // Fallback: Load from classpath resources (for production deployment)
         String libName = System.mapLibraryName("auron");
         ClassLoader classLoader = AuronAdaptor.class.getClassLoader();
         try {
             InputStream libInputStream = classLoader.getResourceAsStream(libName);
             if (libInputStream == null) {
-                throw new IllegalStateException("Native library not found in classpath: " + libName);
+                throw new IllegalStateException("Native library not found in java.library.path or classpath: "
+                        + libName
+                        + ". Please ensure the native library is built and available.");
             }
             File tempFile = File.createTempFile("libauron-", ".tmp");
             tempFile.deleteOnExit();

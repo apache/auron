@@ -48,8 +48,11 @@ pub mod single_repartitioner;
 pub mod sort_repartitioner;
 
 pub mod buffered_data;
+#[cfg(not(feature = "flink"))]
 mod rss;
+#[cfg(not(feature = "flink"))]
 pub mod rss_single_repartitioner;
+#[cfg(not(feature = "flink"))]
 pub mod rss_sort_repartitioner;
 
 #[async_trait]

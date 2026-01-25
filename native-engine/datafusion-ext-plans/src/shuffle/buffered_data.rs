@@ -34,6 +34,8 @@ use jni::objects::GlobalRef;
 #[cfg(test)]
 use parking_lot::Mutex;
 
+#[cfg(not(feature = "flink"))]
+use crate::shuffle::rss::RssWriter;
 use crate::{
     common::{
         offsetted::{Offsetted, OffsettedMergeIterator},
@@ -41,7 +43,7 @@ use crate::{
     },
     shuffle::{
         Partitioning, evaluate_hashes, evaluate_partition_ids, evaluate_range_partition_ids,
-        evaluate_robin_partition_ids, rss::RssWriter,
+        evaluate_robin_partition_ids,
     },
 };
 
@@ -158,6 +160,7 @@ impl BufferedData {
     }
 
     // write buffered data to rss, returns uncompressed size
+    #[cfg(not(feature = "flink"))]
     pub fn write_rss(mut self, rss_partition_writer: GlobalRef) -> Result<()> {
         if self.num_rows == 0 {
             return Ok(());

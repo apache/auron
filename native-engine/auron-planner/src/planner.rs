@@ -52,10 +52,13 @@ use datafusion::{
 use datafusion_ext_exprs::{
     bloom_filter_might_contain::BloomFilterMightContainExpr, cast::TryCastExpr,
     get_indexed_field::GetIndexedFieldExpr, get_map_value::GetMapValueExpr,
-    named_struct::NamedStructExpr, row_num::RowNumExpr,
-    spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
-    spark_udf_wrapper::SparkUDFWrapperExpr, string_contains::StringContainsExpr,
+    named_struct::NamedStructExpr, row_num::RowNumExpr, string_contains::StringContainsExpr,
     string_ends_with::StringEndsWithExpr, string_starts_with::StringStartsWithExpr,
+};
+#[cfg(not(feature = "flink"))]
+use datafusion_ext_exprs::{
+    spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
+    spark_udf_wrapper::SparkUDFWrapperExpr,
 };
 use datafusion_ext_plans::{
     agg::{
@@ -72,22 +75,23 @@ use datafusion_ext_plans::{
     filter_exec::FilterExec,
     generate::{create_generator, create_udtf_generator},
     generate_exec::GenerateExec,
-    ipc_reader_exec::IpcReaderExec,
-    ipc_writer_exec::IpcWriterExec,
     limit_exec::LimitExec,
     orc_exec::OrcExec,
     parquet_exec::ParquetExec,
-    parquet_sink_exec::ParquetSinkExec,
     project_exec::ProjectExec,
     rename_columns_exec::RenameColumnsExec,
-    rss_shuffle_writer_exec::RssShuffleWriterExec,
     shuffle::Partitioning,
-    shuffle_writer_exec::ShuffleWriterExec,
     sort_exec::SortExec,
     sort_merge_join_exec::SortMergeJoinExec,
     union_exec::{UnionExec, UnionInput},
     window::{WindowExpr, WindowFunction, WindowRankType},
     window_exec::WindowExec,
+};
+#[cfg(not(feature = "flink"))]
+use datafusion_ext_plans::{
+    ipc_reader_exec::IpcReaderExec, ipc_writer_exec::IpcWriterExec,
+    parquet_sink_exec::ParquetSinkExec, rss_shuffle_writer_exec::RssShuffleWriterExec,
+    shuffle_writer_exec::ShuffleWriterExec,
 };
 use object_store::{ObjectMeta, ObjectStore, path::Path};
 use parking_lot::Mutex as SyncMutex;
@@ -278,6 +282,7 @@ impl PhysicalPlanner {
                     sort_options,
                 )?))
             }
+            #[cfg(not(feature = "flink"))]
             PhysicalPlanType::ShuffleWriter(shuffle_writer) => {
                 let input: Arc<dyn ExecutionPlan> =
                     convert_box_required!(self, shuffle_writer.input)?;
@@ -294,6 +299,11 @@ impl PhysicalPlanner {
                     shuffle_writer.output_index_file.clone(),
                 )?))
             }
+            #[cfg(feature = "flink")]
+            PhysicalPlanType::ShuffleWriter(_) => Err(PlanError::General(
+                "ShuffleWriter not supported in Flink builds".to_string(),
+            )),
+            #[cfg(not(feature = "flink"))]
             PhysicalPlanType::RssShuffleWriter(rss_shuffle_writer) => {
                 let input: Arc<dyn ExecutionPlan> =
                     convert_box_required!(self, rss_shuffle_writer.input)?;
@@ -308,6 +318,11 @@ impl PhysicalPlanner {
                     rss_shuffle_writer.rss_partition_writer_resource_id.clone(),
                 )?))
             }
+            #[cfg(feature = "flink")]
+            PhysicalPlanType::RssShuffleWriter(_) => Err(PlanError::General(
+                "RssShuffleWriter not supported in Flink builds".to_string(),
+            )),
+            #[cfg(not(feature = "flink"))]
             PhysicalPlanType::IpcWriter(ipc_writer) => {
                 let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, ipc_writer.input)?;
 
@@ -316,6 +331,11 @@ impl PhysicalPlanner {
                     ipc_writer.ipc_consumer_resource_id.clone(),
                 )))
             }
+            #[cfg(feature = "flink")]
+            PhysicalPlanType::IpcWriter(_) => Err(PlanError::General(
+                "IpcWriter not supported in Flink builds".to_string(),
+            )),
+            #[cfg(not(feature = "flink"))]
             PhysicalPlanType::IpcReader(ipc_reader) => {
                 let schema = Arc::new(convert_required!(ipc_reader.schema)?);
                 Ok(Arc::new(IpcReaderExec::new(
@@ -324,6 +344,10 @@ impl PhysicalPlanner {
                     schema,
                 )))
             }
+            #[cfg(feature = "flink")]
+            PhysicalPlanType::IpcReader(_) => Err(PlanError::General(
+                "IpcReader not supported in Flink builds".to_string(),
+            )),
             PhysicalPlanType::Debug(debug) => {
                 let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, debug.input)?;
                 Ok(Arc::new(DebugExec::new(input, debug.debug_id.clone())))
@@ -757,6 +781,7 @@ impl PhysicalPlanner {
                     generate.outer,
                 )?))
             }
+            #[cfg(not(feature = "flink"))]
             PhysicalPlanType::ParquetSink(parquet_sink) => {
                 let mut props: Vec<(String, String)> = vec![];
                 for prop in &parquet_sink.prop {
@@ -769,6 +794,10 @@ impl PhysicalPlanner {
                     props,
                 )))
             }
+            #[cfg(feature = "flink")]
+            PhysicalPlanType::ParquetSink(_) => Err(PlanError::General(
+                "ParquetSink not supported in Flink builds".to_string(),
+            )),
         }
     }
 
@@ -900,6 +929,7 @@ impl PhysicalPlanner {
                     )),
                 ))
             }
+            #[cfg(not(feature = "flink"))]
             ExprType::SparkUdfWrapperExpr(e) => Arc::new(SparkUDFWrapperExpr::try_new(
                 e.serialized.clone(),
                 convert_required!(e.return_type)?,
@@ -910,12 +940,25 @@ impl PhysicalPlanner {
                     .collect::<Result<Vec<_>, _>>()?,
                 e.expr_string.clone(),
             )?),
+            #[cfg(feature = "flink")]
+            ExprType::SparkUdfWrapperExpr(_) => {
+                return Err(PlanError::General(
+                    "SparkUdfWrapperExpr not supported in Flink builds".to_string(),
+                ));
+            }
+            #[cfg(not(feature = "flink"))]
             ExprType::SparkScalarSubqueryWrapperExpr(e) => {
                 Arc::new(SparkScalarSubqueryWrapperExpr::try_new(
                     e.serialized.clone(),
                     convert_required!(e.return_type)?,
                     e.return_nullable,
                 )?)
+            }
+            #[cfg(feature = "flink")]
+            ExprType::SparkScalarSubqueryWrapperExpr(_) => {
+                return Err(PlanError::General(
+                    "SparkScalarSubqueryWrapperExpr not supported in Flink builds".to_string(),
+                ));
             }
             ExprType::GetIndexedFieldExpr(e) => {
                 let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;

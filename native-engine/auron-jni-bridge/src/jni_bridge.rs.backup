@@ -427,49 +427,31 @@ pub struct JavaClasses<'a> {
     pub cJavaURI: JavaURI<'a>,
     pub cJavaBuffer: JavaBuffer<'a>,
 
-    #[cfg(not(feature = "flink"))]
     pub cScalaIterator: ScalaIterator<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cScalaTuple2: ScalaTuple2<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cScalaFunction0: ScalaFunction0<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cScalaFunction1: ScalaFunction1<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cScalaFunction2: ScalaFunction2<'a>,
 
     pub cHadoopFileSystem: HadoopFileSystem<'a>,
     pub cHadoopPath: HadoopPath<'a>,
 
-    #[cfg(not(feature = "flink"))]
     pub cSparkFileSegment: SparkFileSegment<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cSparkSQLMetric: SparkSQLMetric<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cSparkMetricNode: SparkMetricNode<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cSparkAuronUDFWrapperContext: SparkAuronUDFWrapperContext<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cSparkUDAFWrapperContext: SparkUDAFWrapperContext<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cSparkUDTFWrapperContext: SparkUDTFWrapperContext<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cSparkUDAFMemTracker: SparkUDAFMemTracker<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cAuronConf: AuronConf<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cAuronRssPartitionWriterBase: AuronRssPartitionWriterBase<'a>,
     pub cAuronCallNativeWrapper: AuronCallNativeWrapper<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cAuronOnHeapSpillManager: AuronOnHeapSpillManager<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cAuronNativeParquetSinkUtils: AuronNativeParquetSinkUtils<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cAuronBlockObject: AuronBlockObject<'a>,
     pub cAuronArrowFFIExporter: AuronArrowFFIExporter<'a>,
     pub cAuronFSDataInputWrapper: AuronFSDataInputWrapper<'a>,
     pub cAuronFSDataOutputWrapper: AuronFSDataOutputWrapper<'a>,
-    #[cfg(not(feature = "flink"))]
     pub cAuronJsonFallbackWrapper: AuronJsonFallbackWrapper<'a>,
 
     pub cAuronUDFWrapperContext: AuronUDFWrapperContext<'a>,
@@ -486,15 +468,7 @@ impl JavaClasses<'static> {
         if let Err(err) = JNI_JAVA_CLASSES.get_or_try_init(|| -> Result<_, Box<dyn Error>> {
             log::info!("Initializing JavaClasses...");
             let env = unsafe { std::mem::transmute::<_, &'static JNIEnv>(env) };
-
-            #[cfg(feature = "flink")]
-            log::info!("==> FLINK MODE: Spark/Scala classes will be skipped");
-            #[cfg(not(feature = "flink"))]
-            log::info!("==> SPARK MODE: Loading all Spark/Scala classes");
-
-            log::info!("Loading JniBridge...");
             let jni_bridge = JniBridge::new(env)?;
-            log::info!("Loading classloader...");
             let classloader = env
                 .call_static_method_unchecked(
                     jni_bridge.class,
@@ -503,154 +477,50 @@ impl JavaClasses<'static> {
                     &[],
                 )?
                 .l()?;
-            log::info!("Getting JVM...");
-            let jvm = env.get_java_vm()?;
-            log::info!("Getting global classloader ref...");
-            let classloader = get_global_ref_jobject(env, classloader)?;
 
-            log::info!("Loading cClass...");
-            let c_class = JavaClass::new(env)?;
-            log::info!("Loading cJavaThrowable...");
-            let c_java_throwable = JavaThrowable::new(env)?;
-            log::info!("Loading cJavaRuntimeException...");
-            let c_java_runtime_exception = JavaRuntimeException::new(env)?;
-            log::info!("Loading cJavaReadableByteChannel...");
-            let c_java_readable_byte_channel = JavaReadableByteChannel::new(env)?;
-            log::info!("Loading cJavaBoolean...");
-            let c_java_boolean = JavaBoolean::new(env)?;
-            log::info!("Loading cJavaLong...");
-            let c_java_long = JavaLong::new(env)?;
-            log::info!("Loading cJavaAutoCloseable...");
-            let c_java_auto_closeable = JavaAutoCloseable::new(env)?;
-            log::info!("Loading cJavaURI...");
-            let c_java_uri = JavaURI::new(env)?;
-            log::info!("Loading cJavaBuffer...");
-            let c_java_buffer = JavaBuffer::new(env)?;
-
-            #[cfg(not(feature = "flink"))]
-            log::info!("Loading Scala classes...");
-            #[cfg(not(feature = "flink"))]
-            let c_scala_iterator = ScalaIterator::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_scala_tuple2 = ScalaTuple2::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_scala_function0 = ScalaFunction0::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_scala_function1 = ScalaFunction1::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_scala_function2 = ScalaFunction2::new(env)?;
-
-            log::info!("Loading cHadoopFileSystem...");
-            let c_hadoop_file_system = HadoopFileSystem::new(env)?;
-            log::info!("Loading cHadoopPath...");
-            let c_hadoop_path = HadoopPath::new(env)?;
-
-            #[cfg(not(feature = "flink"))]
-            log::info!("Loading Spark classes...");
-            #[cfg(not(feature = "flink"))]
-            let c_spark_file_segment = SparkFileSegment::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_spark_sql_metric = SparkSQLMetric::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_spark_metric_node = SparkMetricNode::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_spark_auron_udf_wrapper_context = SparkAuronUDFWrapperContext::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_spark_udaf_wrapper_context = SparkUDAFWrapperContext::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_spark_udtf_wrapper_context = SparkUDTFWrapperContext::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_spark_udaf_mem_tracker = SparkUDAFMemTracker::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_auron_conf = AuronConf::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_auron_rss_partition_writer_base = AuronRssPartitionWriterBase::new(env)?;
-
-            log::info!("Loading cAuronCallNativeWrapper...");
-            let c_auron_call_native_wrapper = AuronCallNativeWrapper::new(env)?;
-
-            #[cfg(not(feature = "flink"))]
-            let c_auron_on_heap_spill_manager = AuronOnHeapSpillManager::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_auron_native_parquet_sink_utils = AuronNativeParquetSinkUtils::new(env)?;
-            #[cfg(not(feature = "flink"))]
-            let c_auron_block_object = AuronBlockObject::new(env)?;
-
-            log::info!("Loading cAuronArrowFFIExporter...");
-            let c_auron_arrow_ffi_exporter = AuronArrowFFIExporter::new(env)?;
-            log::info!("Loading cAuronFSDataInputWrapper...");
-            let c_auron_fs_data_input_wrapper = AuronFSDataInputWrapper::new(env)?;
-            log::info!("Loading cAuronFSDataOutputWrapper...");
-            let c_auron_fs_data_output_wrapper = AuronFSDataOutputWrapper::new(env)?;
-
-            #[cfg(not(feature = "flink"))]
-            let c_auron_json_fallback_wrapper = AuronJsonFallbackWrapper::new(env)?;
-
-            log::info!("Loading cAuronUDFWrapperContext...");
-            let c_auron_udf_wrapper_context = AuronUDFWrapperContext::new(env)?;
-
-            log::info!("Assembling JavaClasses struct...");
             let java_classes = JavaClasses {
-                jvm,
-                classloader,
+                jvm: env.get_java_vm()?,
+                classloader: get_global_ref_jobject(env, classloader)?,
                 cJniBridge: jni_bridge,
 
-                cClass: c_class,
-                cJavaThrowable: c_java_throwable,
-                cJavaRuntimeException: c_java_runtime_exception,
-                cJavaReadableByteChannel: c_java_readable_byte_channel,
-                cJavaBoolean: c_java_boolean,
-                cJavaLong: c_java_long,
-                cJavaAutoCloseable: c_java_auto_closeable,
-                cJavaURI: c_java_uri,
-                cJavaBuffer: c_java_buffer,
+                cClass: JavaClass::new(env)?,
+                cJavaThrowable: JavaThrowable::new(env)?,
+                cJavaRuntimeException: JavaRuntimeException::new(env)?,
+                cJavaReadableByteChannel: JavaReadableByteChannel::new(env)?,
+                cJavaBoolean: JavaBoolean::new(env)?,
+                cJavaLong: JavaLong::new(env)?,
+                cJavaAutoCloseable: JavaAutoCloseable::new(env)?,
+                cJavaURI: JavaURI::new(env)?,
+                cJavaBuffer: JavaBuffer::new(env)?,
 
-                #[cfg(not(feature = "flink"))]
-                cScalaIterator: c_scala_iterator,
-                #[cfg(not(feature = "flink"))]
-                cScalaTuple2: c_scala_tuple2,
-                #[cfg(not(feature = "flink"))]
-                cScalaFunction0: c_scala_function0,
-                #[cfg(not(feature = "flink"))]
-                cScalaFunction1: c_scala_function1,
-                #[cfg(not(feature = "flink"))]
-                cScalaFunction2: c_scala_function2,
+                cScalaIterator: ScalaIterator::new(env)?,
+                cScalaTuple2: ScalaTuple2::new(env)?,
+                cScalaFunction0: ScalaFunction0::new(env)?,
+                cScalaFunction1: ScalaFunction1::new(env)?,
+                cScalaFunction2: ScalaFunction2::new(env)?,
 
-                cHadoopFileSystem: c_hadoop_file_system,
-                cHadoopPath: c_hadoop_path,
+                cHadoopFileSystem: HadoopFileSystem::new(env)?,
+                cHadoopPath: HadoopPath::new(env)?,
 
-                #[cfg(not(feature = "flink"))]
-                cSparkFileSegment: c_spark_file_segment,
-                #[cfg(not(feature = "flink"))]
-                cSparkSQLMetric: c_spark_sql_metric,
-                #[cfg(not(feature = "flink"))]
-                cSparkMetricNode: c_spark_metric_node,
-                #[cfg(not(feature = "flink"))]
-                cSparkAuronUDFWrapperContext: c_spark_auron_udf_wrapper_context,
-                #[cfg(not(feature = "flink"))]
-                cSparkUDAFWrapperContext: c_spark_udaf_wrapper_context,
-                #[cfg(not(feature = "flink"))]
-                cSparkUDTFWrapperContext: c_spark_udtf_wrapper_context,
-                #[cfg(not(feature = "flink"))]
-                cSparkUDAFMemTracker: c_spark_udaf_mem_tracker,
-                #[cfg(not(feature = "flink"))]
-                cAuronConf: c_auron_conf,
-                #[cfg(not(feature = "flink"))]
-                cAuronRssPartitionWriterBase: c_auron_rss_partition_writer_base,
-                cAuronCallNativeWrapper: c_auron_call_native_wrapper,
-                #[cfg(not(feature = "flink"))]
-                cAuronOnHeapSpillManager: c_auron_on_heap_spill_manager,
-                #[cfg(not(feature = "flink"))]
-                cAuronNativeParquetSinkUtils: c_auron_native_parquet_sink_utils,
-                #[cfg(not(feature = "flink"))]
-                cAuronBlockObject: c_auron_block_object,
-                cAuronArrowFFIExporter: c_auron_arrow_ffi_exporter,
-                cAuronFSDataInputWrapper: c_auron_fs_data_input_wrapper,
-                cAuronFSDataOutputWrapper: c_auron_fs_data_output_wrapper,
-                #[cfg(not(feature = "flink"))]
-                cAuronJsonFallbackWrapper: c_auron_json_fallback_wrapper,
+                cSparkFileSegment: SparkFileSegment::new(env)?,
+                cSparkSQLMetric: SparkSQLMetric::new(env)?,
+                cSparkMetricNode: SparkMetricNode::new(env)?,
+                cSparkAuronUDFWrapperContext: SparkAuronUDFWrapperContext::new(env)?,
+                cSparkUDAFWrapperContext: SparkUDAFWrapperContext::new(env)?,
+                cSparkUDTFWrapperContext: SparkUDTFWrapperContext::new(env)?,
+                cSparkUDAFMemTracker: SparkUDAFMemTracker::new(env)?,
+                cAuronConf: AuronConf::new(env)?,
+                cAuronRssPartitionWriterBase: AuronRssPartitionWriterBase::new(env)?,
+                cAuronCallNativeWrapper: AuronCallNativeWrapper::new(env)?,
+                cAuronOnHeapSpillManager: AuronOnHeapSpillManager::new(env)?,
+                cAuronNativeParquetSinkUtils: AuronNativeParquetSinkUtils::new(env)?,
+                cAuronBlockObject: AuronBlockObject::new(env)?,
+                cAuronArrowFFIExporter: AuronArrowFFIExporter::new(env)?,
+                cAuronFSDataInputWrapper: AuronFSDataInputWrapper::new(env)?,
+                cAuronFSDataOutputWrapper: AuronFSDataOutputWrapper::new(env)?,
+                cAuronJsonFallbackWrapper: AuronJsonFallbackWrapper::new(env)?,
 
-                cAuronUDFWrapperContext: c_auron_udf_wrapper_context,
+                cAuronUDFWrapperContext: AuronUDFWrapperContext::new(env)?,
             };
             log::info!("Initializing JavaClasses finished");
             Ok(java_classes)
@@ -993,7 +863,6 @@ impl<'a> JavaBuffer<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct ScalaIterator<'a> {
     pub class: JClass<'a>,
     pub method_hasNext: JMethodID,
@@ -1001,8 +870,6 @@ pub struct ScalaIterator<'a> {
     pub method_next: JMethodID,
     pub method_next_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> ScalaIterator<'a> {
     pub const SIG_TYPE: &'static str = "scala/collection/Iterator";
 
@@ -1019,7 +886,6 @@ impl<'a> ScalaIterator<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct ScalaTuple2<'a> {
     pub class: JClass<'a>,
     pub method__1: JMethodID,
@@ -1027,8 +893,6 @@ pub struct ScalaTuple2<'a> {
     pub method__2: JMethodID,
     pub method__2_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> ScalaTuple2<'a> {
     pub const SIG_TYPE: &'static str = "scala/Tuple2";
 
@@ -1045,14 +909,11 @@ impl<'a> ScalaTuple2<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct ScalaFunction0<'a> {
     pub class: JClass<'a>,
     pub method_apply: JMethodID,
     pub method_apply_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> ScalaFunction0<'a> {
     pub const SIG_TYPE: &'static str = "scala/Function0";
 
@@ -1067,14 +928,11 @@ impl<'a> ScalaFunction0<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct ScalaFunction1<'a> {
     pub class: JClass<'a>,
     pub method_apply: JMethodID,
     pub method_apply_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> ScalaFunction1<'a> {
     pub const SIG_TYPE: &'static str = "scala/Function1";
 
@@ -1093,14 +951,11 @@ impl<'a> ScalaFunction1<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct ScalaFunction2<'a> {
     pub class: JClass<'a>,
     pub method_apply: JMethodID,
     pub method_apply_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> ScalaFunction2<'a> {
     pub const SIG_TYPE: &'static str = "scala/Function2";
 
@@ -1190,7 +1045,6 @@ impl<'a> HadoopFSDataInputStream<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct SparkFileSegment<'a> {
     pub class: JClass<'a>,
     pub method_file: JMethodID,
@@ -1200,8 +1054,6 @@ pub struct SparkFileSegment<'a> {
     pub method_length: JMethodID,
     pub method_length_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> SparkFileSegment<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/storage/FileSegment";
 
@@ -1220,14 +1072,11 @@ impl<'a> SparkFileSegment<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct SparkSQLMetric<'a> {
     pub class: JClass<'a>,
     pub method_add: JMethodID,
     pub method_add_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> SparkSQLMetric<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/execution/metric/SQLMetric";
 
@@ -1242,7 +1091,6 @@ impl<'a> SparkSQLMetric<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct SparkMetricNode<'a> {
     pub class: JClass<'a>,
     pub method_getChild: JMethodID,
@@ -1250,8 +1098,6 @@ pub struct SparkMetricNode<'a> {
     pub method_add: JMethodID,
     pub method_add_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> SparkMetricNode<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/auron/metric/SparkMetricNode";
 
@@ -1272,7 +1118,6 @@ impl<'a> SparkMetricNode<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct AuronConf<'a> {
     pub class: JClass<'a>,
     pub method_booleanConf: JStaticMethodID,
@@ -1287,7 +1132,6 @@ pub struct AuronConf<'a> {
     pub method_stringConf_ret: ReturnType,
 }
 
-#[cfg(not(feature = "flink"))]
 impl<'a> AuronConf<'_> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/AuronConf";
 
@@ -1326,7 +1170,6 @@ impl<'a> AuronConf<'_> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct AuronRssPartitionWriterBase<'a> {
     pub class: JClass<'a>,
     pub method_write: JMethodID,
@@ -1335,7 +1178,6 @@ pub struct AuronRssPartitionWriterBase<'a> {
     pub method_flush_ret: ReturnType,
 }
 
-#[cfg(not(feature = "flink"))]
 impl<'a> AuronRssPartitionWriterBase<'_> {
     pub const SIG_TYPE: &'static str =
         "org/apache/spark/sql/execution/auron/shuffle/RssPartitionWriterBase";
@@ -1353,15 +1195,12 @@ impl<'a> AuronRssPartitionWriterBase<'_> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct SparkAuronUDFWrapperContext<'a> {
     pub class: JClass<'a>,
     pub ctor: JMethodID,
     pub method_eval: JMethodID,
     pub method_eval_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> SparkAuronUDFWrapperContext<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/auron/spark/sql/SparkAuronUDFWrapperContext";
 
@@ -1396,7 +1235,6 @@ impl<'a> AuronUDFWrapperContext<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct SparkUDAFWrapperContext<'a> {
     pub class: JClass<'a>,
     pub ctor: JMethodID,
@@ -1421,8 +1259,6 @@ pub struct SparkUDAFWrapperContext<'a> {
     pub method_unspill: JMethodID,
     pub method_unspill_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> SparkUDAFWrapperContext<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/SparkUDAFWrapperContext";
 
@@ -1496,7 +1332,6 @@ impl<'a> SparkUDAFWrapperContext<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct SparkUDTFWrapperContext<'a> {
     pub class: JClass<'a>,
     pub ctor: JMethodID,
@@ -1507,8 +1342,6 @@ pub struct SparkUDTFWrapperContext<'a> {
     pub method_terminateLoop: JMethodID,
     pub method_terminateLoop_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> SparkUDTFWrapperContext<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/SparkUDTFWrapperContext";
 
@@ -1528,7 +1361,6 @@ impl<'a> SparkUDTFWrapperContext<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct SparkUDAFMemTracker<'a> {
     pub class: JClass<'a>,
     pub ctor: JMethodID,
@@ -1539,8 +1371,6 @@ pub struct SparkUDAFMemTracker<'a> {
     pub method_updateUsed: JMethodID,
     pub method_updateUsed_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> SparkUDAFMemTracker<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/SparkUDAFMemTracker";
 
@@ -1607,7 +1437,6 @@ impl<'a> AuronCallNativeWrapper<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct AuronOnHeapSpillManager<'a> {
     pub class: JClass<'a>,
     pub method_isOnHeapAvailable: JMethodID,
@@ -1625,8 +1454,6 @@ pub struct AuronOnHeapSpillManager<'a> {
     pub method_releaseSpill: JMethodID,
     pub method_releaseSpill_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> AuronOnHeapSpillManager<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/memory/SparkOnHeapSpillManager";
 
@@ -1657,7 +1484,6 @@ impl<'a> AuronOnHeapSpillManager<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct AuronNativeParquetSinkUtils<'a> {
     pub class: JClass<'a>,
     pub method_getTaskOutputPath: JStaticMethodID,
@@ -1665,8 +1491,6 @@ pub struct AuronNativeParquetSinkUtils<'a> {
     pub method_completeOutput: JStaticMethodID,
     pub method_completeOutput_ret: ReturnType,
 }
-
-#[cfg(not(feature = "flink"))]
 impl<'a> AuronNativeParquetSinkUtils<'a> {
     pub const SIG_TYPE: &'static str =
         "org/apache/spark/sql/execution/auron/plan/NativeParquetSinkUtils";
@@ -1692,7 +1516,6 @@ impl<'a> AuronNativeParquetSinkUtils<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct AuronBlockObject<'a> {
     pub class: JClass<'a>,
     pub method_hasFileSegment: JMethodID,
@@ -1713,7 +1536,6 @@ pub struct AuronBlockObject<'a> {
     pub method_throwFetchFailed_ret: ReturnType,
 }
 
-#[cfg(not(feature = "flink"))]
 impl<'a> AuronBlockObject<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/execution/auron/shuffle/BlockObject";
 
@@ -1818,7 +1640,6 @@ impl<'a> AuronFSDataOutputWrapper<'a> {
 }
 
 #[allow(non_snake_case)]
-#[cfg(not(feature = "flink"))]
 pub struct AuronJsonFallbackWrapper<'a> {
     pub class: JClass<'a>,
     pub ctor: JMethodID,
@@ -1826,7 +1647,6 @@ pub struct AuronJsonFallbackWrapper<'a> {
     pub method_parseJsons_ret: ReturnType,
 }
 
-#[cfg(not(feature = "flink"))]
 impl<'a> AuronJsonFallbackWrapper<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/util/JsonFallbackWrapper";
 

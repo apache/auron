@@ -24,11 +24,14 @@ import org.apache.auron.jni.AuronCallNativeWrapper;
 import org.apache.auron.jni.FlinkAuronAdaptor;
 import org.apache.auron.metric.MetricNode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
@@ -38,7 +41,8 @@ import org.slf4j.LoggerFactory;
  * Flink SourceFunction that wraps Auron native execution.
  * Executes a PhysicalPlanNode using the Auron native engine and emits results as Flink RowData.
  */
-public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowData> {
+public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowData>
+        implements ResultTypeQueryable<RowData> {
 
     private static final Logger LOG = LoggerFactory.getLogger(AuronBatchExecutionWrapperOperator.class);
 
@@ -73,8 +77,12 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
         isRunning = true;
 
         // Get Flink configuration and set in thread context
-        FlinkAuronAdaptor.setThreadConfiguration(
-                (Configuration) getRuntimeContext().getExecutionConfig().getGlobalJobParameters());
+        // Check if GlobalJobParameters is actually a Configuration
+        Configuration config = parameters;
+        if (getRuntimeContext().getExecutionConfig().getGlobalJobParameters() instanceof Configuration) {
+            config = (Configuration) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+        }
+        FlinkAuronAdaptor.setThreadConfiguration(config);
 
         // Create Arrow allocator
         allocator = new RootAllocator(Long.MAX_VALUE);
@@ -201,5 +209,10 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
             super.close();
         }
         LOG.info("Closed Auron native execution wrapper");
+    }
+
+    @Override
+    public TypeInformation<RowData> getProducedType() {
+        return InternalTypeInfo.of(outputSchema);
     }
 }

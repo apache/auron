@@ -26,7 +26,113 @@ pub mod count;
 pub mod first;
 pub mod first_ignores_null;
 pub mod maxmin;
+#[cfg(not(feature = "flink"))]
 pub mod spark_udaf_wrapper;
+#[cfg(feature = "flink")]
+pub mod spark_udaf_wrapper {
+    // Stub module for Flink builds - UDAFs not supported in Flink MVP
+    use arrow::array::ArrayRef;
+    use datafusion::common::Result;
+    use once_cell::sync::OnceCell;
+
+    use super::*;
+
+    #[derive(Debug)]
+    pub struct SparkUDAFWrapper;
+
+    impl SparkUDAFWrapper {
+        pub fn partial_update_with_indices_cache(
+            &self,
+            _acc_col: &mut acc::AccColumnRef,
+            _acc_idx: agg::IdxSelection<'_>,
+            _partial_args: &[ArrayRef],
+            _partial_arg_idx: agg::IdxSelection<'_>,
+            _indices_cache: &OnceCell<Vec<usize>>,
+        ) -> Result<()> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+
+        pub fn partial_merge_with_indices_cache(
+            &self,
+            _accs: &mut acc::AccColumnRef,
+            _acc_idx: agg::IdxSelection<'_>,
+            _merging_accs: &mut acc::AccColumnRef,
+            _merging_acc_idx: agg::IdxSelection<'_>,
+            _cache: &OnceCell<auron_jni_bridge::jni_bridge::LocalRef>,
+        ) -> Result<()> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+
+        pub fn final_merge_with_indices_cache(
+            &self,
+            _acc_col: &mut acc::AccColumnRef,
+            _idx: agg::IdxSelection<'_>,
+            _indices_cache: &OnceCell<Vec<usize>>,
+        ) -> Result<ArrayRef> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct AccUDAFBufferRowsColumn;
+
+    impl AccUDAFBufferRowsColumn {
+        pub fn spill_with_indices_cache(
+            &self,
+            _idx: agg::IdxSelection<'_>,
+            _buf: &mut auron_memmgr::spill::SpillCompressedWriter,
+            _spill_idx: usize,
+            _mem_tracker: &SparkUDAFMemTracker,
+            _cache: &OnceCell<auron_jni_bridge::jni_bridge::LocalRef>,
+        ) -> Result<()> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+
+        pub fn freeze_to_rows_with_indices_cache(
+            &self,
+            _idx: agg::IdxSelection<'_>,
+            _array: &mut [Vec<u8>],
+            _cache: &OnceCell<auron_jni_bridge::jni_bridge::LocalRef>,
+        ) -> Result<()> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+
+        pub fn unspill_with_key(
+            &mut self,
+            _num_rows: usize,
+            _r: &mut auron_memmgr::spill::SpillCompressedReader,
+            _mem_tracker: &SparkUDAFMemTracker,
+            _spill_idx: usize,
+        ) -> Result<()> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct SparkUDAFMemTracker;
+
+    impl SparkUDAFMemTracker {
+        pub fn try_new() -> Result<Self> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+
+        pub fn as_obj(&self) -> jni::objects::JObject {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+
+        pub fn update_used(&self) -> Result<bool> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+
+        pub fn reset(&self) -> Result<()> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+
+        pub fn add_column(&self, _column: &AccUDAFBufferRowsColumn) -> Result<()> {
+            unreachable!("UDAF not supported in Flink builds")
+        }
+    }
+}
 pub mod sum;
 
 use std::{fmt::Debug, sync::Arc};

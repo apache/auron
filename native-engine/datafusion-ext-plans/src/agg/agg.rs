@@ -275,6 +275,7 @@ pub fn create_agg(
     })
 }
 
+#[cfg(not(feature = "flink"))]
 pub fn create_udaf_agg(
     serialized: Vec<u8>,
     return_type: DataType,
@@ -285,4 +286,13 @@ pub fn create_udaf_agg(
         return_type,
         children,
     )?))
+}
+
+#[cfg(feature = "flink")]
+pub fn create_udaf_agg(
+    _serialized: Vec<u8>,
+    _return_type: DataType,
+    _children: Vec<PhysicalExprRef>,
+) -> Result<Arc<dyn Agg>> {
+    df_execution_err!("UDAF not supported for Flink")
 }

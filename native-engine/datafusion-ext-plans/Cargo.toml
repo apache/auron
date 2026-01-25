@@ -23,6 +23,13 @@ resolver = "1"
 
 [features]
 default = ["tokio/rt-multi-thread"]
+flink = [
+    "auron-jni-bridge/flink",
+    "auron-memmgr/flink",
+    "datafusion-ext-commons/flink",
+    "datafusion-ext-exprs/flink",
+    "datafusion-ext-functions/flink",
+]  # Feature flag for Flink integration - disables Spark-specific code
 
 [dependencies]
 arrow = { workspace = true }

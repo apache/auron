@@ -23,6 +23,7 @@ resolver = "1"
 
 [features]
 default = ["tokio/rt-multi-thread"]
+flink = []  # Feature flag for Flink integration - disables Spark-specific code
 
 [dependencies]
 arrow = { workspace = true }

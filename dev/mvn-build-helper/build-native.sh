@@ -25,11 +25,13 @@ _CALLING_DIR="$(pwd)"
 PROJECT_DIR="$(cd "`dirname "$0"`/../.."; pwd)"
 cd "$PROJECT_DIR"
 
-profile="$1"
+profile="${1:-release}"
 features_arg=""
 if [ -n "$2" ]; then
     features_arg="--features $2"
 fi
+
+echo "Building with profile: $profile"
 
 # Support cross-compilation via CARGO_BUILD_TARGET environment variable
 # Example: CARGO_BUILD_TARGET=x86_64-apple-darwin mvn package

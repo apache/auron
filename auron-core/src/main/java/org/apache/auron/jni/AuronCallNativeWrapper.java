@@ -54,25 +54,50 @@ public class AuronCallNativeWrapper {
     private long nativeRuntimePtr;
     private Consumer<VectorSchemaRoot> batchConsumer;
 
-    // initialize native environment
-    static {
-        LOG.info("Initializing native environment (batchSize="
-                + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.BATCH_SIZE) + ", "
-                + "memoryFraction="
-                + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.MEMORY_FRACTION) + ")");
+    // Lazy initialization flag to ensure native environment is set up only once
+    private static volatile boolean nativeInitialized = false;
+    private static final Object initLock = new Object();
 
-        // arrow configuration
-        System.setProperty("arrow.struct.conflict.policy", "CONFLICT_APPEND");
+    // Initialize native environment on first use instead of in static block
+    // This allows thread-local configuration to be set up before library loading
+    private static void ensureNativeInitialized() {
+        if (!nativeInitialized) {
+            synchronized (initLock) {
+                if (!nativeInitialized) {
+                    try {
+                        LOG.info("Initializing native environment (batchSize="
+                                + AuronAdaptor.getInstance()
+                                        .getAuronConfiguration()
+                                        .get(AuronConfiguration.BATCH_SIZE)
+                                + ", "
+                                + "memoryFraction="
+                                + AuronAdaptor.getInstance()
+                                        .getAuronConfiguration()
+                                        .get(AuronConfiguration.MEMORY_FRACTION)
+                                + ")");
 
-        // preload JNI bridge classes
-        try {
-            Class.forName("org.apache.auron.jni.JniBridge");
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException("Cannot load JniBridge class", e);
+                        // arrow configuration
+                        System.setProperty("arrow.struct.conflict.policy", "CONFLICT_APPEND");
+
+                        // preload JNI bridge classes
+                        try {
+                            Class.forName("org.apache.auron.jni.JniBridge");
+                        } catch (ClassNotFoundException e) {
+                            throw new RuntimeException("Cannot load JniBridge class", e);
+                        }
+
+                        AuronAdaptor.getInstance().loadAuronLib();
+                        Runtime.getRuntime().addShutdownHook(new Thread(JniBridge::onExit));
+
+                        nativeInitialized = true;
+                        LOG.info("Native environment initialized successfully");
+                    } catch (Exception e) {
+                        LOG.error("Failed to initialize native environment", e);
+                        throw new RuntimeException("Failed to initialize Auron native environment", e);
+                    }
+                }
+            }
         }
-
-        AuronAdaptor.getInstance().loadAuronLib();
-        Runtime.getRuntime().addShutdownHook(new Thread(JniBridge::onExit));
     }
 
     public AuronCallNativeWrapper(
@@ -83,6 +108,9 @@ public class AuronCallNativeWrapper {
             int stageId,
             int taskId,
             long nativeMemory) {
+        // Ensure native environment is initialized before use
+        ensureNativeInitialized();
+
         this.arrowAllocator = arrowAllocator;
         this.nativePlan = nativePlan;
         this.metrics = metrics;

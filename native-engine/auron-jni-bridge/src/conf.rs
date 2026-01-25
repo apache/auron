@@ -64,42 +64,87 @@ define_conf!(StringConf, NATIVE_LOG_LEVEL);
 
 pub trait BooleanConf {
     fn key(&self) -> &'static str;
+    #[cfg(not(feature = "flink"))]
     fn value(&self) -> Result<bool> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
         jni_call_static!(AuronConf.booleanConf(key.as_obj()) -> bool)
     }
+    #[cfg(feature = "flink")]
+    fn value(&self) -> Result<bool> {
+        // TODO: Implement Flink configuration retrieval
+        Ok(false)
+    }
 }
 
 pub trait IntConf {
     fn key(&self) -> &'static str;
+    #[cfg(not(feature = "flink"))]
     fn value(&self) -> Result<i32> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
         jni_call_static!(AuronConf.intConf(key.as_obj()) -> i32)
     }
+    #[cfg(feature = "flink")]
+    fn value(&self) -> Result<i32> {
+        // TODO: Implement Flink configuration retrieval
+        match self.key() {
+            "BATCH_SIZE" => Ok(8192),
+            "PARQUET_MAX_OVER_READ_SIZE" => Ok(8388608),
+            "PARQUET_METADATA_CACHE_SIZE" => Ok(100),
+            "SPARK_IO_COMPRESSION_ZSTD_LEVEL" => Ok(1),
+            "TOKIO_WORKER_THREADS_PER_CPU" => Ok(1),
+            "SPARK_TASK_CPUS" => Ok(1),
+            "SHUFFLE_COMPRESSION_TARGET_BUF_SIZE" => Ok(32768),
+            "SMJ_FALLBACK_ROWS_THRESHOLD" => Ok(10000),
+            "SMJ_FALLBACK_MEM_SIZE_THRESHOLD" => Ok(10485760),
+            "SUGGESTED_BATCH_MEM_SIZE" => Ok(10485760),
+            "SUGGESTED_BATCH_MEM_SIZE_KWAY_MERGE" => Ok(10485760),
+            "UDAF_FALLBACK_NUM_UDAFS_TRIGGER_SORT_AGG" => Ok(5),
+            "PARTIAL_AGG_SKIPPING_MIN_ROWS" => Ok(1000),
+            _ => Ok(0),
+        }
+    }
 }
 
 pub trait LongConf {
     fn key(&self) -> &'static str;
+    #[cfg(not(feature = "flink"))]
     fn value(&self) -> Result<i64> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
         jni_call_static!(AuronConf.longConf(key.as_obj()) -> i64)
     }
+    #[cfg(feature = "flink")]
+    fn value(&self) -> Result<i64> {
+        // TODO: Implement Flink configuration retrieval
+        Ok(0)
+    }
 }
 
 pub trait DoubleConf {
     fn key(&self) -> &'static str;
+    #[cfg(not(feature = "flink"))]
     fn value(&self) -> Result<f64> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
         jni_call_static!(AuronConf.doubleConf(key.as_obj()) -> f64)
     }
+    #[cfg(feature = "flink")]
+    fn value(&self) -> Result<f64> {
+        // TODO: Implement Flink configuration retrieval
+        match self.key() {
+            "MEMORY_FRACTION" => Ok(0.7),
+            "PROCESS_MEMORY_FRACTION" => Ok(0.7),
+            "PARTIAL_AGG_SKIPPING_RATIO" => Ok(0.5),
+            _ => Ok(0.0),
+        }
+    }
 }
 
 pub trait StringConf {
     fn key(&self) -> &'static str;
+    #[cfg(not(feature = "flink"))]
     fn value(&self) -> Result<String> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
@@ -109,5 +154,15 @@ pub trait StringConf {
                 .into()
         )?;
         Ok(value)
+    }
+    #[cfg(feature = "flink")]
+    fn value(&self) -> Result<String> {
+        // TODO: Implement Flink configuration retrieval
+        match self.key() {
+            "SPARK_IO_COMPRESSION_CODEC" => Ok("lz4".to_string()),
+            "SPILL_COMPRESSION_CODEC" => Ok("lz4".to_string()),
+            "NATIVE_LOG_LEVEL" => Ok("INFO".to_string()),
+            _ => Ok(String::new()),
+        }
     }
 }

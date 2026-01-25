@@ -70,6 +70,7 @@ pub struct AggContext {
     pub is_expand_agg: bool,
     pub agg_expr_evaluator: CachedExprsEvaluator,
     pub num_spill_buckets: OnceCell<usize>,
+    #[cfg(not(feature = "flink"))]
     pub udaf_mem_tracker: OnceCell<SparkUDAFMemTracker>,
 }
 
@@ -202,6 +203,7 @@ impl AggContext {
             partial_skipping_skip_spill,
             is_expand_agg,
             num_spill_buckets: Default::default(),
+            #[cfg(not(feature = "flink"))]
             udaf_mem_tracker: Default::default(),
         })
     }
@@ -468,11 +470,18 @@ impl AggContext {
     }
 
     pub fn get_udaf_mem_tracker(&self) -> Option<&SparkUDAFMemTracker> {
-        self.udaf_mem_tracker.get()
+        #[cfg(not(feature = "flink"))]
+        return self.udaf_mem_tracker.get();
+        #[cfg(feature = "flink")]
+        return None;
     }
 
     pub fn get_or_try_init_udaf_mem_tracker(&self) -> Result<&SparkUDAFMemTracker> {
-        self.udaf_mem_tracker
-            .get_or_try_init(|| SparkUDAFMemTracker::try_new())
+        #[cfg(not(feature = "flink"))]
+        return self
+            .udaf_mem_tracker
+            .get_or_try_init(|| SparkUDAFMemTracker::try_new());
+        #[cfg(feature = "flink")]
+        datafusion_ext_commons::df_execution_err!("UDAF not supported in Flink builds")
     }
 }

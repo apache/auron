@@ -320,7 +320,19 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
 
         // Get file paths for native execution
         File parquetFile = new File(parquetDir, "native_test");
-        assertTrue(parquetFile.exists(), "Parquet file should exist");
+        System.out.println("📂 Looking for Parquet files in: " + parquetFile.getAbsolutePath());
+        System.out.println("📂 Directory exists: " + parquetFile.exists());
+        System.out.println("📂 Is directory: " + parquetFile.isDirectory());
+
+        if (parquetFile.exists() && parquetFile.isDirectory()) {
+            File[] allFiles = parquetFile.listFiles();
+            System.out.println("📂 All files in directory: " + (allFiles != null ? allFiles.length : 0));
+            if (allFiles != null) {
+                for (File f : allFiles) {
+                    System.out.println("   - " + f.getName() + " (size: " + f.length() + " bytes)");
+                }
+            }
+        }
 
         // Build schema for native execution
         org.apache.flink.table.types.logical.LogicalType[] fieldTypes = {
@@ -334,8 +346,8 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
         org.apache.flink.table.types.logical.RowType rowType =
                 org.apache.flink.table.types.logical.RowType.of(fieldTypes, fieldNames);
 
-        // Get all Parquet files
-        File[] parquetFiles = parquetFile.listFiles((dir, name) -> name.endsWith(".parquet"));
+        // Get all Parquet files (Flink doesn't add .parquet extension by default)
+        File[] parquetFiles = parquetFile.listFiles((dir, name) -> !name.startsWith("."));
         assertNotNull(parquetFiles, "Should find parquet files");
         assertTrue(parquetFiles.length > 0, "Should have at least one parquet file");
 
@@ -345,6 +357,13 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
         }
 
         System.out.println("📁 Parquet files for native scan: " + filePaths);
+
+        // Set runtime mode to AUTOMATIC before creating the DataStream
+        // The old SourceFunction API doesn't support explicit boundedness declaration,
+        // so AUTOMATIC mode is required to allow Flink to detect completion
+        Configuration runtimeConfig = new Configuration();
+        runtimeConfig.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.AUTOMATIC);
+        environment.configure(runtimeConfig);
 
         // Create native Parquet scan using explicit API
         org.apache.flink.streaming.api.datastream.DataStream<org.apache.flink.table.data.RowData> nativeStream =
@@ -366,6 +385,7 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
         System.out.println("🚀 Executing native DataStream...");
 
         try {
+
             // Collect results from the native execution
             List<org.apache.flink.table.data.RowData> rowDataResults = new java.util.ArrayList<>();
             org.apache.flink.util.CloseableIterator<org.apache.flink.table.data.RowData> iterator =
@@ -423,9 +443,10 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
         writeParquetTestData(parquetDir, "native_projection_test", schema, testData);
 
         File parquetFile = new File(parquetDir, "native_projection_test");
-        File[] parquetFiles = parquetFile.listFiles((dir, name) -> name.endsWith(".parquet"));
-        assertNotNull(parquetFiles);
-        assertTrue(parquetFiles.length > 0);
+        // Flink doesn't add .parquet extension by default, so get all non-hidden files
+        File[] parquetFiles = parquetFile.listFiles((dir, name) -> !name.startsWith("."));
+        assertNotNull(parquetFiles, "Should find parquet files");
+        assertTrue(parquetFiles.length > 0, "Should have at least one parquet file");
 
         List<String> filePaths = new java.util.ArrayList<>();
         for (File f : parquetFiles) {
@@ -459,6 +480,12 @@ public class AuronFlinkParquetScanITCase extends AuronFlinkTableTestBase {
 
         System.out.println("📁 Parquet files: " + filePaths);
         System.out.println("📋 Projecting fields: [0, 1] (id, name)");
+
+        // Set runtime mode to AUTOMATIC before creating the DataStream
+        // (SourceFunction API doesn't support explicit boundedness declaration)
+        Configuration runtimeConfig = new Configuration();
+        runtimeConfig.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.AUTOMATIC);
+        environment.configure(runtimeConfig);
 
         // Create native Parquet scan with projection
         org.apache.flink.streaming.api.datastream.DataStream<org.apache.flink.table.data.RowData> nativeStream =

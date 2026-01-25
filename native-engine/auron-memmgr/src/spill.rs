@@ -86,6 +86,7 @@ fn spill_compression_codec() -> &'static str {
         .as_str()
 }
 
+#[cfg(not(feature = "flink"))]
 pub fn try_new_spill(spill_metrics: &SpillMetrics) -> Result<Box<dyn Spill>> {
     if !is_jni_bridge_inited() {
         // is driver
@@ -99,6 +100,12 @@ pub fn try_new_spill(spill_metrics: &SpillMetrics) -> Result<Box<dyn Spill>> {
             Ok(Box::new(FileSpill::try_new(spill_metrics)?))
         }
     }
+}
+
+#[cfg(feature = "flink")]
+pub fn try_new_spill(spill_metrics: &SpillMetrics) -> Result<Box<dyn Spill>> {
+    // Flink always uses file-based spill
+    Ok(Box::new(FileSpill::try_new(spill_metrics)?))
 }
 
 /// A spill structure which write data to temporary files
@@ -179,7 +186,10 @@ impl Drop for FileSpill {
 
 /// A spill structure which cooperates with AuronOnHeapSpillManager
 /// used in executor side
+#[cfg(not(feature = "flink"))]
 struct OnHeapSpill(Arc<RawOnHeapSpill>, SpillMetrics);
+
+#[cfg(not(feature = "flink"))]
 impl OnHeapSpill {
     fn try_new(hsm: LocalRef, spill_metrics: &SpillMetrics) -> Result<Self> {
         let spill_id = jni_call!(AuronOnHeapSpillManager(hsm.as_obj()).newSpill() -> i32)?;
@@ -205,6 +215,7 @@ impl OnHeapSpill {
     }
 }
 
+#[cfg(not(feature = "flink"))]
 impl Spill for OnHeapSpill {
     fn as_any(&self) -> &dyn Any {
         self
@@ -225,6 +236,7 @@ impl Spill for OnHeapSpill {
     }
 }
 
+#[cfg(not(feature = "flink"))]
 impl Write for OnHeapSpill {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let _timer = self.1.mem_spill_iotime.timer();
@@ -243,6 +255,7 @@ impl Write for OnHeapSpill {
     }
 }
 
+#[cfg(not(feature = "flink"))]
 impl Read for OnHeapSpill {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let _timer = self.1.mem_spill_iotime.timer();
@@ -254,6 +267,7 @@ impl Read for OnHeapSpill {
     }
 }
 
+#[cfg(not(feature = "flink"))]
 impl Drop for OnHeapSpill {
     fn drop(&mut self) {
         self.1.mem_spill_count.add(1);
@@ -266,11 +280,13 @@ impl Drop for OnHeapSpill {
     }
 }
 
+#[cfg(not(feature = "flink"))]
 struct RawOnHeapSpill {
     hsm: GlobalRef,
     spill_id: i32,
 }
 
+#[cfg(not(feature = "flink"))]
 impl Drop for RawOnHeapSpill {
     fn drop(&mut self) {
         let _ = jni_call!(AuronOnHeapSpillManager(self.hsm.as_obj())

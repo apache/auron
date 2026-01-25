@@ -22,6 +22,11 @@ edition = "2024"
 
 [features]
 default = ["prost/no-recursion-limit"]
+flink = [
+    "datafusion-ext-exprs/flink",
+    "datafusion-ext-functions/flink",
+    "datafusion-ext-plans/flink",
+]  # Feature flag for Flink integration - disables Spark-specific code
 
 [dependencies]
 arrow = { workspace = true }

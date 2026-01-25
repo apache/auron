@@ -14,7 +14,9 @@
 // limitations under the License.
 
 mod explode;
+#[cfg(not(feature = "flink"))]
 mod json_tuple;
+#[cfg(not(feature = "flink"))]
 mod spark_udtf_wrapper;
 
 use std::{any::Any, fmt::Debug, sync::Arc};
@@ -30,11 +32,9 @@ use datafusion::{
 };
 use datafusion_ext_commons::{df_execution_err, df_unimplemented_err, downcast_any};
 
-use crate::generate::{
-    explode::{ExplodeArray, ExplodeMap},
-    json_tuple::JsonTuple,
-    spark_udtf_wrapper::SparkUDTFWrapper,
-};
+use crate::generate::explode::{ExplodeArray, ExplodeMap};
+#[cfg(not(feature = "flink"))]
+use crate::generate::{json_tuple::JsonTuple, spark_udtf_wrapper::SparkUDTFWrapper};
 
 pub trait Generator: Debug + Send + Sync {
     fn exprs(&self) -> Vec<PhysicalExprRef>;
@@ -69,6 +69,7 @@ pub enum GenerateFunc {
     UDTF,
 }
 
+#[cfg(not(feature = "flink"))]
 pub fn create_generator(
     input_schema: &SchemaRef,
     func: GenerateFunc,
@@ -104,6 +105,33 @@ pub fn create_generator(
     }
 }
 
+#[cfg(feature = "flink")]
+pub fn create_generator(
+    input_schema: &SchemaRef,
+    func: GenerateFunc,
+    children: Vec<PhysicalExprRef>,
+) -> Result<Arc<dyn Generator>> {
+    match func {
+        GenerateFunc::Explode => match children[0].data_type(input_schema)? {
+            DataType::List(..) => Ok(Arc::new(ExplodeArray::new(children[0].clone(), false))),
+            DataType::Map(..) => Ok(Arc::new(ExplodeMap::new(children[0].clone(), false))),
+            other => df_unimplemented_err!("unsupported explode type: {other}"),
+        },
+        GenerateFunc::PosExplode => match children[0].data_type(input_schema)? {
+            DataType::List(..) => Ok(Arc::new(ExplodeArray::new(children[0].clone(), true))),
+            DataType::Map(..) => Ok(Arc::new(ExplodeMap::new(children[0].clone(), true))),
+            other => df_unimplemented_err!("unsupported pos_explode type: {other}"),
+        },
+        GenerateFunc::JsonTuple => {
+            df_unimplemented_err!("JsonTuple not supported for Flink")
+        }
+        GenerateFunc::UDTF => {
+            unreachable!("UDTF should be handled in create_udtf_generator")
+        }
+    }
+}
+
+#[cfg(not(feature = "flink"))]
 pub fn create_udtf_generator(
     serialized: Vec<u8>,
     return_schema: SchemaRef,
@@ -114,4 +142,13 @@ pub fn create_udtf_generator(
         return_schema,
         children,
     )?))
+}
+
+#[cfg(feature = "flink")]
+pub fn create_udtf_generator(
+    _serialized: Vec<u8>,
+    _return_schema: SchemaRef,
+    _children: Vec<PhysicalExprRef>,
+) -> Result<Arc<dyn Generator>> {
+    df_unimplemented_err!("UDTF not supported for Flink")
 }

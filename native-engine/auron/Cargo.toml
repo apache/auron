@@ -29,6 +29,13 @@ default = ["tokio/rt-multi-thread", "jemalloc"]
 jemalloc = ["dep:tikv-jemallocator"]
 jemalloc-pprof = ["dep:tikv-jemalloc-ctl", "dep:tikv-jemalloc-sys", "dep:jemalloc_pprof", "dep:pprof", "dep:poem", "dep:serde", "http-service"]
 http-service = []
+flink = [
+    "auron-jni-bridge/flink",
+    "datafusion-ext-commons/flink",
+    "auron-memmgr/flink",
+    "auron-planner/flink",
+    "datafusion-ext-plans/flink",
+]  # Feature flag for Flink integration - disables Spark-specific JNI classes
 
 [dependencies]
 arrow = { workspace = true }

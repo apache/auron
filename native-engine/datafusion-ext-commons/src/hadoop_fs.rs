@@ -142,6 +142,7 @@ impl FsProvider {
         }
     }
 
+    #[cfg(not(feature = "flink"))]
     pub fn provide(&self, path: &str) -> Result<Fs> {
         let _timer = self.io_time.timer();
         let fs = jni_call!(
@@ -150,5 +151,13 @@ impl FsProvider {
             ) -> JObject
         )?;
         Ok(Fs::new(jni_new_global_ref!(fs.as_obj())?, &self.io_time))
+    }
+
+    #[cfg(feature = "flink")]
+    pub fn provide(&self, path: &str) -> Result<Fs> {
+        let _timer = self.io_time.timer();
+        // For Flink, fs_provider is already a Hadoop FileSystem, not a Scala function
+        // We can just clone the GlobalRef and return it
+        Ok(Fs::new(self.fs_provider.clone(), &self.io_time))
     }
 }

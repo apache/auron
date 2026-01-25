@@ -18,22 +18,38 @@ use std::sync::Arc;
 use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
 use datafusion_ext_commons::df_unimplemented_err;
 
+#[cfg(not(feature = "flink"))]
 mod brickhouse;
+#[cfg(not(feature = "flink"))]
 mod spark_check_overflow;
+#[cfg(not(feature = "flink"))]
 mod spark_crypto;
+#[cfg(not(feature = "flink"))]
 mod spark_dates;
+#[cfg(not(feature = "flink"))]
 pub mod spark_get_json_object;
+#[cfg(not(feature = "flink"))]
 mod spark_hash;
+#[cfg(not(feature = "flink"))]
 mod spark_initcap;
+#[cfg(not(feature = "flink"))]
 mod spark_isnan;
+#[cfg(not(feature = "flink"))]
 mod spark_make_array;
+#[cfg(not(feature = "flink"))]
 mod spark_make_decimal;
+#[cfg(not(feature = "flink"))]
 mod spark_normalize_nan_and_zero;
+#[cfg(not(feature = "flink"))]
 mod spark_null_if;
+#[cfg(not(feature = "flink"))]
 mod spark_round;
+#[cfg(not(feature = "flink"))]
 mod spark_strings;
+#[cfg(not(feature = "flink"))]
 mod spark_unscaled_value;
 
+#[cfg(not(feature = "flink"))]
 pub fn create_auron_ext_function(
     name: &str,
     spark_partition_id: usize,
@@ -84,4 +100,12 @@ pub fn create_auron_ext_function(
         "Spark_IsNaN" => Arc::new(spark_isnan::spark_isnan),
         _ => df_unimplemented_err!("spark ext function not implemented: {name}")?,
     })
+}
+
+#[cfg(feature = "flink")]
+pub fn create_auron_ext_function(
+    name: &str,
+    _spark_partition_id: usize,
+) -> Result<ScalarFunctionImplementation> {
+    df_unimplemented_err!("Flink ext functions not yet implemented: {name}")
 }

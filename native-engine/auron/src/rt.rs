@@ -39,10 +39,10 @@ use datafusion::{
     },
 };
 use datafusion_ext_commons::{df_execution_err, downcast_any};
+use datafusion_ext_plans::common::execution_context::{ExecutionContext, cancel_all_tasks};
+#[cfg(not(feature = "flink"))]
 use datafusion_ext_plans::{
-    common::execution_context::{ExecutionContext, cancel_all_tasks},
-    ipc_writer_exec::IpcWriterExec,
-    parquet_sink_exec::ParquetSinkExec,
+    ipc_writer_exec::IpcWriterExec, parquet_sink_exec::ParquetSinkExec,
     shuffle_writer_exec::ShuffleWriterExec,
 };
 use futures::{FutureExt, StreamExt};
@@ -50,10 +50,11 @@ use jni::objects::{GlobalRef, JObject};
 use prost::Message;
 use tokio::{runtime::Runtime, task::JoinHandle};
 
+#[cfg(not(feature = "flink"))]
+use crate::metrics::update_spark_metric_node;
 use crate::{
     handle_unwinded_scope,
     logging::{THREAD_PARTITION_ID, THREAD_STAGE_ID, THREAD_TID},
-    metrics::update_spark_metric_node,
 };
 
 pub struct NativeExecutionRuntime {
@@ -147,11 +148,15 @@ impl NativeExecutionRuntime {
             let mut stream = exec_ctx_cloned.execute(&execution_plan_cloned)?;
 
             // coalesce output stream if necessary
-            if downcast_any!(execution_plan_cloned, EmptyExec).is_err()
+            #[cfg(not(feature = "flink"))]
+            let should_coalesce = downcast_any!(execution_plan_cloned, EmptyExec).is_err()
                 && downcast_any!(execution_plan_cloned, ParquetSinkExec).is_err()
                 && downcast_any!(execution_plan_cloned, IpcWriterExec).is_err()
-                && downcast_any!(execution_plan_cloned, ShuffleWriterExec).is_err()
-            {
+                && downcast_any!(execution_plan_cloned, ShuffleWriterExec).is_err();
+            #[cfg(feature = "flink")]
+            let should_coalesce = downcast_any!(execution_plan_cloned, EmptyExec).is_err();
+
+            if should_coalesce {
                 stream = exec_ctx_cloned.coalesce_with_default_batch_size(stream);
             }
 
@@ -274,11 +279,18 @@ impl NativeExecutionRuntime {
         log::info!("(partition={partition}) native execution finalized");
     }
 
+    #[cfg(not(feature = "flink"))]
     fn update_metrics(&self) -> Result<()> {
         let metrics = jni_call!(
             AuronCallNativeWrapper(self.native_wrapper.as_obj()).getMetrics() -> JObject
         )?;
         update_spark_metric_node(metrics.as_obj(), self.plan.clone())?;
+        Ok(())
+    }
+
+    #[cfg(feature = "flink")]
+    fn update_metrics(&self) -> Result<()> {
+        // Flink doesn't use Spark metrics
         Ok(())
     }
 }

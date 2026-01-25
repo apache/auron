@@ -102,6 +102,7 @@ public class AuronFlinkTableTestBase {
         // Create source table with test data
         tableEnvironment.executeSql("CREATE TABLE " + tableName + "_source " + schema + " WITH ("
                 + "  'connector' = 'values',"
+                + "  'bounded' = 'true',"
                 + "  'data-id' = '"
                 + dataId + "'" + ")");
 

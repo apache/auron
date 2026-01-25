@@ -21,6 +21,7 @@ use jni::objects::{JObject, JThrowable};
 mod alloc;
 mod exec;
 mod logging;
+#[cfg(not(feature = "flink"))]
 mod metrics;
 mod rt;
 

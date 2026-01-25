@@ -55,7 +55,7 @@
     <hadoopVersion>3.4.2</hadoopVersion>
     <protobufVersion>3.25.5</protobufVersion>
     <nettyVersion>4.2.7.Final</nettyVersion>
-    <javaVersion>8</javaVersion>
+    <javaVersion>17</javaVersion>
     <scalaVersion>2.12</scalaVersion>
     <scalaLongVersion>2.12.18</scalaLongVersion>
     <scalaJava8CompatVersion>1.0.2</scalaJava8CompatVersion>
@@ -604,7 +604,7 @@
               <version>[3.0.2,)</version>
             </requireMavenVersion>
             <requireJavaVersion>
-              <version>[1.8,)</version>
+              <version>[17,)</version>
             </requireJavaVersion>
           </rules>
         </configuration>
@@ -668,6 +668,15 @@
         <releaseMode>pre</releaseMode>
         <buildNativeWithRelease>false</buildNativeWithRelease>
         <buildWithFeatures />
+      </properties>
+    </profile>
+
+    <profile>
+      <id>flink</id>
+      <properties>
+        <releaseMode>release</releaseMode>
+        <buildNativeWithRelease>true</buildNativeWithRelease>
+        <buildWithFeatures>flink</buildWithFeatures>
       </properties>
     </profile>
 
@@ -738,35 +747,10 @@
     </profile>
 
     <profile>
-      <id>jdk-8</id>
-      <activation>
-        <jdk>1.8</jdk>
-      </activation>
-      <properties>
-        <javaVersion>8</javaVersion>
-        <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.8</semanticdb.version>
-        <scalafmtVersion>3.0.0</scalafmtVersion>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>jdk-11</id>
-      <activation>
-        <jdk>11</jdk>
-      </activation>
-      <properties>
-        <javaVersion>11</javaVersion>
-        <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.8</semanticdb.version>
-        <scalafmtVersion>3.0.0</scalafmtVersion>
-      </properties>
-    </profile>
-
-    <profile>
       <id>jdk-17</id>
       <activation>
-        <jdk>17</jdk>
+        <activeByDefault>true</activeByDefault>
+        <jdk>[17,21)</jdk>
       </activation>
       <properties>
         <javaVersion>17</javaVersion>
