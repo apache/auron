@@ -593,25 +593,25 @@ Input [2]: [i_manufact_id#11, _c1#14]
 Keys [1]: [i_manufact_id#11]
 Functions [1]: [partial_sum(_c1#14)]
 Aggregate Attributes [1]: [sum#15]
-Results [2]: [i_manufact_id#11, #16#16]
+Results [2]: [i_manufact_id#11, #16]
 
 (68) NativeShuffleExchange
-Input [2]: [i_manufact_id#11, #16#16]
+Input [2]: [i_manufact_id#11, #16]
 Arguments: hashpartitioning(i_manufact_id#11, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (69) ShuffleQueryStage
-Output [2]: [i_manufact_id#11, #16#16]
+Output [2]: [i_manufact_id#11, #16]
 Arguments: X
 
 (70) AQEShuffleRead
-Input [2]: [i_manufact_id#11, #16#16]
+Input [2]: [i_manufact_id#11, #16]
 Arguments: coalesced
 
 (71) InputAdapter
-Input [2]: [i_manufact_id#11, #16#16]
+Input [2]: [i_manufact_id#11, #16]
 
 (72) NativeHashAggregate
-Input [2]: [i_manufact_id#11, #16#16]
+Input [2]: [i_manufact_id#11, #16]
 Keys [1]: [i_manufact_id#11]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#4))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#4))#17]
@@ -798,25 +798,25 @@ Input [2]: [i_manufact_id#26, _c1#27]
 Keys [1]: [i_manufact_id#26]
 Functions [1]: [partial_sum(_c1#27)]
 Aggregate Attributes [1]: [sum#28]
-Results [2]: [i_manufact_id#26, #16#16]
+Results [2]: [i_manufact_id#26, #16]
 
 (118) NativeShuffleExchange
-Input [2]: [i_manufact_id#26, #16#16]
+Input [2]: [i_manufact_id#26, #16]
 Arguments: hashpartitioning(i_manufact_id#26, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (119) ShuffleQueryStage
-Output [2]: [i_manufact_id#26, #16#16]
+Output [2]: [i_manufact_id#26, #16]
 Arguments: X
 
 (120) AQEShuffleRead
-Input [2]: [i_manufact_id#26, #16#16]
+Input [2]: [i_manufact_id#26, #16]
 Arguments: coalesced
 
 (121) InputAdapter
-Input [2]: [i_manufact_id#26, #16#16]
+Input [2]: [i_manufact_id#26, #16]
 
 (122) NativeHashAggregate
-Input [2]: [i_manufact_id#26, #16#16]
+Input [2]: [i_manufact_id#26, #16]
 Keys [1]: [i_manufact_id#26]
 Functions [1]: [sum(UnscaledValue(cs_ext_sales_price#22))]
 Aggregate Attributes [1]: [sum(UnscaledValue(cs_ext_sales_price#22))#29]
@@ -1003,25 +1003,25 @@ Input [2]: [i_manufact_id#38, _c1#39]
 Keys [1]: [i_manufact_id#38]
 Functions [1]: [partial_sum(_c1#39)]
 Aggregate Attributes [1]: [sum#40]
-Results [2]: [i_manufact_id#38, #16#16]
+Results [2]: [i_manufact_id#38, #16]
 
 (168) NativeShuffleExchange
-Input [2]: [i_manufact_id#38, #16#16]
+Input [2]: [i_manufact_id#38, #16]
 Arguments: hashpartitioning(i_manufact_id#38, 100), ENSURE_REQUIREMENTS, [plan_id=17]
 
 (169) ShuffleQueryStage
-Output [2]: [i_manufact_id#38, #16#16]
+Output [2]: [i_manufact_id#38, #16]
 Arguments: X
 
 (170) AQEShuffleRead
-Input [2]: [i_manufact_id#38, #16#16]
+Input [2]: [i_manufact_id#38, #16]
 Arguments: coalesced
 
 (171) InputAdapter
-Input [2]: [i_manufact_id#38, #16#16]
+Input [2]: [i_manufact_id#38, #16]
 
 (172) NativeHashAggregate
-Input [2]: [i_manufact_id#38, #16#16]
+Input [2]: [i_manufact_id#38, #16]
 Keys [1]: [i_manufact_id#38]
 Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#34))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#34))#41]
@@ -1043,37 +1043,37 @@ Input [2]: [#11#11, #18#18]
 Keys [1]: [i_manufact_id#11]
 Functions [1]: [partial_sum(total_sales#18)]
 Aggregate Attributes [2]: [sum#43, isEmpty#44]
-Results [2]: [i_manufact_id#11, #16#16]
+Results [2]: [i_manufact_id#11, #45]
 
 (177) NativeShuffleExchange
-Input [2]: [i_manufact_id#11, #16#16]
+Input [2]: [i_manufact_id#11, #45]
 Arguments: hashpartitioning(i_manufact_id#11, 100), ENSURE_REQUIREMENTS, [plan_id=18]
 
 (178) ShuffleQueryStage
-Output [2]: [i_manufact_id#11, #16#16]
+Output [2]: [i_manufact_id#11, #45]
 Arguments: X
 
 (179) AQEShuffleRead
-Input [2]: [i_manufact_id#11, #16#16]
+Input [2]: [i_manufact_id#11, #45]
 Arguments: coalesced
 
 (180) InputAdapter
-Input [2]: [i_manufact_id#11, #16#16]
+Input [2]: [i_manufact_id#11, #45]
 
 (181) NativeHashAggregate
-Input [2]: [i_manufact_id#11, #16#16]
+Input [2]: [i_manufact_id#11, #45]
 Keys [1]: [i_manufact_id#11]
 Functions [1]: [sum(total_sales#18)]
-Aggregate Attributes [1]: [sum(total_sales#18)#45]
-Results [2]: [i_manufact_id#11, sum(total_sales#18)#45]
+Aggregate Attributes [1]: [sum(total_sales#18)#46]
+Results [2]: [i_manufact_id#11, sum(total_sales#18)#46]
 
 (182) NativeProject
-Output [2]: [i_manufact_id#11, sum(total_sales#18)#45 AS total_sales#46]
-Input [2]: [i_manufact_id#11, sum(total_sales#18)#45]
+Output [2]: [i_manufact_id#11, sum(total_sales#18)#46 AS total_sales#47]
+Input [2]: [i_manufact_id#11, sum(total_sales#18)#46]
 
 (183) NativeTakeOrdered
-Input [2]: [i_manufact_id#11, total_sales#46]
-Arguments: X, [total_sales#46 ASC NULLS FIRST]
+Input [2]: [i_manufact_id#11, total_sales#47]
+Arguments: X, [total_sales#47 ASC NULLS FIRST]
 
 (184) Scan parquet
 Output [4]: [ss_sold_date_sk#1, ss_item_sk#2, ss_addr_sk#3, ss_ext_sales_price#4]
@@ -1247,14 +1247,14 @@ Input [2]: [ss_ext_sales_price#4, i_manufact_id#11]
 Keys [1]: [i_manufact_id#11]
 Functions [1]: [partial_sum(UnscaledValue(ss_ext_sales_price#4))]
 Aggregate Attributes [1]: [sum#15]
-Results [2]: [i_manufact_id#11, sum#47]
+Results [2]: [i_manufact_id#11, sum#48]
 
 (221) Exchange
-Input [2]: [i_manufact_id#11, sum#47]
+Input [2]: [i_manufact_id#11, sum#48]
 Arguments: hashpartitioning(i_manufact_id#11, 100), ENSURE_REQUIREMENTS, [plan_id=27]
 
 (222) HashAggregate
-Input [2]: [i_manufact_id#11, sum#47]
+Input [2]: [i_manufact_id#11, sum#48]
 Keys [1]: [i_manufact_id#11]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#4))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#4))#17]
@@ -1280,19 +1280,19 @@ Input [4]: [cs_sold_date_sk#19, cs_bill_addr_sk#20, cs_item_sk#21, cs_ext_sales_
 Arguments: [cs_sold_date_sk#19 ASC NULLS FIRST], false, 0
 
 (227) Scan parquet
-Output [3]: [d_date_sk#23, d_year#48, d_moy#49]
+Output [3]: [d_date_sk#23, d_year#49, d_moy#50]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,5), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (228) Filter
-Input [3]: [d_date_sk#23, d_year#48, d_moy#49]
-Condition : ((((isnotnull(d_year#48) AND isnotnull(d_moy#49)) AND (d_year#48 = 1998)) AND (d_moy#49 = 5)) AND isnotnull(d_date_sk#23))
+Input [3]: [d_date_sk#23, d_year#49, d_moy#50]
+Condition : ((((isnotnull(d_year#49) AND isnotnull(d_moy#50)) AND (d_year#49 = 1998)) AND (d_moy#50 = 5)) AND isnotnull(d_date_sk#23))
 
 (229) Project
 Output [1]: [d_date_sk#23]
-Input [3]: [d_date_sk#23, d_year#48, d_moy#49]
+Input [3]: [d_date_sk#23, d_year#49, d_moy#50]
 
 (230) Exchange
 Input [1]: [d_date_sk#23]
@@ -1321,19 +1321,19 @@ Input [3]: [cs_bill_addr_sk#20, cs_item_sk#21, cs_ext_sales_price#22]
 Arguments: [cs_bill_addr_sk#20 ASC NULLS FIRST], false, 0
 
 (236) Scan parquet
-Output [2]: [ca_address_sk#24, ca_gmt_offset#50]
+Output [2]: [ca_address_sk#24, ca_gmt_offset#51]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ca_gmt_offset), EqualTo(ca_gmt_offset,-5.00), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_gmt_offset:decimal(5,2)>
 
 (237) Filter
-Input [2]: [ca_address_sk#24, ca_gmt_offset#50]
-Condition : ((isnotnull(ca_gmt_offset#50) AND (ca_gmt_offset#50 = -5.00)) AND isnotnull(ca_address_sk#24))
+Input [2]: [ca_address_sk#24, ca_gmt_offset#51]
+Condition : ((isnotnull(ca_gmt_offset#51) AND (ca_gmt_offset#51 = -5.00)) AND isnotnull(ca_address_sk#24))
 
 (238) Project
 Output [1]: [ca_address_sk#24]
-Input [2]: [ca_address_sk#24, ca_gmt_offset#50]
+Input [2]: [ca_address_sk#24, ca_gmt_offset#51]
 
 (239) Exchange
 Input [1]: [ca_address_sk#24]
@@ -1381,31 +1381,31 @@ Input [2]: [i_item_sk#25, i_manufact_id#26]
 Arguments: [i_manufact_id#26 ASC NULLS FIRST], false, 0
 
 (249) Scan parquet
-Output [2]: [i_category#51, i_manufact_id#52]
+Output [2]: [i_category#52, i_manufact_id#53]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Electronics)]
 ReadSchema: struct<i_category:string,i_manufact_id:int>
 
 (250) Filter
-Input [2]: [i_category#51, i_manufact_id#52]
-Condition : (isnotnull(i_category#51) AND (i_category#51 = Electronics))
+Input [2]: [i_category#52, i_manufact_id#53]
+Condition : (isnotnull(i_category#52) AND (i_category#52 = Electronics))
 
 (251) Project
-Output [1]: [i_manufact_id#52]
-Input [2]: [i_category#51, i_manufact_id#52]
+Output [1]: [i_manufact_id#53]
+Input [2]: [i_category#52, i_manufact_id#53]
 
 (252) Exchange
-Input [1]: [i_manufact_id#52]
-Arguments: hashpartitioning(i_manufact_id#52, 100), ENSURE_REQUIREMENTS, [plan_id=34]
+Input [1]: [i_manufact_id#53]
+Arguments: hashpartitioning(i_manufact_id#53, 100), ENSURE_REQUIREMENTS, [plan_id=34]
 
 (253) Sort
-Input [1]: [i_manufact_id#52]
-Arguments: [i_manufact_id#52 ASC NULLS FIRST], false, 0
+Input [1]: [i_manufact_id#53]
+Arguments: [i_manufact_id#53 ASC NULLS FIRST], false, 0
 
 (254) SortMergeJoin
 Left keys [1]: [i_manufact_id#26]
-Right keys [1]: [i_manufact_id#52]
+Right keys [1]: [i_manufact_id#53]
 Join type: LeftSemi
 Join condition: None
 
@@ -1432,14 +1432,14 @@ Input [2]: [cs_ext_sales_price#22, i_manufact_id#26]
 Keys [1]: [i_manufact_id#26]
 Functions [1]: [partial_sum(UnscaledValue(cs_ext_sales_price#22))]
 Aggregate Attributes [1]: [sum#28]
-Results [2]: [i_manufact_id#26, sum#53]
+Results [2]: [i_manufact_id#26, sum#54]
 
 (260) Exchange
-Input [2]: [i_manufact_id#26, sum#53]
+Input [2]: [i_manufact_id#26, sum#54]
 Arguments: hashpartitioning(i_manufact_id#26, 100), ENSURE_REQUIREMENTS, [plan_id=36]
 
 (261) HashAggregate
-Input [2]: [i_manufact_id#26, sum#53]
+Input [2]: [i_manufact_id#26, sum#54]
 Keys [1]: [i_manufact_id#26]
 Functions [1]: [sum(UnscaledValue(cs_ext_sales_price#22))]
 Aggregate Attributes [1]: [sum(UnscaledValue(cs_ext_sales_price#22))#29]
@@ -1465,19 +1465,19 @@ Input [4]: [ws_sold_date_sk#31, ws_item_sk#32, ws_bill_addr_sk#33, ws_ext_sales_
 Arguments: [ws_sold_date_sk#31 ASC NULLS FIRST], false, 0
 
 (266) Scan parquet
-Output [3]: [d_date_sk#35, d_year#54, d_moy#55]
+Output [3]: [d_date_sk#35, d_year#55, d_moy#56]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,5), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (267) Filter
-Input [3]: [d_date_sk#35, d_year#54, d_moy#55]
-Condition : ((((isnotnull(d_year#54) AND isnotnull(d_moy#55)) AND (d_year#54 = 1998)) AND (d_moy#55 = 5)) AND isnotnull(d_date_sk#35))
+Input [3]: [d_date_sk#35, d_year#55, d_moy#56]
+Condition : ((((isnotnull(d_year#55) AND isnotnull(d_moy#56)) AND (d_year#55 = 1998)) AND (d_moy#56 = 5)) AND isnotnull(d_date_sk#35))
 
 (268) Project
 Output [1]: [d_date_sk#35]
-Input [3]: [d_date_sk#35, d_year#54, d_moy#55]
+Input [3]: [d_date_sk#35, d_year#55, d_moy#56]
 
 (269) Exchange
 Input [1]: [d_date_sk#35]
@@ -1506,19 +1506,19 @@ Input [3]: [ws_item_sk#32, ws_bill_addr_sk#33, ws_ext_sales_price#34]
 Arguments: [ws_bill_addr_sk#33 ASC NULLS FIRST], false, 0
 
 (275) Scan parquet
-Output [2]: [ca_address_sk#36, ca_gmt_offset#56]
+Output [2]: [ca_address_sk#36, ca_gmt_offset#57]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ca_gmt_offset), EqualTo(ca_gmt_offset,-5.00), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_gmt_offset:decimal(5,2)>
 
 (276) Filter
-Input [2]: [ca_address_sk#36, ca_gmt_offset#56]
-Condition : ((isnotnull(ca_gmt_offset#56) AND (ca_gmt_offset#56 = -5.00)) AND isnotnull(ca_address_sk#36))
+Input [2]: [ca_address_sk#36, ca_gmt_offset#57]
+Condition : ((isnotnull(ca_gmt_offset#57) AND (ca_gmt_offset#57 = -5.00)) AND isnotnull(ca_address_sk#36))
 
 (277) Project
 Output [1]: [ca_address_sk#36]
-Input [2]: [ca_address_sk#36, ca_gmt_offset#56]
+Input [2]: [ca_address_sk#36, ca_gmt_offset#57]
 
 (278) Exchange
 Input [1]: [ca_address_sk#36]
@@ -1566,31 +1566,31 @@ Input [2]: [i_item_sk#37, i_manufact_id#38]
 Arguments: [i_manufact_id#38 ASC NULLS FIRST], false, 0
 
 (288) Scan parquet
-Output [2]: [i_category#57, i_manufact_id#58]
+Output [2]: [i_category#58, i_manufact_id#59]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Electronics)]
 ReadSchema: struct<i_category:string,i_manufact_id:int>
 
 (289) Filter
-Input [2]: [i_category#57, i_manufact_id#58]
-Condition : (isnotnull(i_category#57) AND (i_category#57 = Electronics))
+Input [2]: [i_category#58, i_manufact_id#59]
+Condition : (isnotnull(i_category#58) AND (i_category#58 = Electronics))
 
 (290) Project
-Output [1]: [i_manufact_id#58]
-Input [2]: [i_category#57, i_manufact_id#58]
+Output [1]: [i_manufact_id#59]
+Input [2]: [i_category#58, i_manufact_id#59]
 
 (291) Exchange
-Input [1]: [i_manufact_id#58]
-Arguments: hashpartitioning(i_manufact_id#58, 100), ENSURE_REQUIREMENTS, [plan_id=43]
+Input [1]: [i_manufact_id#59]
+Arguments: hashpartitioning(i_manufact_id#59, 100), ENSURE_REQUIREMENTS, [plan_id=43]
 
 (292) Sort
-Input [1]: [i_manufact_id#58]
-Arguments: [i_manufact_id#58 ASC NULLS FIRST], false, 0
+Input [1]: [i_manufact_id#59]
+Arguments: [i_manufact_id#59 ASC NULLS FIRST], false, 0
 
 (293) SortMergeJoin
 Left keys [1]: [i_manufact_id#38]
-Right keys [1]: [i_manufact_id#58]
+Right keys [1]: [i_manufact_id#59]
 Join type: LeftSemi
 Join condition: None
 
@@ -1617,14 +1617,14 @@ Input [2]: [ws_ext_sales_price#34, i_manufact_id#38]
 Keys [1]: [i_manufact_id#38]
 Functions [1]: [partial_sum(UnscaledValue(ws_ext_sales_price#34))]
 Aggregate Attributes [1]: [sum#40]
-Results [2]: [i_manufact_id#38, sum#59]
+Results [2]: [i_manufact_id#38, sum#60]
 
 (299) Exchange
-Input [2]: [i_manufact_id#38, sum#59]
+Input [2]: [i_manufact_id#38, sum#60]
 Arguments: hashpartitioning(i_manufact_id#38, 100), ENSURE_REQUIREMENTS, [plan_id=45]
 
 (300) HashAggregate
-Input [2]: [i_manufact_id#38, sum#59]
+Input [2]: [i_manufact_id#38, sum#60]
 Keys [1]: [i_manufact_id#38]
 Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#34))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#34))#41]
@@ -1637,24 +1637,24 @@ Input [2]: [i_manufact_id#11, total_sales#18]
 Keys [1]: [i_manufact_id#11]
 Functions [1]: [partial_sum(total_sales#18)]
 Aggregate Attributes [2]: [sum#43, isEmpty#44]
-Results [3]: [i_manufact_id#11, sum#60, isEmpty#61]
+Results [3]: [i_manufact_id#11, sum#61, isEmpty#62]
 
 (303) Exchange
-Input [3]: [i_manufact_id#11, sum#60, isEmpty#61]
+Input [3]: [i_manufact_id#11, sum#61, isEmpty#62]
 Arguments: hashpartitioning(i_manufact_id#11, 100), ENSURE_REQUIREMENTS, [plan_id=46]
 
 (304) HashAggregate
-Input [3]: [i_manufact_id#11, sum#60, isEmpty#61]
+Input [3]: [i_manufact_id#11, sum#61, isEmpty#62]
 Keys [1]: [i_manufact_id#11]
 Functions [1]: [sum(total_sales#18)]
-Aggregate Attributes [1]: [sum(total_sales#18)#45]
-Results [2]: [i_manufact_id#11, sum(total_sales#18)#45 AS total_sales#46]
+Aggregate Attributes [1]: [sum(total_sales#18)#46]
+Results [2]: [i_manufact_id#11, sum(total_sales#18)#46 AS total_sales#47]
 
 (305) TakeOrderedAndProject
-Input [2]: [i_manufact_id#11, total_sales#46]
-Arguments: X, [total_sales#46 ASC NULLS FIRST], [i_manufact_id#11, total_sales#46]
+Input [2]: [i_manufact_id#11, total_sales#47]
+Arguments: X, [total_sales#47 ASC NULLS FIRST], [i_manufact_id#11, total_sales#47]
 
 (306) AdaptiveSparkPlan
-Output [2]: [i_manufact_id#11, total_sales#46]
+Output [2]: [i_manufact_id#11, total_sales#47]
 Arguments: isFinalPlan=true
 

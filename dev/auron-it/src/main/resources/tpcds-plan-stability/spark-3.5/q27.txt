@@ -408,36 +408,36 @@ Input [7]: [i_item_id#19, s_state#20, spark_grouping_id#21, _c3#22, _c4#23, _c5#
 Keys [3]: [i_item_id#19, s_state#20, spark_grouping_id#21]
 Functions [4]: [partial_avg(_c3#22), partial_avg(_c4#23), partial_avg(_c5#24), partial_avg(_c6#25)]
 Aggregate Attributes [8]: [sum#26, count#27, sum#28, count#29, sum#30, count#31, sum#32, count#33]
-Results [4]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34#34]
+Results [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34, #35, #34, #35, #34, #35, #34, #35]
 
 (69) NativeShuffleExchange
-Input [4]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34#34]
+Input [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34, #35, #34, #35, #34, #35, #34, #35]
 Arguments: hashpartitioning(i_item_id#19, s_state#20, spark_grouping_id#21, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (70) ShuffleQueryStage
-Output [4]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34#34]
+Output [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34, #35, #34, #35, #34, #35, #34, #35]
 Arguments: X
 
 (71) AQEShuffleRead
-Input [4]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34#34]
+Input [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34, #35, #34, #35, #34, #35, #34, #35]
 Arguments: coalesced
 
 (72) InputAdapter
-Input [4]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34#34]
+Input [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34, #35, #34, #35, #34, #35, #34, #35]
 
 (73) NativeHashAggregate
-Input [4]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34#34]
+Input [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, #34, #35, #34, #35, #34, #35, #34, #35]
 Keys [3]: [i_item_id#19, s_state#20, spark_grouping_id#21]
 Functions [4]: [avg(ss_quantity#5), avg(UnscaledValue(ss_list_price#6)), avg(UnscaledValue(ss_coupon_amt#8)), avg(UnscaledValue(ss_sales_price#7))]
-Aggregate Attributes [4]: [avg(ss_quantity#5)#35, avg(UnscaledValue(ss_list_price#6))#36, avg(UnscaledValue(ss_coupon_amt#8))#37, avg(UnscaledValue(ss_sales_price#7))#38]
-Results [7]: [i_item_id#19, s_state#20, spark_grouping_id#21, avg(ss_quantity#5)#35, avg(UnscaledValue(ss_list_price#6))#36, avg(UnscaledValue(ss_coupon_amt#8))#37, avg(UnscaledValue(ss_sales_price#7))#38]
+Aggregate Attributes [4]: [avg(ss_quantity#5)#36, avg(UnscaledValue(ss_list_price#6))#37, avg(UnscaledValue(ss_coupon_amt#8))#38, avg(UnscaledValue(ss_sales_price#7))#39]
+Results [7]: [i_item_id#19, s_state#20, spark_grouping_id#21, avg(ss_quantity#5)#36, avg(UnscaledValue(ss_list_price#6))#37, avg(UnscaledValue(ss_coupon_amt#8))#38, avg(UnscaledValue(ss_sales_price#7))#39]
 
 (74) NativeProject
-Output [7]: [i_item_id#19, s_state#20, cast((shiftright(spark_grouping_id#21, 0) & 1) as tinyint) AS g_state#39, avg(ss_quantity#5)#35 AS agg1#40, cast((avg(UnscaledValue(ss_list_price#6))#36 / 100.0) as decimal(11,6)) AS agg2#41, cast((avg(UnscaledValue(ss_coupon_amt#8))#37 / 100.0) as decimal(11,6)) AS agg3#42, cast((avg(UnscaledValue(ss_sales_price#7))#38 / 100.0) as decimal(11,6)) AS agg4#43]
-Input [7]: [i_item_id#19, s_state#20, spark_grouping_id#21, avg(ss_quantity#5)#35, avg(UnscaledValue(ss_list_price#6))#36, avg(UnscaledValue(ss_coupon_amt#8))#37, avg(UnscaledValue(ss_sales_price#7))#38]
+Output [7]: [i_item_id#19, s_state#20, cast((shiftright(spark_grouping_id#21, 0) & 1) as tinyint) AS g_state#40, avg(ss_quantity#5)#36 AS agg1#41, cast((avg(UnscaledValue(ss_list_price#6))#37 / 100.0) as decimal(11,6)) AS agg2#42, cast((avg(UnscaledValue(ss_coupon_amt#8))#38 / 100.0) as decimal(11,6)) AS agg3#43, cast((avg(UnscaledValue(ss_sales_price#7))#39 / 100.0) as decimal(11,6)) AS agg4#44]
+Input [7]: [i_item_id#19, s_state#20, spark_grouping_id#21, avg(ss_quantity#5)#36, avg(UnscaledValue(ss_list_price#6))#37, avg(UnscaledValue(ss_coupon_amt#8))#38, avg(UnscaledValue(ss_sales_price#7))#39]
 
 (75) NativeTakeOrdered
-Input [7]: [i_item_id#19, s_state#20, g_state#39, agg1#40, agg2#41, agg3#42, agg4#43]
+Input [7]: [i_item_id#19, s_state#20, g_state#40, agg1#41, agg2#42, agg3#43, agg4#44]
 Arguments: X, [i_item_id#19 ASC NULLS FIRST, s_state#20 ASC NULLS FIRST]
 
 (76) Scan parquet
@@ -616,24 +616,24 @@ Input [7]: [ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, i
 Keys [3]: [i_item_id#19, s_state#20, spark_grouping_id#21]
 Functions [4]: [partial_avg(ss_quantity#5), partial_avg(UnscaledValue(ss_list_price#6)), partial_avg(UnscaledValue(ss_coupon_amt#8)), partial_avg(UnscaledValue(ss_sales_price#7))]
 Aggregate Attributes [8]: [sum#26, count#27, sum#28, count#29, sum#30, count#31, sum#32, count#33]
-Results [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, sum#44, count#45, sum#46, count#47, sum#48, count#49, sum#50, count#51]
+Results [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, sum#45, count#46, sum#47, count#48, sum#49, count#50, sum#51, count#52]
 
 (114) Exchange
-Input [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, sum#44, count#45, sum#46, count#47, sum#48, count#49, sum#50, count#51]
+Input [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, sum#45, count#46, sum#47, count#48, sum#49, count#50, sum#51, count#52]
 Arguments: hashpartitioning(i_item_id#19, s_state#20, spark_grouping_id#21, 100), ENSURE_REQUIREMENTS, [plan_id=18]
 
 (115) HashAggregate
-Input [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, sum#44, count#45, sum#46, count#47, sum#48, count#49, sum#50, count#51]
+Input [11]: [i_item_id#19, s_state#20, spark_grouping_id#21, sum#45, count#46, sum#47, count#48, sum#49, count#50, sum#51, count#52]
 Keys [3]: [i_item_id#19, s_state#20, spark_grouping_id#21]
 Functions [4]: [avg(ss_quantity#5), avg(UnscaledValue(ss_list_price#6)), avg(UnscaledValue(ss_coupon_amt#8)), avg(UnscaledValue(ss_sales_price#7))]
-Aggregate Attributes [4]: [avg(ss_quantity#5)#35, avg(UnscaledValue(ss_list_price#6))#36, avg(UnscaledValue(ss_coupon_amt#8))#37, avg(UnscaledValue(ss_sales_price#7))#38]
-Results [7]: [i_item_id#19, s_state#20, cast((shiftright(spark_grouping_id#21, 0) & 1) as tinyint) AS g_state#39, avg(ss_quantity#5)#35 AS agg1#40, cast((avg(UnscaledValue(ss_list_price#6))#36 / 100.0) as decimal(11,6)) AS agg2#41, cast((avg(UnscaledValue(ss_coupon_amt#8))#37 / 100.0) as decimal(11,6)) AS agg3#42, cast((avg(UnscaledValue(ss_sales_price#7))#38 / 100.0) as decimal(11,6)) AS agg4#43]
+Aggregate Attributes [4]: [avg(ss_quantity#5)#36, avg(UnscaledValue(ss_list_price#6))#37, avg(UnscaledValue(ss_coupon_amt#8))#38, avg(UnscaledValue(ss_sales_price#7))#39]
+Results [7]: [i_item_id#19, s_state#20, cast((shiftright(spark_grouping_id#21, 0) & 1) as tinyint) AS g_state#40, avg(ss_quantity#5)#36 AS agg1#41, cast((avg(UnscaledValue(ss_list_price#6))#37 / 100.0) as decimal(11,6)) AS agg2#42, cast((avg(UnscaledValue(ss_coupon_amt#8))#38 / 100.0) as decimal(11,6)) AS agg3#43, cast((avg(UnscaledValue(ss_sales_price#7))#39 / 100.0) as decimal(11,6)) AS agg4#44]
 
 (116) TakeOrderedAndProject
-Input [7]: [i_item_id#19, s_state#20, g_state#39, agg1#40, agg2#41, agg3#42, agg4#43]
-Arguments: X, [i_item_id#19 ASC NULLS FIRST, s_state#20 ASC NULLS FIRST], [i_item_id#19, s_state#20, g_state#39, agg1#40, agg2#41, agg3#42, agg4#43]
+Input [7]: [i_item_id#19, s_state#20, g_state#40, agg1#41, agg2#42, agg3#43, agg4#44]
+Arguments: X, [i_item_id#19 ASC NULLS FIRST, s_state#20 ASC NULLS FIRST], [i_item_id#19, s_state#20, g_state#40, agg1#41, agg2#42, agg3#43, agg4#44]
 
 (117) AdaptiveSparkPlan
-Output [7]: [i_item_id#19, s_state#20, g_state#39, agg1#40, agg2#41, agg3#42, agg4#43]
+Output [7]: [i_item_id#19, s_state#20, g_state#40, agg1#41, agg2#42, agg3#43, agg4#44]
 Arguments: isFinalPlan=true
 

@@ -453,25 +453,25 @@ Input [1]: [ca_zip#13]
 Keys [1]: [ca_zip#13]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#16]
-Results [2]: [ca_zip#13, #17#17]
+Results [2]: [ca_zip#13, #17]
 
 (69) NativeShuffleExchange
-Input [2]: [ca_zip#13, #17#17]
+Input [2]: [ca_zip#13, #17]
 Arguments: hashpartitioning(ca_zip#13, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (70) ShuffleQueryStage
-Output [2]: [ca_zip#13, #17#17]
+Output [2]: [ca_zip#13, #17]
 Arguments: X
 
 (71) AQEShuffleRead
-Input [2]: [ca_zip#13, #17#17]
+Input [2]: [ca_zip#13, #17]
 Arguments: coalesced
 
 (72) InputAdapter
-Input [2]: [ca_zip#13, #17#17]
+Input [2]: [ca_zip#13, #17]
 
 (73) NativeHashAggregate
-Input [2]: [ca_zip#13, #17#17]
+Input [2]: [ca_zip#13, #17]
 Keys [1]: [ca_zip#13]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#18]
@@ -519,33 +519,33 @@ Input [1]: [ca_zip#11]
 Keys [1]: [ca_zip#11]
 Functions: []
 Aggregate Attributes: []
-Results [2]: [ca_zip#11, #17#17]
+Results [1]: [ca_zip#11]
 
 (84) NativeShuffleExchange
-Input [2]: [ca_zip#11, #17#17]
+Input [1]: [ca_zip#11]
 Arguments: hashpartitioning(ca_zip#11, 100), ENSURE_REQUIREMENTS, [plan_id=11]
 
 (85) ShuffleQueryStage
-Output [2]: [ca_zip#11, #17#17]
+Output [1]: [ca_zip#11]
 Arguments: X
 
 (86) AQEShuffleRead
-Input [2]: [ca_zip#11, #17#17]
+Input [1]: [ca_zip#11]
 Arguments: coalesced
 
 (87) InputAdapter
-Input [2]: [ca_zip#11, #17#17]
+Input [1]: [ca_zip#11]
 
 (88) NativeHashAggregate
-Input [2]: [ca_zip#11, #17#17]
+Input [1]: [ca_zip#11]
 Keys [1]: [ca_zip#11]
 Functions: []
 Aggregate Attributes: []
-Results [2]: [ca_zip#11, #17#17]
+Results [1]: [ca_zip#11]
 
 (89) NativeProject
 Output [1]: [ca_zip#11]
-Input [2]: [ca_zip#11, #17#17]
+Input [1]: [ca_zip#11]
 
 (90) NativeShuffleExchange
 Input [1]: [ca_zip#11]
@@ -585,25 +585,25 @@ Input [2]: [s_store_name#8, _c1#21]
 Keys [1]: [s_store_name#8]
 Functions [1]: [partial_sum(_c1#21)]
 Aggregate Attributes [1]: [sum#22]
-Results [2]: [s_store_name#8, #17#17]
+Results [2]: [s_store_name#8, #17]
 
 (99) NativeShuffleExchange
-Input [2]: [s_store_name#8, #17#17]
+Input [2]: [s_store_name#8, #17]
 Arguments: hashpartitioning(s_store_name#8, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (100) ShuffleQueryStage
-Output [2]: [s_store_name#8, #17#17]
+Output [2]: [s_store_name#8, #17]
 Arguments: X
 
 (101) AQEShuffleRead
-Input [2]: [s_store_name#8, #17#17]
+Input [2]: [s_store_name#8, #17]
 Arguments: coalesced
 
 (102) InputAdapter
-Input [2]: [s_store_name#8, #17#17]
+Input [2]: [s_store_name#8, #17]
 
 (103) NativeHashAggregate
-Input [2]: [s_store_name#8, #17#17]
+Input [2]: [s_store_name#8, #17]
 Keys [1]: [s_store_name#8]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#23]

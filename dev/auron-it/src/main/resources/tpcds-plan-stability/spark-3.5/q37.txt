@@ -316,33 +316,33 @@ Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 Keys [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 Functions: []
 Aggregate Attributes: []
-Results [4]: [i_item_id#2, i_item_desc#3, i_current_price#4, #12#12]
+Results [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 
 (53) NativeShuffleExchange
-Input [4]: [i_item_id#2, i_item_desc#3, i_current_price#4, #12#12]
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 Arguments: hashpartitioning(i_item_id#2, i_item_desc#3, i_current_price#4, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (54) ShuffleQueryStage
-Output [4]: [i_item_id#2, i_item_desc#3, i_current_price#4, #12#12]
+Output [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 Arguments: X
 
 (55) AQEShuffleRead
-Input [4]: [i_item_id#2, i_item_desc#3, i_current_price#4, #12#12]
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 Arguments: coalesced
 
 (56) InputAdapter
-Input [4]: [i_item_id#2, i_item_desc#3, i_current_price#4, #12#12]
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 
 (57) NativeHashAggregate
-Input [4]: [i_item_id#2, i_item_desc#3, i_current_price#4, #12#12]
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 Keys [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 Functions: []
 Aggregate Attributes: []
-Results [4]: [i_item_id#2, i_item_desc#3, i_current_price#4, #12#12]
+Results [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 
 (58) NativeProject
 Output [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
-Input [4]: [i_item_id#2, i_item_desc#3, i_current_price#4, #12#12]
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 
 (59) Scan parquet
 Output [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufact_id#5]

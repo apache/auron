@@ -212,25 +212,25 @@ Input [2]: [ss_customer_sk#2, act_sales#12]
 Keys [1]: [ss_customer_sk#2]
 Functions [1]: [partial_sum(act_sales#12)]
 Aggregate Attributes [2]: [sum#13, isEmpty#14]
-Results [2]: [ss_customer_sk#2, #15#15]
+Results [2]: [ss_customer_sk#2, #15]
 
 (35) NativeShuffleExchange
-Input [2]: [ss_customer_sk#2, #15#15]
+Input [2]: [ss_customer_sk#2, #15]
 Arguments: hashpartitioning(ss_customer_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (36) ShuffleQueryStage
-Output [2]: [ss_customer_sk#2, #15#15]
+Output [2]: [ss_customer_sk#2, #15]
 Arguments: X
 
 (37) AQEShuffleRead
-Input [2]: [ss_customer_sk#2, #15#15]
+Input [2]: [ss_customer_sk#2, #15]
 Arguments: coalesced
 
 (38) InputAdapter
-Input [2]: [ss_customer_sk#2, #15#15]
+Input [2]: [ss_customer_sk#2, #15]
 
 (39) NativeHashAggregate
-Input [2]: [ss_customer_sk#2, #15#15]
+Input [2]: [ss_customer_sk#2, #15]
 Keys [1]: [ss_customer_sk#2]
 Functions [1]: [sum(act_sales#12)]
 Aggregate Attributes [1]: [sum(act_sales#12)#16]

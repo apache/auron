@@ -447,10 +447,10 @@ Input [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#18, _c4#
 Keys [4]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#18]
 Functions [2]: [partial_sum(_c4#19), partial_sum(_c5#20)]
 Aggregate Attributes [2]: [sum#21, sum#22]
-Results [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#18, #23#23]
+Results [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#18, #23, #23]
 
 (69) NativeHashAggregate
-Input [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#18, #23#23]
+Input [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#18, #23, #23]
 Keys [4]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#18]
 Functions [2]: [sum(UnscaledValue(ss_coupon_amt#7)), sum(UnscaledValue(ss_net_profit#8))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ss_coupon_amt#7))#24, sum(UnscaledValue(ss_net_profit#8))#25]

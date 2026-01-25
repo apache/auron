@@ -493,10 +493,10 @@ Input [3]: [s_store_sk#7, _c1#8, _c2#9]
 Keys [1]: [s_store_sk#7]
 Functions [2]: [partial_sum(_c1#8), partial_sum(_c2#9)]
 Aggregate Attributes [2]: [sum#10, sum#11]
-Results [2]: [s_store_sk#7, #12#12]
+Results [3]: [s_store_sk#7, #12, #12]
 
 (37) NativeHashAggregate
-Input [2]: [s_store_sk#7, #12#12]
+Input [3]: [s_store_sk#7, #12, #12]
 Keys [1]: [s_store_sk#7]
 Functions [2]: [sum(UnscaledValue(ss_ext_sales_price#3)), sum(UnscaledValue(ss_net_profit#4))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ss_ext_sales_price#3))#13, sum(UnscaledValue(ss_net_profit#4))#14]
@@ -636,10 +636,10 @@ Input [3]: [s_store_sk#22, _c1#23, _c2#24]
 Keys [1]: [s_store_sk#22]
 Functions [2]: [partial_sum(_c1#23), partial_sum(_c2#24)]
 Aggregate Attributes [2]: [sum#25, sum#26]
-Results [2]: [s_store_sk#22, #12#12]
+Results [3]: [s_store_sk#22, #12, #12]
 
 (71) NativeHashAggregate
-Input [2]: [s_store_sk#22, #12#12]
+Input [3]: [s_store_sk#22, #12, #12]
 Keys [1]: [s_store_sk#22]
 Functions [2]: [sum(UnscaledValue(sr_return_amt#19)), sum(UnscaledValue(sr_net_loss#20))]
 Aggregate Attributes [2]: [sum(UnscaledValue(sr_return_amt#19))#27, sum(UnscaledValue(sr_net_loss#20))#28]
@@ -738,25 +738,25 @@ Input [3]: [cs_call_center_sk#36, _c1#40, _c2#41]
 Keys [1]: [cs_call_center_sk#36]
 Functions [2]: [partial_sum(_c1#40), partial_sum(_c2#41)]
 Aggregate Attributes [2]: [sum#42, sum#43]
-Results [2]: [cs_call_center_sk#36, #12#12]
+Results [3]: [cs_call_center_sk#36, #12, #12]
 
 (94) NativeShuffleExchange
-Input [2]: [cs_call_center_sk#36, #12#12]
+Input [3]: [cs_call_center_sk#36, #12, #12]
 Arguments: hashpartitioning(cs_call_center_sk#36, 100), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (95) ShuffleQueryStage
-Output [2]: [cs_call_center_sk#36, #12#12]
+Output [3]: [cs_call_center_sk#36, #12, #12]
 Arguments: X
 
 (96) AQEShuffleRead
-Input [2]: [cs_call_center_sk#36, #12#12]
+Input [3]: [cs_call_center_sk#36, #12, #12]
 Arguments: coalesced
 
 (97) InputAdapter
-Input [2]: [cs_call_center_sk#36, #12#12]
+Input [3]: [cs_call_center_sk#36, #12, #12]
 
 (98) NativeHashAggregate
-Input [2]: [cs_call_center_sk#36, #12#12]
+Input [3]: [cs_call_center_sk#36, #12, #12]
 Keys [1]: [cs_call_center_sk#36]
 Functions [2]: [sum(UnscaledValue(cs_ext_sales_price#37)), sum(UnscaledValue(cs_net_profit#38))]
 Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_sales_price#37))#44, sum(UnscaledValue(cs_net_profit#38))#45]
@@ -841,18 +841,18 @@ Input [2]: [_c0#52, _c1#53]
 Keys: []
 Functions [2]: [partial_sum(_c0#52), partial_sum(_c1#53)]
 Aggregate Attributes [2]: [sum#54, sum#55]
-Results [1]: [#12#12]
+Results [2]: [#12, #12]
 
 (118) NativeShuffleExchange
-Input [1]: [#12#12]
+Input [2]: [#12, #12]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 
 (119) ShuffleQueryStage
-Output [1]: [#12#12]
+Output [2]: [#12, #12]
 Arguments: X
 
 (120) NativeHashAggregate
-Input [1]: [#12#12]
+Input [2]: [#12, #12]
 Keys: []
 Functions [2]: [sum(UnscaledValue(cr_return_amount#49)), sum(UnscaledValue(cr_net_loss#50))]
 Aggregate Attributes [2]: [sum(UnscaledValue(cr_return_amount#49))#56, sum(UnscaledValue(cr_net_loss#50))#57]
@@ -1011,10 +1011,10 @@ Input [3]: [wp_web_page_sk#68, _c1#69, _c2#70]
 Keys [1]: [wp_web_page_sk#68]
 Functions [2]: [partial_sum(_c1#69), partial_sum(_c2#70)]
 Aggregate Attributes [2]: [sum#71, sum#72]
-Results [2]: [wp_web_page_sk#68, #12#12]
+Results [3]: [wp_web_page_sk#68, #12, #12]
 
 (158) NativeHashAggregate
-Input [2]: [wp_web_page_sk#68, #12#12]
+Input [3]: [wp_web_page_sk#68, #12, #12]
 Keys [1]: [wp_web_page_sk#68]
 Functions [2]: [sum(UnscaledValue(ws_ext_sales_price#65)), sum(UnscaledValue(ws_net_profit#66))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_sales_price#65))#73, sum(UnscaledValue(ws_net_profit#66))#74]
@@ -1154,10 +1154,10 @@ Input [3]: [wp_web_page_sk#82, _c1#83, _c2#84]
 Keys [1]: [wp_web_page_sk#82]
 Functions [2]: [partial_sum(_c1#83), partial_sum(_c2#84)]
 Aggregate Attributes [2]: [sum#85, sum#86]
-Results [2]: [wp_web_page_sk#82, #12#12]
+Results [3]: [wp_web_page_sk#82, #12, #12]
 
 (192) NativeHashAggregate
-Input [2]: [wp_web_page_sk#82, #12#12]
+Input [3]: [wp_web_page_sk#82, #12, #12]
 Keys [1]: [wp_web_page_sk#82]
 Functions [2]: [sum(UnscaledValue(wr_return_amt#79)), sum(UnscaledValue(wr_net_loss#80))]
 Aggregate Attributes [2]: [sum(UnscaledValue(wr_return_amt#79))#87, sum(UnscaledValue(wr_net_loss#80))#88]
@@ -1197,37 +1197,37 @@ Input [6]: [sales#15, returns#31, profit#32, channel#95, id#96, spark_grouping_i
 Keys [3]: [channel#95, id#96, spark_grouping_id#97]
 Functions [3]: [partial_sum(sales#15), partial_sum(returns#31), partial_sum(profit#32)]
 Aggregate Attributes [6]: [sum#98, isEmpty#99, sum#100, isEmpty#101, sum#102, isEmpty#103]
-Results [4]: [channel#95, id#96, spark_grouping_id#97, #12#12]
+Results [6]: [channel#95, id#96, spark_grouping_id#97, #104, #104, #104]
 
 (201) NativeShuffleExchange
-Input [4]: [channel#95, id#96, spark_grouping_id#97, #12#12]
+Input [6]: [channel#95, id#96, spark_grouping_id#97, #104, #104, #104]
 Arguments: hashpartitioning(channel#95, id#96, spark_grouping_id#97, 100), ENSURE_REQUIREMENTS, [plan_id=16]
 
 (202) ShuffleQueryStage
-Output [4]: [channel#95, id#96, spark_grouping_id#97, #12#12]
+Output [6]: [channel#95, id#96, spark_grouping_id#97, #104, #104, #104]
 Arguments: X
 
 (203) AQEShuffleRead
-Input [4]: [channel#95, id#96, spark_grouping_id#97, #12#12]
+Input [6]: [channel#95, id#96, spark_grouping_id#97, #104, #104, #104]
 Arguments: coalesced
 
 (204) InputAdapter
-Input [4]: [channel#95, id#96, spark_grouping_id#97, #12#12]
+Input [6]: [channel#95, id#96, spark_grouping_id#97, #104, #104, #104]
 
 (205) NativeHashAggregate
-Input [4]: [channel#95, id#96, spark_grouping_id#97, #12#12]
+Input [6]: [channel#95, id#96, spark_grouping_id#97, #104, #104, #104]
 Keys [3]: [channel#95, id#96, spark_grouping_id#97]
 Functions [3]: [sum(sales#15), sum(returns#31), sum(profit#32)]
-Aggregate Attributes [3]: [sum(sales#15)#104, sum(returns#31)#105, sum(profit#32)#106]
-Results [6]: [channel#95, id#96, spark_grouping_id#97, sum(sales#15)#104, sum(returns#31)#105, sum(profit#32)#106]
+Aggregate Attributes [3]: [sum(sales#15)#105, sum(returns#31)#106, sum(profit#32)#107]
+Results [6]: [channel#95, id#96, spark_grouping_id#97, sum(sales#15)#105, sum(returns#31)#106, sum(profit#32)#107]
 
 (206) NativeProject
-Output [5]: [channel#95, id#96, sum(sales#15)#104 AS sales#107, sum(returns#31)#105 AS returns#108, sum(profit#32)#106 AS profit#109]
-Input [6]: [channel#95, id#96, spark_grouping_id#97, sum(sales#15)#104, sum(returns#31)#105, sum(profit#32)#106]
+Output [5]: [channel#95, id#96, sum(sales#15)#105 AS sales#108, sum(returns#31)#106 AS returns#109, sum(profit#32)#107 AS profit#110]
+Input [6]: [channel#95, id#96, spark_grouping_id#97, sum(sales#15)#105, sum(returns#31)#106, sum(profit#32)#107]
 
 (207) NativeTakeOrdered
-Input [5]: [channel#95, id#96, sales#107, returns#108, profit#109]
-Arguments: X, [channel#95 ASC NULLS FIRST, id#96 ASC NULLS FIRST, sales#107 ASC NULLS FIRST]
+Input [5]: [channel#95, id#96, sales#108, returns#109, profit#110]
+Arguments: X, [channel#95 ASC NULLS FIRST, id#96 ASC NULLS FIRST, sales#108 ASC NULLS FIRST]
 
 (208) Scan parquet
 Output [4]: [ss_sold_date_sk#1, ss_store_sk#2, ss_ext_sales_price#3, ss_net_profit#4]
@@ -1323,10 +1323,10 @@ Input [3]: [ss_ext_sales_price#3, ss_net_profit#4, s_store_sk#7]
 Keys [1]: [s_store_sk#7]
 Functions [2]: [partial_sum(UnscaledValue(ss_ext_sales_price#3)), partial_sum(UnscaledValue(ss_net_profit#4))]
 Aggregate Attributes [2]: [sum#10, sum#11]
-Results [3]: [s_store_sk#7, sum#110, sum#111]
+Results [3]: [s_store_sk#7, sum#111, sum#112]
 
 (228) HashAggregate
-Input [3]: [s_store_sk#7, sum#110, sum#111]
+Input [3]: [s_store_sk#7, sum#111, sum#112]
 Keys [1]: [s_store_sk#7]
 Functions [2]: [sum(UnscaledValue(ss_ext_sales_price#3)), sum(UnscaledValue(ss_net_profit#4))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ss_ext_sales_price#3))#13, sum(UnscaledValue(ss_net_profit#4))#14]
@@ -1356,19 +1356,19 @@ Input [4]: [sr_returned_date_sk#17, sr_store_sk#18, sr_return_amt#19, sr_net_los
 Arguments: [sr_returned_date_sk#17 ASC NULLS FIRST], false, 0
 
 (234) Scan parquet
-Output [2]: [d_date_sk#21, d_date#112]
+Output [2]: [d_date_sk#21, d_date#113]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-08-03), LessThanOrEqual(d_date,2000-09-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (235) Filter
-Input [2]: [d_date_sk#21, d_date#112]
-Condition : (((isnotnull(d_date#112) AND (d_date#112 >= 2000-08-03)) AND (d_date#112 <= 2000-09-02)) AND isnotnull(d_date_sk#21))
+Input [2]: [d_date_sk#21, d_date#113]
+Condition : (((isnotnull(d_date#113) AND (d_date#113 >= 2000-08-03)) AND (d_date#113 <= 2000-09-02)) AND isnotnull(d_date_sk#21))
 
 (236) Project
 Output [1]: [d_date_sk#21]
-Input [2]: [d_date_sk#21, d_date#112]
+Input [2]: [d_date_sk#21, d_date#113]
 
 (237) Exchange
 Input [1]: [d_date_sk#21]
@@ -1430,10 +1430,10 @@ Input [3]: [sr_return_amt#19, sr_net_loss#20, s_store_sk#22]
 Keys [1]: [s_store_sk#22]
 Functions [2]: [partial_sum(UnscaledValue(sr_return_amt#19)), partial_sum(UnscaledValue(sr_net_loss#20))]
 Aggregate Attributes [2]: [sum#25, sum#26]
-Results [3]: [s_store_sk#22, sum#113, sum#114]
+Results [3]: [s_store_sk#22, sum#114, sum#115]
 
 (250) HashAggregate
-Input [3]: [s_store_sk#22, sum#113, sum#114]
+Input [3]: [s_store_sk#22, sum#114, sum#115]
 Keys [1]: [s_store_sk#22]
 Functions [2]: [sum(UnscaledValue(sr_return_amt#19)), sum(UnscaledValue(sr_net_loss#20))]
 Aggregate Attributes [2]: [sum(UnscaledValue(sr_return_amt#19))#27, sum(UnscaledValue(sr_net_loss#20))#28]
@@ -1473,19 +1473,19 @@ Input [4]: [cs_sold_date_sk#35, cs_call_center_sk#36, cs_ext_sales_price#37, cs_
 Arguments: [cs_sold_date_sk#35 ASC NULLS FIRST], false, 0
 
 (258) Scan parquet
-Output [2]: [d_date_sk#39, d_date#115]
+Output [2]: [d_date_sk#39, d_date#116]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-08-03), LessThanOrEqual(d_date,2000-09-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (259) Filter
-Input [2]: [d_date_sk#39, d_date#115]
-Condition : (((isnotnull(d_date#115) AND (d_date#115 >= 2000-08-03)) AND (d_date#115 <= 2000-09-02)) AND isnotnull(d_date_sk#39))
+Input [2]: [d_date_sk#39, d_date#116]
+Condition : (((isnotnull(d_date#116) AND (d_date#116 >= 2000-08-03)) AND (d_date#116 <= 2000-09-02)) AND isnotnull(d_date_sk#39))
 
 (260) Project
 Output [1]: [d_date_sk#39]
-Input [2]: [d_date_sk#39, d_date#115]
+Input [2]: [d_date_sk#39, d_date#116]
 
 (261) Exchange
 Input [1]: [d_date_sk#39]
@@ -1510,14 +1510,14 @@ Input [3]: [cs_call_center_sk#36, cs_ext_sales_price#37, cs_net_profit#38]
 Keys [1]: [cs_call_center_sk#36]
 Functions [2]: [partial_sum(UnscaledValue(cs_ext_sales_price#37)), partial_sum(UnscaledValue(cs_net_profit#38))]
 Aggregate Attributes [2]: [sum#42, sum#43]
-Results [3]: [cs_call_center_sk#36, sum#116, sum#117]
+Results [3]: [cs_call_center_sk#36, sum#117, sum#118]
 
 (266) Exchange
-Input [3]: [cs_call_center_sk#36, sum#116, sum#117]
+Input [3]: [cs_call_center_sk#36, sum#117, sum#118]
 Arguments: hashpartitioning(cs_call_center_sk#36, 100), ENSURE_REQUIREMENTS, [plan_id=27]
 
 (267) HashAggregate
-Input [3]: [cs_call_center_sk#36, sum#116, sum#117]
+Input [3]: [cs_call_center_sk#36, sum#117, sum#118]
 Keys [1]: [cs_call_center_sk#36]
 Functions [2]: [sum(UnscaledValue(cs_ext_sales_price#37)), sum(UnscaledValue(cs_net_profit#38))]
 Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_sales_price#37))#44, sum(UnscaledValue(cs_net_profit#38))#45]
@@ -1543,19 +1543,19 @@ Input [3]: [cr_returned_date_sk#48, cr_return_amount#49, cr_net_loss#50]
 Arguments: [cr_returned_date_sk#48 ASC NULLS FIRST], false, 0
 
 (272) Scan parquet
-Output [2]: [d_date_sk#51, d_date#118]
+Output [2]: [d_date_sk#51, d_date#119]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-08-03), LessThanOrEqual(d_date,2000-09-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (273) Filter
-Input [2]: [d_date_sk#51, d_date#118]
-Condition : (((isnotnull(d_date#118) AND (d_date#118 >= 2000-08-03)) AND (d_date#118 <= 2000-09-02)) AND isnotnull(d_date_sk#51))
+Input [2]: [d_date_sk#51, d_date#119]
+Condition : (((isnotnull(d_date#119) AND (d_date#119 >= 2000-08-03)) AND (d_date#119 <= 2000-09-02)) AND isnotnull(d_date_sk#51))
 
 (274) Project
 Output [1]: [d_date_sk#51]
-Input [2]: [d_date_sk#51, d_date#118]
+Input [2]: [d_date_sk#51, d_date#119]
 
 (275) Exchange
 Input [1]: [d_date_sk#51]
@@ -1580,14 +1580,14 @@ Input [2]: [cr_return_amount#49, cr_net_loss#50]
 Keys: []
 Functions [2]: [partial_sum(UnscaledValue(cr_return_amount#49)), partial_sum(UnscaledValue(cr_net_loss#50))]
 Aggregate Attributes [2]: [sum#54, sum#55]
-Results [2]: [sum#119, sum#120]
+Results [2]: [sum#120, sum#121]
 
 (280) Exchange
-Input [2]: [sum#119, sum#120]
+Input [2]: [sum#120, sum#121]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=30]
 
 (281) HashAggregate
-Input [2]: [sum#119, sum#120]
+Input [2]: [sum#120, sum#121]
 Keys: []
 Functions [2]: [sum(UnscaledValue(cr_return_amount#49)), sum(UnscaledValue(cr_net_loss#50))]
 Aggregate Attributes [2]: [sum(UnscaledValue(cr_return_amount#49))#56, sum(UnscaledValue(cr_net_loss#50))#57]
@@ -1621,19 +1621,19 @@ Input [4]: [ws_sold_date_sk#63, ws_web_page_sk#64, ws_ext_sales_price#65, ws_net
 Arguments: [ws_sold_date_sk#63 ASC NULLS FIRST], false, 0
 
 (288) Scan parquet
-Output [2]: [d_date_sk#67, d_date#121]
+Output [2]: [d_date_sk#67, d_date#122]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-08-03), LessThanOrEqual(d_date,2000-09-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (289) Filter
-Input [2]: [d_date_sk#67, d_date#121]
-Condition : (((isnotnull(d_date#121) AND (d_date#121 >= 2000-08-03)) AND (d_date#121 <= 2000-09-02)) AND isnotnull(d_date_sk#67))
+Input [2]: [d_date_sk#67, d_date#122]
+Condition : (((isnotnull(d_date#122) AND (d_date#122 >= 2000-08-03)) AND (d_date#122 <= 2000-09-02)) AND isnotnull(d_date_sk#67))
 
 (290) Project
 Output [1]: [d_date_sk#67]
-Input [2]: [d_date_sk#67, d_date#121]
+Input [2]: [d_date_sk#67, d_date#122]
 
 (291) Exchange
 Input [1]: [d_date_sk#67]
@@ -1695,10 +1695,10 @@ Input [3]: [ws_ext_sales_price#65, ws_net_profit#66, wp_web_page_sk#68]
 Keys [1]: [wp_web_page_sk#68]
 Functions [2]: [partial_sum(UnscaledValue(ws_ext_sales_price#65)), partial_sum(UnscaledValue(ws_net_profit#66))]
 Aggregate Attributes [2]: [sum#71, sum#72]
-Results [3]: [wp_web_page_sk#68, sum#122, sum#123]
+Results [3]: [wp_web_page_sk#68, sum#123, sum#124]
 
 (304) HashAggregate
-Input [3]: [wp_web_page_sk#68, sum#122, sum#123]
+Input [3]: [wp_web_page_sk#68, sum#123, sum#124]
 Keys [1]: [wp_web_page_sk#68]
 Functions [2]: [sum(UnscaledValue(ws_ext_sales_price#65)), sum(UnscaledValue(ws_net_profit#66))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_sales_price#65))#73, sum(UnscaledValue(ws_net_profit#66))#74]
@@ -1728,19 +1728,19 @@ Input [4]: [wr_returned_date_sk#77, wr_web_page_sk#78, wr_return_amt#79, wr_net_
 Arguments: [wr_returned_date_sk#77 ASC NULLS FIRST], false, 0
 
 (310) Scan parquet
-Output [2]: [d_date_sk#81, d_date#124]
+Output [2]: [d_date_sk#81, d_date#125]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-08-03), LessThanOrEqual(d_date,2000-09-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (311) Filter
-Input [2]: [d_date_sk#81, d_date#124]
-Condition : (((isnotnull(d_date#124) AND (d_date#124 >= 2000-08-03)) AND (d_date#124 <= 2000-09-02)) AND isnotnull(d_date_sk#81))
+Input [2]: [d_date_sk#81, d_date#125]
+Condition : (((isnotnull(d_date#125) AND (d_date#125 >= 2000-08-03)) AND (d_date#125 <= 2000-09-02)) AND isnotnull(d_date_sk#81))
 
 (312) Project
 Output [1]: [d_date_sk#81]
-Input [2]: [d_date_sk#81, d_date#124]
+Input [2]: [d_date_sk#81, d_date#125]
 
 (313) Exchange
 Input [1]: [d_date_sk#81]
@@ -1802,10 +1802,10 @@ Input [3]: [wr_return_amt#79, wr_net_loss#80, wp_web_page_sk#82]
 Keys [1]: [wp_web_page_sk#82]
 Functions [2]: [partial_sum(UnscaledValue(wr_return_amt#79)), partial_sum(UnscaledValue(wr_net_loss#80))]
 Aggregate Attributes [2]: [sum#85, sum#86]
-Results [3]: [wp_web_page_sk#82, sum#125, sum#126]
+Results [3]: [wp_web_page_sk#82, sum#126, sum#127]
 
 (326) HashAggregate
-Input [3]: [wp_web_page_sk#82, sum#125, sum#126]
+Input [3]: [wp_web_page_sk#82, sum#126, sum#127]
 Keys [1]: [wp_web_page_sk#82]
 Functions [2]: [sum(UnscaledValue(wr_return_amt#79)), sum(UnscaledValue(wr_net_loss#80))]
 Aggregate Attributes [2]: [sum(UnscaledValue(wr_return_amt#79))#87, sum(UnscaledValue(wr_net_loss#80))#88]
@@ -1836,24 +1836,24 @@ Input [6]: [sales#15, returns#31, profit#32, channel#95, id#96, spark_grouping_i
 Keys [3]: [channel#95, id#96, spark_grouping_id#97]
 Functions [3]: [partial_sum(sales#15), partial_sum(returns#31), partial_sum(profit#32)]
 Aggregate Attributes [6]: [sum#98, isEmpty#99, sum#100, isEmpty#101, sum#102, isEmpty#103]
-Results [9]: [channel#95, id#96, spark_grouping_id#97, sum#127, isEmpty#128, sum#129, isEmpty#130, sum#131, isEmpty#132]
+Results [9]: [channel#95, id#96, spark_grouping_id#97, sum#128, isEmpty#129, sum#130, isEmpty#131, sum#132, isEmpty#133]
 
 (333) Exchange
-Input [9]: [channel#95, id#96, spark_grouping_id#97, sum#127, isEmpty#128, sum#129, isEmpty#130, sum#131, isEmpty#132]
+Input [9]: [channel#95, id#96, spark_grouping_id#97, sum#128, isEmpty#129, sum#130, isEmpty#131, sum#132, isEmpty#133]
 Arguments: hashpartitioning(channel#95, id#96, spark_grouping_id#97, 100), ENSURE_REQUIREMENTS, [plan_id=39]
 
 (334) HashAggregate
-Input [9]: [channel#95, id#96, spark_grouping_id#97, sum#127, isEmpty#128, sum#129, isEmpty#130, sum#131, isEmpty#132]
+Input [9]: [channel#95, id#96, spark_grouping_id#97, sum#128, isEmpty#129, sum#130, isEmpty#131, sum#132, isEmpty#133]
 Keys [3]: [channel#95, id#96, spark_grouping_id#97]
 Functions [3]: [sum(sales#15), sum(returns#31), sum(profit#32)]
-Aggregate Attributes [3]: [sum(sales#15)#104, sum(returns#31)#105, sum(profit#32)#106]
-Results [5]: [channel#95, id#96, sum(sales#15)#104 AS sales#107, sum(returns#31)#105 AS returns#108, sum(profit#32)#106 AS profit#109]
+Aggregate Attributes [3]: [sum(sales#15)#105, sum(returns#31)#106, sum(profit#32)#107]
+Results [5]: [channel#95, id#96, sum(sales#15)#105 AS sales#108, sum(returns#31)#106 AS returns#109, sum(profit#32)#107 AS profit#110]
 
 (335) TakeOrderedAndProject
-Input [5]: [channel#95, id#96, sales#107, returns#108, profit#109]
-Arguments: X, [channel#95 ASC NULLS FIRST, id#96 ASC NULLS FIRST, sales#107 ASC NULLS FIRST], [channel#95, id#96, sales#107, returns#108, profit#109]
+Input [5]: [channel#95, id#96, sales#108, returns#109, profit#110]
+Arguments: X, [channel#95 ASC NULLS FIRST, id#96 ASC NULLS FIRST, sales#108 ASC NULLS FIRST], [channel#95, id#96, sales#108, returns#109, profit#110]
 
 (336) AdaptiveSparkPlan
-Output [5]: [channel#95, id#96, sales#107, returns#108, profit#109]
+Output [5]: [channel#95, id#96, sales#108, returns#109, profit#110]
 Arguments: isFinalPlan=true
 

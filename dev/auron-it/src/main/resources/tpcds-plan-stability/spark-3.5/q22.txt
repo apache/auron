@@ -311,37 +311,37 @@ Input [6]: [inv_quantity_on_hand#4, i_product_name#13, i_brand#14, i_class#15, i
 Keys [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
 Functions [1]: [partial_avg(inv_quantity_on_hand#4)]
 Aggregate Attributes [2]: [sum#18, count#19]
-Results [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20#20]
+Results [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20, #21]
 
 (52) NativeShuffleExchange
-Input [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20#20]
+Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20, #21]
 Arguments: hashpartitioning(i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (53) ShuffleQueryStage
-Output [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20#20]
+Output [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20, #21]
 Arguments: X
 
 (54) AQEShuffleRead
-Input [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20#20]
+Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20, #21]
 Arguments: coalesced
 
 (55) InputAdapter
-Input [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20#20]
+Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20, #21]
 
 (56) NativeHashAggregate
-Input [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20#20]
+Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, #20, #21]
 Keys [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
 Functions [1]: [avg(inv_quantity_on_hand#4)]
-Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#21]
-Results [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, avg(inv_quantity_on_hand#4)#21]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#22]
+Results [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, avg(inv_quantity_on_hand#4)#22]
 
 (57) NativeProject
-Output [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, avg(inv_quantity_on_hand#4)#21 AS qoh#22]
-Input [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, avg(inv_quantity_on_hand#4)#21]
+Output [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, avg(inv_quantity_on_hand#4)#22 AS qoh#23]
+Input [6]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, avg(inv_quantity_on_hand#4)#22]
 
 (58) NativeTakeOrdered
-Input [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#22]
-Arguments: X, [qoh#22 ASC NULLS FIRST, i_product_name#13 ASC NULLS FIRST, i_brand#14 ASC NULLS FIRST, i_class#15 ASC NULLS FIRST, i_category#16 ASC NULLS FIRST]
+Input [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#23]
+Arguments: X, [qoh#23 ASC NULLS FIRST, i_product_name#13 ASC NULLS FIRST, i_brand#14 ASC NULLS FIRST, i_class#15 ASC NULLS FIRST, i_category#16 ASC NULLS FIRST]
 
 (59) Scan parquet
 Output [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
@@ -478,24 +478,24 @@ Input [6]: [inv_quantity_on_hand#4, i_product_name#13, i_brand#14, i_class#15, i
 Keys [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
 Functions [1]: [partial_avg(inv_quantity_on_hand#4)]
 Aggregate Attributes [2]: [sum#18, count#19]
-Results [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#23, count#24]
+Results [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#24, count#25]
 
 (88) Exchange
-Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#23, count#24]
+Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#24, count#25]
 Arguments: hashpartitioning(i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, 100), ENSURE_REQUIREMENTS, [plan_id=14]
 
 (89) HashAggregate
-Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#23, count#24]
+Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#24, count#25]
 Keys [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
 Functions [1]: [avg(inv_quantity_on_hand#4)]
-Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#21]
-Results [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, avg(inv_quantity_on_hand#4)#21 AS qoh#22]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#22]
+Results [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, avg(inv_quantity_on_hand#4)#22 AS qoh#23]
 
 (90) TakeOrderedAndProject
-Input [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#22]
-Arguments: X, [qoh#22 ASC NULLS FIRST, i_product_name#13 ASC NULLS FIRST, i_brand#14 ASC NULLS FIRST, i_class#15 ASC NULLS FIRST, i_category#16 ASC NULLS FIRST], [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#22]
+Input [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#23]
+Arguments: X, [qoh#23 ASC NULLS FIRST, i_product_name#13 ASC NULLS FIRST, i_brand#14 ASC NULLS FIRST, i_class#15 ASC NULLS FIRST, i_category#16 ASC NULLS FIRST], [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#23]
 
 (91) AdaptiveSparkPlan
-Output [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#22]
+Output [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#23]
 Arguments: isFinalPlan=true
 

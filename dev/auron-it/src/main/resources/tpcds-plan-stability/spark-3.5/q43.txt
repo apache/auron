@@ -230,25 +230,25 @@ Input [9]: [s_store_name#9, s_store_id#8, _c2#11, _c3#12, _c4#13, _c5#14, _c6#15
 Keys [2]: [s_store_name#9, s_store_id#8]
 Functions [7]: [partial_sum(_c2#11), partial_sum(_c3#12), partial_sum(_c4#13), partial_sum(_c5#14), partial_sum(_c6#15), partial_sum(_c7#16), partial_sum(_c8#17)]
 Aggregate Attributes [7]: [sum#18, sum#19, sum#20, sum#21, sum#22, sum#23, sum#24]
-Results [3]: [s_store_name#9, s_store_id#8, #25#25]
+Results [9]: [s_store_name#9, s_store_id#8, #25, #25, #25, #25, #25, #25, #25]
 
 (38) NativeShuffleExchange
-Input [3]: [s_store_name#9, s_store_id#8, #25#25]
+Input [9]: [s_store_name#9, s_store_id#8, #25, #25, #25, #25, #25, #25, #25]
 Arguments: hashpartitioning(s_store_name#9, s_store_id#8, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (39) ShuffleQueryStage
-Output [3]: [s_store_name#9, s_store_id#8, #25#25]
+Output [9]: [s_store_name#9, s_store_id#8, #25, #25, #25, #25, #25, #25, #25]
 Arguments: X
 
 (40) AQEShuffleRead
-Input [3]: [s_store_name#9, s_store_id#8, #25#25]
+Input [9]: [s_store_name#9, s_store_id#8, #25, #25, #25, #25, #25, #25, #25]
 Arguments: coalesced
 
 (41) InputAdapter
-Input [3]: [s_store_name#9, s_store_id#8, #25#25]
+Input [9]: [s_store_name#9, s_store_id#8, #25, #25, #25, #25, #25, #25, #25]
 
 (42) NativeHashAggregate
-Input [3]: [s_store_name#9, s_store_id#8, #25#25]
+Input [9]: [s_store_name#9, s_store_id#8, #25, #25, #25, #25, #25, #25, #25]
 Keys [2]: [s_store_name#9, s_store_id#8]
 Functions [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#3 = Sunday) THEN ss_sales_price#6 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Monday) THEN ss_sales_price#6 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Tuesday) THEN ss_sales_price#6 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Wednesday) THEN ss_sales_price#6 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Thursday) THEN ss_sales_price#6 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Friday) THEN ss_sales_price#6 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Saturday) THEN ss_sales_price#6 END))]
 Aggregate Attributes [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#3 = Sunday) THEN ss_sales_price#6 END))#26, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Monday) THEN ss_sales_price#6 END))#27, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Tuesday) THEN ss_sales_price#6 END))#28, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Wednesday) THEN ss_sales_price#6 END))#29, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Thursday) THEN ss_sales_price#6 END))#30, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Friday) THEN ss_sales_price#6 END))#31, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Saturday) THEN ss_sales_price#6 END))#32]

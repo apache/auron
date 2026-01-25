@@ -439,25 +439,25 @@ Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#
 Keys [6]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10]
 Functions [1]: [partial_sum(_c6#14)]
 Aggregate Attributes [1]: [sum#15]
-Results [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16#16]
+Results [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16]
 
 (51) NativeShuffleExchange
-Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16#16]
+Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16]
 Arguments: hashpartitioning(i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (52) ShuffleQueryStage
-Output [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16#16]
+Output [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16]
 Arguments: X
 
 (53) AQEShuffleRead
-Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16#16]
+Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16]
 Arguments: coalesced
 
 (54) InputAdapter
-Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16#16]
+Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16]
 
 (55) NativeHashAggregate
-Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16#16]
+Input [7]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10, #16]
 Keys [6]: [i_category#3, i_brand#2, s_store_name#12, s_company_name#13, d_year#9, d_moy#10]
 Functions [1]: [sum(UnscaledValue(ss_sales_price#7))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#7))#17]

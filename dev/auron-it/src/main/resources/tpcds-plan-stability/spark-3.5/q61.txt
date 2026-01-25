@@ -715,18 +715,18 @@ Input [1]: [_c0#22]
 Keys: []
 Functions [1]: [partial_sum(_c0#22)]
 Aggregate Attributes [1]: [sum#23]
-Results [1]: [#24#24]
+Results [1]: [#24]
 
 (101) NativeShuffleExchange
-Input [1]: [#24#24]
+Input [1]: [#24]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=13]
 
 (102) ShuffleQueryStage
-Output [1]: [#24#24]
+Output [1]: [#24]
 Arguments: X
 
 (103) NativeHashAggregate
-Input [1]: [#24#24]
+Input [1]: [#24]
 Keys: []
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#6))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#6))#25]
@@ -1015,18 +1015,18 @@ Input [1]: [_c0#38]
 Keys: []
 Functions [1]: [partial_sum(_c0#38)]
 Aggregate Attributes [1]: [sum#39]
-Results [1]: [#24#24]
+Results [1]: [#24]
 
 (175) NativeShuffleExchange
-Input [1]: [#24#24]
+Input [1]: [#24]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=19]
 
 (176) ShuffleQueryStage
-Output [1]: [#24#24]
+Output [1]: [#24]
 Arguments: X
 
 (177) NativeHashAggregate
-Input [1]: [#24#24]
+Input [1]: [#24]
 Keys: []
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#31))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#31))#40]

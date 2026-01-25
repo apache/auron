@@ -384,18 +384,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#10]
-Results [1]: [#11#11]
+Results [1]: [#11]
 
 (53) NativeShuffleExchange
-Input [1]: [#11#11]
+Input [1]: [#11]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 
 (54) ShuffleQueryStage
-Output [1]: [#11#11]
+Output [1]: [#11]
 Arguments: X
 
 (55) NativeHashAggregate
-Input [1]: [#11#11]
+Input [1]: [#11]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#12]
@@ -531,18 +531,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#19]
-Results [1]: [#11#11]
+Results [1]: [#11]
 
 (88) NativeShuffleExchange
-Input [1]: [#11#11]
+Input [1]: [#11]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 
 (89) ShuffleQueryStage
-Output [1]: [#11#11]
+Output [1]: [#11]
 Arguments: X
 
 (90) NativeHashAggregate
-Input [1]: [#11#11]
+Input [1]: [#11]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#20]

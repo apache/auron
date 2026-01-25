@@ -447,10 +447,10 @@ Input [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, _c4#
 Keys [4]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19]
 Functions [3]: [partial_sum(_c4#20), partial_sum(_c5#21), partial_sum(_c6#22)]
 Aggregate Attributes [3]: [sum#23, sum#24, sum#25]
-Results [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, #26#26]
+Results [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, #26, #26, #26]
 
 (69) NativeHashAggregate
-Input [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, #26#26]
+Input [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, #26, #26, #26]
 Keys [4]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19]
 Functions [3]: [sum(UnscaledValue(ss_ext_sales_price#7)), sum(UnscaledValue(ss_ext_list_price#8)), sum(UnscaledValue(ss_ext_tax#9))]
 Aggregate Attributes [3]: [sum(UnscaledValue(ss_ext_sales_price#7))#27, sum(UnscaledValue(ss_ext_list_price#8))#28, sum(UnscaledValue(ss_ext_tax#9))#29]

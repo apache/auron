@@ -556,25 +556,25 @@ Input [6]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, _c5#37]
 Keys [5]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6]
 Functions [2]: [partial_count(1), partial_sum(_c5#37)]
 Aggregate Attributes [2]: [count#38, sum#39]
-Results [6]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40#40]
+Results [7]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40, #40]
 
 (96) NativeShuffleExchange
-Input [6]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40#40]
+Input [7]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40, #40]
 Arguments: hashpartitioning(channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (97) ShuffleQueryStage
-Output [6]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40#40]
+Output [7]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40, #40]
 Arguments: X
 
 (98) AQEShuffleRead
-Input [6]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40#40]
+Input [7]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40, #40]
 Arguments: coalesced
 
 (99) InputAdapter
-Input [6]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40#40]
+Input [7]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40, #40]
 
 (100) NativeHashAggregate
-Input [6]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40#40]
+Input [7]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6, #40, #40]
 Keys [5]: [channel#10, col_name#11, d_year#8, d_qoy#9, i_category#6]
 Functions [2]: [count(1), sum(UnscaledValue(ext_sales_price#12))]
 Aggregate Attributes [2]: [count(1)#41, sum(UnscaledValue(ext_sales_price#12))#42]

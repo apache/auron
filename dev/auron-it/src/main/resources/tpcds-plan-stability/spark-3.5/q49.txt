@@ -414,513 +414,513 @@ Input [5]: [ws_item_sk#2, _c1#14, _c2#15, _c3#16, _c4#17]
 Keys [1]: [ws_item_sk#2]
 Functions [4]: [partial_sum(_c1#14), partial_sum(_c2#15), partial_sum(_c3#16), partial_sum(_c4#17)]
 Aggregate Attributes [6]: [sum#18, sum#19, sum#20, isEmpty#21, sum#22, isEmpty#23]
-Results [2]: [ws_item_sk#2, #24#24]
+Results [5]: [ws_item_sk#2, #24, #24, #25, #25]
 
 (38) NativeShuffleExchange
-Input [2]: [ws_item_sk#2, #24#24]
+Input [5]: [ws_item_sk#2, #24, #24, #25, #25]
 Arguments: hashpartitioning(ws_item_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (39) ShuffleQueryStage
-Output [2]: [ws_item_sk#2, #24#24]
+Output [5]: [ws_item_sk#2, #24, #24, #25, #25]
 Arguments: X
 
 (40) AQEShuffleRead
-Input [2]: [ws_item_sk#2, #24#24]
+Input [5]: [ws_item_sk#2, #24, #24, #25, #25]
 Arguments: coalesced
 
 (41) InputAdapter
-Input [2]: [ws_item_sk#2, #24#24]
+Input [5]: [ws_item_sk#2, #24, #24, #25, #25]
 
 (42) NativeHashAggregate
-Input [2]: [ws_item_sk#2, #24#24]
+Input [5]: [ws_item_sk#2, #24, #24, #25, #25]
 Keys [1]: [ws_item_sk#2]
 Functions [4]: [sum(coalesce(wr_return_quantity#9, 0)), sum(coalesce(ws_quantity#4, 0)), sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(wr_return_quantity#9, 0))#25, sum(coalesce(ws_quantity#4, 0))#26, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#27, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#28]
-Results [5]: [ws_item_sk#2, sum(coalesce(wr_return_quantity#9, 0))#25, sum(coalesce(ws_quantity#4, 0))#26, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#27, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#28]
+Aggregate Attributes [4]: [sum(coalesce(wr_return_quantity#9, 0))#26, sum(coalesce(ws_quantity#4, 0))#27, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#28, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#29]
+Results [5]: [ws_item_sk#2, sum(coalesce(wr_return_quantity#9, 0))#26, sum(coalesce(ws_quantity#4, 0))#27, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#28, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#29]
 
 (43) NativeProject
-Output [3]: [ws_item_sk#2 AS item#29, (cast(sum(coalesce(wr_return_quantity#9, 0))#25 as decimal(15,4)) / cast(sum(coalesce(ws_quantity#4, 0))#26 as decimal(15,4))) AS return_ratio#30, (cast(sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#27 as decimal(15,4)) / cast(sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#28 as decimal(15,4))) AS currency_ratio#31]
-Input [5]: [ws_item_sk#2, sum(coalesce(wr_return_quantity#9, 0))#25, sum(coalesce(ws_quantity#4, 0))#26, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#27, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#28]
+Output [3]: [ws_item_sk#2 AS item#30, (cast(sum(coalesce(wr_return_quantity#9, 0))#26 as decimal(15,4)) / cast(sum(coalesce(ws_quantity#4, 0))#27 as decimal(15,4))) AS return_ratio#31, (cast(sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#28 as decimal(15,4)) / cast(sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#29 as decimal(15,4))) AS currency_ratio#32]
+Input [5]: [ws_item_sk#2, sum(coalesce(wr_return_quantity#9, 0))#26, sum(coalesce(ws_quantity#4, 0))#27, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#28, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#29]
 
 (44) NativeShuffleExchange
-Input [3]: [item#29, return_ratio#30, currency_ratio#31]
+Input [3]: [item#30, return_ratio#31, currency_ratio#32]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
 
 (45) ShuffleQueryStage
-Output [3]: [item#29, return_ratio#30, currency_ratio#31]
+Output [3]: [item#30, return_ratio#31, currency_ratio#32]
 Arguments: X
 
 (46) NativeSort
-Input [3]: [item#29, return_ratio#30, currency_ratio#31]
-Arguments: [return_ratio#30 ASC NULLS FIRST], false
+Input [3]: [item#30, return_ratio#31, currency_ratio#32]
+Arguments: [return_ratio#31 ASC NULLS FIRST], false
 
 (47) NativeWindow
-Input [3]: [item#29, return_ratio#30, currency_ratio#31]
-Arguments: [rank(return_ratio#30) windowspecdefinition(return_ratio#30 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#32], [return_ratio#30 ASC NULLS FIRST]
+Input [3]: [item#30, return_ratio#31, currency_ratio#32]
+Arguments: [rank(return_ratio#31) windowspecdefinition(return_ratio#31 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#33], [return_ratio#31 ASC NULLS FIRST]
 
 (48) NativeSort
-Input [4]: [item#29, return_ratio#30, currency_ratio#31, return_rank#32]
-Arguments: [currency_ratio#31 ASC NULLS FIRST], false
+Input [4]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33]
+Arguments: [currency_ratio#32 ASC NULLS FIRST], false
 
 (49) NativeWindow
-Input [4]: [item#29, return_ratio#30, currency_ratio#31, return_rank#32]
-Arguments: [rank(currency_ratio#31) windowspecdefinition(currency_ratio#31 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#33], [currency_ratio#31 ASC NULLS FIRST]
+Input [4]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33]
+Arguments: [rank(currency_ratio#32) windowspecdefinition(currency_ratio#32 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#34], [currency_ratio#32 ASC NULLS FIRST]
 
 (50) NativeFilter
-Input [5]: [item#29, return_ratio#30, currency_ratio#31, return_rank#32, currency_rank#33]
-Condition : ((return_rank#32 <= 10) OR (currency_rank#33 <= 10))
+Input [5]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33, currency_rank#34]
+Condition : ((return_rank#33 <= 10) OR (currency_rank#34 <= 10))
 
 (51) NativeProject
-Output [5]: [web AS channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Input [5]: [item#29, return_ratio#30, currency_ratio#31, return_rank#32, currency_rank#33]
+Output [5]: [web AS channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Input [5]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33, currency_rank#34]
 
 (188) Scan parquet
-Output [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_net_profit#40]
+Output [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40, cs_net_profit#41]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(cs_net_profit), IsNotNull(cs_net_paid), IsNotNull(cs_quantity), GreaterThan(cs_net_profit,1.00), GreaterThan(cs_net_paid,0.00), GreaterThan(cs_quantity,0), IsNotNull(cs_order_number), IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_item_sk:int,cs_order_number:int,cs_quantity:int,cs_net_paid:decimal(7,2),cs_net_profit:decimal(7,2)>
 
 (53) InputAdapter
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_net_profit#40]
-Arguments: [#35, #36, #37, #38, #39, #40]
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40, cs_net_profit#41]
+Arguments: [#36, #37, #38, #39, #40, #41]
 
 (54) NativeFilter
-Input [6]: [#35#35, #36#36, #37#37, #38#38, #39#39, #40#40]
-Condition : ((((((((isnotnull(cs_net_profit#40) AND isnotnull(cs_net_paid#39)) AND isnotnull(cs_quantity#38)) AND (cs_net_profit#40 > 1.00)) AND (cs_net_paid#39 > 0.00)) AND (cs_quantity#38 > 0)) AND isnotnull(cs_order_number#37)) AND isnotnull(cs_item_sk#36)) AND isnotnull(cs_sold_date_sk#35))
+Input [6]: [#36#36, #37#37, #38#38, #39#39, #40#40, #41#41]
+Condition : ((((((((isnotnull(cs_net_profit#41) AND isnotnull(cs_net_paid#40)) AND isnotnull(cs_quantity#39)) AND (cs_net_profit#41 > 1.00)) AND (cs_net_paid#40 > 0.00)) AND (cs_quantity#39 > 0)) AND isnotnull(cs_order_number#38)) AND isnotnull(cs_item_sk#37)) AND isnotnull(cs_sold_date_sk#36))
 
 (55) NativeProject
-Output [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
-Input [6]: [#35#35, #36#36, #37#37, #38#38, #39#39, #40#40]
+Output [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
+Input [6]: [#36#36, #37#37, #38#38, #39#39, #40#40, #41#41]
 
 (56) NativeShuffleExchange
-Input [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
-Arguments: hashpartitioning(cs_order_number#37, cs_item_sk#36, 100), ENSURE_REQUIREMENTS, [plan_id=7]
+Input [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
+Arguments: hashpartitioning(cs_order_number#38, cs_item_sk#37, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (57) ShuffleQueryStage
-Output [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
+Output [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
 Arguments: X
 
 (58) AQEShuffleRead
-Input [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
+Input [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
 Arguments: coalesced
 
 (59) InputAdapter
-Input [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
+Input [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
 
 (60) NativeSort
-Input [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
-Arguments: [cs_order_number#37 ASC NULLS FIRST, cs_item_sk#36 ASC NULLS FIRST], false
+Input [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
+Arguments: [cs_order_number#38 ASC NULLS FIRST, cs_item_sk#37 ASC NULLS FIRST], false
 
 (193) Scan parquet
-Output [4]: [cr_item_sk#41, cr_order_number#42, cr_return_quantity#43, cr_return_amount#44]
+Output [4]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00), IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_quantity:int,cr_return_amount:decimal(7,2)>
 
 (62) InputAdapter
-Input [4]: [cr_item_sk#41, cr_order_number#42, cr_return_quantity#43, cr_return_amount#44]
-Arguments: [#41, #42, #43, #44]
+Input [4]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
+Arguments: [#42, #43, #44, #45]
 
 (63) NativeFilter
-Input [4]: [#41#41, #42#42, #43#43, #44#44]
-Condition : (((isnotnull(cr_return_amount#44) AND (cr_return_amount#44 > 10000.00)) AND isnotnull(cr_order_number#42)) AND isnotnull(cr_item_sk#41))
+Input [4]: [#42#42, #43#43, #44#44, #45#45]
+Condition : (((isnotnull(cr_return_amount#45) AND (cr_return_amount#45 > 10000.00)) AND isnotnull(cr_order_number#43)) AND isnotnull(cr_item_sk#42))
 
 (64) NativeShuffleExchange
-Input [4]: [#41#41, #42#42, #43#43, #44#44]
-Arguments: hashpartitioning(cr_order_number#42, cr_item_sk#41, 100), ENSURE_REQUIREMENTS, [plan_id=8]
+Input [4]: [#42#42, #43#43, #44#44, #45#45]
+Arguments: hashpartitioning(cr_order_number#43, cr_item_sk#42, 100), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (65) ShuffleQueryStage
-Output [4]: [#41#41, #42#42, #43#43, #44#44]
+Output [4]: [#42#42, #43#43, #44#44, #45#45]
 Arguments: X
 
 (66) AQEShuffleRead
-Input [4]: [#41#41, #42#42, #43#43, #44#44]
+Input [4]: [#42#42, #43#43, #44#44, #45#45]
 Arguments: coalesced
 
 (67) InputAdapter
-Input [4]: [#41#41, #42#42, #43#43, #44#44]
+Input [4]: [#42#42, #43#43, #44#44, #45#45]
 
 (68) NativeSort
-Input [4]: [#41#41, #42#42, #43#43, #44#44]
-Arguments: [cr_order_number#42 ASC NULLS FIRST, cr_item_sk#41 ASC NULLS FIRST], false
+Input [4]: [#42#42, #43#43, #44#44, #45#45]
+Arguments: [cr_order_number#43 ASC NULLS FIRST, cr_item_sk#42 ASC NULLS FIRST], false
 
 (69) NativeSortMergeJoin
-Left keys [2]: [cs_order_number#37, cs_item_sk#36]
-Right keys [2]: [cr_order_number#42, cr_item_sk#41]
+Left keys [2]: [cs_order_number#38, cs_item_sk#37]
+Right keys [2]: [cr_order_number#43, cr_item_sk#42]
 Join type: Inner
 Join condition: None
 
 (70) NativeProject
-Output [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Input [9]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, #41#41, #42#42, #43#43, #44#44]
+Output [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Input [9]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40, #42#42, #43#43, #44#44, #45#45]
 
 (71) NativeShuffleExchange
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Arguments: hashpartitioning(cs_sold_date_sk#35, 100), ENSURE_REQUIREMENTS, [plan_id=9]
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Arguments: hashpartitioning(cs_sold_date_sk#36, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (72) ShuffleQueryStage
-Output [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
+Output [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
 Arguments: X
 
 (73) AQEShuffleRead
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
 Arguments: coalesced
 
 (74) InputAdapter
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
 
 (75) NativeSort
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Arguments: [cs_sold_date_sk#35 ASC NULLS FIRST], false
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Arguments: [cs_sold_date_sk#36 ASC NULLS FIRST], false
 
 (76) ReusedExchange [Reuses operator id: 29]
-Output [1]: [d_date_sk#45]
+Output [1]: [d_date_sk#46]
 
 (77) ShuffleQueryStage
-Output [1]: [d_date_sk#45]
+Output [1]: [d_date_sk#46]
 Arguments: X
 
 (78) AQEShuffleRead
-Input [1]: [d_date_sk#45]
+Input [1]: [d_date_sk#46]
 Arguments: coalesced
 
 (79) InputAdapter
-Input [1]: [d_date_sk#45]
-Arguments: [#45]
+Input [1]: [d_date_sk#46]
+Arguments: [#46]
 
 (80) InputAdapter
-Input [1]: [#45#45]
+Input [1]: [#46#46]
 
 (81) NativeSort
-Input [1]: [#45#45]
-Arguments: [d_date_sk#45 ASC NULLS FIRST], false
+Input [1]: [#46#46]
+Arguments: [d_date_sk#46 ASC NULLS FIRST], false
 
 (82) NativeSortMergeJoin
-Left keys [1]: [cs_sold_date_sk#35]
-Right keys [1]: [d_date_sk#45]
+Left keys [1]: [cs_sold_date_sk#36]
+Right keys [1]: [d_date_sk#46]
 Join type: Inner
 Join condition: None
 
 (83) NativeProject
-Output [5]: [cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Input [7]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44, #45#45]
+Output [5]: [cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Input [7]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45, #46#46]
 
 (84) NativeProject
-Output [5]: [cs_item_sk#36 AS cs_item_sk#36, coalesce(cr_return_quantity#43, 0) AS _c1#46, coalesce(cs_quantity#38, 0) AS _c2#47, coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00) AS _c3#48, coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00) AS _c4#49]
-Input [5]: [cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
+Output [5]: [cs_item_sk#37 AS cs_item_sk#37, coalesce(cr_return_quantity#44, 0) AS _c1#47, coalesce(cs_quantity#39, 0) AS _c2#48, coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00) AS _c3#49, coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00) AS _c4#50]
+Input [5]: [cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
 
 (85) NativeHashAggregate
-Input [5]: [cs_item_sk#36, _c1#46, _c2#47, _c3#48, _c4#49]
-Keys [1]: [cs_item_sk#36]
-Functions [4]: [partial_sum(_c1#46), partial_sum(_c2#47), partial_sum(_c3#48), partial_sum(_c4#49)]
-Aggregate Attributes [6]: [sum#50, sum#51, sum#52, isEmpty#53, sum#54, isEmpty#55]
-Results [2]: [cs_item_sk#36, #24#24]
+Input [5]: [cs_item_sk#37, _c1#47, _c2#48, _c3#49, _c4#50]
+Keys [1]: [cs_item_sk#37]
+Functions [4]: [partial_sum(_c1#47), partial_sum(_c2#48), partial_sum(_c3#49), partial_sum(_c4#50)]
+Aggregate Attributes [6]: [sum#51, sum#52, sum#53, isEmpty#54, sum#55, isEmpty#56]
+Results [5]: [cs_item_sk#37, #24, #24, #25, #25]
 
 (86) NativeShuffleExchange
-Input [2]: [cs_item_sk#36, #24#24]
-Arguments: hashpartitioning(cs_item_sk#36, 100), ENSURE_REQUIREMENTS, [plan_id=10]
+Input [5]: [cs_item_sk#37, #24, #24, #25, #25]
+Arguments: hashpartitioning(cs_item_sk#37, 100), ENSURE_REQUIREMENTS, [plan_id=10]
 
 (87) ShuffleQueryStage
-Output [2]: [cs_item_sk#36, #24#24]
+Output [5]: [cs_item_sk#37, #24, #24, #25, #25]
 Arguments: X
 
 (88) AQEShuffleRead
-Input [2]: [cs_item_sk#36, #24#24]
+Input [5]: [cs_item_sk#37, #24, #24, #25, #25]
 Arguments: coalesced
 
 (89) InputAdapter
-Input [2]: [cs_item_sk#36, #24#24]
+Input [5]: [cs_item_sk#37, #24, #24, #25, #25]
 
 (90) NativeHashAggregate
-Input [2]: [cs_item_sk#36, #24#24]
-Keys [1]: [cs_item_sk#36]
-Functions [4]: [sum(coalesce(cr_return_quantity#43, 0)), sum(coalesce(cs_quantity#38, 0)), sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(cr_return_quantity#43, 0))#56, sum(coalesce(cs_quantity#38, 0))#57, sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00))#58, sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#59]
-Results [5]: [cs_item_sk#36, sum(coalesce(cr_return_quantity#43, 0))#56, sum(coalesce(cs_quantity#38, 0))#57, sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00))#58, sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#59]
+Input [5]: [cs_item_sk#37, #24, #24, #25, #25]
+Keys [1]: [cs_item_sk#37]
+Functions [4]: [sum(coalesce(cr_return_quantity#44, 0)), sum(coalesce(cs_quantity#39, 0)), sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(cr_return_quantity#44, 0))#57, sum(coalesce(cs_quantity#39, 0))#58, sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#59, sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))#60]
+Results [5]: [cs_item_sk#37, sum(coalesce(cr_return_quantity#44, 0))#57, sum(coalesce(cs_quantity#39, 0))#58, sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#59, sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))#60]
 
 (91) NativeProject
-Output [3]: [cs_item_sk#36 AS item#60, (cast(sum(coalesce(cr_return_quantity#43, 0))#56 as decimal(15,4)) / cast(sum(coalesce(cs_quantity#38, 0))#57 as decimal(15,4))) AS return_ratio#61, (cast(sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00))#58 as decimal(15,4)) / cast(sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#59 as decimal(15,4))) AS currency_ratio#62]
-Input [5]: [cs_item_sk#36, sum(coalesce(cr_return_quantity#43, 0))#56, sum(coalesce(cs_quantity#38, 0))#57, sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00))#58, sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#59]
+Output [3]: [cs_item_sk#37 AS item#61, (cast(sum(coalesce(cr_return_quantity#44, 0))#57 as decimal(15,4)) / cast(sum(coalesce(cs_quantity#39, 0))#58 as decimal(15,4))) AS return_ratio#62, (cast(sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#59 as decimal(15,4)) / cast(sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))#60 as decimal(15,4))) AS currency_ratio#63]
+Input [5]: [cs_item_sk#37, sum(coalesce(cr_return_quantity#44, 0))#57, sum(coalesce(cs_quantity#39, 0))#58, sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#59, sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))#60]
 
 (92) NativeShuffleExchange
-Input [3]: [item#60, return_ratio#61, currency_ratio#62]
+Input [3]: [item#61, return_ratio#62, currency_ratio#63]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
 
 (93) ShuffleQueryStage
-Output [3]: [item#60, return_ratio#61, currency_ratio#62]
+Output [3]: [item#61, return_ratio#62, currency_ratio#63]
 Arguments: X
 
 (94) NativeSort
-Input [3]: [item#60, return_ratio#61, currency_ratio#62]
-Arguments: [return_ratio#61 ASC NULLS FIRST], false
+Input [3]: [item#61, return_ratio#62, currency_ratio#63]
+Arguments: [return_ratio#62 ASC NULLS FIRST], false
 
 (95) NativeWindow
-Input [3]: [item#60, return_ratio#61, currency_ratio#62]
-Arguments: [rank(return_ratio#61) windowspecdefinition(return_ratio#61 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#63], [return_ratio#61 ASC NULLS FIRST]
+Input [3]: [item#61, return_ratio#62, currency_ratio#63]
+Arguments: [rank(return_ratio#62) windowspecdefinition(return_ratio#62 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#64], [return_ratio#62 ASC NULLS FIRST]
 
 (96) NativeSort
-Input [4]: [item#60, return_ratio#61, currency_ratio#62, return_rank#63]
-Arguments: [currency_ratio#62 ASC NULLS FIRST], false
+Input [4]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64]
+Arguments: [currency_ratio#63 ASC NULLS FIRST], false
 
 (97) NativeWindow
-Input [4]: [item#60, return_ratio#61, currency_ratio#62, return_rank#63]
-Arguments: [rank(currency_ratio#62) windowspecdefinition(currency_ratio#62 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#64], [currency_ratio#62 ASC NULLS FIRST]
+Input [4]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64]
+Arguments: [rank(currency_ratio#63) windowspecdefinition(currency_ratio#63 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#65], [currency_ratio#63 ASC NULLS FIRST]
 
 (98) NativeFilter
-Input [5]: [item#60, return_ratio#61, currency_ratio#62, return_rank#63, currency_rank#64]
-Condition : ((return_rank#63 <= 10) OR (currency_rank#64 <= 10))
+Input [5]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64, currency_rank#65]
+Condition : ((return_rank#64 <= 10) OR (currency_rank#65 <= 10))
 
 (99) NativeProject
-Output [5]: [catalog AS channel#65, item#60, return_ratio#61, return_rank#63, currency_rank#64]
-Input [5]: [item#60, return_ratio#61, currency_ratio#62, return_rank#63, currency_rank#64]
+Output [5]: [catalog AS channel#66, item#61, return_ratio#62, return_rank#64, currency_rank#65]
+Input [5]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64, currency_rank#65]
 
 (218) Scan parquet
-Output [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70, ss_net_profit#71]
+Output [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, ss_net_profit#72]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_net_profit), IsNotNull(ss_net_paid), IsNotNull(ss_quantity), GreaterThan(ss_net_profit,1.00), GreaterThan(ss_net_paid,0.00), GreaterThan(ss_quantity,0), IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ticket_number:int,ss_quantity:int,ss_net_paid:decimal(7,2),ss_net_profit:decimal(7,2)>
 
 (101) InputAdapter
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70, ss_net_profit#71]
-Arguments: [#66, #67, #68, #69, #70, #71]
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, ss_net_profit#72]
+Arguments: [#67, #68, #69, #70, #71, #72]
 
 (102) NativeFilter
-Input [6]: [#66#66, #67#67, #68#68, #69#69, #70#70, #71#71]
-Condition : ((((((((isnotnull(ss_net_profit#71) AND isnotnull(ss_net_paid#70)) AND isnotnull(ss_quantity#69)) AND (ss_net_profit#71 > 1.00)) AND (ss_net_paid#70 > 0.00)) AND (ss_quantity#69 > 0)) AND isnotnull(ss_ticket_number#68)) AND isnotnull(ss_item_sk#67)) AND isnotnull(ss_sold_date_sk#66))
+Input [6]: [#67#67, #68#68, #69#69, #70#70, #71#71, #72#72]
+Condition : ((((((((isnotnull(ss_net_profit#72) AND isnotnull(ss_net_paid#71)) AND isnotnull(ss_quantity#70)) AND (ss_net_profit#72 > 1.00)) AND (ss_net_paid#71 > 0.00)) AND (ss_quantity#70 > 0)) AND isnotnull(ss_ticket_number#69)) AND isnotnull(ss_item_sk#68)) AND isnotnull(ss_sold_date_sk#67))
 
 (103) NativeProject
-Output [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
-Input [6]: [#66#66, #67#67, #68#68, #69#69, #70#70, #71#71]
+Output [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
+Input [6]: [#67#67, #68#68, #69#69, #70#70, #71#71, #72#72]
 
 (104) NativeShuffleExchange
-Input [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
-Arguments: hashpartitioning(ss_ticket_number#68, ss_item_sk#67, 100), ENSURE_REQUIREMENTS, [plan_id=12]
+Input [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
+Arguments: hashpartitioning(ss_ticket_number#69, ss_item_sk#68, 100), ENSURE_REQUIREMENTS, [plan_id=12]
 
 (105) ShuffleQueryStage
-Output [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
+Output [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
 Arguments: X
 
 (106) AQEShuffleRead
-Input [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
+Input [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
 Arguments: coalesced
 
 (107) InputAdapter
-Input [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
+Input [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
 
 (108) NativeSort
-Input [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
-Arguments: [ss_ticket_number#68 ASC NULLS FIRST, ss_item_sk#67 ASC NULLS FIRST], false
+Input [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
+Arguments: [ss_ticket_number#69 ASC NULLS FIRST, ss_item_sk#68 ASC NULLS FIRST], false
 
 (223) Scan parquet
-Output [4]: [sr_item_sk#72, sr_ticket_number#73, sr_return_quantity#74, sr_return_amt#75]
+Output [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (110) InputAdapter
-Input [4]: [sr_item_sk#72, sr_ticket_number#73, sr_return_quantity#74, sr_return_amt#75]
-Arguments: [#72, #73, #74, #75]
+Input [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+Arguments: [#73, #74, #75, #76]
 
 (111) NativeFilter
-Input [4]: [#72#72, #73#73, #74#74, #75#75]
-Condition : (((isnotnull(sr_return_amt#75) AND (sr_return_amt#75 > 10000.00)) AND isnotnull(sr_ticket_number#73)) AND isnotnull(sr_item_sk#72))
+Input [4]: [#73#73, #74#74, #75#75, #76#76]
+Condition : (((isnotnull(sr_return_amt#76) AND (sr_return_amt#76 > 10000.00)) AND isnotnull(sr_ticket_number#74)) AND isnotnull(sr_item_sk#73))
 
 (112) NativeShuffleExchange
-Input [4]: [#72#72, #73#73, #74#74, #75#75]
-Arguments: hashpartitioning(sr_ticket_number#73, sr_item_sk#72, 100), ENSURE_REQUIREMENTS, [plan_id=13]
+Input [4]: [#73#73, #74#74, #75#75, #76#76]
+Arguments: hashpartitioning(sr_ticket_number#74, sr_item_sk#73, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (113) ShuffleQueryStage
-Output [4]: [#72#72, #73#73, #74#74, #75#75]
+Output [4]: [#73#73, #74#74, #75#75, #76#76]
 Arguments: X
 
 (114) AQEShuffleRead
-Input [4]: [#72#72, #73#73, #74#74, #75#75]
+Input [4]: [#73#73, #74#74, #75#75, #76#76]
 Arguments: coalesced
 
 (115) InputAdapter
-Input [4]: [#72#72, #73#73, #74#74, #75#75]
+Input [4]: [#73#73, #74#74, #75#75, #76#76]
 
 (116) NativeSort
-Input [4]: [#72#72, #73#73, #74#74, #75#75]
-Arguments: [sr_ticket_number#73 ASC NULLS FIRST, sr_item_sk#72 ASC NULLS FIRST], false
+Input [4]: [#73#73, #74#74, #75#75, #76#76]
+Arguments: [sr_ticket_number#74 ASC NULLS FIRST, sr_item_sk#73 ASC NULLS FIRST], false
 
 (117) NativeSortMergeJoin
-Left keys [2]: [ss_ticket_number#68, ss_item_sk#67]
-Right keys [2]: [sr_ticket_number#73, sr_item_sk#72]
+Left keys [2]: [ss_ticket_number#69, ss_item_sk#68]
+Right keys [2]: [sr_ticket_number#74, sr_item_sk#73]
 Join type: Inner
 Join condition: None
 
 (118) NativeProject
-Output [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Input [9]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70, #72#72, #73#73, #74#74, #75#75]
+Output [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Input [9]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, #73#73, #74#74, #75#75, #76#76]
 
 (119) NativeShuffleExchange
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Arguments: hashpartitioning(ss_sold_date_sk#66, 100), ENSURE_REQUIREMENTS, [plan_id=14]
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Arguments: hashpartitioning(ss_sold_date_sk#67, 100), ENSURE_REQUIREMENTS, [plan_id=14]
 
 (120) ShuffleQueryStage
-Output [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
+Output [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
 Arguments: X
 
 (121) AQEShuffleRead
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
 Arguments: coalesced
 
 (122) InputAdapter
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
 
 (123) NativeSort
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Arguments: [ss_sold_date_sk#66 ASC NULLS FIRST], false
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Arguments: [ss_sold_date_sk#67 ASC NULLS FIRST], false
 
 (124) ReusedExchange [Reuses operator id: 29]
-Output [1]: [d_date_sk#76]
+Output [1]: [d_date_sk#77]
 
 (125) ShuffleQueryStage
-Output [1]: [d_date_sk#76]
+Output [1]: [d_date_sk#77]
 Arguments: X
 
 (126) AQEShuffleRead
-Input [1]: [d_date_sk#76]
+Input [1]: [d_date_sk#77]
 Arguments: coalesced
 
 (127) InputAdapter
-Input [1]: [d_date_sk#76]
-Arguments: [#76]
+Input [1]: [d_date_sk#77]
+Arguments: [#77]
 
 (128) InputAdapter
-Input [1]: [#76#76]
+Input [1]: [#77#77]
 
 (129) NativeSort
-Input [1]: [#76#76]
-Arguments: [d_date_sk#76 ASC NULLS FIRST], false
+Input [1]: [#77#77]
+Arguments: [d_date_sk#77 ASC NULLS FIRST], false
 
 (130) NativeSortMergeJoin
-Left keys [1]: [ss_sold_date_sk#66]
-Right keys [1]: [d_date_sk#76]
+Left keys [1]: [ss_sold_date_sk#67]
+Right keys [1]: [d_date_sk#77]
 Join type: Inner
 Join condition: None
 
 (131) NativeProject
-Output [5]: [ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Input [7]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75, #76#76]
+Output [5]: [ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Input [7]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76, #77#77]
 
 (132) NativeProject
-Output [5]: [ss_item_sk#67 AS ss_item_sk#67, coalesce(sr_return_quantity#74, 0) AS _c1#77, coalesce(ss_quantity#69, 0) AS _c2#78, coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00) AS _c3#79, coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00) AS _c4#80]
-Input [5]: [ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
+Output [5]: [ss_item_sk#68 AS ss_item_sk#68, coalesce(sr_return_quantity#75, 0) AS _c1#78, coalesce(ss_quantity#70, 0) AS _c2#79, coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00) AS _c3#80, coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00) AS _c4#81]
+Input [5]: [ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
 
 (133) NativeHashAggregate
-Input [5]: [ss_item_sk#67, _c1#77, _c2#78, _c3#79, _c4#80]
-Keys [1]: [ss_item_sk#67]
-Functions [4]: [partial_sum(_c1#77), partial_sum(_c2#78), partial_sum(_c3#79), partial_sum(_c4#80)]
-Aggregate Attributes [6]: [sum#81, sum#82, sum#83, isEmpty#84, sum#85, isEmpty#86]
-Results [2]: [ss_item_sk#67, #24#24]
+Input [5]: [ss_item_sk#68, _c1#78, _c2#79, _c3#80, _c4#81]
+Keys [1]: [ss_item_sk#68]
+Functions [4]: [partial_sum(_c1#78), partial_sum(_c2#79), partial_sum(_c3#80), partial_sum(_c4#81)]
+Aggregate Attributes [6]: [sum#82, sum#83, sum#84, isEmpty#85, sum#86, isEmpty#87]
+Results [5]: [ss_item_sk#68, #24, #24, #25, #25]
 
 (134) NativeShuffleExchange
-Input [2]: [ss_item_sk#67, #24#24]
-Arguments: hashpartitioning(ss_item_sk#67, 100), ENSURE_REQUIREMENTS, [plan_id=15]
+Input [5]: [ss_item_sk#68, #24, #24, #25, #25]
+Arguments: hashpartitioning(ss_item_sk#68, 100), ENSURE_REQUIREMENTS, [plan_id=15]
 
 (135) ShuffleQueryStage
-Output [2]: [ss_item_sk#67, #24#24]
+Output [5]: [ss_item_sk#68, #24, #24, #25, #25]
 Arguments: X
 
 (136) AQEShuffleRead
-Input [2]: [ss_item_sk#67, #24#24]
+Input [5]: [ss_item_sk#68, #24, #24, #25, #25]
 Arguments: coalesced
 
 (137) InputAdapter
-Input [2]: [ss_item_sk#67, #24#24]
+Input [5]: [ss_item_sk#68, #24, #24, #25, #25]
 
 (138) NativeHashAggregate
-Input [2]: [ss_item_sk#67, #24#24]
-Keys [1]: [ss_item_sk#67]
-Functions [4]: [sum(coalesce(sr_return_quantity#74, 0)), sum(coalesce(ss_quantity#69, 0)), sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(sr_return_quantity#74, 0))#87, sum(coalesce(ss_quantity#69, 0))#88, sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00))#89, sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))#90]
-Results [5]: [ss_item_sk#67, sum(coalesce(sr_return_quantity#74, 0))#87, sum(coalesce(ss_quantity#69, 0))#88, sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00))#89, sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))#90]
+Input [5]: [ss_item_sk#68, #24, #24, #25, #25]
+Keys [1]: [ss_item_sk#68]
+Functions [4]: [sum(coalesce(sr_return_quantity#75, 0)), sum(coalesce(ss_quantity#70, 0)), sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(sr_return_quantity#75, 0))#88, sum(coalesce(ss_quantity#70, 0))#89, sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00))#90, sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))#91]
+Results [5]: [ss_item_sk#68, sum(coalesce(sr_return_quantity#75, 0))#88, sum(coalesce(ss_quantity#70, 0))#89, sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00))#90, sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))#91]
 
 (139) NativeProject
-Output [3]: [ss_item_sk#67 AS item#91, (cast(sum(coalesce(sr_return_quantity#74, 0))#87 as decimal(15,4)) / cast(sum(coalesce(ss_quantity#69, 0))#88 as decimal(15,4))) AS return_ratio#92, (cast(sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00))#89 as decimal(15,4)) / cast(sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))#90 as decimal(15,4))) AS currency_ratio#93]
-Input [5]: [ss_item_sk#67, sum(coalesce(sr_return_quantity#74, 0))#87, sum(coalesce(ss_quantity#69, 0))#88, sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00))#89, sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))#90]
+Output [3]: [ss_item_sk#68 AS item#92, (cast(sum(coalesce(sr_return_quantity#75, 0))#88 as decimal(15,4)) / cast(sum(coalesce(ss_quantity#70, 0))#89 as decimal(15,4))) AS return_ratio#93, (cast(sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00))#90 as decimal(15,4)) / cast(sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))#91 as decimal(15,4))) AS currency_ratio#94]
+Input [5]: [ss_item_sk#68, sum(coalesce(sr_return_quantity#75, 0))#88, sum(coalesce(ss_quantity#70, 0))#89, sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00))#90, sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))#91]
 
 (140) NativeShuffleExchange
-Input [3]: [item#91, return_ratio#92, currency_ratio#93]
+Input [3]: [item#92, return_ratio#93, currency_ratio#94]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=16]
 
 (141) ShuffleQueryStage
-Output [3]: [item#91, return_ratio#92, currency_ratio#93]
+Output [3]: [item#92, return_ratio#93, currency_ratio#94]
 Arguments: X
 
 (142) NativeSort
-Input [3]: [item#91, return_ratio#92, currency_ratio#93]
-Arguments: [return_ratio#92 ASC NULLS FIRST], false
+Input [3]: [item#92, return_ratio#93, currency_ratio#94]
+Arguments: [return_ratio#93 ASC NULLS FIRST], false
 
 (143) NativeWindow
-Input [3]: [item#91, return_ratio#92, currency_ratio#93]
-Arguments: [rank(return_ratio#92) windowspecdefinition(return_ratio#92 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#94], [return_ratio#92 ASC NULLS FIRST]
+Input [3]: [item#92, return_ratio#93, currency_ratio#94]
+Arguments: [rank(return_ratio#93) windowspecdefinition(return_ratio#93 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#95], [return_ratio#93 ASC NULLS FIRST]
 
 (144) NativeSort
-Input [4]: [item#91, return_ratio#92, currency_ratio#93, return_rank#94]
-Arguments: [currency_ratio#93 ASC NULLS FIRST], false
+Input [4]: [item#92, return_ratio#93, currency_ratio#94, return_rank#95]
+Arguments: [currency_ratio#94 ASC NULLS FIRST], false
 
 (145) NativeWindow
-Input [4]: [item#91, return_ratio#92, currency_ratio#93, return_rank#94]
-Arguments: [rank(currency_ratio#93) windowspecdefinition(currency_ratio#93 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#95], [currency_ratio#93 ASC NULLS FIRST]
+Input [4]: [item#92, return_ratio#93, currency_ratio#94, return_rank#95]
+Arguments: [rank(currency_ratio#94) windowspecdefinition(currency_ratio#94 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#96], [currency_ratio#94 ASC NULLS FIRST]
 
 (146) NativeFilter
-Input [5]: [item#91, return_ratio#92, currency_ratio#93, return_rank#94, currency_rank#95]
-Condition : ((return_rank#94 <= 10) OR (currency_rank#95 <= 10))
+Input [5]: [item#92, return_ratio#93, currency_ratio#94, return_rank#95, currency_rank#96]
+Condition : ((return_rank#95 <= 10) OR (currency_rank#96 <= 10))
 
 (147) NativeProject
-Output [5]: [store AS channel#96, item#91, return_ratio#92, return_rank#94, currency_rank#95]
-Input [5]: [item#91, return_ratio#92, currency_ratio#93, return_rank#94, currency_rank#95]
+Output [5]: [store AS channel#97, item#92, return_ratio#93, return_rank#95, currency_rank#96]
+Input [5]: [item#92, return_ratio#93, currency_ratio#94, return_rank#95, currency_rank#96]
 
 (148) NativeUnion
-Arguments: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Arguments: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 (149) InputAdapter
-Input [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Arguments: [#34, #29, #30, #32, #33]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Arguments: [#35, #30, #31, #33, #34]
 
 (150) NativeHashAggregate
-Input [5]: [#34#34, #29#29, #30#30, #32#32, #33#33]
-Keys [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Input [5]: [#35#35, #30#30, #31#31, #33#33, #34#34]
+Keys [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Functions: []
 Aggregate Attributes: []
-Results [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, #24#24]
+Results [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 (151) NativeShuffleExchange
-Input [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, #24#24]
-Arguments: hashpartitioning(channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, 100), ENSURE_REQUIREMENTS, [plan_id=17]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Arguments: hashpartitioning(channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34, 100), ENSURE_REQUIREMENTS, [plan_id=17]
 
 (152) ShuffleQueryStage
-Output [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, #24#24]
+Output [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Arguments: X
 
 (153) AQEShuffleRead
-Input [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, #24#24]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Arguments: coalesced
 
 (154) InputAdapter
-Input [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, #24#24]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 (155) NativeHashAggregate
-Input [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, #24#24]
-Keys [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Keys [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Functions: []
 Aggregate Attributes: []
-Results [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, #24#24]
+Results [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 (156) NativeProject
-Output [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Input [6]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, #24#24]
+Output [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 (157) NativeTakeOrdered
-Input [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Arguments: X, [channel#34 ASC NULLS FIRST, return_rank#32 ASC NULLS FIRST, currency_rank#33 ASC NULLS FIRST, item#29 ASC NULLS FIRST]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Arguments: X, [channel#35 ASC NULLS FIRST, return_rank#33 ASC NULLS FIRST, currency_rank#34 ASC NULLS FIRST, item#30 ASC NULLS FIRST]
 
 (158) Scan parquet
 Output [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5, ws_net_profit#6]
@@ -1020,350 +1020,350 @@ Input [5]: [ws_item_sk#2, ws_quantity#4, ws_net_paid#5, wr_return_quantity#9, wr
 Keys [1]: [ws_item_sk#2]
 Functions [4]: [partial_sum(coalesce(wr_return_quantity#9, 0)), partial_sum(coalesce(ws_quantity#4, 0)), partial_sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
 Aggregate Attributes [6]: [sum#18, sum#19, sum#20, isEmpty#21, sum#22, isEmpty#23]
-Results [7]: [ws_item_sk#2, sum#97, sum#98, sum#99, isEmpty#100, sum#101, isEmpty#102]
+Results [7]: [ws_item_sk#2, sum#98, sum#99, sum#100, isEmpty#101, sum#102, isEmpty#103]
 
 (179) Exchange
-Input [7]: [ws_item_sk#2, sum#97, sum#98, sum#99, isEmpty#100, sum#101, isEmpty#102]
+Input [7]: [ws_item_sk#2, sum#98, sum#99, sum#100, isEmpty#101, sum#102, isEmpty#103]
 Arguments: hashpartitioning(ws_item_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=22]
 
 (180) HashAggregate
-Input [7]: [ws_item_sk#2, sum#97, sum#98, sum#99, isEmpty#100, sum#101, isEmpty#102]
+Input [7]: [ws_item_sk#2, sum#98, sum#99, sum#100, isEmpty#101, sum#102, isEmpty#103]
 Keys [1]: [ws_item_sk#2]
 Functions [4]: [sum(coalesce(wr_return_quantity#9, 0)), sum(coalesce(ws_quantity#4, 0)), sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(wr_return_quantity#9, 0))#25, sum(coalesce(ws_quantity#4, 0))#26, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#27, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#28]
-Results [3]: [ws_item_sk#2 AS item#29, (cast(sum(coalesce(wr_return_quantity#9, 0))#25 as decimal(15,4)) / cast(sum(coalesce(ws_quantity#4, 0))#26 as decimal(15,4))) AS return_ratio#30, (cast(sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#27 as decimal(15,4)) / cast(sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#28 as decimal(15,4))) AS currency_ratio#31]
+Aggregate Attributes [4]: [sum(coalesce(wr_return_quantity#9, 0))#26, sum(coalesce(ws_quantity#4, 0))#27, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#28, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#29]
+Results [3]: [ws_item_sk#2 AS item#30, (cast(sum(coalesce(wr_return_quantity#9, 0))#26 as decimal(15,4)) / cast(sum(coalesce(ws_quantity#4, 0))#27 as decimal(15,4))) AS return_ratio#31, (cast(sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#28 as decimal(15,4)) / cast(sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#29 as decimal(15,4))) AS currency_ratio#32]
 
 (181) Exchange
-Input [3]: [item#29, return_ratio#30, currency_ratio#31]
+Input [3]: [item#30, return_ratio#31, currency_ratio#32]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=23]
 
 (182) Sort
-Input [3]: [item#29, return_ratio#30, currency_ratio#31]
-Arguments: [return_ratio#30 ASC NULLS FIRST], false, 0
+Input [3]: [item#30, return_ratio#31, currency_ratio#32]
+Arguments: [return_ratio#31 ASC NULLS FIRST], false, 0
 
 (183) Window
-Input [3]: [item#29, return_ratio#30, currency_ratio#31]
-Arguments: [rank(return_ratio#30) windowspecdefinition(return_ratio#30 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#32], [return_ratio#30 ASC NULLS FIRST]
+Input [3]: [item#30, return_ratio#31, currency_ratio#32]
+Arguments: [rank(return_ratio#31) windowspecdefinition(return_ratio#31 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#33], [return_ratio#31 ASC NULLS FIRST]
 
 (184) Sort
-Input [4]: [item#29, return_ratio#30, currency_ratio#31, return_rank#32]
-Arguments: [currency_ratio#31 ASC NULLS FIRST], false, 0
+Input [4]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33]
+Arguments: [currency_ratio#32 ASC NULLS FIRST], false, 0
 
 (185) Window
-Input [4]: [item#29, return_ratio#30, currency_ratio#31, return_rank#32]
-Arguments: [rank(currency_ratio#31) windowspecdefinition(currency_ratio#31 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#33], [currency_ratio#31 ASC NULLS FIRST]
+Input [4]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33]
+Arguments: [rank(currency_ratio#32) windowspecdefinition(currency_ratio#32 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#34], [currency_ratio#32 ASC NULLS FIRST]
 
 (186) Filter
-Input [5]: [item#29, return_ratio#30, currency_ratio#31, return_rank#32, currency_rank#33]
-Condition : ((return_rank#32 <= 10) OR (currency_rank#33 <= 10))
+Input [5]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33, currency_rank#34]
+Condition : ((return_rank#33 <= 10) OR (currency_rank#34 <= 10))
 
 (187) Project
-Output [5]: [web AS channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Input [5]: [item#29, return_ratio#30, currency_ratio#31, return_rank#32, currency_rank#33]
+Output [5]: [web AS channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Input [5]: [item#30, return_ratio#31, currency_ratio#32, return_rank#33, currency_rank#34]
 
 (188) Scan parquet
-Output [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_net_profit#40]
+Output [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40, cs_net_profit#41]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(cs_net_profit), IsNotNull(cs_net_paid), IsNotNull(cs_quantity), GreaterThan(cs_net_profit,1.00), GreaterThan(cs_net_paid,0.00), GreaterThan(cs_quantity,0), IsNotNull(cs_order_number), IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_item_sk:int,cs_order_number:int,cs_quantity:int,cs_net_paid:decimal(7,2),cs_net_profit:decimal(7,2)>
 
 (189) Filter
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_net_profit#40]
-Condition : ((((((((isnotnull(cs_net_profit#40) AND isnotnull(cs_net_paid#39)) AND isnotnull(cs_quantity#38)) AND (cs_net_profit#40 > 1.00)) AND (cs_net_paid#39 > 0.00)) AND (cs_quantity#38 > 0)) AND isnotnull(cs_order_number#37)) AND isnotnull(cs_item_sk#36)) AND isnotnull(cs_sold_date_sk#35))
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40, cs_net_profit#41]
+Condition : ((((((((isnotnull(cs_net_profit#41) AND isnotnull(cs_net_paid#40)) AND isnotnull(cs_quantity#39)) AND (cs_net_profit#41 > 1.00)) AND (cs_net_paid#40 > 0.00)) AND (cs_quantity#39 > 0)) AND isnotnull(cs_order_number#38)) AND isnotnull(cs_item_sk#37)) AND isnotnull(cs_sold_date_sk#36))
 
 (190) Project
-Output [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_net_profit#40]
+Output [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40, cs_net_profit#41]
 
 (191) Exchange
-Input [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
-Arguments: hashpartitioning(cs_order_number#37, cs_item_sk#36, 100), ENSURE_REQUIREMENTS, [plan_id=24]
+Input [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
+Arguments: hashpartitioning(cs_order_number#38, cs_item_sk#37, 100), ENSURE_REQUIREMENTS, [plan_id=24]
 
 (192) Sort
-Input [5]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39]
-Arguments: [cs_order_number#37 ASC NULLS FIRST, cs_item_sk#36 ASC NULLS FIRST], false, 0
+Input [5]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40]
+Arguments: [cs_order_number#38 ASC NULLS FIRST, cs_item_sk#37 ASC NULLS FIRST], false, 0
 
 (193) Scan parquet
-Output [4]: [cr_item_sk#41, cr_order_number#42, cr_return_quantity#43, cr_return_amount#44]
+Output [4]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00), IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_quantity:int,cr_return_amount:decimal(7,2)>
 
 (194) Filter
-Input [4]: [cr_item_sk#41, cr_order_number#42, cr_return_quantity#43, cr_return_amount#44]
-Condition : (((isnotnull(cr_return_amount#44) AND (cr_return_amount#44 > 10000.00)) AND isnotnull(cr_order_number#42)) AND isnotnull(cr_item_sk#41))
+Input [4]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
+Condition : (((isnotnull(cr_return_amount#45) AND (cr_return_amount#45 > 10000.00)) AND isnotnull(cr_order_number#43)) AND isnotnull(cr_item_sk#42))
 
 (195) Exchange
-Input [4]: [cr_item_sk#41, cr_order_number#42, cr_return_quantity#43, cr_return_amount#44]
-Arguments: hashpartitioning(cr_order_number#42, cr_item_sk#41, 100), ENSURE_REQUIREMENTS, [plan_id=25]
+Input [4]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
+Arguments: hashpartitioning(cr_order_number#43, cr_item_sk#42, 100), ENSURE_REQUIREMENTS, [plan_id=25]
 
 (196) Sort
-Input [4]: [cr_item_sk#41, cr_order_number#42, cr_return_quantity#43, cr_return_amount#44]
-Arguments: [cr_order_number#42 ASC NULLS FIRST, cr_item_sk#41 ASC NULLS FIRST], false, 0
+Input [4]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
+Arguments: [cr_order_number#43 ASC NULLS FIRST, cr_item_sk#42 ASC NULLS FIRST], false, 0
 
 (197) SortMergeJoin
-Left keys [2]: [cs_order_number#37, cs_item_sk#36]
-Right keys [2]: [cr_order_number#42, cr_item_sk#41]
+Left keys [2]: [cs_order_number#38, cs_item_sk#37]
+Right keys [2]: [cr_order_number#43, cr_item_sk#42]
 Join type: Inner
 Join condition: None
 
 (198) Project
-Output [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Input [9]: [cs_sold_date_sk#35, cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cr_item_sk#41, cr_order_number#42, cr_return_quantity#43, cr_return_amount#44]
+Output [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Input [9]: [cs_sold_date_sk#36, cs_item_sk#37, cs_order_number#38, cs_quantity#39, cs_net_paid#40, cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
 
 (199) Exchange
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Arguments: hashpartitioning(cs_sold_date_sk#35, 100), ENSURE_REQUIREMENTS, [plan_id=26]
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Arguments: hashpartitioning(cs_sold_date_sk#36, 100), ENSURE_REQUIREMENTS, [plan_id=26]
 
 (200) Sort
-Input [6]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Arguments: [cs_sold_date_sk#35 ASC NULLS FIRST], false, 0
+Input [6]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Arguments: [cs_sold_date_sk#36 ASC NULLS FIRST], false, 0
 
 (201) Scan parquet
-Output [3]: [d_date_sk#45, d_year#103, d_moy#104]
+Output [3]: [d_date_sk#46, d_year#104, d_moy#105]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,12), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (202) Filter
-Input [3]: [d_date_sk#45, d_year#103, d_moy#104]
-Condition : ((((isnotnull(d_year#103) AND isnotnull(d_moy#104)) AND (d_year#103 = 2001)) AND (d_moy#104 = 12)) AND isnotnull(d_date_sk#45))
+Input [3]: [d_date_sk#46, d_year#104, d_moy#105]
+Condition : ((((isnotnull(d_year#104) AND isnotnull(d_moy#105)) AND (d_year#104 = 2001)) AND (d_moy#105 = 12)) AND isnotnull(d_date_sk#46))
 
 (203) Project
-Output [1]: [d_date_sk#45]
-Input [3]: [d_date_sk#45, d_year#103, d_moy#104]
+Output [1]: [d_date_sk#46]
+Input [3]: [d_date_sk#46, d_year#104, d_moy#105]
 
 (204) Exchange
-Input [1]: [d_date_sk#45]
-Arguments: hashpartitioning(d_date_sk#45, 100), ENSURE_REQUIREMENTS, [plan_id=27]
+Input [1]: [d_date_sk#46]
+Arguments: hashpartitioning(d_date_sk#46, 100), ENSURE_REQUIREMENTS, [plan_id=27]
 
 (205) Sort
-Input [1]: [d_date_sk#45]
-Arguments: [d_date_sk#45 ASC NULLS FIRST], false, 0
+Input [1]: [d_date_sk#46]
+Arguments: [d_date_sk#46 ASC NULLS FIRST], false, 0
 
 (206) SortMergeJoin
-Left keys [1]: [cs_sold_date_sk#35]
-Right keys [1]: [d_date_sk#45]
+Left keys [1]: [cs_sold_date_sk#36]
+Right keys [1]: [d_date_sk#46]
 Join type: Inner
 Join condition: None
 
 (207) Project
-Output [5]: [cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Input [7]: [cs_sold_date_sk#35, cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44, d_date_sk#45]
+Output [5]: [cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Input [7]: [cs_sold_date_sk#36, cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45, d_date_sk#46]
 
 (208) HashAggregate
-Input [5]: [cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#43, cr_return_amount#44]
-Keys [1]: [cs_item_sk#36]
-Functions [4]: [partial_sum(coalesce(cr_return_quantity#43, 0)), partial_sum(coalesce(cs_quantity#38, 0)), partial_sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))]
-Aggregate Attributes [6]: [sum#50, sum#51, sum#52, isEmpty#53, sum#54, isEmpty#55]
-Results [7]: [cs_item_sk#36, sum#105, sum#106, sum#107, isEmpty#108, sum#109, isEmpty#110]
+Input [5]: [cs_item_sk#37, cs_quantity#39, cs_net_paid#40, cr_return_quantity#44, cr_return_amount#45]
+Keys [1]: [cs_item_sk#37]
+Functions [4]: [partial_sum(coalesce(cr_return_quantity#44, 0)), partial_sum(coalesce(cs_quantity#39, 0)), partial_sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))]
+Aggregate Attributes [6]: [sum#51, sum#52, sum#53, isEmpty#54, sum#55, isEmpty#56]
+Results [7]: [cs_item_sk#37, sum#106, sum#107, sum#108, isEmpty#109, sum#110, isEmpty#111]
 
 (209) Exchange
-Input [7]: [cs_item_sk#36, sum#105, sum#106, sum#107, isEmpty#108, sum#109, isEmpty#110]
-Arguments: hashpartitioning(cs_item_sk#36, 100), ENSURE_REQUIREMENTS, [plan_id=28]
+Input [7]: [cs_item_sk#37, sum#106, sum#107, sum#108, isEmpty#109, sum#110, isEmpty#111]
+Arguments: hashpartitioning(cs_item_sk#37, 100), ENSURE_REQUIREMENTS, [plan_id=28]
 
 (210) HashAggregate
-Input [7]: [cs_item_sk#36, sum#105, sum#106, sum#107, isEmpty#108, sum#109, isEmpty#110]
-Keys [1]: [cs_item_sk#36]
-Functions [4]: [sum(coalesce(cr_return_quantity#43, 0)), sum(coalesce(cs_quantity#38, 0)), sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(cr_return_quantity#43, 0))#56, sum(coalesce(cs_quantity#38, 0))#57, sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00))#58, sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#59]
-Results [3]: [cs_item_sk#36 AS item#60, (cast(sum(coalesce(cr_return_quantity#43, 0))#56 as decimal(15,4)) / cast(sum(coalesce(cs_quantity#38, 0))#57 as decimal(15,4))) AS return_ratio#61, (cast(sum(coalesce(cast(cr_return_amount#44 as decimal(12,2)), 0.00))#58 as decimal(15,4)) / cast(sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#59 as decimal(15,4))) AS currency_ratio#62]
+Input [7]: [cs_item_sk#37, sum#106, sum#107, sum#108, isEmpty#109, sum#110, isEmpty#111]
+Keys [1]: [cs_item_sk#37]
+Functions [4]: [sum(coalesce(cr_return_quantity#44, 0)), sum(coalesce(cs_quantity#39, 0)), sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(cr_return_quantity#44, 0))#57, sum(coalesce(cs_quantity#39, 0))#58, sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#59, sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))#60]
+Results [3]: [cs_item_sk#37 AS item#61, (cast(sum(coalesce(cr_return_quantity#44, 0))#57 as decimal(15,4)) / cast(sum(coalesce(cs_quantity#39, 0))#58 as decimal(15,4))) AS return_ratio#62, (cast(sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#59 as decimal(15,4)) / cast(sum(coalesce(cast(cs_net_paid#40 as decimal(12,2)), 0.00))#60 as decimal(15,4))) AS currency_ratio#63]
 
 (211) Exchange
-Input [3]: [item#60, return_ratio#61, currency_ratio#62]
+Input [3]: [item#61, return_ratio#62, currency_ratio#63]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=29]
 
 (212) Sort
-Input [3]: [item#60, return_ratio#61, currency_ratio#62]
-Arguments: [return_ratio#61 ASC NULLS FIRST], false, 0
+Input [3]: [item#61, return_ratio#62, currency_ratio#63]
+Arguments: [return_ratio#62 ASC NULLS FIRST], false, 0
 
 (213) Window
-Input [3]: [item#60, return_ratio#61, currency_ratio#62]
-Arguments: [rank(return_ratio#61) windowspecdefinition(return_ratio#61 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#63], [return_ratio#61 ASC NULLS FIRST]
+Input [3]: [item#61, return_ratio#62, currency_ratio#63]
+Arguments: [rank(return_ratio#62) windowspecdefinition(return_ratio#62 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#64], [return_ratio#62 ASC NULLS FIRST]
 
 (214) Sort
-Input [4]: [item#60, return_ratio#61, currency_ratio#62, return_rank#63]
-Arguments: [currency_ratio#62 ASC NULLS FIRST], false, 0
+Input [4]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64]
+Arguments: [currency_ratio#63 ASC NULLS FIRST], false, 0
 
 (215) Window
-Input [4]: [item#60, return_ratio#61, currency_ratio#62, return_rank#63]
-Arguments: [rank(currency_ratio#62) windowspecdefinition(currency_ratio#62 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#64], [currency_ratio#62 ASC NULLS FIRST]
+Input [4]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64]
+Arguments: [rank(currency_ratio#63) windowspecdefinition(currency_ratio#63 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#65], [currency_ratio#63 ASC NULLS FIRST]
 
 (216) Filter
-Input [5]: [item#60, return_ratio#61, currency_ratio#62, return_rank#63, currency_rank#64]
-Condition : ((return_rank#63 <= 10) OR (currency_rank#64 <= 10))
+Input [5]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64, currency_rank#65]
+Condition : ((return_rank#64 <= 10) OR (currency_rank#65 <= 10))
 
 (217) Project
-Output [5]: [catalog AS channel#65, item#60, return_ratio#61, return_rank#63, currency_rank#64]
-Input [5]: [item#60, return_ratio#61, currency_ratio#62, return_rank#63, currency_rank#64]
+Output [5]: [catalog AS channel#66, item#61, return_ratio#62, return_rank#64, currency_rank#65]
+Input [5]: [item#61, return_ratio#62, currency_ratio#63, return_rank#64, currency_rank#65]
 
 (218) Scan parquet
-Output [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70, ss_net_profit#71]
+Output [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, ss_net_profit#72]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_net_profit), IsNotNull(ss_net_paid), IsNotNull(ss_quantity), GreaterThan(ss_net_profit,1.00), GreaterThan(ss_net_paid,0.00), GreaterThan(ss_quantity,0), IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ticket_number:int,ss_quantity:int,ss_net_paid:decimal(7,2),ss_net_profit:decimal(7,2)>
 
 (219) Filter
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70, ss_net_profit#71]
-Condition : ((((((((isnotnull(ss_net_profit#71) AND isnotnull(ss_net_paid#70)) AND isnotnull(ss_quantity#69)) AND (ss_net_profit#71 > 1.00)) AND (ss_net_paid#70 > 0.00)) AND (ss_quantity#69 > 0)) AND isnotnull(ss_ticket_number#68)) AND isnotnull(ss_item_sk#67)) AND isnotnull(ss_sold_date_sk#66))
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, ss_net_profit#72]
+Condition : ((((((((isnotnull(ss_net_profit#72) AND isnotnull(ss_net_paid#71)) AND isnotnull(ss_quantity#70)) AND (ss_net_profit#72 > 1.00)) AND (ss_net_paid#71 > 0.00)) AND (ss_quantity#70 > 0)) AND isnotnull(ss_ticket_number#69)) AND isnotnull(ss_item_sk#68)) AND isnotnull(ss_sold_date_sk#67))
 
 (220) Project
-Output [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70, ss_net_profit#71]
+Output [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, ss_net_profit#72]
 
 (221) Exchange
-Input [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
-Arguments: hashpartitioning(ss_ticket_number#68, ss_item_sk#67, 100), ENSURE_REQUIREMENTS, [plan_id=30]
+Input [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
+Arguments: hashpartitioning(ss_ticket_number#69, ss_item_sk#68, 100), ENSURE_REQUIREMENTS, [plan_id=30]
 
 (222) Sort
-Input [5]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70]
-Arguments: [ss_ticket_number#68 ASC NULLS FIRST, ss_item_sk#67 ASC NULLS FIRST], false, 0
+Input [5]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71]
+Arguments: [ss_ticket_number#69 ASC NULLS FIRST, ss_item_sk#68 ASC NULLS FIRST], false, 0
 
 (223) Scan parquet
-Output [4]: [sr_item_sk#72, sr_ticket_number#73, sr_return_quantity#74, sr_return_amt#75]
+Output [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (224) Filter
-Input [4]: [sr_item_sk#72, sr_ticket_number#73, sr_return_quantity#74, sr_return_amt#75]
-Condition : (((isnotnull(sr_return_amt#75) AND (sr_return_amt#75 > 10000.00)) AND isnotnull(sr_ticket_number#73)) AND isnotnull(sr_item_sk#72))
+Input [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+Condition : (((isnotnull(sr_return_amt#76) AND (sr_return_amt#76 > 10000.00)) AND isnotnull(sr_ticket_number#74)) AND isnotnull(sr_item_sk#73))
 
 (225) Exchange
-Input [4]: [sr_item_sk#72, sr_ticket_number#73, sr_return_quantity#74, sr_return_amt#75]
-Arguments: hashpartitioning(sr_ticket_number#73, sr_item_sk#72, 100), ENSURE_REQUIREMENTS, [plan_id=31]
+Input [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+Arguments: hashpartitioning(sr_ticket_number#74, sr_item_sk#73, 100), ENSURE_REQUIREMENTS, [plan_id=31]
 
 (226) Sort
-Input [4]: [sr_item_sk#72, sr_ticket_number#73, sr_return_quantity#74, sr_return_amt#75]
-Arguments: [sr_ticket_number#73 ASC NULLS FIRST, sr_item_sk#72 ASC NULLS FIRST], false, 0
+Input [4]: [sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
+Arguments: [sr_ticket_number#74 ASC NULLS FIRST, sr_item_sk#73 ASC NULLS FIRST], false, 0
 
 (227) SortMergeJoin
-Left keys [2]: [ss_ticket_number#68, ss_item_sk#67]
-Right keys [2]: [sr_ticket_number#73, sr_item_sk#72]
+Left keys [2]: [ss_ticket_number#69, ss_item_sk#68]
+Right keys [2]: [sr_ticket_number#74, sr_item_sk#73]
 Join type: Inner
 Join condition: None
 
 (228) Project
-Output [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Input [9]: [ss_sold_date_sk#66, ss_item_sk#67, ss_ticket_number#68, ss_quantity#69, ss_net_paid#70, sr_item_sk#72, sr_ticket_number#73, sr_return_quantity#74, sr_return_amt#75]
+Output [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Input [9]: [ss_sold_date_sk#67, ss_item_sk#68, ss_ticket_number#69, ss_quantity#70, ss_net_paid#71, sr_item_sk#73, sr_ticket_number#74, sr_return_quantity#75, sr_return_amt#76]
 
 (229) Exchange
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Arguments: hashpartitioning(ss_sold_date_sk#66, 100), ENSURE_REQUIREMENTS, [plan_id=32]
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Arguments: hashpartitioning(ss_sold_date_sk#67, 100), ENSURE_REQUIREMENTS, [plan_id=32]
 
 (230) Sort
-Input [6]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Arguments: [ss_sold_date_sk#66 ASC NULLS FIRST], false, 0
+Input [6]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Arguments: [ss_sold_date_sk#67 ASC NULLS FIRST], false, 0
 
 (231) Scan parquet
-Output [3]: [d_date_sk#76, d_year#111, d_moy#112]
+Output [3]: [d_date_sk#77, d_year#112, d_moy#113]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,12), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (232) Filter
-Input [3]: [d_date_sk#76, d_year#111, d_moy#112]
-Condition : ((((isnotnull(d_year#111) AND isnotnull(d_moy#112)) AND (d_year#111 = 2001)) AND (d_moy#112 = 12)) AND isnotnull(d_date_sk#76))
+Input [3]: [d_date_sk#77, d_year#112, d_moy#113]
+Condition : ((((isnotnull(d_year#112) AND isnotnull(d_moy#113)) AND (d_year#112 = 2001)) AND (d_moy#113 = 12)) AND isnotnull(d_date_sk#77))
 
 (233) Project
-Output [1]: [d_date_sk#76]
-Input [3]: [d_date_sk#76, d_year#111, d_moy#112]
+Output [1]: [d_date_sk#77]
+Input [3]: [d_date_sk#77, d_year#112, d_moy#113]
 
 (234) Exchange
-Input [1]: [d_date_sk#76]
-Arguments: hashpartitioning(d_date_sk#76, 100), ENSURE_REQUIREMENTS, [plan_id=33]
+Input [1]: [d_date_sk#77]
+Arguments: hashpartitioning(d_date_sk#77, 100), ENSURE_REQUIREMENTS, [plan_id=33]
 
 (235) Sort
-Input [1]: [d_date_sk#76]
-Arguments: [d_date_sk#76 ASC NULLS FIRST], false, 0
+Input [1]: [d_date_sk#77]
+Arguments: [d_date_sk#77 ASC NULLS FIRST], false, 0
 
 (236) SortMergeJoin
-Left keys [1]: [ss_sold_date_sk#66]
-Right keys [1]: [d_date_sk#76]
+Left keys [1]: [ss_sold_date_sk#67]
+Right keys [1]: [d_date_sk#77]
 Join type: Inner
 Join condition: None
 
 (237) Project
-Output [5]: [ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Input [7]: [ss_sold_date_sk#66, ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75, d_date_sk#76]
+Output [5]: [ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Input [7]: [ss_sold_date_sk#67, ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76, d_date_sk#77]
 
 (238) HashAggregate
-Input [5]: [ss_item_sk#67, ss_quantity#69, ss_net_paid#70, sr_return_quantity#74, sr_return_amt#75]
-Keys [1]: [ss_item_sk#67]
-Functions [4]: [partial_sum(coalesce(sr_return_quantity#74, 0)), partial_sum(coalesce(ss_quantity#69, 0)), partial_sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))]
-Aggregate Attributes [6]: [sum#81, sum#82, sum#83, isEmpty#84, sum#85, isEmpty#86]
-Results [7]: [ss_item_sk#67, sum#113, sum#114, sum#115, isEmpty#116, sum#117, isEmpty#118]
+Input [5]: [ss_item_sk#68, ss_quantity#70, ss_net_paid#71, sr_return_quantity#75, sr_return_amt#76]
+Keys [1]: [ss_item_sk#68]
+Functions [4]: [partial_sum(coalesce(sr_return_quantity#75, 0)), partial_sum(coalesce(ss_quantity#70, 0)), partial_sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))]
+Aggregate Attributes [6]: [sum#82, sum#83, sum#84, isEmpty#85, sum#86, isEmpty#87]
+Results [7]: [ss_item_sk#68, sum#114, sum#115, sum#116, isEmpty#117, sum#118, isEmpty#119]
 
 (239) Exchange
-Input [7]: [ss_item_sk#67, sum#113, sum#114, sum#115, isEmpty#116, sum#117, isEmpty#118]
-Arguments: hashpartitioning(ss_item_sk#67, 100), ENSURE_REQUIREMENTS, [plan_id=34]
+Input [7]: [ss_item_sk#68, sum#114, sum#115, sum#116, isEmpty#117, sum#118, isEmpty#119]
+Arguments: hashpartitioning(ss_item_sk#68, 100), ENSURE_REQUIREMENTS, [plan_id=34]
 
 (240) HashAggregate
-Input [7]: [ss_item_sk#67, sum#113, sum#114, sum#115, isEmpty#116, sum#117, isEmpty#118]
-Keys [1]: [ss_item_sk#67]
-Functions [4]: [sum(coalesce(sr_return_quantity#74, 0)), sum(coalesce(ss_quantity#69, 0)), sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(sr_return_quantity#74, 0))#87, sum(coalesce(ss_quantity#69, 0))#88, sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00))#89, sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))#90]
-Results [3]: [ss_item_sk#67 AS item#91, (cast(sum(coalesce(sr_return_quantity#74, 0))#87 as decimal(15,4)) / cast(sum(coalesce(ss_quantity#69, 0))#88 as decimal(15,4))) AS return_ratio#92, (cast(sum(coalesce(cast(sr_return_amt#75 as decimal(12,2)), 0.00))#89 as decimal(15,4)) / cast(sum(coalesce(cast(ss_net_paid#70 as decimal(12,2)), 0.00))#90 as decimal(15,4))) AS currency_ratio#93]
+Input [7]: [ss_item_sk#68, sum#114, sum#115, sum#116, isEmpty#117, sum#118, isEmpty#119]
+Keys [1]: [ss_item_sk#68]
+Functions [4]: [sum(coalesce(sr_return_quantity#75, 0)), sum(coalesce(ss_quantity#70, 0)), sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(sr_return_quantity#75, 0))#88, sum(coalesce(ss_quantity#70, 0))#89, sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00))#90, sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))#91]
+Results [3]: [ss_item_sk#68 AS item#92, (cast(sum(coalesce(sr_return_quantity#75, 0))#88 as decimal(15,4)) / cast(sum(coalesce(ss_quantity#70, 0))#89 as decimal(15,4))) AS return_ratio#93, (cast(sum(coalesce(cast(sr_return_amt#76 as decimal(12,2)), 0.00))#90 as decimal(15,4)) / cast(sum(coalesce(cast(ss_net_paid#71 as decimal(12,2)), 0.00))#91 as decimal(15,4))) AS currency_ratio#94]
 
 (241) Exchange
-Input [3]: [item#91, return_ratio#92, currency_ratio#93]
+Input [3]: [item#92, return_ratio#93, currency_ratio#94]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=35]
 
 (242) Sort
-Input [3]: [item#91, return_ratio#92, currency_ratio#93]
-Arguments: [return_ratio#92 ASC NULLS FIRST], false, 0
+Input [3]: [item#92, return_ratio#93, currency_ratio#94]
+Arguments: [return_ratio#93 ASC NULLS FIRST], false, 0
 
 (243) Window
-Input [3]: [item#91, return_ratio#92, currency_ratio#93]
-Arguments: [rank(return_ratio#92) windowspecdefinition(return_ratio#92 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#94], [return_ratio#92 ASC NULLS FIRST]
+Input [3]: [item#92, return_ratio#93, currency_ratio#94]
+Arguments: [rank(return_ratio#93) windowspecdefinition(return_ratio#93 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS return_rank#95], [return_ratio#93 ASC NULLS FIRST]
 
 (244) Sort
-Input [4]: [item#91, return_ratio#92, currency_ratio#93, return_rank#94]
-Arguments: [currency_ratio#93 ASC NULLS FIRST], false, 0
+Input [4]: [item#92, return_ratio#93, currency_ratio#94, return_rank#95]
+Arguments: [currency_ratio#94 ASC NULLS FIRST], false, 0
 
 (245) Window
-Input [4]: [item#91, return_ratio#92, currency_ratio#93, return_rank#94]
-Arguments: [rank(currency_ratio#93) windowspecdefinition(currency_ratio#93 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#95], [currency_ratio#93 ASC NULLS FIRST]
+Input [4]: [item#92, return_ratio#93, currency_ratio#94, return_rank#95]
+Arguments: [rank(currency_ratio#94) windowspecdefinition(currency_ratio#94 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS currency_rank#96], [currency_ratio#94 ASC NULLS FIRST]
 
 (246) Filter
-Input [5]: [item#91, return_ratio#92, currency_ratio#93, return_rank#94, currency_rank#95]
-Condition : ((return_rank#94 <= 10) OR (currency_rank#95 <= 10))
+Input [5]: [item#92, return_ratio#93, currency_ratio#94, return_rank#95, currency_rank#96]
+Condition : ((return_rank#95 <= 10) OR (currency_rank#96 <= 10))
 
 (247) Project
-Output [5]: [store AS channel#96, item#91, return_ratio#92, return_rank#94, currency_rank#95]
-Input [5]: [item#91, return_ratio#92, currency_ratio#93, return_rank#94, currency_rank#95]
+Output [5]: [store AS channel#97, item#92, return_ratio#93, return_rank#95, currency_rank#96]
+Input [5]: [item#92, return_ratio#93, currency_ratio#94, return_rank#95, currency_rank#96]
 
 (248) Union
 
 (249) HashAggregate
-Input [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Keys [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Keys [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Functions: []
 Aggregate Attributes: []
-Results [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Results [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 (250) Exchange
-Input [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Arguments: hashpartitioning(channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33, 100), ENSURE_REQUIREMENTS, [plan_id=36]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Arguments: hashpartitioning(channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34, 100), ENSURE_REQUIREMENTS, [plan_id=36]
 
 (251) HashAggregate
-Input [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Keys [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Keys [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Functions: []
 Aggregate Attributes: []
-Results [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Results [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 (252) TakeOrderedAndProject
-Input [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
-Arguments: X, [channel#34 ASC NULLS FIRST, return_rank#32 ASC NULLS FIRST, currency_rank#33 ASC NULLS FIRST, item#29 ASC NULLS FIRST], [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
+Arguments: X, [channel#35 ASC NULLS FIRST, return_rank#33 ASC NULLS FIRST, currency_rank#34 ASC NULLS FIRST, item#30 ASC NULLS FIRST], [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 (253) AdaptiveSparkPlan
-Output [5]: [channel#34, item#29, return_ratio#30, return_rank#32, currency_rank#33]
+Output [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Arguments: isFinalPlan=true
 

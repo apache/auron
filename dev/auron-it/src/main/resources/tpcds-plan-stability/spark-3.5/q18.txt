@@ -586,36 +586,36 @@ Input [12]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_group
 Keys [5]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32]
 Functions [7]: [partial_avg(_c5#33), partial_avg(_c6#34), partial_avg(_c7#35), partial_avg(_c8#36), partial_avg(_c9#37), partial_avg(_c10#38), partial_avg(_c11#39)]
 Aggregate Attributes [14]: [sum#40, count#41, sum#42, count#43, sum#44, count#45, sum#46, count#47, sum#48, count#49, sum#50, count#51, sum#52, count#53]
-Results [6]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54#54]
+Results [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55]
 
 (100) NativeShuffleExchange
-Input [6]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54#54]
+Input [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55]
 Arguments: hashpartitioning(i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (101) ShuffleQueryStage
-Output [6]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54#54]
+Output [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55]
 Arguments: X
 
 (102) AQEShuffleRead
-Input [6]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54#54]
+Input [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55]
 Arguments: coalesced
 
 (103) InputAdapter
-Input [6]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54#54]
+Input [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55]
 
 (104) NativeHashAggregate
-Input [6]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54#54]
+Input [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55, #54, #55]
 Keys [5]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32]
 Functions [7]: [avg(cast(cs_quantity#5 as decimal(12,2))), avg(cast(cs_list_price#6 as decimal(12,2))), avg(cast(cs_coupon_amt#8 as decimal(12,2))), avg(cast(cs_sales_price#7 as decimal(12,2))), avg(cast(cs_net_profit#9 as decimal(12,2))), avg(cast(c_birth_year#18 as decimal(12,2))), avg(cast(cd_dep_count#13 as decimal(12,2)))]
-Aggregate Attributes [7]: [avg(cast(cs_quantity#5 as decimal(12,2)))#55, avg(cast(cs_list_price#6 as decimal(12,2)))#56, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#57, avg(cast(cs_sales_price#7 as decimal(12,2)))#58, avg(cast(cs_net_profit#9 as decimal(12,2)))#59, avg(cast(c_birth_year#18 as decimal(12,2)))#60, avg(cast(cd_dep_count#13 as decimal(12,2)))#61]
-Results [12]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, avg(cast(cs_quantity#5 as decimal(12,2)))#55, avg(cast(cs_list_price#6 as decimal(12,2)))#56, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#57, avg(cast(cs_sales_price#7 as decimal(12,2)))#58, avg(cast(cs_net_profit#9 as decimal(12,2)))#59, avg(cast(c_birth_year#18 as decimal(12,2)))#60, avg(cast(cd_dep_count#13 as decimal(12,2)))#61]
+Aggregate Attributes [7]: [avg(cast(cs_quantity#5 as decimal(12,2)))#56, avg(cast(cs_list_price#6 as decimal(12,2)))#57, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#58, avg(cast(cs_sales_price#7 as decimal(12,2)))#59, avg(cast(cs_net_profit#9 as decimal(12,2)))#60, avg(cast(c_birth_year#18 as decimal(12,2)))#61, avg(cast(cd_dep_count#13 as decimal(12,2)))#62]
+Results [12]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, avg(cast(cs_quantity#5 as decimal(12,2)))#56, avg(cast(cs_list_price#6 as decimal(12,2)))#57, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#58, avg(cast(cs_sales_price#7 as decimal(12,2)))#59, avg(cast(cs_net_profit#9 as decimal(12,2)))#60, avg(cast(c_birth_year#18 as decimal(12,2)))#61, avg(cast(cd_dep_count#13 as decimal(12,2)))#62]
 
 (105) NativeProject
-Output [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, avg(cast(cs_quantity#5 as decimal(12,2)))#55 AS agg1#62, avg(cast(cs_list_price#6 as decimal(12,2)))#56 AS agg2#63, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#57 AS agg3#64, avg(cast(cs_sales_price#7 as decimal(12,2)))#58 AS agg4#65, avg(cast(cs_net_profit#9 as decimal(12,2)))#59 AS agg5#66, avg(cast(c_birth_year#18 as decimal(12,2)))#60 AS agg6#67, avg(cast(cd_dep_count#13 as decimal(12,2)))#61 AS agg7#68]
-Input [12]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, avg(cast(cs_quantity#5 as decimal(12,2)))#55, avg(cast(cs_list_price#6 as decimal(12,2)))#56, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#57, avg(cast(cs_sales_price#7 as decimal(12,2)))#58, avg(cast(cs_net_profit#9 as decimal(12,2)))#59, avg(cast(c_birth_year#18 as decimal(12,2)))#60, avg(cast(cd_dep_count#13 as decimal(12,2)))#61]
+Output [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, avg(cast(cs_quantity#5 as decimal(12,2)))#56 AS agg1#63, avg(cast(cs_list_price#6 as decimal(12,2)))#57 AS agg2#64, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#58 AS agg3#65, avg(cast(cs_sales_price#7 as decimal(12,2)))#59 AS agg4#66, avg(cast(cs_net_profit#9 as decimal(12,2)))#60 AS agg5#67, avg(cast(c_birth_year#18 as decimal(12,2)))#61 AS agg6#68, avg(cast(cd_dep_count#13 as decimal(12,2)))#62 AS agg7#69]
+Input [12]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, avg(cast(cs_quantity#5 as decimal(12,2)))#56, avg(cast(cs_list_price#6 as decimal(12,2)))#57, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#58, avg(cast(cs_sales_price#7 as decimal(12,2)))#59, avg(cast(cs_net_profit#9 as decimal(12,2)))#60, avg(cast(c_birth_year#18 as decimal(12,2)))#61, avg(cast(cd_dep_count#13 as decimal(12,2)))#62]
 
 (106) NativeTakeOrdered
-Input [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#62, agg2#63, agg3#64, agg4#65, agg5#66, agg6#67, agg7#68]
+Input [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#63, agg2#64, agg3#65, agg4#66, agg5#67, agg6#68, agg7#69]
 Arguments: X, [ca_country#29 DESC NULLS LAST, ca_state#30 DESC NULLS LAST, ca_county#31 DESC NULLS LAST, i_item_id#28 ASC NULLS FIRST]
 
 (107) Scan parquet
@@ -872,24 +872,24 @@ Input [12]: [cs_quantity#5, cs_list_price#6, cs_sales_price#7, cs_coupon_amt#8, 
 Keys [5]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32]
 Functions [7]: [partial_avg(cast(cs_quantity#5 as decimal(12,2))), partial_avg(cast(cs_list_price#6 as decimal(12,2))), partial_avg(cast(cs_coupon_amt#8 as decimal(12,2))), partial_avg(cast(cs_sales_price#7 as decimal(12,2))), partial_avg(cast(cs_net_profit#9 as decimal(12,2))), partial_avg(cast(c_birth_year#18 as decimal(12,2))), partial_avg(cast(cd_dep_count#13 as decimal(12,2)))]
 Aggregate Attributes [14]: [sum#40, count#41, sum#42, count#43, sum#44, count#45, sum#46, count#47, sum#48, count#49, sum#50, count#51, sum#52, count#53]
-Results [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, sum#69, count#70, sum#71, count#72, sum#73, count#74, sum#75, count#76, sum#77, count#78, sum#79, count#80, sum#81, count#82]
+Results [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, sum#70, count#71, sum#72, count#73, sum#74, count#75, sum#76, count#77, sum#78, count#79, sum#80, count#81, sum#82, count#83]
 
 (162) Exchange
-Input [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, sum#69, count#70, sum#71, count#72, sum#73, count#74, sum#75, count#76, sum#77, count#78, sum#79, count#80, sum#81, count#82]
+Input [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, sum#70, count#71, sum#72, count#73, sum#74, count#75, sum#76, count#77, sum#78, count#79, sum#80, count#81, sum#82, count#83]
 Arguments: hashpartitioning(i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, 100), ENSURE_REQUIREMENTS, [plan_id=26]
 
 (163) HashAggregate
-Input [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, sum#69, count#70, sum#71, count#72, sum#73, count#74, sum#75, count#76, sum#77, count#78, sum#79, count#80, sum#81, count#82]
+Input [19]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32, sum#70, count#71, sum#72, count#73, sum#74, count#75, sum#76, count#77, sum#78, count#79, sum#80, count#81, sum#82, count#83]
 Keys [5]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, spark_grouping_id#32]
 Functions [7]: [avg(cast(cs_quantity#5 as decimal(12,2))), avg(cast(cs_list_price#6 as decimal(12,2))), avg(cast(cs_coupon_amt#8 as decimal(12,2))), avg(cast(cs_sales_price#7 as decimal(12,2))), avg(cast(cs_net_profit#9 as decimal(12,2))), avg(cast(c_birth_year#18 as decimal(12,2))), avg(cast(cd_dep_count#13 as decimal(12,2)))]
-Aggregate Attributes [7]: [avg(cast(cs_quantity#5 as decimal(12,2)))#55, avg(cast(cs_list_price#6 as decimal(12,2)))#56, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#57, avg(cast(cs_sales_price#7 as decimal(12,2)))#58, avg(cast(cs_net_profit#9 as decimal(12,2)))#59, avg(cast(c_birth_year#18 as decimal(12,2)))#60, avg(cast(cd_dep_count#13 as decimal(12,2)))#61]
-Results [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, avg(cast(cs_quantity#5 as decimal(12,2)))#55 AS agg1#62, avg(cast(cs_list_price#6 as decimal(12,2)))#56 AS agg2#63, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#57 AS agg3#64, avg(cast(cs_sales_price#7 as decimal(12,2)))#58 AS agg4#65, avg(cast(cs_net_profit#9 as decimal(12,2)))#59 AS agg5#66, avg(cast(c_birth_year#18 as decimal(12,2)))#60 AS agg6#67, avg(cast(cd_dep_count#13 as decimal(12,2)))#61 AS agg7#68]
+Aggregate Attributes [7]: [avg(cast(cs_quantity#5 as decimal(12,2)))#56, avg(cast(cs_list_price#6 as decimal(12,2)))#57, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#58, avg(cast(cs_sales_price#7 as decimal(12,2)))#59, avg(cast(cs_net_profit#9 as decimal(12,2)))#60, avg(cast(c_birth_year#18 as decimal(12,2)))#61, avg(cast(cd_dep_count#13 as decimal(12,2)))#62]
+Results [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, avg(cast(cs_quantity#5 as decimal(12,2)))#56 AS agg1#63, avg(cast(cs_list_price#6 as decimal(12,2)))#57 AS agg2#64, avg(cast(cs_coupon_amt#8 as decimal(12,2)))#58 AS agg3#65, avg(cast(cs_sales_price#7 as decimal(12,2)))#59 AS agg4#66, avg(cast(cs_net_profit#9 as decimal(12,2)))#60 AS agg5#67, avg(cast(c_birth_year#18 as decimal(12,2)))#61 AS agg6#68, avg(cast(cd_dep_count#13 as decimal(12,2)))#62 AS agg7#69]
 
 (164) TakeOrderedAndProject
-Input [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#62, agg2#63, agg3#64, agg4#65, agg5#66, agg6#67, agg7#68]
-Arguments: X, [ca_country#29 DESC NULLS LAST, ca_state#30 DESC NULLS LAST, ca_county#31 DESC NULLS LAST, i_item_id#28 ASC NULLS FIRST], [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#62, agg2#63, agg3#64, agg4#65, agg5#66, agg6#67, agg7#68]
+Input [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#63, agg2#64, agg3#65, agg4#66, agg5#67, agg6#68, agg7#69]
+Arguments: X, [ca_country#29 DESC NULLS LAST, ca_state#30 DESC NULLS LAST, ca_county#31 DESC NULLS LAST, i_item_id#28 ASC NULLS FIRST], [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#63, agg2#64, agg3#65, agg4#66, agg5#67, agg6#68, agg7#69]
 
 (165) AdaptiveSparkPlan
-Output [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#62, agg2#63, agg3#64, agg4#65, agg5#66, agg6#67, agg7#68]
+Output [11]: [i_item_id#28, ca_country#29, ca_state#30, ca_county#31, agg1#63, agg2#64, agg3#65, agg4#66, agg5#67, agg6#68, agg7#69]
 Arguments: isFinalPlan=true
 

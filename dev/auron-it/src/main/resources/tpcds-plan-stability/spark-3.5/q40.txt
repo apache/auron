@@ -396,25 +396,25 @@ Input [4]: [w_state#10, i_item_id#12, _c2#16, _c3#17]
 Keys [2]: [w_state#10, i_item_id#12]
 Functions [2]: [partial_sum(_c2#16), partial_sum(_c3#17)]
 Aggregate Attributes [4]: [sum#18, isEmpty#19, sum#20, isEmpty#21]
-Results [3]: [w_state#10, i_item_id#12, #22#22]
+Results [4]: [w_state#10, i_item_id#12, #22, #22]
 
 (67) NativeShuffleExchange
-Input [3]: [w_state#10, i_item_id#12, #22#22]
+Input [4]: [w_state#10, i_item_id#12, #22, #22]
 Arguments: hashpartitioning(w_state#10, i_item_id#12, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (68) ShuffleQueryStage
-Output [3]: [w_state#10, i_item_id#12, #22#22]
+Output [4]: [w_state#10, i_item_id#12, #22, #22]
 Arguments: X
 
 (69) AQEShuffleRead
-Input [3]: [w_state#10, i_item_id#12, #22#22]
+Input [4]: [w_state#10, i_item_id#12, #22, #22]
 Arguments: coalesced
 
 (70) InputAdapter
-Input [3]: [w_state#10, i_item_id#12, #22#22]
+Input [4]: [w_state#10, i_item_id#12, #22, #22]
 
 (71) NativeHashAggregate
-Input [3]: [w_state#10, i_item_id#12, #22#22]
+Input [4]: [w_state#10, i_item_id#12, #22, #22]
 Keys [2]: [w_state#10, i_item_id#12]
 Functions [2]: [sum(CASE WHEN (d_date#15 < 2000-03-11) THEN (cs_sales_price#5 - coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00)) ELSE 0.00 END), sum(CASE WHEN (d_date#15 >= 2000-03-11) THEN (cs_sales_price#5 - coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00)) ELSE 0.00 END)]
 Aggregate Attributes [2]: [sum(CASE WHEN (d_date#15 < 2000-03-11) THEN (cs_sales_price#5 - coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00)) ELSE 0.00 END)#23, sum(CASE WHEN (d_date#15 >= 2000-03-11) THEN (cs_sales_price#5 - coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00)) ELSE 0.00 END)#24]

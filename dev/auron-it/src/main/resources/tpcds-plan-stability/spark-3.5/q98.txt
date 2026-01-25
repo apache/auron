@@ -242,25 +242,25 @@ Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price
 Keys [5]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7]
 Functions [1]: [partial_sum(_c5#12)]
 Aggregate Attributes [1]: [sum#13]
-Results [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14#14]
+Results [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14]
 
 (37) NativeShuffleExchange
-Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14#14]
+Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14]
 Arguments: hashpartitioning(i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (38) ShuffleQueryStage
-Output [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14#14]
+Output [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14]
 Arguments: X
 
 (39) AQEShuffleRead
-Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14#14]
+Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14]
 Arguments: coalesced
 
 (40) InputAdapter
-Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14#14]
+Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14]
 
 (41) NativeHashAggregate
-Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14#14]
+Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, #14]
 Keys [5]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#3))#15]

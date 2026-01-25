@@ -346,25 +346,25 @@ Input [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, _c4#1
 Keys [4]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14]
 Functions [2]: [partial_sum(_c4#18), partial_sum(_c5#19)]
 Aggregate Attributes [2]: [sum#20, sum#21]
-Results [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22#22]
+Results [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22, #22]
 
 (54) NativeShuffleExchange
-Input [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22#22]
+Input [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22, #22]
 Arguments: hashpartitioning(ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (55) ShuffleQueryStage
-Output [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22#22]
+Output [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22, #22]
 Arguments: X
 
 (56) AQEShuffleRead
-Input [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22#22]
+Input [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22, #22]
 Arguments: coalesced
 
 (57) InputAdapter
-Input [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22#22]
+Input [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22, #22]
 
 (58) NativeHashAggregate
-Input [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22#22]
+Input [6]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14, #22, #22]
 Keys [4]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, s_city#14]
 Functions [2]: [sum(UnscaledValue(ss_coupon_amt#7)), sum(UnscaledValue(ss_net_profit#8))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ss_coupon_amt#7))#23, sum(UnscaledValue(ss_net_profit#8))#24]

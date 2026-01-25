@@ -668,37 +668,37 @@ Input [4]: [r_reason_desc#29, _c1#30, _c2#31, _c3#32]
 Keys [1]: [r_reason_desc#29]
 Functions [3]: [partial_avg(_c1#30), partial_avg(_c2#31), partial_avg(_c3#32)]
 Aggregate Attributes [6]: [sum#33, count#34, sum#35, count#36, sum#37, count#38]
-Results [2]: [r_reason_desc#29, #39#39]
+Results [7]: [r_reason_desc#29, #39, #40, #39, #40, #39, #40]
 
 (115) NativeShuffleExchange
-Input [2]: [r_reason_desc#29, #39#39]
+Input [7]: [r_reason_desc#29, #39, #40, #39, #40, #39, #40]
 Arguments: hashpartitioning(r_reason_desc#29, 100), ENSURE_REQUIREMENTS, [plan_id=15]
 
 (116) ShuffleQueryStage
-Output [2]: [r_reason_desc#29, #39#39]
+Output [7]: [r_reason_desc#29, #39, #40, #39, #40, #39, #40]
 Arguments: X
 
 (117) AQEShuffleRead
-Input [2]: [r_reason_desc#29, #39#39]
+Input [7]: [r_reason_desc#29, #39, #40, #39, #40, #39, #40]
 Arguments: coalesced
 
 (118) InputAdapter
-Input [2]: [r_reason_desc#29, #39#39]
+Input [7]: [r_reason_desc#29, #39, #40, #39, #40, #39, #40]
 
 (119) NativeHashAggregate
-Input [2]: [r_reason_desc#29, #39#39]
+Input [7]: [r_reason_desc#29, #39, #40, #39, #40, #39, #40]
 Keys [1]: [r_reason_desc#29]
 Functions [3]: [avg(ws_quantity#5), avg(UnscaledValue(wr_refunded_cash#15)), avg(UnscaledValue(wr_fee#14))]
-Aggregate Attributes [3]: [avg(ws_quantity#5)#40, avg(UnscaledValue(wr_refunded_cash#15))#41, avg(UnscaledValue(wr_fee#14))#42]
-Results [4]: [r_reason_desc#29, avg(ws_quantity#5)#40, avg(UnscaledValue(wr_refunded_cash#15))#41, avg(UnscaledValue(wr_fee#14))#42]
+Aggregate Attributes [3]: [avg(ws_quantity#5)#41, avg(UnscaledValue(wr_refunded_cash#15))#42, avg(UnscaledValue(wr_fee#14))#43]
+Results [4]: [r_reason_desc#29, avg(ws_quantity#5)#41, avg(UnscaledValue(wr_refunded_cash#15))#42, avg(UnscaledValue(wr_fee#14))#43]
 
 (120) NativeProject
-Output [4]: [substr(r_reason_desc#29, 1, 20) AS substr(r_reason_desc, 1, 20)#43, avg(ws_quantity#5)#40 AS avg(ws_quantity)#44, cast((avg(UnscaledValue(wr_refunded_cash#15))#41 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#45, cast((avg(UnscaledValue(wr_fee#14))#42 / 100.0) as decimal(11,6)) AS avg(wr_fee)#46]
-Input [4]: [r_reason_desc#29, avg(ws_quantity#5)#40, avg(UnscaledValue(wr_refunded_cash#15))#41, avg(UnscaledValue(wr_fee#14))#42]
+Output [4]: [substr(r_reason_desc#29, 1, 20) AS substr(r_reason_desc, 1, 20)#44, avg(ws_quantity#5)#41 AS avg(ws_quantity)#45, cast((avg(UnscaledValue(wr_refunded_cash#15))#42 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#46, cast((avg(UnscaledValue(wr_fee#14))#43 / 100.0) as decimal(11,6)) AS avg(wr_fee)#47]
+Input [4]: [r_reason_desc#29, avg(ws_quantity#5)#41, avg(UnscaledValue(wr_refunded_cash#15))#42, avg(UnscaledValue(wr_fee#14))#43]
 
 (121) NativeTakeOrdered
-Input [4]: [substr(r_reason_desc, 1, 20)#43, avg(ws_quantity)#44, avg(wr_refunded_cash)#45, avg(wr_fee)#46]
-Arguments: X, [substr(r_reason_desc, 1, 20)#43 ASC NULLS FIRST, avg(ws_quantity)#44 ASC NULLS FIRST, avg(wr_refunded_cash)#45 ASC NULLS FIRST, avg(wr_fee)#46 ASC NULLS FIRST]
+Input [4]: [substr(r_reason_desc, 1, 20)#44, avg(ws_quantity)#45, avg(wr_refunded_cash)#46, avg(wr_fee)#47]
+Arguments: X, [substr(r_reason_desc, 1, 20)#44 ASC NULLS FIRST, avg(ws_quantity)#45 ASC NULLS FIRST, avg(wr_refunded_cash)#46 ASC NULLS FIRST, avg(wr_fee)#47 ASC NULLS FIRST]
 
 (122) Scan parquet
 Output [7]: [ws_sold_date_sk#1, ws_item_sk#2, ws_web_page_sk#3, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7]
@@ -983,24 +983,24 @@ Input [4]: [ws_quantity#5, wr_fee#14, wr_refunded_cash#15, r_reason_desc#29]
 Keys [1]: [r_reason_desc#29]
 Functions [3]: [partial_avg(ws_quantity#5), partial_avg(UnscaledValue(wr_refunded_cash#15)), partial_avg(UnscaledValue(wr_fee#14))]
 Aggregate Attributes [6]: [sum#33, count#34, sum#35, count#36, sum#37, count#38]
-Results [7]: [r_reason_desc#29, sum#47, count#48, sum#49, count#50, sum#51, count#52]
+Results [7]: [r_reason_desc#29, sum#48, count#49, sum#50, count#51, sum#52, count#53]
 
 (183) Exchange
-Input [7]: [r_reason_desc#29, sum#47, count#48, sum#49, count#50, sum#51, count#52]
+Input [7]: [r_reason_desc#29, sum#48, count#49, sum#50, count#51, sum#52, count#53]
 Arguments: hashpartitioning(r_reason_desc#29, 100), ENSURE_REQUIREMENTS, [plan_id=30]
 
 (184) HashAggregate
-Input [7]: [r_reason_desc#29, sum#47, count#48, sum#49, count#50, sum#51, count#52]
+Input [7]: [r_reason_desc#29, sum#48, count#49, sum#50, count#51, sum#52, count#53]
 Keys [1]: [r_reason_desc#29]
 Functions [3]: [avg(ws_quantity#5), avg(UnscaledValue(wr_refunded_cash#15)), avg(UnscaledValue(wr_fee#14))]
-Aggregate Attributes [3]: [avg(ws_quantity#5)#40, avg(UnscaledValue(wr_refunded_cash#15))#41, avg(UnscaledValue(wr_fee#14))#42]
-Results [4]: [substr(r_reason_desc#29, 1, 20) AS substr(r_reason_desc, 1, 20)#43, avg(ws_quantity#5)#40 AS avg(ws_quantity)#44, cast((avg(UnscaledValue(wr_refunded_cash#15))#41 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#45, cast((avg(UnscaledValue(wr_fee#14))#42 / 100.0) as decimal(11,6)) AS avg(wr_fee)#46]
+Aggregate Attributes [3]: [avg(ws_quantity#5)#41, avg(UnscaledValue(wr_refunded_cash#15))#42, avg(UnscaledValue(wr_fee#14))#43]
+Results [4]: [substr(r_reason_desc#29, 1, 20) AS substr(r_reason_desc, 1, 20)#44, avg(ws_quantity#5)#41 AS avg(ws_quantity)#45, cast((avg(UnscaledValue(wr_refunded_cash#15))#42 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#46, cast((avg(UnscaledValue(wr_fee#14))#43 / 100.0) as decimal(11,6)) AS avg(wr_fee)#47]
 
 (185) TakeOrderedAndProject
-Input [4]: [substr(r_reason_desc, 1, 20)#43, avg(ws_quantity)#44, avg(wr_refunded_cash)#45, avg(wr_fee)#46]
-Arguments: X, [substr(r_reason_desc, 1, 20)#43 ASC NULLS FIRST, avg(ws_quantity)#44 ASC NULLS FIRST, avg(wr_refunded_cash)#45 ASC NULLS FIRST, avg(wr_fee)#46 ASC NULLS FIRST], [substr(r_reason_desc, 1, 20)#43, avg(ws_quantity)#44, avg(wr_refunded_cash)#45, avg(wr_fee)#46]
+Input [4]: [substr(r_reason_desc, 1, 20)#44, avg(ws_quantity)#45, avg(wr_refunded_cash)#46, avg(wr_fee)#47]
+Arguments: X, [substr(r_reason_desc, 1, 20)#44 ASC NULLS FIRST, avg(ws_quantity)#45 ASC NULLS FIRST, avg(wr_refunded_cash)#46 ASC NULLS FIRST, avg(wr_fee)#47 ASC NULLS FIRST], [substr(r_reason_desc, 1, 20)#44, avg(ws_quantity)#45, avg(wr_refunded_cash)#46, avg(wr_fee)#47]
 
 (186) AdaptiveSparkPlan
-Output [4]: [substr(r_reason_desc, 1, 20)#43, avg(ws_quantity)#44, avg(wr_refunded_cash)#45, avg(wr_fee)#46]
+Output [4]: [substr(r_reason_desc, 1, 20)#44, avg(ws_quantity)#45, avg(wr_refunded_cash)#46, avg(wr_fee)#47]
 Arguments: isFinalPlan=true
 

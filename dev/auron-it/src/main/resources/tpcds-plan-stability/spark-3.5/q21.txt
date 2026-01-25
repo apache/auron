@@ -312,25 +312,25 @@ Input [4]: [w_warehouse_name#6, i_item_id#8, _c2#12, _c3#13]
 Keys [2]: [w_warehouse_name#6, i_item_id#8]
 Functions [2]: [partial_sum(_c2#12), partial_sum(_c3#13)]
 Aggregate Attributes [2]: [sum#14, sum#15]
-Results [3]: [w_warehouse_name#6, i_item_id#8, #16#16]
+Results [4]: [w_warehouse_name#6, i_item_id#8, #16, #16]
 
 (52) NativeShuffleExchange
-Input [3]: [w_warehouse_name#6, i_item_id#8, #16#16]
+Input [4]: [w_warehouse_name#6, i_item_id#8, #16, #16]
 Arguments: hashpartitioning(w_warehouse_name#6, i_item_id#8, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (53) ShuffleQueryStage
-Output [3]: [w_warehouse_name#6, i_item_id#8, #16#16]
+Output [4]: [w_warehouse_name#6, i_item_id#8, #16, #16]
 Arguments: X
 
 (54) AQEShuffleRead
-Input [3]: [w_warehouse_name#6, i_item_id#8, #16#16]
+Input [4]: [w_warehouse_name#6, i_item_id#8, #16, #16]
 Arguments: coalesced
 
 (55) InputAdapter
-Input [3]: [w_warehouse_name#6, i_item_id#8, #16#16]
+Input [4]: [w_warehouse_name#6, i_item_id#8, #16, #16]
 
 (56) NativeHashAggregate
-Input [3]: [w_warehouse_name#6, i_item_id#8, #16#16]
+Input [4]: [w_warehouse_name#6, i_item_id#8, #16, #16]
 Keys [2]: [w_warehouse_name#6, i_item_id#8]
 Functions [2]: [sum(CASE WHEN (d_date#11 < 2000-03-11) THEN inv_quantity_on_hand#4 ELSE 0 END), sum(CASE WHEN (d_date#11 >= 2000-03-11) THEN inv_quantity_on_hand#4 ELSE 0 END)]
 Aggregate Attributes [2]: [sum(CASE WHEN (d_date#11 < 2000-03-11) THEN inv_quantity_on_hand#4 ELSE 0 END)#17, sum(CASE WHEN (d_date#11 >= 2000-03-11) THEN inv_quantity_on_hand#4 ELSE 0 END)#18]

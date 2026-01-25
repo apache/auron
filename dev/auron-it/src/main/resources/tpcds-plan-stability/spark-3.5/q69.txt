@@ -651,25 +651,25 @@ Input [5]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purch
 Keys [5]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#23]
-Results [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24#24]
+Results [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24]
 
 (111) NativeShuffleExchange
-Input [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24#24]
+Input [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24]
 Arguments: hashpartitioning(cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (112) ShuffleQueryStage
-Output [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24#24]
+Output [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24]
 Arguments: X
 
 (113) AQEShuffleRead
-Input [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24#24]
+Input [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24]
 Arguments: coalesced
 
 (114) InputAdapter
-Input [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24#24]
+Input [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24]
 
 (115) NativeHashAggregate
-Input [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24#24]
+Input [6]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22, #24]
 Keys [5]: [cd_gender#18, cd_marital_status#19, cd_education_status#20, cd_purchase_estimate#21, cd_credit_rating#22]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#25]
