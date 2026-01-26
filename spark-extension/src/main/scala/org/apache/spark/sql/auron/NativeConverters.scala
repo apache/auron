@@ -1025,27 +1025,28 @@ object NativeConverters extends Logging {
         convertExprWithFallback(caseWhen, isPruningExpr, fallback)
 
       case e @ CaseWhen(branches, elseValue) =>
-        val caseExpr = pb.PhysicalCaseNode.newBuilder()
-        val whenThens = branches.map { case (w, t) =>
-          val casted = t match {
+        // Flatten branches into: condition1, value1, condition2, value2, ..., elseValue
+        // Cast values to match output data type
+        val flattenedArgs = branches.flatMap { case (when, then) =>
+          val castedThen = then match {
             case t if t.dataType != e.dataType => Cast(t, e.dataType)
             case t => t
           }
-          pb.PhysicalWhenThen
-            .newBuilder()
-            .setWhenExpr(convertExprWithFallback(w, isPruningExpr, fallback))
-            .setThenExpr(convertExprWithFallback(casted, isPruningExpr, fallback))
-            .build()
+          Seq(when, castedThen)
         }
-        caseExpr.addAllWhenThenExpr(whenThens.asJava)
-        elseValue.foreach { el =>
-          val casted = el match {
-            case el if el.dataType != e.dataType => Cast(el, e.dataType)
-            case el => el
-          }
-          caseExpr.setElseExpr(convertExprWithFallback(casted, isPruningExpr, fallback))
+
+        // Add else value if present (cast to output type)
+        val allArgs = elseValue match {
+          case Some(el) =>
+            val castedElse = el match {
+              case e1 if e1.dataType != e.dataType => Cast(e1, e.dataType)
+              case e1 => e1
+            }
+            flattenedArgs :+ castedElse
+          case None => flattenedArgs
         }
-        pb.PhysicalExprNode.newBuilder().setCase(caseExpr).build()
+
+        buildExtScalarFunction("Spark_CaseWhen", allArgs, e.dataType)
 
       // expressions for DecimalPrecision rule
       case UnscaledValue(_1) if decimalArithOpEnabled =>
