@@ -62,7 +62,6 @@ impl Debug for SparkMonotonicallyIncreasingIdExpr {
 impl PartialEq for SparkMonotonicallyIncreasingIdExpr {
     fn eq(&self, other: &Self) -> bool {
         self.partition_id == other.partition_id
-            && self.row_counter.load(SeqCst) == other.row_counter.load(SeqCst)
     }
 }
 
@@ -71,7 +70,6 @@ impl Eq for SparkMonotonicallyIncreasingIdExpr {}
 impl Hash for SparkMonotonicallyIncreasingIdExpr {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.partition_id.hash(state);
-        self.row_counter.load(SeqCst).hash(state);
     }
 }
 
