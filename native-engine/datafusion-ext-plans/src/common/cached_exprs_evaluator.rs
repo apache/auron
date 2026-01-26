@@ -114,12 +114,10 @@ impl CachedExprsEvaluator {
                                 } else {
                                     Arc::new(uda.filter(selected)?)
                                 }
+                            } else if let Some(previous_selected) = &previous_selected {
+                                filter(&scatter(previous_selected, array)?, selected)?
                             } else {
-                                if let Some(previous_selected) = &previous_selected {
-                                    filter(&scatter(previous_selected, array)?, selected)?
-                                } else {
-                                    filter(&array, selected)?
-                                }
+                                filter(&array, selected)?
                             }
                         })));
                     }

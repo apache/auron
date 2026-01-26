@@ -91,14 +91,6 @@ unit_arg = "allow"
 manual_repeat_n = "allow"
 manual_div_ceil = "allow"
 
-# Condition/Logic
-collapsible_if = "allow"
-collapsible_else_if = "allow"
-if_same_then_else = "allow"
-match_like_matches_macro = "allow"
-explicit_auto_deref = "allow"
-bool_assert_comparison = "allow"
-
 # Naming/Structure/Remaining
 upper_case_acronyms = "allow"
 module_inception = "allow"

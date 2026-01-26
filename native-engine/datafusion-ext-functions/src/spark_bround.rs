@@ -203,16 +203,12 @@ fn round_half_even_f32(x: f32) -> f32 {
     let sign = x.signum();
     let ax = x.abs();
     let f = ax.floor();
-    let diff = ax - f;
 
-    let rounded = if diff > 0.5 {
-        f + 1.0
-    } else if diff < 0.5 {
-        f
-    } else if ((f as i32) & 1) == 0 {
-        f
-    } else {
-        f + 1.0
+    let rounded = match ax - f {
+        diff if diff > 0.5 => f + 1.0,
+        diff if diff < 0.5 => f,
+        _ if (f as i32) & 1 == 0 => f,
+        _ => f + 1.0,
     };
 
     rounded.copysign(sign)

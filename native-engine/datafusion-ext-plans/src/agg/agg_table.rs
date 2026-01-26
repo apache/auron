@@ -106,17 +106,18 @@ impl AggTable {
         }
 
         // trigger partial skipping if memory usage is too high
-        if self.agg_ctx.partial_skipping_skip_spill && self.mem_used_percent() > 0.8 {
-            if self.agg_ctx.supports_partial_skipping {
-                return df_execution_err!("AGG_TRIGGER_PARTIAL_SKIPPING");
-            }
+        if self.agg_ctx.partial_skipping_skip_spill
+            && self.mem_used_percent() > 0.8
+            && self.agg_ctx.supports_partial_skipping
+        {
+            return df_execution_err!("AGG_TRIGGER_PARTIAL_SKIPPING");
         }
 
         // check for partial skipping by cardinality ratio
-        if in_mem.num_records() >= self.agg_ctx.partial_skipping_min_rows {
-            if in_mem.check_trigger_partial_skipping() {
-                return df_execution_err!("AGG_TRIGGER_PARTIAL_SKIPPING");
-            }
+        if in_mem.num_records() >= self.agg_ctx.partial_skipping_min_rows
+            && in_mem.check_trigger_partial_skipping()
+        {
+            return df_execution_err!("AGG_TRIGGER_PARTIAL_SKIPPING");
         }
 
         // update memory usage

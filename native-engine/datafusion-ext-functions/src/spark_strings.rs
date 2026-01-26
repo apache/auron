@@ -167,10 +167,9 @@ pub fn string_concat(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     } else {
         // short avenue with only scalars
         // returns null if args contains null
-        let is_not_null = args.iter().all(|arg| match arg {
-            ColumnarValue::Scalar(scalar) if scalar.is_null() => false,
-            _ => true,
-        });
+        let is_not_null = args
+            .iter()
+            .all(|arg| !matches!(arg, ColumnarValue::Scalar(scalar) if scalar.is_null()));
         if !is_not_null {
             return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None)));
         }
