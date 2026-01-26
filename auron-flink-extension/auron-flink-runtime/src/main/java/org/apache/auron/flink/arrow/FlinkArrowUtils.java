@@ -52,7 +52,7 @@ import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 
 /**
- * Utility class for converting between Flink LogicalType and Arrow types.
+ * Utility class for converting Flink {@link LogicalType} instances to Arrow types, fields and schemas.
  */
 public class FlinkArrowUtils {
 
