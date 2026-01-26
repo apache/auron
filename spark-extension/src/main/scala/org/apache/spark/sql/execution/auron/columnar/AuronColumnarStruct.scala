@@ -37,6 +37,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.unsafe.types.UTF8String
 
+import org.apache.auron.sparkver
+
 class AuronColumnarStruct(data: AuronColumnVector, rowId: Int) extends InternalRow {
   override def numFields: Int = data.dataType.asInstanceOf[StructType].size
 
@@ -141,6 +143,11 @@ class AuronColumnarStruct(data: AuronColumnVector, rowId: Int) extends InternalR
   }
 
   override def setNullAt(ordinal: Int): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  @sparkver("4.0")
+  override def getVariant(i: Int): org.apache.spark.unsafe.types.VariantVal = {
     throw new UnsupportedOperationException
   }
 }

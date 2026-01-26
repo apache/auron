@@ -27,7 +27,7 @@ import org.apache.auron.sparkver
 
 case object NativeShuffledHashJoinExecProvider {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   def provide(
       left: SparkPlan,
       right: SparkPlan,

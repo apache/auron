@@ -825,6 +825,47 @@
     </profile>
 
     <profile>
+      <id>spark-4.0</id>
+      <properties>
+        <shimName>spark-4.0</shimName>
+        <shimPkg>spark-extension-shims-spark4</shimPkg>
+        <scalaTestVersion>3.2.10</scalaTestVersion>
+        <scalafmtVersion>3.9.9</scalafmtVersion>
+        <sparkVersion>4.0.1</sparkVersion>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>3.4.1</version>
+            <executions>
+              <execution>
+                <id>enforce-java-scala-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireJavaVersion>
+                      <version>[17,)</version>
+                      <message>Spark 4.0 requires JDK 17 or higher to compile!</message>
+                    </requireJavaVersion>
+                    <requireProperty>
+                      <property>scalaVersion</property>
+                      <regex>^2.13.*</regex>
+                      <regexMessage>Spark 4.0 requires Scala 2.13 and is not compatible with Scala 2.12!</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
       <id>jdk-8</id>
       <activation>
         <jdk>1.8</jdk>

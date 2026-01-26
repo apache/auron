@@ -126,13 +126,12 @@ case class NativeShuffleExchangeExec(
         new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
       }
 
-      override def write(
-          rdd: RDD[_],
+      private def doWrite(
+          nativeRDD: NativeRDD,
           dep: ShuffleDependency[_, _, _],
           mapId: Long,
           context: TaskContext,
           partition: Partition): MapStatus = {
-
         val writer = SparkEnv.get.shuffleManager.getWriter(
           dep.shuffleHandle,
           mapId,
@@ -140,24 +139,60 @@ case class NativeShuffleExchangeExec(
           createMetricsReporter(context))
 
         writer match {
-          case writer: AuronRssShuffleWriterBase[_, _] =>
-            writer.nativeRssShuffleWrite(
-              rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
+          case w: AuronRssShuffleWriterBase[_, _] =>
+            w.nativeRssShuffleWrite(
+              nativeRDD,
               dep,
               mapId.toInt,
               context,
               partition,
               numPartitions)
 
-          case writer: AuronShuffleWriterBase[_, _] =>
-            writer.nativeShuffleWrite(
-              rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
-              dep,
-              mapId.toInt,
-              context,
-              partition)
+          case w: AuronShuffleWriterBase[_, _] =>
+            w.nativeShuffleWrite(nativeRDD, dep, mapId.toInt, context, partition)
+          case _ =>
+            throw new SparkException(
+              s"Unsupported shuffle writer type: ${writer.getClass.getName}")
         }
-        writer.stop(true).get
+        writer.stop(success = true).getOrElse {
+          throw new SparkException("Shuffle writer stop returned None MapStatus")
+        }
+      }
+
+      @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+      override def write(
+          rdd: RDD[_],
+          dep: ShuffleDependency[_, _, _],
+          mapId: Long,
+          context: TaskContext,
+          partition: Partition): MapStatus = {
+        val nativeRDD = rdd match {
+          case m: MapPartitionsRDD[_, _] => m.prev.asInstanceOf[NativeRDD]
+          case n: NativeRDD => n
+          case _ =>
+            throw new SparkException(
+              s"Expected NativeRDD or MapPartitionsRDD, but got ${rdd.getClass.getName}")
+        }
+        doWrite(nativeRDD, dep, mapId, context, partition)
+      }
+
+      @sparkver("4.0")
+      override def write(
+          inputs: Iterator[_],
+          dep: ShuffleDependency[_, _, _],
+          mapId: Long,
+          mapIndex: Int,
+          context: TaskContext): MapStatus = {
+
+        // [SPARK-44605][CORE] Consuming 'inputs' iterator to trigger the underlying RDD compute.
+        // In Native execution, this triggers the native plan which handles the actual shuffle write.
+        while (inputs.hasNext) {
+          inputs.next()
+        }
+
+        // Use inputRDD and partitionId for accurate metadata access.
+        val partition = inputRDD.partitions(context.partitionId())
+        doWrite(inputRDD, dep, mapId, context, partition)
       }
     }
   }
@@ -165,7 +200,7 @@ case class NativeShuffleExchangeExec(
   // for databricks testing
   val causedBroadcastJoinBuildOOM = false
 
-  @sparkver("3.5")
+  @sparkver("3.5 / 4.0")
   override def advisoryPartitionSize: Option[Long] = None
 
   // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
@@ -174,17 +209,22 @@ case class NativeShuffleExchangeExec(
   override def canChangeNumPartitions: Boolean =
     outputPartitioning != SinglePartition
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override def shuffleOrigin: org.apache.spark.sql.execution.exchange.ShuffleOrigin = {
     import org.apache.spark.sql.execution.exchange.ShuffleOrigin;
     _shuffleOrigin.get.asInstanceOf[ShuffleOrigin]
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
   @sparkver("3.0 / 3.1")
   override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
     copy(child = newChildren.head)
+
+  @sparkver("4.0")
+  override def shuffleId: Int = {
+    shuffleDependency.shuffleId;
+  }
 }

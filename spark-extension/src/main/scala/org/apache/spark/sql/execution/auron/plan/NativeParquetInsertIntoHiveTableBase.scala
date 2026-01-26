@@ -71,7 +71,7 @@ abstract class NativeParquetInsertIntoHiveTableBase(
         :+ ("io_time", SQLMetrics.createNanoTimingMetric(sparkContext, "Native.io_time"))
         :+ ("bytes_written",
         SQLMetrics
-          .createSizeMetric(sparkContext, "Native.bytes_written")): _*)
+           .createSizeMetric(sparkContext, "Native.bytes_written")): _*)
 
   def check(): Unit = {
     val hadoopConf = sparkContext.hadoopConfiguration
