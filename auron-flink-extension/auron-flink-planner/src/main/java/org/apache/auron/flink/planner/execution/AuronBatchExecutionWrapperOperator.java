@@ -67,7 +67,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
      * @param stageId The stage ID for this task.
      */
     public AuronBatchExecutionWrapperOperator(
-        PhysicalPlanNode nativePlan, RowType outputSchema, int partitionId, int stageId) {
+            PhysicalPlanNode nativePlan, RowType outputSchema, int partitionId, int stageId) {
         this.nativePlan = nativePlan;
         this.outputSchema = outputSchema;
         this.partitionId = partitionId;
@@ -108,7 +108,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
         LOG.info("Initializing Auron native execution for partition {} stage {} task {}", partitionId, stageId, taskId);
 
         nativeWrapper = new AuronCallNativeWrapper(
-            allocator, nativePlan, emptyMetrics, partitionId, stageId, taskId, nativeMemory);
+                allocator, nativePlan, emptyMetrics, partitionId, stageId, taskId, nativeMemory);
 
         LOG.info("Auron native execution initialized successfully");
     }
@@ -117,13 +117,13 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
     public void run(SourceContext<RowData> ctx) throws Exception {
         // Load and process batches from native engine
         while (isRunning
-            && nativeWrapper.loadNextBatch(root -> {
-            try {
-                processBatch(root, ctx);
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to process Arrow batch", e);
-            }
-        })) {
+                && nativeWrapper.loadNextBatch(root -> {
+                    try {
+                        processBatch(root, ctx);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to process Arrow batch", e);
+                    }
+                })) {
             // Continue loading batches
         }
 

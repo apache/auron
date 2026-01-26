@@ -55,13 +55,13 @@ public class AuronFlinkConverters {
      * @return The PhysicalPlanNode containing the ParquetScanExecNode.
      */
     public static PhysicalPlanNode convertParquetScan(
-        List<String> filePaths,
-        RowType schema,
-        RowType fullSchema,
-        int[] projectedFieldIndices,
-        List<RexNode> predicates,
-        int numPartitions,
-        int partitionIndex) {
+            List<String> filePaths,
+            RowType schema,
+            RowType fullSchema,
+            int[] projectedFieldIndices,
+            List<RexNode> predicates,
+            int numPartitions,
+            int partitionIndex) {
 
         // Build the file group
         FileGroup.Builder fileGroupBuilder = FileGroup.newBuilder();
@@ -70,10 +70,10 @@ public class AuronFlinkConverters {
             long fileSize = getFileSize(path);
 
             PartitionedFile partitionedFile = PartitionedFile.newBuilder()
-                .setPath(path)
-                .setSize(fileSize) // Actual file size from filesystem
-                .setLastModifiedNs(0)
-                .build();
+                    .setPath(path)
+                    .setSize(fileSize) // Actual file size from filesystem
+                    .setLastModifiedNs(0)
+                    .build();
             fileGroupBuilder.addFiles(partitionedFile);
         }
 
@@ -96,13 +96,13 @@ public class AuronFlinkConverters {
 
         // Build FileScanExecConf
         FileScanExecConf.Builder confBuilder = FileScanExecConf.newBuilder()
-            .setNumPartitions(numPartitions)
-            .setPartitionIndex(partitionIndex)
-            .setFileGroup(fileGroupBuilder.build())
-            .setSchema(nativeSchema)
-            .addAllProjection(projection)
-            .setStatistics(Statistics.getDefaultInstance())
-            .setPartitionSchema(Schema.newBuilder().build()); // Empty partition schema for MVP
+                .setNumPartitions(numPartitions)
+                .setPartitionIndex(partitionIndex)
+                .setFileGroup(fileGroupBuilder.build())
+                .setSchema(nativeSchema)
+                .addAllProjection(projection)
+                .setStatistics(Statistics.getDefaultInstance())
+                .setPartitionSchema(Schema.newBuilder().build()); // Empty partition schema for MVP
 
         // Convert predicates for pushdown
         List<PhysicalExprNode> pruningPredicates = new ArrayList<>();
@@ -120,9 +120,9 @@ public class AuronFlinkConverters {
 
         // Build ParquetScanExecNode
         ParquetScanExecNode.Builder scanBuilder = ParquetScanExecNode.newBuilder()
-            .setBaseConf(confBuilder.build())
-            .setFsResourceId("flink-parquet-scan-" + partitionIndex)
-            .addAllPruningPredicates(pruningPredicates);
+                .setBaseConf(confBuilder.build())
+                .setFsResourceId("flink-parquet-scan-" + partitionIndex)
+                .addAllPruningPredicates(pruningPredicates);
 
         return PhysicalPlanNode.newBuilder().setParquetScan(scanBuilder.build()).build();
     }
@@ -138,11 +138,11 @@ public class AuronFlinkConverters {
      * @return The PhysicalPlanNode containing the ProjectionExecNode.
      */
     public static PhysicalPlanNode convertProjection(
-        PhysicalPlanNode input,
-        List<RexNode> projections,
-        List<String> outputFieldNames,
-        List<LogicalType> outputTypes,
-        List<String> inputFieldNames) {
+            PhysicalPlanNode input,
+            List<RexNode> projections,
+            List<String> outputFieldNames,
+            List<LogicalType> outputTypes,
+            List<String> inputFieldNames) {
 
         // Convert projection expressions
         List<PhysicalExprNode> nativeExprs = new ArrayList<>();
@@ -160,14 +160,14 @@ public class AuronFlinkConverters {
 
         // Build ProjectionExecNode
         ProjectionExecNode.Builder projectionBuilder = ProjectionExecNode.newBuilder()
-            .setInput(input)
-            .addAllExpr(nativeExprs)
-            .addAllExprName(outputFieldNames)
-            .addAllDataType(nativeTypes);
+                .setInput(input)
+                .addAllExpr(nativeExprs)
+                .addAllExprName(outputFieldNames)
+                .addAllDataType(nativeTypes);
 
         return PhysicalPlanNode.newBuilder()
-            .setProjection(projectionBuilder.build())
-            .build();
+                .setProjection(projectionBuilder.build())
+                .build();
     }
 
     /**
@@ -179,7 +179,7 @@ public class AuronFlinkConverters {
      * @return The PhysicalPlanNode containing the FilterExecNode.
      */
     public static PhysicalPlanNode convertFilter(
-        PhysicalPlanNode input, List<RexNode> filterConditions, List<String> inputFieldNames) {
+            PhysicalPlanNode input, List<RexNode> filterConditions, List<String> inputFieldNames) {
 
         // Convert filter expressions
         List<PhysicalExprNode> nativeFilters = new ArrayList<>();
@@ -190,7 +190,7 @@ public class AuronFlinkConverters {
 
         // Build FilterExecNode
         FilterExecNode.Builder filterBuilder =
-            FilterExecNode.newBuilder().setInput(input).addAllExpr(nativeFilters);
+                FilterExecNode.newBuilder().setInput(input).addAllExpr(nativeFilters);
 
         return PhysicalPlanNode.newBuilder().setFilter(filterBuilder.build()).build();
     }
@@ -208,12 +208,12 @@ public class AuronFlinkConverters {
      * @return The PhysicalPlanNode (Filter wrapping Projection, or just Projection).
      */
     public static PhysicalPlanNode convertCalc(
-        PhysicalPlanNode input,
-        List<RexNode> filterConditions,
-        List<RexNode> projections,
-        List<String> outputFieldNames,
-        List<LogicalType> outputTypes,
-        List<String> inputFieldNames) {
+            PhysicalPlanNode input,
+            List<RexNode> filterConditions,
+            List<RexNode> projections,
+            List<String> outputFieldNames,
+            List<LogicalType> outputTypes,
+            List<String> inputFieldNames) {
 
         PhysicalPlanNode result = input;
 
@@ -249,10 +249,10 @@ public class AuronFlinkConverters {
             ArrowType arrowType = FlinkTypeConverter.toArrowType(fieldType);
 
             Field field = Field.newBuilder()
-                .setName(fieldName)
-                .setArrowType(arrowType)
-                .setNullable(fieldType.isNullable())
-                .build();
+                    .setName(fieldName)
+                    .setArrowType(arrowType)
+                    .setNullable(fieldType.isNullable())
+                    .build();
 
             schemaBuilder.addColumns(field);
         }
