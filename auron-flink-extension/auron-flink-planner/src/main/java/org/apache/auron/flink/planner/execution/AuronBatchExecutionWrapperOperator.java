@@ -36,13 +36,15 @@ import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.auron.jni.JniBridge;
+import org.apache.hadoop.fs.FileSystem;
 
 /**
  * Flink SourceFunction that wraps Auron native execution.
  * Executes a PhysicalPlanNode using the Auron native engine and emits results as Flink RowData.
  */
 public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowData>
-        implements ResultTypeQueryable<RowData> {
+    implements ResultTypeQueryable<RowData> {
 
     private static final Logger LOG = LoggerFactory.getLogger(AuronBatchExecutionWrapperOperator.class);
 
@@ -54,6 +56,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
     private transient BufferAllocator allocator;
     private transient AuronCallNativeWrapper nativeWrapper;
     private transient volatile boolean isRunning;
+    private transient String fsResourceId;
 
     /**
      * Creates a new Auron batch execution wrapper.
@@ -64,7 +67,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
      * @param stageId The stage ID for this task.
      */
     public AuronBatchExecutionWrapperOperator(
-            PhysicalPlanNode nativePlan, RowType outputSchema, int partitionId, int stageId) {
+        PhysicalPlanNode nativePlan, RowType outputSchema, int partitionId, int stageId) {
         this.nativePlan = nativePlan;
         this.outputSchema = outputSchema;
         this.partitionId = partitionId;
@@ -83,7 +86,17 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
             config = (Configuration) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
         }
         FlinkAuronAdaptor.setThreadConfiguration(config);
-
+// Initialize and register Hadoop FileSystem for native Parquet reading
+        try {
+            org.apache.hadoop.conf.Configuration hadoopConf = new org.apache.hadoop.conf.Configuration();
+            FileSystem fs = FileSystem.get(hadoopConf);
+            fsResourceId = "flink-parquet-scan-" + partitionId;
+            JniBridge.putResource(fsResourceId, fs);
+            LOG.info("Registered Hadoop FileSystem with resource ID: {}", fsResourceId);
+        } catch (Exception e) {
+            LOG.error("Failed to initialize Hadoop FileSystem", e);
+            throw new RuntimeException("Failed to initialize Hadoop FileSystem for Auron native execution", e);
+        }
         // Create Arrow allocator
         allocator = new RootAllocator(Long.MAX_VALUE);
 
@@ -95,7 +108,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
         LOG.info("Initializing Auron native execution for partition {} stage {} task {}", partitionId, stageId, taskId);
 
         nativeWrapper = new AuronCallNativeWrapper(
-                allocator, nativePlan, emptyMetrics, partitionId, stageId, taskId, nativeMemory);
+            allocator, nativePlan, emptyMetrics, partitionId, stageId, taskId, nativeMemory);
 
         LOG.info("Auron native execution initialized successfully");
     }
@@ -104,13 +117,13 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
     public void run(SourceContext<RowData> ctx) throws Exception {
         // Load and process batches from native engine
         while (isRunning
-                && nativeWrapper.loadNextBatch(root -> {
-                    try {
-                        processBatch(root, ctx);
-                    } catch (Exception e) {
-                        throw new RuntimeException("Failed to process Arrow batch", e);
-                    }
-                })) {
+            && nativeWrapper.loadNextBatch(root -> {
+            try {
+                processBatch(root, ctx);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to process Arrow batch", e);
+            }
+        })) {
             // Continue loading batches
         }
 
@@ -203,6 +216,19 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
             if (allocator != null) {
                 allocator.close();
                 allocator = null;
+            }
+            // Close and unregister Hadoop FileSystem
+            if (fsResourceId != null) {
+                try {
+                    Object fsObj = JniBridge.getResource(fsResourceId);
+                    if (fsObj instanceof FileSystem) {
+                        ((FileSystem) fsObj).close();
+                    }
+                    JniBridge.getResource(fsResourceId); // Remove from map
+                } catch (Exception e) {
+                    LOG.warn("Failed to close Hadoop FileSystem: {}", e.getMessage());
+                }
+                LOG.info("Closed Hadoop FileSystem with resource ID: {}", fsResourceId);
             }
             FlinkAuronAdaptor.clearThreadConfiguration();
         } finally {
