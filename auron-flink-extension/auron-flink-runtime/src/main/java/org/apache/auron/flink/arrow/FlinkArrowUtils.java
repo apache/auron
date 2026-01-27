@@ -18,7 +18,6 @@ package org.apache.auron.flink.arrow;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.complex.MapVector;
@@ -146,7 +145,8 @@ public class FlinkArrowUtils {
             FieldType fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null);
             List<Field> children = new ArrayList<>();
             for (RowType.RowField field : rowType.getFields()) {
-                children.add(toArrowField(field.getName(), field.getType(), field.getType().isNullable()));
+                children.add(toArrowField(
+                        field.getName(), field.getType(), field.getType().isNullable()));
             }
             return new Field(name, fieldType, children);
         } else if (logicalType instanceof MapType) {
@@ -182,7 +182,8 @@ public class FlinkArrowUtils {
     public static Schema toArrowSchema(RowType rowType) {
         List<Field> fields = new ArrayList<>();
         for (RowType.RowField field : rowType.getFields()) {
-            fields.add(toArrowField(field.getName(), field.getType(), field.getType().isNullable()));
+            fields.add(toArrowField(
+                    field.getName(), field.getType(), field.getType().isNullable()));
         }
         return new Schema(fields);
     }
