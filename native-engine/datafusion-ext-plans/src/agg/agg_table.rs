@@ -106,17 +106,18 @@ impl AggTable {
         }
 
         // trigger partial skipping if memory usage is too high
-        if self.agg_ctx.partial_skipping_skip_spill && self.mem_used_percent() > 0.8 {
-            if self.agg_ctx.supports_partial_skipping {
-                return df_execution_err!("AGG_TRIGGER_PARTIAL_SKIPPING");
-            }
+        if self.agg_ctx.partial_skipping_skip_spill
+            && self.mem_used_percent() > 0.8
+            && self.agg_ctx.supports_partial_skipping
+        {
+            return df_execution_err!("AGG_TRIGGER_PARTIAL_SKIPPING");
         }
 
         // check for partial skipping by cardinality ratio
-        if in_mem.num_records() >= self.agg_ctx.partial_skipping_min_rows {
-            if in_mem.check_trigger_partial_skipping() {
-                return df_execution_err!("AGG_TRIGGER_PARTIAL_SKIPPING");
-            }
+        if in_mem.num_records() >= self.agg_ctx.partial_skipping_min_rows
+            && in_mem.check_trigger_partial_skipping()
+        {
+            return df_execution_err!("AGG_TRIGGER_PARTIAL_SKIPPING");
         }
 
         // update memory usage
@@ -544,7 +545,7 @@ impl HashingData {
         // sort all records using radix sort on hashcodes of keys
         let num_spill_buckets = self.agg_ctx.num_spill_buckets(self.mem_used());
         let key_rows = self.map.into_keys();
-        let acc_table = self.acc_table;
+        let mut acc_table = self.acc_table;
         let mut entries = key_rows
             .iter()
             .enumerate()
@@ -568,7 +569,7 @@ impl HashingData {
                 write_spill_bucket(
                     &mut writer,
                     &self.agg_ctx,
-                    &acc_table,
+                    &mut acc_table,
                     entries[offset..][..cur_bucket_count]
                         .iter()
                         .map(|&(_, record_idx)| &key_rows[record_idx as usize]),
@@ -674,7 +675,7 @@ impl MergingData {
         entries.shrink_to_fit();
 
         let key_rows = self.key_rows;
-        let acc_table = self.acc_table;
+        let mut acc_table = self.acc_table;
         let mut bucket_counts = vec![0; num_spill_buckets];
 
         radix_sort_by_key(&mut entries, &mut bucket_counts, |(bucket_id, ..)| {
@@ -693,7 +694,7 @@ impl MergingData {
                 write_spill_bucket(
                     &mut writer,
                     &self.agg_ctx,
-                    &acc_table,
+                    &mut acc_table,
                     entries[offset..][..cur_bucket_count].iter().map(
                         |&(_, batch_idx, row_idx, _)| {
                             key_rows[batch_idx as usize]
@@ -722,7 +723,7 @@ impl MergingData {
 fn write_spill_bucket(
     w: &mut SpillCompressedWriter,
     agg_ctx: &AggContext,
-    acc_table: &AccTable,
+    acc_table: &mut AccTable,
     key_iter: impl Iterator<Item = impl AsRef<[u8]>>,
     acc_idx_iter: impl Iterator<Item = usize>,
     spill_idx: usize,
@@ -730,7 +731,7 @@ fn write_spill_bucket(
     // write accs
     let udaf_indices_cache = OnceCell::new();
     let acc_indices: Vec<usize> = acc_idx_iter.collect();
-    for col in acc_table.cols() {
+    for col in acc_table.cols_mut() {
         if let Ok(udaf_col) = downcast_any!(col, AccUDAFBufferRowsColumn) {
             udaf_col.spill_with_indices_cache(
                 IdxSelection::Indices(&acc_indices),

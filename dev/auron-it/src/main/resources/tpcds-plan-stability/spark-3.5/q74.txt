@@ -406,25 +406,25 @@ Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, _c4#10]
 Keys [4]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9]
 Functions [1]: [partial_sum(_c4#10)]
 Aggregate Attributes [1]: [sum#11]
-Results [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12#12]
+Results [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12]
 
 (36) NativeShuffleExchange
-Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12#12]
+Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12]
 Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (37) ShuffleQueryStage
-Output [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12#12]
+Output [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12]
 Arguments: X
 
 (38) AQEShuffleRead
-Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12#12]
+Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12]
 Arguments: coalesced
 
 (39) InputAdapter
-Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12#12]
+Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12]
 
 (40) NativeHashAggregate
-Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12#12]
+Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9, #12]
 Keys [4]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#9]
 Functions [1]: [sum(UnscaledValue(ss_net_paid#7))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#7))#13]
@@ -532,25 +532,25 @@ Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, _c4#23
 Keys [4]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22]
 Functions [1]: [partial_sum(_c4#23)]
 Aggregate Attributes [1]: [sum#24]
-Results [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12#12]
+Results [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12]
 
 (66) NativeShuffleExchange
-Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12#12]
+Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12]
 Arguments: hashpartitioning(c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, 100), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (67) ShuffleQueryStage
-Output [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12#12]
+Output [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12]
 Arguments: X
 
 (68) AQEShuffleRead
-Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12#12]
+Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12]
 Arguments: coalesced
 
 (69) InputAdapter
-Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12#12]
+Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12]
 
 (70) NativeHashAggregate
-Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12#12]
+Input [5]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22, #12]
 Keys [4]: [c_customer_id#16, c_first_name#17, c_last_name#18, d_year#22]
 Functions [1]: [sum(UnscaledValue(ss_net_paid#20))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#20))#13]
@@ -711,25 +711,25 @@ Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, _c4#38
 Keys [4]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37]
 Functions [1]: [partial_sum(_c4#38)]
 Aggregate Attributes [1]: [sum#39]
-Results [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12#12]
+Results [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12]
 
 (109) NativeShuffleExchange
-Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12#12]
+Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12]
 Arguments: hashpartitioning(c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, 100), ENSURE_REQUIREMENTS, [plan_id=12]
 
 (110) ShuffleQueryStage
-Output [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12#12]
+Output [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12]
 Arguments: X
 
 (111) AQEShuffleRead
-Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12#12]
+Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12]
 Arguments: coalesced
 
 (112) InputAdapter
-Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12#12]
+Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12]
 
 (113) NativeHashAggregate
-Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12#12]
+Input [5]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37, #12]
 Keys [4]: [c_customer_id#30, c_first_name#31, c_last_name#32, d_year#37]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#35))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#35))#40]
@@ -835,25 +835,25 @@ Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, _c4#50
 Keys [4]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49]
 Functions [1]: [partial_sum(_c4#50)]
 Aggregate Attributes [1]: [sum#51]
-Results [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12#12]
+Results [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12]
 
 (139) NativeShuffleExchange
-Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12#12]
+Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12]
 Arguments: hashpartitioning(c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, 100), ENSURE_REQUIREMENTS, [plan_id=14]
 
 (140) ShuffleQueryStage
-Output [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12#12]
+Output [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12]
 Arguments: X
 
 (141) AQEShuffleRead
-Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12#12]
+Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12]
 Arguments: coalesced
 
 (142) InputAdapter
-Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12#12]
+Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12]
 
 (143) NativeHashAggregate
-Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12#12]
+Input [5]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49, #12]
 Keys [4]: [c_customer_id#43, c_first_name#44, c_last_name#45, d_year#49]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#47))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#47))#40]

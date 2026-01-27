@@ -313,18 +313,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#11]
-Results [1]: [#12#12]
+Results [1]: [#12]
 
 (53) NativeShuffleExchange
-Input [1]: [#12#12]
+Input [1]: [#12]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 
 (54) ShuffleQueryStage
-Output [1]: [#12#12]
+Output [1]: [#12]
 Arguments: X
 
 (55) NativeHashAggregate
-Input [1]: [#12#12]
+Input [1]: [#12]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#13]

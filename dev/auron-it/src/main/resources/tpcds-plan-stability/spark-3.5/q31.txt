@@ -568,25 +568,25 @@ Input [4]: [ca_county#8, d_qoy#6, d_year#5, _c3#9]
 Keys [3]: [ca_county#8, d_qoy#6, d_year#5]
 Functions [1]: [partial_sum(_c3#9)]
 Aggregate Attributes [1]: [sum#10]
-Results [4]: [ca_county#8, d_qoy#6, d_year#5, #11#11]
+Results [4]: [ca_county#8, d_qoy#6, d_year#5, #11]
 
 (36) NativeShuffleExchange
-Input [4]: [ca_county#8, d_qoy#6, d_year#5, #11#11]
+Input [4]: [ca_county#8, d_qoy#6, d_year#5, #11]
 Arguments: hashpartitioning(ca_county#8, d_qoy#6, d_year#5, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (37) ShuffleQueryStage
-Output [4]: [ca_county#8, d_qoy#6, d_year#5, #11#11]
+Output [4]: [ca_county#8, d_qoy#6, d_year#5, #11]
 Arguments: X
 
 (38) AQEShuffleRead
-Input [4]: [ca_county#8, d_qoy#6, d_year#5, #11#11]
+Input [4]: [ca_county#8, d_qoy#6, d_year#5, #11]
 Arguments: coalesced
 
 (39) InputAdapter
-Input [4]: [ca_county#8, d_qoy#6, d_year#5, #11#11]
+Input [4]: [ca_county#8, d_qoy#6, d_year#5, #11]
 
 (40) NativeHashAggregate
-Input [4]: [ca_county#8, d_qoy#6, d_year#5, #11#11]
+Input [4]: [ca_county#8, d_qoy#6, d_year#5, #11]
 Keys [3]: [ca_county#8, d_qoy#6, d_year#5]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#3))#12]
@@ -741,25 +741,25 @@ Input [4]: [ca_county#21, d_qoy#19, d_year#18, _c3#22]
 Keys [3]: [ca_county#21, d_qoy#19, d_year#18]
 Functions [1]: [partial_sum(_c3#22)]
 Aggregate Attributes [1]: [sum#23]
-Results [4]: [ca_county#21, d_qoy#19, d_year#18, #11#11]
+Results [4]: [ca_county#21, d_qoy#19, d_year#18, #11]
 
 (78) NativeShuffleExchange
-Input [4]: [ca_county#21, d_qoy#19, d_year#18, #11#11]
+Input [4]: [ca_county#21, d_qoy#19, d_year#18, #11]
 Arguments: hashpartitioning(ca_county#21, d_qoy#19, d_year#18, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (79) ShuffleQueryStage
-Output [4]: [ca_county#21, d_qoy#19, d_year#18, #11#11]
+Output [4]: [ca_county#21, d_qoy#19, d_year#18, #11]
 Arguments: X
 
 (80) AQEShuffleRead
-Input [4]: [ca_county#21, d_qoy#19, d_year#18, #11#11]
+Input [4]: [ca_county#21, d_qoy#19, d_year#18, #11]
 Arguments: coalesced
 
 (81) InputAdapter
-Input [4]: [ca_county#21, d_qoy#19, d_year#18, #11#11]
+Input [4]: [ca_county#21, d_qoy#19, d_year#18, #11]
 
 (82) NativeHashAggregate
-Input [4]: [ca_county#21, d_qoy#19, d_year#18, #11#11]
+Input [4]: [ca_county#21, d_qoy#19, d_year#18, #11]
 Keys [3]: [ca_county#21, d_qoy#19, d_year#18]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#16))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#16))#12]
@@ -920,25 +920,25 @@ Input [4]: [ca_county#32, d_qoy#30, d_year#29, _c3#33]
 Keys [3]: [ca_county#32, d_qoy#30, d_year#29]
 Functions [1]: [partial_sum(_c3#33)]
 Aggregate Attributes [1]: [sum#34]
-Results [4]: [ca_county#32, d_qoy#30, d_year#29, #11#11]
+Results [4]: [ca_county#32, d_qoy#30, d_year#29, #11]
 
 (121) NativeShuffleExchange
-Input [4]: [ca_county#32, d_qoy#30, d_year#29, #11#11]
+Input [4]: [ca_county#32, d_qoy#30, d_year#29, #11]
 Arguments: hashpartitioning(ca_county#32, d_qoy#30, d_year#29, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (122) ShuffleQueryStage
-Output [4]: [ca_county#32, d_qoy#30, d_year#29, #11#11]
+Output [4]: [ca_county#32, d_qoy#30, d_year#29, #11]
 Arguments: X
 
 (123) AQEShuffleRead
-Input [4]: [ca_county#32, d_qoy#30, d_year#29, #11#11]
+Input [4]: [ca_county#32, d_qoy#30, d_year#29, #11]
 Arguments: coalesced
 
 (124) InputAdapter
-Input [4]: [ca_county#32, d_qoy#30, d_year#29, #11#11]
+Input [4]: [ca_county#32, d_qoy#30, d_year#29, #11]
 
 (125) NativeHashAggregate
-Input [4]: [ca_county#32, d_qoy#30, d_year#29, #11#11]
+Input [4]: [ca_county#32, d_qoy#30, d_year#29, #11]
 Keys [3]: [ca_county#32, d_qoy#30, d_year#29]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#27))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#27))#12]
@@ -1103,25 +1103,25 @@ Input [4]: [ca_county#43, d_qoy#41, d_year#40, _c3#44]
 Keys [3]: [ca_county#43, d_qoy#41, d_year#40]
 Functions [1]: [partial_sum(_c3#44)]
 Aggregate Attributes [1]: [sum#45]
-Results [4]: [ca_county#43, d_qoy#41, d_year#40, #11#11]
+Results [4]: [ca_county#43, d_qoy#41, d_year#40, #11]
 
 (165) NativeShuffleExchange
-Input [4]: [ca_county#43, d_qoy#41, d_year#40, #11#11]
+Input [4]: [ca_county#43, d_qoy#41, d_year#40, #11]
 Arguments: hashpartitioning(ca_county#43, d_qoy#41, d_year#40, 100), ENSURE_REQUIREMENTS, [plan_id=17]
 
 (166) ShuffleQueryStage
-Output [4]: [ca_county#43, d_qoy#41, d_year#40, #11#11]
+Output [4]: [ca_county#43, d_qoy#41, d_year#40, #11]
 Arguments: X
 
 (167) AQEShuffleRead
-Input [4]: [ca_county#43, d_qoy#41, d_year#40, #11#11]
+Input [4]: [ca_county#43, d_qoy#41, d_year#40, #11]
 Arguments: coalesced
 
 (168) InputAdapter
-Input [4]: [ca_county#43, d_qoy#41, d_year#40, #11#11]
+Input [4]: [ca_county#43, d_qoy#41, d_year#40, #11]
 
 (169) NativeHashAggregate
-Input [4]: [ca_county#43, d_qoy#41, d_year#40, #11#11]
+Input [4]: [ca_county#43, d_qoy#41, d_year#40, #11]
 Keys [3]: [ca_county#43, d_qoy#41, d_year#40]
 Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#38))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#38))#46]
@@ -1270,25 +1270,25 @@ Input [4]: [ca_county#55, d_qoy#53, d_year#52, _c3#56]
 Keys [3]: [ca_county#55, d_qoy#53, d_year#52]
 Functions [1]: [partial_sum(_c3#56)]
 Aggregate Attributes [1]: [sum#57]
-Results [4]: [ca_county#55, d_qoy#53, d_year#52, #11#11]
+Results [4]: [ca_county#55, d_qoy#53, d_year#52, #11]
 
 (206) NativeShuffleExchange
-Input [4]: [ca_county#55, d_qoy#53, d_year#52, #11#11]
+Input [4]: [ca_county#55, d_qoy#53, d_year#52, #11]
 Arguments: hashpartitioning(ca_county#55, d_qoy#53, d_year#52, 100), ENSURE_REQUIREMENTS, [plan_id=20]
 
 (207) ShuffleQueryStage
-Output [4]: [ca_county#55, d_qoy#53, d_year#52, #11#11]
+Output [4]: [ca_county#55, d_qoy#53, d_year#52, #11]
 Arguments: X
 
 (208) AQEShuffleRead
-Input [4]: [ca_county#55, d_qoy#53, d_year#52, #11#11]
+Input [4]: [ca_county#55, d_qoy#53, d_year#52, #11]
 Arguments: coalesced
 
 (209) InputAdapter
-Input [4]: [ca_county#55, d_qoy#53, d_year#52, #11#11]
+Input [4]: [ca_county#55, d_qoy#53, d_year#52, #11]
 
 (210) NativeHashAggregate
-Input [4]: [ca_county#55, d_qoy#53, d_year#52, #11#11]
+Input [4]: [ca_county#55, d_qoy#53, d_year#52, #11]
 Keys [3]: [ca_county#55, d_qoy#53, d_year#52]
 Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#50))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#50))#46]
@@ -1441,25 +1441,25 @@ Input [4]: [ca_county#66, d_qoy#64, d_year#63, _c3#67]
 Keys [3]: [ca_county#66, d_qoy#64, d_year#63]
 Functions [1]: [partial_sum(_c3#67)]
 Aggregate Attributes [1]: [sum#68]
-Results [4]: [ca_county#66, d_qoy#64, d_year#63, #11#11]
+Results [4]: [ca_county#66, d_qoy#64, d_year#63, #11]
 
 (248) NativeShuffleExchange
-Input [4]: [ca_county#66, d_qoy#64, d_year#63, #11#11]
+Input [4]: [ca_county#66, d_qoy#64, d_year#63, #11]
 Arguments: hashpartitioning(ca_county#66, d_qoy#64, d_year#63, 100), ENSURE_REQUIREMENTS, [plan_id=23]
 
 (249) ShuffleQueryStage
-Output [4]: [ca_county#66, d_qoy#64, d_year#63, #11#11]
+Output [4]: [ca_county#66, d_qoy#64, d_year#63, #11]
 Arguments: X
 
 (250) AQEShuffleRead
-Input [4]: [ca_county#66, d_qoy#64, d_year#63, #11#11]
+Input [4]: [ca_county#66, d_qoy#64, d_year#63, #11]
 Arguments: coalesced
 
 (251) InputAdapter
-Input [4]: [ca_county#66, d_qoy#64, d_year#63, #11#11]
+Input [4]: [ca_county#66, d_qoy#64, d_year#63, #11]
 
 (252) NativeHashAggregate
-Input [4]: [ca_county#66, d_qoy#64, d_year#63, #11#11]
+Input [4]: [ca_county#66, d_qoy#64, d_year#63, #11]
 Keys [3]: [ca_county#66, d_qoy#64, d_year#63]
 Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#61))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#61))#46]

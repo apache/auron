@@ -394,219 +394,219 @@ Input [6]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, _c4#11,
 Keys [4]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10]
 Functions [2]: [partial_stddev_samp(_c4#11), partial_avg(_c5#12)]
 Aggregate Attributes [5]: [n#13, avg#14, m2#15, sum#16, count#17]
-Results [5]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18#18]
+Results [7]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18, #18, #19]
 
 (52) NativeShuffleExchange
-Input [5]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18#18]
+Input [7]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18, #18, #19]
 Arguments: hashpartitioning(w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (53) ShuffleQueryStage
-Output [5]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18#18]
+Output [7]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18, #18, #19]
 Arguments: X
 
 (54) AQEShuffleRead
-Input [5]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18#18]
+Input [7]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18, #18, #19]
 Arguments: coalesced
 
 (55) InputAdapter
-Input [5]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18#18]
+Input [7]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18, #18, #19]
 
 (56) NativeHashAggregate
-Input [5]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18#18]
+Input [7]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, #18, #18, #19]
 Keys [4]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10]
 Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double)), avg(inv_quantity_on_hand#4)]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#19, avg(inv_quantity_on_hand#4)#20]
-Results [6]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#4 as double))#19, avg(inv_quantity_on_hand#4)#20]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#20, avg(inv_quantity_on_hand#4)#21]
+Results [6]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#4 as double))#20, avg(inv_quantity_on_hand#4)#21]
 
 (57) NativeProject
-Output [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#4 as double))#19 AS stdev#21, avg(inv_quantity_on_hand#4)#20 AS mean#22]
-Input [6]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#4 as double))#19, avg(inv_quantity_on_hand#4)#20]
+Output [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#4 as double))#20 AS stdev#22, avg(inv_quantity_on_hand#4)#21 AS mean#23]
+Input [6]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#4 as double))#20, avg(inv_quantity_on_hand#4)#21]
 
 (58) NativeFilter
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stdev#21, mean#22]
-Condition : (CASE WHEN (mean#22 = 0.0) THEN false ELSE ((stdev#21 / mean#22) > 1.0) END AND CASE WHEN (mean#22 = 0.0) THEN false ELSE ((stdev#21 / mean#22) > 1.5) END)
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stdev#22, mean#23]
+Condition : (CASE WHEN (mean#23 = 0.0) THEN false ELSE ((stdev#22 / mean#23) > 1.0) END AND CASE WHEN (mean#23 = 0.0) THEN false ELSE ((stdev#22 / mean#23) > 1.5) END)
 
 (59) NativeProject
-Output [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, CASE WHEN (mean#22 = 0.0) THEN null ELSE (stdev#21 / mean#22) END AS cov#23]
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stdev#21, mean#22]
+Output [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, CASE WHEN (mean#23 = 0.0) THEN null ELSE (stdev#22 / mean#23) END AS cov#24]
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stdev#22, mean#23]
 
 (60) NativeShuffleExchange
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23]
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24]
 Arguments: hashpartitioning(i_item_sk#5, w_warehouse_sk#6, 100), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (61) ShuffleQueryStage
-Output [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23]
+Output [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24]
 Arguments: X
 
 (62) AQEShuffleRead
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23]
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24]
 Arguments: coalesced
 
 (63) InputAdapter
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23]
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24]
 
 (64) NativeSort
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23]
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24]
 Arguments: [i_item_sk#5 ASC NULLS FIRST, w_warehouse_sk#6 ASC NULLS FIRST], false
 
 (65) ReusedExchange [Reuses operator id: 34]
-Output [5]: [inv_date_sk#24, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28]
+Output [5]: [inv_date_sk#25, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29]
 
 (66) ShuffleQueryStage
-Output [5]: [inv_date_sk#24, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28]
+Output [5]: [inv_date_sk#25, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29]
 Arguments: X
 
 (67) AQEShuffleRead
-Input [5]: [inv_date_sk#24, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28]
+Input [5]: [inv_date_sk#25, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29]
 Arguments: coalesced
 
 (68) InputAdapter
-Input [5]: [inv_date_sk#24, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28]
-Arguments: [#24, #25, #26, #27, #28]
+Input [5]: [inv_date_sk#25, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29]
+Arguments: [#25, #26, #27, #28, #29]
 
 (69) InputAdapter
-Input [5]: [#24#24, #25#25, #26#26, #27#27, #28#28]
+Input [5]: [#25#25, #26#26, #27#27, #28#28, #29#29]
 
 (70) NativeSort
-Input [5]: [#24#24, #25#25, #26#26, #27#27, #28#28]
-Arguments: [inv_date_sk#24 ASC NULLS FIRST], false
+Input [5]: [#25#25, #26#26, #27#27, #28#28, #29#29]
+Arguments: [inv_date_sk#25 ASC NULLS FIRST], false
 
 (157) Scan parquet
-Output [3]: [d_date_sk#29, d_year#30, d_moy#31]
+Output [3]: [d_date_sk#30, d_year#31, d_moy#32]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (72) InputAdapter
-Input [3]: [d_date_sk#29, d_year#30, d_moy#31]
-Arguments: [#29, #30, #31]
+Input [3]: [d_date_sk#30, d_year#31, d_moy#32]
+Arguments: [#30, #31, #32]
 
 (73) NativeFilter
-Input [3]: [#29#29, #30#30, #31#31]
-Condition : ((((isnotnull(d_year#30) AND isnotnull(d_moy#31)) AND (d_year#30 = 2001)) AND (d_moy#31 = 2)) AND isnotnull(d_date_sk#29))
+Input [3]: [#30#30, #31#31, #32#32]
+Condition : ((((isnotnull(d_year#31) AND isnotnull(d_moy#32)) AND (d_year#31 = 2001)) AND (d_moy#32 = 2)) AND isnotnull(d_date_sk#30))
 
 (74) NativeProject
-Output [2]: [d_date_sk#29, d_moy#31]
-Input [3]: [#29#29, #30#30, #31#31]
+Output [2]: [d_date_sk#30, d_moy#32]
+Input [3]: [#30#30, #31#31, #32#32]
 
 (75) NativeShuffleExchange
-Input [2]: [d_date_sk#29, d_moy#31]
-Arguments: hashpartitioning(d_date_sk#29, 100), ENSURE_REQUIREMENTS, [plan_id=9]
+Input [2]: [d_date_sk#30, d_moy#32]
+Arguments: hashpartitioning(d_date_sk#30, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (76) ShuffleQueryStage
-Output [2]: [d_date_sk#29, d_moy#31]
+Output [2]: [d_date_sk#30, d_moy#32]
 Arguments: X
 
 (77) AQEShuffleRead
-Input [2]: [d_date_sk#29, d_moy#31]
+Input [2]: [d_date_sk#30, d_moy#32]
 Arguments: coalesced
 
 (78) InputAdapter
-Input [2]: [d_date_sk#29, d_moy#31]
+Input [2]: [d_date_sk#30, d_moy#32]
 
 (79) NativeSort
-Input [2]: [d_date_sk#29, d_moy#31]
-Arguments: [d_date_sk#29 ASC NULLS FIRST], false
+Input [2]: [d_date_sk#30, d_moy#32]
+Arguments: [d_date_sk#30 ASC NULLS FIRST], false
 
 (80) NativeSortMergeJoin
-Left keys [1]: [inv_date_sk#24]
-Right keys [1]: [d_date_sk#29]
+Left keys [1]: [inv_date_sk#25]
+Right keys [1]: [d_date_sk#30]
 Join type: Inner
 Join condition: None
 
 (81) NativeProject
-Output [5]: [inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28, d_moy#31]
-Input [7]: [#24#24, #25#25, #26#26, #27#27, #28#28, d_date_sk#29, d_moy#31]
+Output [5]: [inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29, d_moy#32]
+Input [7]: [#25#25, #26#26, #27#27, #28#28, #29#29, d_date_sk#30, d_moy#32]
 
 (82) NativeProject
-Output [6]: [w_warehouse_name#28 AS w_warehouse_name#28, w_warehouse_sk#27 AS w_warehouse_sk#27, i_item_sk#26 AS i_item_sk#26, d_moy#31 AS d_moy#31, cast(inv_quantity_on_hand#25 as double) AS _c4#32, inv_quantity_on_hand#25 AS _c5#33]
-Input [5]: [inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28, d_moy#31]
+Output [6]: [w_warehouse_name#29 AS w_warehouse_name#29, w_warehouse_sk#28 AS w_warehouse_sk#28, i_item_sk#27 AS i_item_sk#27, d_moy#32 AS d_moy#32, cast(inv_quantity_on_hand#26 as double) AS _c4#33, inv_quantity_on_hand#26 AS _c5#34]
+Input [5]: [inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29, d_moy#32]
 
 (83) NativeHashAggregate
-Input [6]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, _c4#32, _c5#33]
-Keys [4]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31]
-Functions [2]: [partial_stddev_samp(_c4#32), partial_avg(_c5#33)]
-Aggregate Attributes [5]: [n#34, avg#35, m2#36, sum#37, count#38]
-Results [5]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, #18#18]
+Input [6]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, _c4#33, _c5#34]
+Keys [4]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32]
+Functions [2]: [partial_stddev_samp(_c4#33), partial_avg(_c5#34)]
+Aggregate Attributes [5]: [n#35, avg#36, m2#37, sum#38, count#39]
+Results [7]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, #18, #18, #19]
 
 (84) NativeShuffleExchange
-Input [5]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, #18#18]
-Arguments: hashpartitioning(w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, 100), ENSURE_REQUIREMENTS, [plan_id=10]
+Input [7]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, #18, #18, #19]
+Arguments: hashpartitioning(w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, 100), ENSURE_REQUIREMENTS, [plan_id=10]
 
 (85) ShuffleQueryStage
-Output [5]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, #18#18]
+Output [7]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, #18, #18, #19]
 Arguments: X
 
 (86) AQEShuffleRead
-Input [5]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, #18#18]
+Input [7]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, #18, #18, #19]
 Arguments: coalesced
 
 (87) InputAdapter
-Input [5]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, #18#18]
+Input [7]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, #18, #18, #19]
 
 (88) NativeHashAggregate
-Input [5]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, #18#18]
-Keys [4]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31]
-Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#25 as double)), avg(inv_quantity_on_hand#25)]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#25 as double))#19, avg(inv_quantity_on_hand#25)#20]
-Results [6]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, stddev_samp(cast(inv_quantity_on_hand#25 as double))#19, avg(inv_quantity_on_hand#25)#20]
+Input [7]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, #18, #18, #19]
+Keys [4]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32]
+Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#26 as double)), avg(inv_quantity_on_hand#26)]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#26 as double))#20, avg(inv_quantity_on_hand#26)#21]
+Results [6]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, stddev_samp(cast(inv_quantity_on_hand#26 as double))#20, avg(inv_quantity_on_hand#26)#21]
 
 (89) NativeProject
-Output [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, stddev_samp(cast(inv_quantity_on_hand#25 as double))#19 AS stdev#21, avg(inv_quantity_on_hand#25)#20 AS mean#22]
-Input [6]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, stddev_samp(cast(inv_quantity_on_hand#25 as double))#19, avg(inv_quantity_on_hand#25)#20]
+Output [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, stddev_samp(cast(inv_quantity_on_hand#26 as double))#20 AS stdev#22, avg(inv_quantity_on_hand#26)#21 AS mean#23]
+Input [6]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, stddev_samp(cast(inv_quantity_on_hand#26 as double))#20, avg(inv_quantity_on_hand#26)#21]
 
 (90) NativeFilter
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, stdev#21, mean#22]
-Condition : CASE WHEN (mean#22 = 0.0) THEN false ELSE ((stdev#21 / mean#22) > 1.0) END
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, stdev#22, mean#23]
+Condition : CASE WHEN (mean#23 = 0.0) THEN false ELSE ((stdev#22 / mean#23) > 1.0) END
 
 (91) NativeProject
-Output [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#22 AS mean#39, CASE WHEN (mean#22 = 0.0) THEN null ELSE (stdev#21 / mean#22) END AS cov#40]
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, stdev#21, mean#22]
+Output [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#23 AS mean#40, CASE WHEN (mean#23 = 0.0) THEN null ELSE (stdev#22 / mean#23) END AS cov#41]
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, stdev#22, mean#23]
 
 (92) NativeShuffleExchange
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
-Arguments: hashpartitioning(i_item_sk#26, w_warehouse_sk#27, 100), ENSURE_REQUIREMENTS, [plan_id=11]
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
+Arguments: hashpartitioning(i_item_sk#27, w_warehouse_sk#28, 100), ENSURE_REQUIREMENTS, [plan_id=11]
 
 (93) ShuffleQueryStage
-Output [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
+Output [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
 Arguments: X
 
 (94) AQEShuffleRead
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
 Arguments: coalesced
 
 (95) InputAdapter
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
 
 (96) NativeSort
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
-Arguments: [i_item_sk#26 ASC NULLS FIRST, w_warehouse_sk#27 ASC NULLS FIRST], false
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
+Arguments: [i_item_sk#27 ASC NULLS FIRST, w_warehouse_sk#28 ASC NULLS FIRST], false
 
 (97) NativeSortMergeJoin
 Left keys [2]: [i_item_sk#5, w_warehouse_sk#6]
-Right keys [2]: [i_item_sk#26, w_warehouse_sk#27]
+Right keys [2]: [i_item_sk#27, w_warehouse_sk#28]
 Join type: Inner
 Join condition: None
 
 (98) NativeShuffleExchange
-Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23, w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
-Arguments: rangepartitioning(w_warehouse_sk#6 ASC NULLS FIRST, i_item_sk#5 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, mean#22 ASC NULLS FIRST, cov#23 ASC NULLS FIRST, d_moy#31 ASC NULLS FIRST, mean#39 ASC NULLS FIRST, cov#40 ASC NULLS FIRST, 100), ENSURE_REQUIREMENTS, [plan_id=12]
+Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24, w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
+Arguments: rangepartitioning(w_warehouse_sk#6 ASC NULLS FIRST, i_item_sk#5 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, mean#23 ASC NULLS FIRST, cov#24 ASC NULLS FIRST, d_moy#32 ASC NULLS FIRST, mean#40 ASC NULLS FIRST, cov#41 ASC NULLS FIRST, 100), ENSURE_REQUIREMENTS, [plan_id=12]
 
 (99) ShuffleQueryStage
-Output [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23, w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
+Output [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24, w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
 Arguments: X
 
 (100) AQEShuffleRead
-Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23, w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
+Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24, w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
 Arguments: coalesced
 
 (101) InputAdapter
-Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23, w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
+Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24, w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
 
 (102) NativeSort
-Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23, w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
-Arguments: [w_warehouse_sk#6 ASC NULLS FIRST, i_item_sk#5 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, mean#22 ASC NULLS FIRST, cov#23 ASC NULLS FIRST, d_moy#31 ASC NULLS FIRST, mean#39 ASC NULLS FIRST, cov#40 ASC NULLS FIRST], true
+Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24, w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
+Arguments: [w_warehouse_sk#6 ASC NULLS FIRST, i_item_sk#5 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, mean#23 ASC NULLS FIRST, cov#24 ASC NULLS FIRST, d_moy#32 ASC NULLS FIRST, mean#40 ASC NULLS FIRST, cov#41 ASC NULLS FIRST], true
 
 (103) Scan parquet
 Output [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
@@ -739,210 +739,210 @@ Input [5]: [inv_quantity_on_hand#4, i_item_sk#5, w_warehouse_sk#6, w_warehouse_n
 Keys [4]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10]
 Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#4 as double)), partial_avg(inv_quantity_on_hand#4)]
 Aggregate Attributes [5]: [n#13, avg#14, m2#15, sum#16, count#17]
-Results [9]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, n#41, avg#42, m2#43, sum#44, count#45]
+Results [9]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, n#42, avg#43, m2#44, sum#45, count#46]
 
 (131) Exchange
-Input [9]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, n#41, avg#42, m2#43, sum#44, count#45]
+Input [9]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, n#42, avg#43, m2#44, sum#45, count#46]
 Arguments: hashpartitioning(w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, 100), ENSURE_REQUIREMENTS, [plan_id=19]
 
 (132) HashAggregate
-Input [9]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, n#41, avg#42, m2#43, sum#44, count#45]
+Input [9]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10, n#42, avg#43, m2#44, sum#45, count#46]
 Keys [4]: [w_warehouse_name#7, w_warehouse_sk#6, i_item_sk#5, d_moy#10]
 Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double)), avg(inv_quantity_on_hand#4)]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#19, avg(inv_quantity_on_hand#4)#20]
-Results [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#4 as double))#19 AS stdev#21, avg(inv_quantity_on_hand#4)#20 AS mean#22]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#20, avg(inv_quantity_on_hand#4)#21]
+Results [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#4 as double))#20 AS stdev#22, avg(inv_quantity_on_hand#4)#21 AS mean#23]
 
 (133) Filter
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stdev#21, mean#22]
-Condition : (CASE WHEN (mean#22 = 0.0) THEN false ELSE ((stdev#21 / mean#22) > 1.0) END AND CASE WHEN (mean#22 = 0.0) THEN false ELSE ((stdev#21 / mean#22) > 1.5) END)
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stdev#22, mean#23]
+Condition : (CASE WHEN (mean#23 = 0.0) THEN false ELSE ((stdev#22 / mean#23) > 1.0) END AND CASE WHEN (mean#23 = 0.0) THEN false ELSE ((stdev#22 / mean#23) > 1.5) END)
 
 (134) Project
-Output [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, CASE WHEN (mean#22 = 0.0) THEN null ELSE (stdev#21 / mean#22) END AS cov#23]
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stdev#21, mean#22]
+Output [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, CASE WHEN (mean#23 = 0.0) THEN null ELSE (stdev#22 / mean#23) END AS cov#24]
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, stdev#22, mean#23]
 
 (135) Exchange
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23]
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24]
 Arguments: hashpartitioning(i_item_sk#5, w_warehouse_sk#6, 100), ENSURE_REQUIREMENTS, [plan_id=20]
 
 (136) Sort
-Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23]
+Input [5]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24]
 Arguments: [i_item_sk#5 ASC NULLS FIRST, w_warehouse_sk#6 ASC NULLS FIRST], false, 0
 
 (137) Scan parquet
-Output [4]: [inv_date_sk#24, inv_item_sk#46, inv_warehouse_sk#47, inv_quantity_on_hand#25]
+Output [4]: [inv_date_sk#25, inv_item_sk#47, inv_warehouse_sk#48, inv_quantity_on_hand#26]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(inv_item_sk), IsNotNull(inv_warehouse_sk), IsNotNull(inv_date_sk)]
 ReadSchema: struct<inv_date_sk:int,inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
 
 (138) Filter
-Input [4]: [inv_date_sk#24, inv_item_sk#46, inv_warehouse_sk#47, inv_quantity_on_hand#25]
-Condition : ((isnotnull(inv_item_sk#46) AND isnotnull(inv_warehouse_sk#47)) AND isnotnull(inv_date_sk#24))
+Input [4]: [inv_date_sk#25, inv_item_sk#47, inv_warehouse_sk#48, inv_quantity_on_hand#26]
+Condition : ((isnotnull(inv_item_sk#47) AND isnotnull(inv_warehouse_sk#48)) AND isnotnull(inv_date_sk#25))
 
 (139) Exchange
-Input [4]: [inv_date_sk#24, inv_item_sk#46, inv_warehouse_sk#47, inv_quantity_on_hand#25]
-Arguments: hashpartitioning(inv_item_sk#46, 100), ENSURE_REQUIREMENTS, [plan_id=21]
+Input [4]: [inv_date_sk#25, inv_item_sk#47, inv_warehouse_sk#48, inv_quantity_on_hand#26]
+Arguments: hashpartitioning(inv_item_sk#47, 100), ENSURE_REQUIREMENTS, [plan_id=21]
 
 (140) Sort
-Input [4]: [inv_date_sk#24, inv_item_sk#46, inv_warehouse_sk#47, inv_quantity_on_hand#25]
-Arguments: [inv_item_sk#46 ASC NULLS FIRST], false, 0
+Input [4]: [inv_date_sk#25, inv_item_sk#47, inv_warehouse_sk#48, inv_quantity_on_hand#26]
+Arguments: [inv_item_sk#47 ASC NULLS FIRST], false, 0
 
 (141) Scan parquet
-Output [1]: [i_item_sk#26]
+Output [1]: [i_item_sk#27]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int>
 
 (142) Filter
-Input [1]: [i_item_sk#26]
-Condition : isnotnull(i_item_sk#26)
+Input [1]: [i_item_sk#27]
+Condition : isnotnull(i_item_sk#27)
 
 (143) Exchange
-Input [1]: [i_item_sk#26]
-Arguments: hashpartitioning(i_item_sk#26, 100), ENSURE_REQUIREMENTS, [plan_id=22]
+Input [1]: [i_item_sk#27]
+Arguments: hashpartitioning(i_item_sk#27, 100), ENSURE_REQUIREMENTS, [plan_id=22]
 
 (144) Sort
-Input [1]: [i_item_sk#26]
-Arguments: [i_item_sk#26 ASC NULLS FIRST], false, 0
+Input [1]: [i_item_sk#27]
+Arguments: [i_item_sk#27 ASC NULLS FIRST], false, 0
 
 (145) SortMergeJoin
-Left keys [1]: [inv_item_sk#46]
-Right keys [1]: [i_item_sk#26]
+Left keys [1]: [inv_item_sk#47]
+Right keys [1]: [i_item_sk#27]
 Join type: Inner
 Join condition: None
 
 (146) Project
-Output [4]: [inv_date_sk#24, inv_warehouse_sk#47, inv_quantity_on_hand#25, i_item_sk#26]
-Input [5]: [inv_date_sk#24, inv_item_sk#46, inv_warehouse_sk#47, inv_quantity_on_hand#25, i_item_sk#26]
+Output [4]: [inv_date_sk#25, inv_warehouse_sk#48, inv_quantity_on_hand#26, i_item_sk#27]
+Input [5]: [inv_date_sk#25, inv_item_sk#47, inv_warehouse_sk#48, inv_quantity_on_hand#26, i_item_sk#27]
 
 (147) Exchange
-Input [4]: [inv_date_sk#24, inv_warehouse_sk#47, inv_quantity_on_hand#25, i_item_sk#26]
-Arguments: hashpartitioning(inv_warehouse_sk#47, 100), ENSURE_REQUIREMENTS, [plan_id=23]
+Input [4]: [inv_date_sk#25, inv_warehouse_sk#48, inv_quantity_on_hand#26, i_item_sk#27]
+Arguments: hashpartitioning(inv_warehouse_sk#48, 100), ENSURE_REQUIREMENTS, [plan_id=23]
 
 (148) Sort
-Input [4]: [inv_date_sk#24, inv_warehouse_sk#47, inv_quantity_on_hand#25, i_item_sk#26]
-Arguments: [inv_warehouse_sk#47 ASC NULLS FIRST], false, 0
+Input [4]: [inv_date_sk#25, inv_warehouse_sk#48, inv_quantity_on_hand#26, i_item_sk#27]
+Arguments: [inv_warehouse_sk#48 ASC NULLS FIRST], false, 0
 
 (149) Scan parquet
-Output [2]: [w_warehouse_sk#27, w_warehouse_name#28]
+Output [2]: [w_warehouse_sk#28, w_warehouse_name#29]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(w_warehouse_sk)]
 ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string>
 
 (150) Filter
-Input [2]: [w_warehouse_sk#27, w_warehouse_name#28]
-Condition : isnotnull(w_warehouse_sk#27)
+Input [2]: [w_warehouse_sk#28, w_warehouse_name#29]
+Condition : isnotnull(w_warehouse_sk#28)
 
 (151) Exchange
-Input [2]: [w_warehouse_sk#27, w_warehouse_name#28]
-Arguments: hashpartitioning(w_warehouse_sk#27, 100), ENSURE_REQUIREMENTS, [plan_id=24]
+Input [2]: [w_warehouse_sk#28, w_warehouse_name#29]
+Arguments: hashpartitioning(w_warehouse_sk#28, 100), ENSURE_REQUIREMENTS, [plan_id=24]
 
 (152) Sort
-Input [2]: [w_warehouse_sk#27, w_warehouse_name#28]
-Arguments: [w_warehouse_sk#27 ASC NULLS FIRST], false, 0
+Input [2]: [w_warehouse_sk#28, w_warehouse_name#29]
+Arguments: [w_warehouse_sk#28 ASC NULLS FIRST], false, 0
 
 (153) SortMergeJoin
-Left keys [1]: [inv_warehouse_sk#47]
-Right keys [1]: [w_warehouse_sk#27]
+Left keys [1]: [inv_warehouse_sk#48]
+Right keys [1]: [w_warehouse_sk#28]
 Join type: Inner
 Join condition: None
 
 (154) Project
-Output [5]: [inv_date_sk#24, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28]
-Input [6]: [inv_date_sk#24, inv_warehouse_sk#47, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28]
+Output [5]: [inv_date_sk#25, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29]
+Input [6]: [inv_date_sk#25, inv_warehouse_sk#48, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29]
 
 (155) Exchange
-Input [5]: [inv_date_sk#24, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28]
-Arguments: hashpartitioning(inv_date_sk#24, 100), ENSURE_REQUIREMENTS, [plan_id=25]
+Input [5]: [inv_date_sk#25, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29]
+Arguments: hashpartitioning(inv_date_sk#25, 100), ENSURE_REQUIREMENTS, [plan_id=25]
 
 (156) Sort
-Input [5]: [inv_date_sk#24, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28]
-Arguments: [inv_date_sk#24 ASC NULLS FIRST], false, 0
+Input [5]: [inv_date_sk#25, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29]
+Arguments: [inv_date_sk#25 ASC NULLS FIRST], false, 0
 
 (157) Scan parquet
-Output [3]: [d_date_sk#29, d_year#30, d_moy#31]
+Output [3]: [d_date_sk#30, d_year#31, d_moy#32]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (158) Filter
-Input [3]: [d_date_sk#29, d_year#30, d_moy#31]
-Condition : ((((isnotnull(d_year#30) AND isnotnull(d_moy#31)) AND (d_year#30 = 2001)) AND (d_moy#31 = 2)) AND isnotnull(d_date_sk#29))
+Input [3]: [d_date_sk#30, d_year#31, d_moy#32]
+Condition : ((((isnotnull(d_year#31) AND isnotnull(d_moy#32)) AND (d_year#31 = 2001)) AND (d_moy#32 = 2)) AND isnotnull(d_date_sk#30))
 
 (159) Project
-Output [2]: [d_date_sk#29, d_moy#31]
-Input [3]: [d_date_sk#29, d_year#30, d_moy#31]
+Output [2]: [d_date_sk#30, d_moy#32]
+Input [3]: [d_date_sk#30, d_year#31, d_moy#32]
 
 (160) Exchange
-Input [2]: [d_date_sk#29, d_moy#31]
-Arguments: hashpartitioning(d_date_sk#29, 100), ENSURE_REQUIREMENTS, [plan_id=26]
+Input [2]: [d_date_sk#30, d_moy#32]
+Arguments: hashpartitioning(d_date_sk#30, 100), ENSURE_REQUIREMENTS, [plan_id=26]
 
 (161) Sort
-Input [2]: [d_date_sk#29, d_moy#31]
-Arguments: [d_date_sk#29 ASC NULLS FIRST], false, 0
+Input [2]: [d_date_sk#30, d_moy#32]
+Arguments: [d_date_sk#30 ASC NULLS FIRST], false, 0
 
 (162) SortMergeJoin
-Left keys [1]: [inv_date_sk#24]
-Right keys [1]: [d_date_sk#29]
+Left keys [1]: [inv_date_sk#25]
+Right keys [1]: [d_date_sk#30]
 Join type: Inner
 Join condition: None
 
 (163) Project
-Output [5]: [inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28, d_moy#31]
-Input [7]: [inv_date_sk#24, inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28, d_date_sk#29, d_moy#31]
+Output [5]: [inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29, d_moy#32]
+Input [7]: [inv_date_sk#25, inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29, d_date_sk#30, d_moy#32]
 
 (164) HashAggregate
-Input [5]: [inv_quantity_on_hand#25, i_item_sk#26, w_warehouse_sk#27, w_warehouse_name#28, d_moy#31]
-Keys [4]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31]
-Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#25 as double)), partial_avg(inv_quantity_on_hand#25)]
-Aggregate Attributes [5]: [n#34, avg#35, m2#36, sum#37, count#38]
-Results [9]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, n#48, avg#49, m2#50, sum#51, count#52]
+Input [5]: [inv_quantity_on_hand#26, i_item_sk#27, w_warehouse_sk#28, w_warehouse_name#29, d_moy#32]
+Keys [4]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32]
+Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#26 as double)), partial_avg(inv_quantity_on_hand#26)]
+Aggregate Attributes [5]: [n#35, avg#36, m2#37, sum#38, count#39]
+Results [9]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, n#49, avg#50, m2#51, sum#52, count#53]
 
 (165) Exchange
-Input [9]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, n#48, avg#49, m2#50, sum#51, count#52]
-Arguments: hashpartitioning(w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, 100), ENSURE_REQUIREMENTS, [plan_id=27]
+Input [9]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, n#49, avg#50, m2#51, sum#52, count#53]
+Arguments: hashpartitioning(w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, 100), ENSURE_REQUIREMENTS, [plan_id=27]
 
 (166) HashAggregate
-Input [9]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31, n#48, avg#49, m2#50, sum#51, count#52]
-Keys [4]: [w_warehouse_name#28, w_warehouse_sk#27, i_item_sk#26, d_moy#31]
-Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#25 as double)), avg(inv_quantity_on_hand#25)]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#25 as double))#19, avg(inv_quantity_on_hand#25)#20]
-Results [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, stddev_samp(cast(inv_quantity_on_hand#25 as double))#19 AS stdev#21, avg(inv_quantity_on_hand#25)#20 AS mean#22]
+Input [9]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32, n#49, avg#50, m2#51, sum#52, count#53]
+Keys [4]: [w_warehouse_name#29, w_warehouse_sk#28, i_item_sk#27, d_moy#32]
+Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#26 as double)), avg(inv_quantity_on_hand#26)]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#26 as double))#20, avg(inv_quantity_on_hand#26)#21]
+Results [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, stddev_samp(cast(inv_quantity_on_hand#26 as double))#20 AS stdev#22, avg(inv_quantity_on_hand#26)#21 AS mean#23]
 
 (167) Filter
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, stdev#21, mean#22]
-Condition : CASE WHEN (mean#22 = 0.0) THEN false ELSE ((stdev#21 / mean#22) > 1.0) END
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, stdev#22, mean#23]
+Condition : CASE WHEN (mean#23 = 0.0) THEN false ELSE ((stdev#22 / mean#23) > 1.0) END
 
 (168) Project
-Output [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#22 AS mean#39, CASE WHEN (mean#22 = 0.0) THEN null ELSE (stdev#21 / mean#22) END AS cov#40]
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, stdev#21, mean#22]
+Output [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#23 AS mean#40, CASE WHEN (mean#23 = 0.0) THEN null ELSE (stdev#22 / mean#23) END AS cov#41]
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, stdev#22, mean#23]
 
 (169) Exchange
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
-Arguments: hashpartitioning(i_item_sk#26, w_warehouse_sk#27, 100), ENSURE_REQUIREMENTS, [plan_id=28]
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
+Arguments: hashpartitioning(i_item_sk#27, w_warehouse_sk#28, 100), ENSURE_REQUIREMENTS, [plan_id=28]
 
 (170) Sort
-Input [5]: [w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
-Arguments: [i_item_sk#26 ASC NULLS FIRST, w_warehouse_sk#27 ASC NULLS FIRST], false, 0
+Input [5]: [w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
+Arguments: [i_item_sk#27 ASC NULLS FIRST, w_warehouse_sk#28 ASC NULLS FIRST], false, 0
 
 (171) SortMergeJoin
 Left keys [2]: [i_item_sk#5, w_warehouse_sk#6]
-Right keys [2]: [i_item_sk#26, w_warehouse_sk#27]
+Right keys [2]: [i_item_sk#27, w_warehouse_sk#28]
 Join type: Inner
 Join condition: None
 
 (172) Exchange
-Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23, w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
-Arguments: rangepartitioning(w_warehouse_sk#6 ASC NULLS FIRST, i_item_sk#5 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, mean#22 ASC NULLS FIRST, cov#23 ASC NULLS FIRST, d_moy#31 ASC NULLS FIRST, mean#39 ASC NULLS FIRST, cov#40 ASC NULLS FIRST, 100), ENSURE_REQUIREMENTS, [plan_id=29]
+Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24, w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
+Arguments: rangepartitioning(w_warehouse_sk#6 ASC NULLS FIRST, i_item_sk#5 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, mean#23 ASC NULLS FIRST, cov#24 ASC NULLS FIRST, d_moy#32 ASC NULLS FIRST, mean#40 ASC NULLS FIRST, cov#41 ASC NULLS FIRST, 100), ENSURE_REQUIREMENTS, [plan_id=29]
 
 (173) Sort
-Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23, w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
-Arguments: [w_warehouse_sk#6 ASC NULLS FIRST, i_item_sk#5 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, mean#22 ASC NULLS FIRST, cov#23 ASC NULLS FIRST, d_moy#31 ASC NULLS FIRST, mean#39 ASC NULLS FIRST, cov#40 ASC NULLS FIRST], true, 0
+Input [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24, w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
+Arguments: [w_warehouse_sk#6 ASC NULLS FIRST, i_item_sk#5 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, mean#23 ASC NULLS FIRST, cov#24 ASC NULLS FIRST, d_moy#32 ASC NULLS FIRST, mean#40 ASC NULLS FIRST, cov#41 ASC NULLS FIRST], true, 0
 
 (174) AdaptiveSparkPlan
-Output [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#22, cov#23, w_warehouse_sk#27, i_item_sk#26, d_moy#31, mean#39, cov#40]
+Output [10]: [w_warehouse_sk#6, i_item_sk#5, d_moy#10, mean#23, cov#24, w_warehouse_sk#28, i_item_sk#27, d_moy#32, mean#40, cov#41]
 Arguments: isFinalPlan=true
 

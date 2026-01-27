@@ -20,8 +20,6 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
-import java.io.InputStream
-import java.io.OutputStream
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
@@ -29,7 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.arrow.c.ArrowArray
 import org.apache.arrow.c.Data
-import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.{VarBinaryVector, VectorSchemaRoot}
 import org.apache.arrow.vector.dictionary.DictionaryProvider
 import org.apache.arrow.vector.dictionary.DictionaryProvider.MapDictionaryProvider
 import org.apache.spark.SparkEnv
@@ -162,12 +160,15 @@ case class SparkUDAFWrapperContext[B](serialized: ByteBuffer) extends Logging {
     }
   }
 
-  def serializeRows(rows: BufferRowsColumn[B], indices: Array[Int]): Array[Byte] = {
-    aggEvaluator.get.serializeRows(rows, indices.iterator)
+  def exportRows(
+      rows: BufferRowsColumn[B],
+      indices: Array[Int],
+      outputArrowBinaryArrayPtr: Long): Unit = {
+    aggEvaluator.get.exportRows(rows, indices.iterator, outputArrowBinaryArrayPtr)
   }
 
-  def deserializeRows(dataBuffer: ByteBuffer): BufferRowsColumn[B] = {
-    aggEvaluator.get.deserializeRows(dataBuffer)
+  def importRows(inputArrowBinaryArrayPtr: Long): BufferRowsColumn[B] = {
+    aggEvaluator.get.importRows(inputArrowBinaryArrayPtr)
   }
 
   def spill(
@@ -196,18 +197,15 @@ trait BufferRowsColumn[B] {
 }
 
 trait AggregateEvaluator[B, R <: BufferRowsColumn[B]] extends Logging {
-  private lazy val spillCodec = new SnappyCompressionCodec(SparkEnv.get.conf)
+  protected lazy val spillCodec = new SnappyCompressionCodec(SparkEnv.get.conf)
 
   def createEmptyColumn(): R
 
-  def serializeRows(
-      rows: R,
-      indices: Iterator[Int],
-      streamWrapper: OutputStream => OutputStream = { s => s }): Array[Byte]
+  def exportRows(rows: R, indices: Iterator[Int], outputArrowBinaryArrayPtr: Long): Unit
+  def importRows(inputArrowBinaryArrayPtr: Long): BufferRowsColumn[B]
 
-  def deserializeRows(
-      dataBuffer: ByteBuffer,
-      streamWrapper: InputStream => InputStream = { s => s }): R
+  def spillToBuffer(rows: R, indices: Iterator[Int]): ByteBuffer
+  def unspillFromBuffer(buffer: ByteBuffer): BufferRowsColumn[B]
 
   def spill(
       memTracker: SparkUDAFMemTracker,
@@ -216,8 +214,7 @@ trait AggregateEvaluator[B, R <: BufferRowsColumn[B]] extends Logging {
       spillIdx: Long): Int = {
     val hsm = SparkOnHeapSpillManager.current
     val spillId = memTracker.getSpill(spillIdx)
-    val byteBuffer =
-      ByteBuffer.wrap(serializeRows(rows, indices, spillCodec.compressedOutputStream))
+    val byteBuffer = spillToBuffer(rows, indices)
     val spillBlockSize = byteBuffer.limit()
     hsm.writeSpill(spillId, byteBuffer)
     spillBlockSize
@@ -233,7 +230,7 @@ trait AggregateEvaluator[B, R <: BufferRowsColumn[B]] extends Logging {
     val readSize = hsm.readSpill(spillId, byteBuffer).toLong
     assert(readSize == spillBlockSize)
     byteBuffer.flip()
-    deserializeRows(byteBuffer, spillCodec.compressedInputStream)
+    unspillFromBuffer(byteBuffer)
   }
 }
 
@@ -274,14 +271,56 @@ class DeclarativeEvaluator(val agg: DeclarativeAggregate)
     DeclarativeAggRowsColumn(this, ArrayBuffer())
   }
 
-  override def serializeRows(
+  override def exportRows(
       rows: DeclarativeAggRowsColumn,
       indices: Iterator[Int],
-      streamWrapper: OutputStream => OutputStream): Array[Byte] = {
+      outputArrowBinaryArrayPtr: Long): Unit = {
 
+    Using.resource(new VarBinaryVector("output", ROOT_ALLOCATOR)) { binaryVector =>
+      val rowDataStream = new ByteArrayOutputStream()
+      val rowDataBuffer = new Array[Byte](1024)
+      var valueCount = 0
+
+      for ((rowIdx, outputRowIdx) <- indices.zipWithIndex) {
+        rows.rows(rowIdx).writeToStream(rowDataStream, rowDataBuffer)
+        rows.rows(rowIdx) = releasedRow
+        binaryVector.setSafe(outputRowIdx, rowDataStream.toByteArray)
+        rowDataStream.reset()
+        valueCount += 1
+      }
+      binaryVector.setValueCount(valueCount)
+
+      Using.resource(ArrowArray.wrap(outputArrowBinaryArrayPtr)) { outputArray =>
+        Data.exportVector(ROOT_ALLOCATOR, binaryVector, new MapDictionaryProvider, outputArray)
+      }
+    }
+  }
+
+  override def importRows(inputArrowBinaryArrayPtr: Long): DeclarativeAggRowsColumn = {
+    Using.resource(new VarBinaryVector("input", ROOT_ALLOCATOR)) { binaryVector =>
+      Using.resource(ArrowArray.wrap(inputArrowBinaryArrayPtr)) { inputArray =>
+        Data.importIntoVector(ROOT_ALLOCATOR, inputArray, binaryVector, new MapDictionaryProvider)
+      }
+      val numRows = binaryVector.getValueCount
+      val numFields = agg.aggBufferSchema.length
+      val rows = new ArrayBuffer[UnsafeRow]()
+
+      for (rowIdx <- 0 until numRows) {
+        val row = new UnsafeRow(numFields)
+        val rowData = binaryVector.get(rowIdx)
+        row.pointTo(rowData, rowData.length)
+        rows.append(row)
+      }
+      DeclarativeAggRowsColumn(this, rows)
+    }
+  }
+
+  override def spillToBuffer(
+      rows: DeclarativeAggRowsColumn,
+      indices: Iterator[Int]): ByteBuffer = {
     val numFields = agg.aggBufferSchema.length
     val outputDataStream = new ByteArrayOutputStream()
-    val wrappedStream = streamWrapper(outputDataStream)
+    val wrappedStream = spillCodec.compressedOutputStream(outputDataStream)
     val serializer = new UnsafeRowSerializer(numFields).newInstance()
 
     Using(serializer.serializeStream(wrappedStream)) { ser =>
@@ -291,16 +330,14 @@ class DeclarativeEvaluator(val agg: DeclarativeAggregate)
       }
     }
     wrappedStream.close()
-    outputDataStream.toByteArray
+    ByteBuffer.wrap(outputDataStream.toByteArray)
   }
 
-  override def deserializeRows(
-      dataBuffer: ByteBuffer,
-      streamWrapper: InputStream => InputStream): DeclarativeAggRowsColumn = {
+  override def unspillFromBuffer(buffer: ByteBuffer): DeclarativeAggRowsColumn = {
     val numFields = agg.aggBufferSchema.length
     val deserializer = new UnsafeRowSerializer(numFields).newInstance()
-    val inputDataStream = new ByteBufferInputStream(dataBuffer)
-    val wrappedStream = streamWrapper(inputDataStream)
+    val inputDataStream = new ByteBufferInputStream(buffer)
+    val wrappedStream = spillCodec.compressedInputStream(inputDataStream)
     val rows = new ArrayBuffer[UnsafeRow]()
 
     Using.resource(deserializer.deserializeStream(wrappedStream)) { deser =>
@@ -382,13 +419,47 @@ class TypedImperativeEvaluator[B](val agg: TypedImperativeAggregate[B])
     new TypedImperativeAggRowsColumn[B](this, ArrayBuffer())
   }
 
-  override def serializeRows(
+  override def exportRows(
       rows: TypedImperativeAggRowsColumn[B],
       indices: Iterator[Int],
-      streamWrapper: OutputStream => OutputStream): Array[Byte] = {
+      outputArrowBinaryArrayPtr: Long): Unit = {
 
+    Using.resource(new VarBinaryVector("output", ROOT_ALLOCATOR)) { binaryVector =>
+      var valueCount = 0
+      for ((rowIdx, outputRowIdx) <- indices.zipWithIndex) {
+        binaryVector.setSafe(outputRowIdx, rows.serializedRow(rowIdx))
+        rows.rows(rowIdx) = releasedRow
+        valueCount += 1
+      }
+      binaryVector.setValueCount(valueCount)
+
+      Using.resource(ArrowArray.wrap(outputArrowBinaryArrayPtr)) { outputArray =>
+        Data.exportVector(ROOT_ALLOCATOR, binaryVector, new MapDictionaryProvider, outputArray)
+      }
+    }
+  }
+
+  override def importRows(inputArrowBinaryArrayPtr: Long): TypedImperativeAggRowsColumn[B] = {
+    Using.resource(new VarBinaryVector("input", ROOT_ALLOCATOR)) { binaryVector =>
+      Using.resource(ArrowArray.wrap(inputArrowBinaryArrayPtr)) { inputArray =>
+        Data.importIntoVector(ROOT_ALLOCATOR, inputArray, binaryVector, new MapDictionaryProvider)
+      }
+      val numRows = binaryVector.getValueCount
+      val rows = ArrayBuffer[RowType]()
+
+      for (rowIdx <- 0 until numRows) {
+        val rowData = binaryVector.get(rowIdx)
+        rows.append(SerializedRowType(rowData))
+      }
+      TypedImperativeAggRowsColumn(this, rows)
+    }
+  }
+
+  override def spillToBuffer(
+      rows: TypedImperativeAggRowsColumn[B],
+      indices: Iterator[Int]): ByteBuffer = {
     val outputStream = new ByteArrayOutputStream()
-    val wrappedStream = streamWrapper(outputStream)
+    val wrappedStream = spillCodec.compressedOutputStream(outputStream)
     val dataOut = new DataOutputStream(wrappedStream)
 
     for (i <- indices) {
@@ -398,15 +469,13 @@ class TypedImperativeEvaluator[B](val agg: TypedImperativeAggregate[B])
       rows.rows(i) = releasedRow
     }
     dataOut.close()
-    outputStream.toByteArray
+    ByteBuffer.wrap(outputStream.toByteArray)
   }
 
-  override def deserializeRows(
-      dataBuffer: ByteBuffer,
-      streamWrapper: InputStream => InputStream): TypedImperativeAggRowsColumn[B] = {
+  override def unspillFromBuffer(buffer: ByteBuffer): TypedImperativeAggRowsColumn[B] = {
     val rows = ArrayBuffer[RowType]()
-    val inputStream = new ByteBufferInputStream(dataBuffer)
-    val wrappedStream = streamWrapper(inputStream)
+    val inputStream = new ByteBufferInputStream(buffer)
+    val wrappedStream = spillCodec.compressedInputStream(inputStream)
     val dataIn = new DataInputStream(wrappedStream)
     var finished = false
 
@@ -431,7 +500,9 @@ class TypedImperativeEvaluator[B](val agg: TypedImperativeAggregate[B])
 }
 
 trait RowType
+
 case class SerializedRowType(bytes: Array[Byte]) extends RowType
+
 case class DeserializedRowType[B](row: B) extends RowType
 
 case class TypedImperativeAggRowsColumn[B](
@@ -440,6 +511,7 @@ case class TypedImperativeAggRowsColumn[B](
     extends BufferRowsColumn[B] {
 
   override def length: Int = rows.length
+
   override def memUsed: Int = {
     evaluator.estimatedRowSize match {
       case Some(estimRowSize) => rows.length * estimRowSize

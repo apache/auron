@@ -44,6 +44,7 @@ pub trait Agg: Send + Sync + Debug {
     fn data_type(&self) -> &DataType;
     fn nullable(&self) -> bool;
     fn create_acc_column(&self, num_rows: usize) -> AccColumnRef;
+    fn acc_array_data_types(&self) -> &[DataType];
     fn with_new_exprs(&self, exprs: Vec<PhysicalExprRef>) -> Result<Arc<dyn Agg>>;
 
     fn prepare_partial_args(&self, partial_inputs: &[ArrayRef]) -> Result<Vec<ArrayRef>> {

@@ -457,47 +457,47 @@ Input [3]: [cs_order_number#5, _c1#17, _c2#18]
 Keys [1]: [cs_order_number#5]
 Functions [2]: [partial_sum(_c1#17), partial_sum(_c2#18)]
 Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_ship_cost#6))#19, sum(UnscaledValue(cs_net_profit#7))#20]
-Results [2]: [cs_order_number#5, #21#21]
+Results [3]: [cs_order_number#5, #21, #21]
 
 (77) NativeShuffleExchange
-Input [2]: [cs_order_number#5, #21#21]
+Input [3]: [cs_order_number#5, #21, #21]
 Arguments: hashpartitioning(cs_order_number#5, 100), ENSURE_REQUIREMENTS, [plan_id=10]
 
 (78) ShuffleQueryStage
-Output [2]: [cs_order_number#5, #21#21]
+Output [3]: [cs_order_number#5, #21, #21]
 Arguments: X
 
 (79) AQEShuffleRead
-Input [2]: [cs_order_number#5, #21#21]
+Input [3]: [cs_order_number#5, #21, #21]
 Arguments: coalesced
 
 (80) InputAdapter
-Input [2]: [cs_order_number#5, #21#21]
+Input [3]: [cs_order_number#5, #21, #21]
 
 (81) NativeHashAggregate
-Input [2]: [cs_order_number#5, #21#21]
+Input [3]: [cs_order_number#5, #21, #21]
 Keys [1]: [cs_order_number#5]
 Functions [2]: [merge_sum(UnscaledValue(cs_ext_ship_cost#6)), merge_sum(UnscaledValue(cs_net_profit#7))]
 Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_ship_cost#6))#19, sum(UnscaledValue(cs_net_profit#7))#20]
-Results [2]: [cs_order_number#5, #21#21]
+Results [3]: [cs_order_number#5, #21, #21]
 
 (82) NativeHashAggregate
-Input [2]: [cs_order_number#5, #21#21]
+Input [3]: [cs_order_number#5, #21, #21]
 Keys: []
 Functions [3]: [merge_sum(UnscaledValue(cs_ext_ship_cost#6)), merge_sum(UnscaledValue(cs_net_profit#7)), partial_count(distinct cs_order_number#5)]
 Aggregate Attributes [3]: [sum(UnscaledValue(cs_ext_ship_cost#6))#19, sum(UnscaledValue(cs_net_profit#7))#20, count(cs_order_number#5)#22]
-Results [1]: [#21#21]
+Results [3]: [#21, #21, #21]
 
 (83) NativeShuffleExchange
-Input [1]: [#21#21]
+Input [3]: [#21, #21, #21]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
 
 (84) ShuffleQueryStage
-Output [1]: [#21#21]
+Output [3]: [#21, #21, #21]
 Arguments: X
 
 (85) NativeHashAggregate
-Input [1]: [#21#21]
+Input [3]: [#21, #21, #21]
 Keys: []
 Functions [3]: [sum(UnscaledValue(cs_ext_ship_cost#6)), sum(UnscaledValue(cs_net_profit#7)), count(distinct cs_order_number#5)]
 Aggregate Attributes [3]: [sum(UnscaledValue(cs_ext_ship_cost#6))#19, sum(UnscaledValue(cs_net_profit#7))#20, count(cs_order_number#5)#22]

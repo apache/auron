@@ -16,7 +16,7 @@
 use std::{any::Any, fmt::Formatter, sync::Arc};
 
 use arrow::{
-    datatypes::{Field, Fields, Schema, SchemaRef},
+    datatypes::{Schema, SchemaRef},
     record_batch::{RecordBatch, RecordBatchOptions},
 };
 use async_trait::async_trait;
@@ -35,7 +35,7 @@ use datafusion::{
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
-use crate::{agg::AGG_BUF_COLUMN_NAME, common::execution_context::ExecutionContext};
+use crate::common::execution_context::ExecutionContext;
 
 #[derive(Debug, Clone)]
 pub struct RenameColumnsExec {
@@ -52,35 +52,15 @@ impl RenameColumnsExec {
         renamed_column_names: Vec<String>,
     ) -> Result<Self> {
         let input_schema = input.schema();
-        let mut new_names = vec![];
+        let mut new_fields = Vec::with_capacity(input_schema.fields().len());
 
-        for (i, field) in input_schema
-            .fields()
-            .iter()
-            .take(renamed_column_names.len())
-            .enumerate()
-        {
-            if field.name() != AGG_BUF_COLUMN_NAME {
-                new_names.push(renamed_column_names[i].clone());
-            } else {
-                new_names.push(AGG_BUF_COLUMN_NAME.to_owned());
-                break;
-            }
+        for (old_field, new_name) in input_schema.fields().iter().zip(&renamed_column_names) {
+            new_fields.push(old_field.as_ref().clone().with_name(new_name));
         }
-
-        while new_names.len() < input_schema.fields().len() {
-            new_names.push(input_schema.field(new_names.len()).name().clone());
+        while new_fields.len() < input_schema.fields().len() {
+            new_fields.push(input_schema.field(new_fields.len()).clone());
         }
-        let renamed_column_names = new_names;
-        let renamed_schema = Arc::new(Schema::new(
-            renamed_column_names
-                .iter()
-                .zip(input_schema.fields())
-                .map(|(new_name, field)| {
-                    Field::new(new_name, field.data_type().clone(), field.is_nullable())
-                })
-                .collect::<Fields>(),
-        ));
+        let renamed_schema = Arc::new(Schema::new(new_fields));
 
         Ok(Self {
             input,

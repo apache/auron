@@ -329,25 +329,25 @@ Input [3]: [i_manufact_id#5, d_qoy#16, _c2#18]
 Keys [2]: [i_manufact_id#5, d_qoy#16]
 Functions [1]: [partial_sum(_c2#18)]
 Aggregate Attributes [1]: [sum#19]
-Results [3]: [i_manufact_id#5, d_qoy#16, #20#20]
+Results [3]: [i_manufact_id#5, d_qoy#16, #20]
 
 (53) NativeShuffleExchange
-Input [3]: [i_manufact_id#5, d_qoy#16, #20#20]
+Input [3]: [i_manufact_id#5, d_qoy#16, #20]
 Arguments: hashpartitioning(i_manufact_id#5, d_qoy#16, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (54) ShuffleQueryStage
-Output [3]: [i_manufact_id#5, d_qoy#16, #20#20]
+Output [3]: [i_manufact_id#5, d_qoy#16, #20]
 Arguments: X
 
 (55) AQEShuffleRead
-Input [3]: [i_manufact_id#5, d_qoy#16, #20#20]
+Input [3]: [i_manufact_id#5, d_qoy#16, #20]
 Arguments: coalesced
 
 (56) InputAdapter
-Input [3]: [i_manufact_id#5, d_qoy#16, #20#20]
+Input [3]: [i_manufact_id#5, d_qoy#16, #20]
 
 (57) NativeHashAggregate
-Input [3]: [i_manufact_id#5, d_qoy#16, #20#20]
+Input [3]: [i_manufact_id#5, d_qoy#16, #20]
 Keys [2]: [i_manufact_id#5, d_qoy#16]
 Functions [1]: [sum(UnscaledValue(ss_sales_price#13))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#13))#21]

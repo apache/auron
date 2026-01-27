@@ -1038,62 +1038,62 @@ Input [7]: [#13#13, #7#7, #8#8, #9#9, #11#11, #18#18, #19#19]
 Keys [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 Functions: []
 Aggregate Attributes: []
-Results [8]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, #56#56]
+Results [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 
 (141) NativeShuffleExchange
-Input [8]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 Arguments: hashpartitioning(d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, 100), ENSURE_REQUIREMENTS, [plan_id=15]
 
 (142) ShuffleQueryStage
-Output [8]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, #56#56]
+Output [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 Arguments: X
 
 (143) AQEShuffleRead
-Input [8]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 Arguments: coalesced
 
 (144) InputAdapter
-Input [8]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 
 (145) NativeHashAggregate
-Input [8]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 Keys [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 Functions: []
 Aggregate Attributes: []
-Results [8]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, #56#56]
+Results [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 
 (146) NativeProject
 Output [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
-Input [8]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 
 (147) NativeProject
-Output [7]: [d_year#13 AS d_year#13, i_brand_id#7 AS i_brand_id#7, i_class_id#8 AS i_class_id#8, i_category_id#9 AS i_category_id#9, i_manufact_id#11 AS i_manufact_id#11, sales_cnt#18 AS _c5#57, UnscaledValue(sales_amt#19) AS _c6#58]
+Output [7]: [d_year#13 AS d_year#13, i_brand_id#7 AS i_brand_id#7, i_class_id#8 AS i_class_id#8, i_category_id#9 AS i_category_id#9, i_manufact_id#11 AS i_manufact_id#11, sales_cnt#18 AS _c5#56, UnscaledValue(sales_amt#19) AS _c6#57]
 Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 
 (148) NativeHashAggregate
-Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, _c5#57, _c6#58]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, _c5#56, _c6#57]
 Keys [5]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11]
-Functions [2]: [partial_sum(_c5#57), partial_sum(_c6#58)]
-Aggregate Attributes [2]: [sum#59, sum#60]
-Results [6]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #56#56]
+Functions [2]: [partial_sum(_c5#56), partial_sum(_c6#57)]
+Aggregate Attributes [2]: [sum#58, sum#59]
+Results [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #60, #60]
 
 (149) NativeShuffleExchange
-Input [6]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #60, #60]
 Arguments: hashpartitioning(d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, 100), ENSURE_REQUIREMENTS, [plan_id=16]
 
 (150) ShuffleQueryStage
-Output [6]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #56#56]
+Output [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #60, #60]
 Arguments: X
 
 (151) AQEShuffleRead
-Input [6]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #60, #60]
 Arguments: coalesced
 
 (152) InputAdapter
-Input [6]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #60, #60]
 
 (153) NativeHashAggregate
-Input [6]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #56#56]
+Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, #60, #60]
 Keys [5]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11]
 Functions [2]: [sum(sales_cnt#18), sum(UnscaledValue(sales_amt#19))]
 Aggregate Attributes [2]: [sum(sales_cnt#18)#61, sum(UnscaledValue(sales_amt#19))#62]
@@ -1465,33 +1465,33 @@ Input [7]: [#75#75, #70#70, #71#71, #72#72, #73#73, #18#18, #19#19]
 Keys [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 Functions: []
 Aggregate Attributes: []
-Results [8]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, #56#56]
+Results [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 
 (247) NativeShuffleExchange
-Input [8]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 Arguments: hashpartitioning(d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, 100), ENSURE_REQUIREMENTS, [plan_id=22]
 
 (248) ShuffleQueryStage
-Output [8]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, #56#56]
+Output [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 Arguments: X
 
 (249) AQEShuffleRead
-Input [8]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 Arguments: coalesced
 
 (250) InputAdapter
-Input [8]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 
 (251) NativeHashAggregate
-Input [8]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 Keys [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 Functions: []
 Aggregate Attributes: []
-Results [8]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, #56#56]
+Results [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 
 (252) NativeProject
 Output [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
-Input [8]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 
 (253) NativeProject
 Output [7]: [d_year#75 AS d_year#75, i_brand_id#70 AS i_brand_id#70, i_class_id#71 AS i_class_id#71, i_category_id#72 AS i_category_id#72, i_manufact_id#73 AS i_manufact_id#73, sales_cnt#18 AS _c5#110, UnscaledValue(sales_amt#19) AS _c6#111]
@@ -1501,26 +1501,26 @@ Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufac
 Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, _c5#110, _c6#111]
 Keys [5]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73]
 Functions [2]: [partial_sum(_c5#110), partial_sum(_c6#111)]
-Aggregate Attributes [2]: [sum#59, sum#112]
-Results [6]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #56#56]
+Aggregate Attributes [2]: [sum#58, sum#112]
+Results [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #60, #60]
 
 (255) NativeShuffleExchange
-Input [6]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #60, #60]
 Arguments: hashpartitioning(d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, 100), ENSURE_REQUIREMENTS, [plan_id=23]
 
 (256) ShuffleQueryStage
-Output [6]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #56#56]
+Output [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #60, #60]
 Arguments: X
 
 (257) AQEShuffleRead
-Input [6]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #60, #60]
 Arguments: coalesced
 
 (258) InputAdapter
-Input [6]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #60, #60]
 
 (259) NativeHashAggregate
-Input [6]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #56#56]
+Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, #60, #60]
 Keys [5]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73]
 Functions [2]: [sum(sales_cnt#18), sum(UnscaledValue(sales_amt#19))]
 Aggregate Attributes [2]: [sum(sales_cnt#18)#61, sum(UnscaledValue(sales_amt#19))#62]
@@ -1969,7 +1969,7 @@ Results [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact
 Input [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#18, sales_amt#19]
 Keys [5]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11]
 Functions [2]: [partial_sum(sales_cnt#18), partial_sum(UnscaledValue(sales_amt#19))]
-Aggregate Attributes [2]: [sum#59, sum#60]
+Aggregate Attributes [2]: [sum#58, sum#59]
 Results [7]: [d_year#13, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sum#123, sum#124]
 
 (356) Exchange
@@ -2397,7 +2397,7 @@ Results [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manuf
 Input [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sales_cnt#18, sales_amt#19]
 Keys [5]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73]
 Functions [2]: [partial_sum(sales_cnt#18), partial_sum(UnscaledValue(sales_amt#19))]
-Aggregate Attributes [2]: [sum#59, sum#112]
+Aggregate Attributes [2]: [sum#58, sum#112]
 Results [7]: [d_year#75, i_brand_id#70, i_class_id#71, i_category_id#72, i_manufact_id#73, sum#123, sum#131]
 
 (447) Exchange

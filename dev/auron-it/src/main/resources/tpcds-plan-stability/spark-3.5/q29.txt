@@ -660,25 +660,25 @@ Input [7]: [ss_quantity#6, sr_return_quantity#11, cs_quantity#15, s_store_id#25,
 Keys [4]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26]
 Functions [3]: [partial_sum(ss_quantity#6), partial_sum(sr_return_quantity#11), partial_sum(cs_quantity#15)]
 Aggregate Attributes [3]: [sum#30, sum#31, sum#32]
-Results [5]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33#33]
+Results [7]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33, #33, #33]
 
 (113) NativeShuffleExchange
-Input [5]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33#33]
+Input [7]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33, #33, #33]
 Arguments: hashpartitioning(i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, 100), ENSURE_REQUIREMENTS, [plan_id=15]
 
 (114) ShuffleQueryStage
-Output [5]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33#33]
+Output [7]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33, #33, #33]
 Arguments: X
 
 (115) AQEShuffleRead
-Input [5]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33#33]
+Input [7]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33, #33, #33]
 Arguments: coalesced
 
 (116) InputAdapter
-Input [5]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33#33]
+Input [7]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33, #33, #33]
 
 (117) NativeHashAggregate
-Input [5]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33#33]
+Input [7]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26, #33, #33, #33]
 Keys [4]: [i_item_id#28, i_item_desc#29, s_store_id#25, s_store_name#26]
 Functions [3]: [sum(ss_quantity#6), sum(sr_return_quantity#11), sum(cs_quantity#15)]
 Aggregate Attributes [3]: [sum(ss_quantity#6)#34, sum(sr_return_quantity#11)#35, sum(cs_quantity#15)#36]
