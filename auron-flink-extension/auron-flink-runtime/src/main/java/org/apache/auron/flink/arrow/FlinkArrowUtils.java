@@ -53,7 +53,7 @@ import org.apache.flink.table.types.logical.VarCharType;
 /**
  * Utility class for converting Flink {@link LogicalType} instances to Arrow types, fields and schemas.
  */
-public class FlinkArrowUtils {
+public final class FlinkArrowUtils {
 
     /**
      * Root allocator for Arrow memory management.
@@ -82,6 +82,9 @@ public class FlinkArrowUtils {
      * @throws UnsupportedOperationException if the type is not supported
      */
     public static ArrowType toArrowType(LogicalType logicalType) {
+        if (logicalType == null) {
+            throw new IllegalArgumentException("logicalType cannot be null");
+        }
         if (logicalType instanceof NullType) {
             return ArrowType.Null.INSTANCE;
         } else if (logicalType instanceof BooleanType) {
