@@ -30,15 +30,15 @@
   <name>Apache Auron Flink ${flink.version}</name>
   <description>Apache Auron Flink Project</description>
 
-  <properties>
-    <!-- Enable Flink feature flag for native library build -->
-    <buildWithFeatures>flink</buildWithFeatures>
-  </properties>
-
   <modules>
     <module>auron-flink-planner</module>
     <module>auron-flink-runtime</module>
     <module>auron-flink-assembly</module>
   </modules>
+
+  <properties>
+    <!-- Enable Flink feature flag for native library build -->
+    <buildWithFeatures>flink</buildWithFeatures>
+  </properties>
 
 </project>

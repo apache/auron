@@ -43,8 +43,7 @@
     <module>dev/mvn-build-helper/assembly</module>
     <module>dev/mvn-build-helper/proto</module>
     <module>auron-spark-ui</module>
-    <module>auron-flink-extension/auron-flink-runtime</module>
-    <module>auron-flink-extension/auron-flink-planner</module>
+    <module>auron-flink-extension</module>
   </modules>
 
   <properties>
@@ -62,6 +61,7 @@
     <sparkVersion>3.5.8</sparkVersion>
     <shortSparkVersion>3.5</shortSparkVersion>
     <flink.version>1.18.1</flink.version>
+    <flink.planner.version>1.18-SNAPSHOT</flink.planner.version>
     <maven.version>3.9.12</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
     <maven.plugin.scalatest.version>2.2.0</maven.plugin.scalatest.version>
@@ -73,6 +73,7 @@
     <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
     <maven.plugin.templating.version>3.0.0</maven.plugin.templating.version>
     <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+    <spotless.plugin.version>2.45.0</spotless.plugin.version>
 
     <scalamacros.paradise.version>2.1.1</scalamacros.paradise.version>
     <scalaTestVersion>3.2.14</scalaTestVersion>
@@ -894,6 +895,7 @@
       <properties>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <flink.version>1.18.1</flink.version>
+        <flink.planner.version>1.18-SNAPSHOT</flink.planner.version>
       </properties>
     </profile>
 
