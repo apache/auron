@@ -78,7 +78,7 @@ class SessionManager(val extraSparkConf: Map[String, String]) {
       .appName(appName)
       .config(conf)
       .getOrCreate()
-    // session.sparkContext.setLogLevel("WARN")
+    session.sparkContext.setLogLevel("WARN")
     session
   }
 
