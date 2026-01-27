@@ -28,7 +28,6 @@ import org.apache.auron.memory.OnHeapSpillManager;
 import org.apache.auron.spark.configuration.SparkAuronConfiguration;
 import org.apache.auron.spark.sql.SparkAuronUDFWrapperContext;
 import org.apache.spark.SparkEnv;
-import org.apache.spark.SparkEnv$;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.auron.NativeHelper$;
@@ -88,7 +87,7 @@ public class SparkAuronAdaptor extends AuronAdaptor {
 
     @Override
     public AuronConfiguration getAuronConfiguration() {
-        return new SparkAuronConfiguration(SparkEnv$.MODULE$.get().conf());
+        return new SparkAuronConfiguration();
     }
 
     @Override
