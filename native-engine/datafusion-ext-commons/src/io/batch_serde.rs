@@ -275,7 +275,6 @@ fn write_primitive_array<W: Write, PT: ArrowPrimitiveType>(
     output: &mut W,
     transpose_opt: &mut TransposeOpt,
 ) -> Result<()> {
-    let offset = array.offset();
     let len = array.len();
     let array_data = array.to_data();
     if let Some(null_buffer) = array_data.nulls() {
@@ -295,14 +294,14 @@ fn write_primitive_array<W: Write, PT: ArrowPrimitiveType>(
         && byte_width > 1
     {
         transpose::transpose(
-            array_data.buffer::<PT::Native>(0)[offset..][..len].as_raw_bytes(),
+            array_data.buffer::<PT::Native>(0)[..len].as_raw_bytes(),
             buffer[..byte_width * array.len()].as_raw_bytes_mut(),
             byte_width,
             array.len(),
         );
         output.write_all(buffer[..byte_width * array.len()].as_ref())?;
     } else {
-        output.write_all(array_data.buffer::<PT::Native>(0)[offset..][..len].as_raw_bytes())?;
+        output.write_all(array_data.buffer::<PT::Native>(0)[..len].as_raw_bytes())?;
     }
     Ok(())
 }

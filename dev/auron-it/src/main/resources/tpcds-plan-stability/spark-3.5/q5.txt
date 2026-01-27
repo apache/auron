@@ -448,25 +448,25 @@ Input [5]: [s_store_id#24, _c1#25, _c2#26, _c3#27, _c4#28]
 Keys [1]: [s_store_id#24]
 Functions [4]: [partial_sum(_c1#25), partial_sum(_c2#26), partial_sum(_c3#27), partial_sum(_c4#28)]
 Aggregate Attributes [4]: [sum#29, sum#30, sum#31, sum#32]
-Results [2]: [s_store_id#24, #33#33]
+Results [5]: [s_store_id#24, #33, #33, #33, #33]
 
 (44) NativeShuffleExchange
-Input [2]: [s_store_id#24, #33#33]
+Input [5]: [s_store_id#24, #33, #33, #33, #33]
 Arguments: hashpartitioning(s_store_id#24, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (45) ShuffleQueryStage
-Output [2]: [s_store_id#24, #33#33]
+Output [5]: [s_store_id#24, #33, #33, #33, #33]
 Arguments: X
 
 (46) AQEShuffleRead
-Input [2]: [s_store_id#24, #33#33]
+Input [5]: [s_store_id#24, #33, #33, #33, #33]
 Arguments: coalesced
 
 (47) InputAdapter
-Input [2]: [s_store_id#24, #33#33]
+Input [5]: [s_store_id#24, #33, #33, #33, #33]
 
 (48) NativeHashAggregate
-Input [2]: [s_store_id#24, #33#33]
+Input [5]: [s_store_id#24, #33, #33, #33, #33]
 Keys [1]: [s_store_id#24]
 Functions [4]: [sum(UnscaledValue(sales_price#7)), sum(UnscaledValue(return_amt#9)), sum(UnscaledValue(profit#8)), sum(UnscaledValue(net_loss#10))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#7))#34, sum(UnscaledValue(return_amt#9))#35, sum(UnscaledValue(profit#8))#36, sum(UnscaledValue(net_loss#10))#37]
@@ -644,25 +644,25 @@ Input [5]: [cp_catalog_page_id#65, _c1#66, _c2#67, _c3#68, _c4#69]
 Keys [1]: [cp_catalog_page_id#65]
 Functions [4]: [partial_sum(_c1#66), partial_sum(_c2#67), partial_sum(_c3#68), partial_sum(_c4#69)]
 Aggregate Attributes [4]: [sum#70, sum#71, sum#72, sum#73]
-Results [2]: [cp_catalog_page_id#65, #33#33]
+Results [5]: [cp_catalog_page_id#65, #33, #33, #33, #33]
 
 (90) NativeShuffleExchange
-Input [2]: [cp_catalog_page_id#65, #33#33]
+Input [5]: [cp_catalog_page_id#65, #33, #33, #33, #33]
 Arguments: hashpartitioning(cp_catalog_page_id#65, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (91) ShuffleQueryStage
-Output [2]: [cp_catalog_page_id#65, #33#33]
+Output [5]: [cp_catalog_page_id#65, #33, #33, #33, #33]
 Arguments: X
 
 (92) AQEShuffleRead
-Input [2]: [cp_catalog_page_id#65, #33#33]
+Input [5]: [cp_catalog_page_id#65, #33, #33, #33, #33]
 Arguments: coalesced
 
 (93) InputAdapter
-Input [2]: [cp_catalog_page_id#65, #33#33]
+Input [5]: [cp_catalog_page_id#65, #33, #33, #33, #33]
 
 (94) NativeHashAggregate
-Input [2]: [cp_catalog_page_id#65, #33#33]
+Input [5]: [cp_catalog_page_id#65, #33, #33, #33, #33]
 Keys [1]: [cp_catalog_page_id#65]
 Functions [4]: [sum(UnscaledValue(sales_price#49)), sum(UnscaledValue(return_amt#51)), sum(UnscaledValue(profit#50)), sum(UnscaledValue(net_loss#52))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#49))#74, sum(UnscaledValue(return_amt#51))#75, sum(UnscaledValue(profit#50))#76, sum(UnscaledValue(net_loss#52))#77]
@@ -899,25 +899,25 @@ Input [5]: [web_site_id#109, _c1#110, _c2#111, _c3#112, _c4#113]
 Keys [1]: [web_site_id#109]
 Functions [4]: [partial_sum(_c1#110), partial_sum(_c2#111), partial_sum(_c3#112), partial_sum(_c4#113)]
 Aggregate Attributes [4]: [sum#114, sum#115, sum#116, sum#117]
-Results [2]: [web_site_id#109, #33#33]
+Results [5]: [web_site_id#109, #33, #33, #33, #33]
 
 (150) NativeShuffleExchange
-Input [2]: [web_site_id#109, #33#33]
+Input [5]: [web_site_id#109, #33, #33, #33, #33]
 Arguments: hashpartitioning(web_site_id#109, 100), ENSURE_REQUIREMENTS, [plan_id=15]
 
 (151) ShuffleQueryStage
-Output [2]: [web_site_id#109, #33#33]
+Output [5]: [web_site_id#109, #33, #33, #33, #33]
 Arguments: X
 
 (152) AQEShuffleRead
-Input [2]: [web_site_id#109, #33#33]
+Input [5]: [web_site_id#109, #33, #33, #33, #33]
 Arguments: coalesced
 
 (153) InputAdapter
-Input [2]: [web_site_id#109, #33#33]
+Input [5]: [web_site_id#109, #33, #33, #33, #33]
 
 (154) NativeHashAggregate
-Input [2]: [web_site_id#109, #33#33]
+Input [5]: [web_site_id#109, #33, #33, #33, #33]
 Keys [1]: [web_site_id#109]
 Functions [4]: [sum(UnscaledValue(sales_price#89)), sum(UnscaledValue(return_amt#91)), sum(UnscaledValue(profit#90)), sum(UnscaledValue(net_loss#92))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#89))#118, sum(UnscaledValue(return_amt#91))#119, sum(UnscaledValue(profit#90))#120, sum(UnscaledValue(net_loss#92))#121]
@@ -943,25 +943,25 @@ Input [6]: [sales#38, returns#39, profit#40, channel#127, id#128, spark_grouping
 Keys [3]: [channel#127, id#128, spark_grouping_id#129]
 Functions [3]: [partial_sum(sales#38), partial_sum(returns#39), partial_sum(profit#40)]
 Aggregate Attributes [6]: [sum#130, isEmpty#131, sum#132, isEmpty#133, sum#134, isEmpty#135]
-Results [4]: [channel#127, id#128, spark_grouping_id#129, #33#33]
+Results [6]: [channel#127, id#128, spark_grouping_id#129, #64, #64, #64]
 
 (160) NativeShuffleExchange
-Input [4]: [channel#127, id#128, spark_grouping_id#129, #33#33]
+Input [6]: [channel#127, id#128, spark_grouping_id#129, #64, #64, #64]
 Arguments: hashpartitioning(channel#127, id#128, spark_grouping_id#129, 100), ENSURE_REQUIREMENTS, [plan_id=16]
 
 (161) ShuffleQueryStage
-Output [4]: [channel#127, id#128, spark_grouping_id#129, #33#33]
+Output [6]: [channel#127, id#128, spark_grouping_id#129, #64, #64, #64]
 Arguments: X
 
 (162) AQEShuffleRead
-Input [4]: [channel#127, id#128, spark_grouping_id#129, #33#33]
+Input [6]: [channel#127, id#128, spark_grouping_id#129, #64, #64, #64]
 Arguments: coalesced
 
 (163) InputAdapter
-Input [4]: [channel#127, id#128, spark_grouping_id#129, #33#33]
+Input [6]: [channel#127, id#128, spark_grouping_id#129, #64, #64, #64]
 
 (164) NativeHashAggregate
-Input [4]: [channel#127, id#128, spark_grouping_id#129, #33#33]
+Input [6]: [channel#127, id#128, spark_grouping_id#129, #64, #64, #64]
 Keys [3]: [channel#127, id#128, spark_grouping_id#129]
 Functions [3]: [sum(sales#38), sum(returns#39), sum(profit#40)]
 Aggregate Attributes [3]: [sum(sales#38)#136, sum(returns#39)#137, sum(profit#40)#138]

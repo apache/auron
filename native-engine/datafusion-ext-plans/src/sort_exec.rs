@@ -150,7 +150,7 @@ impl DisplayAs for SortExec {
             .map(|e| e.to_string())
             .collect::<Vec<_>>()
             .join(", ");
-        write!(f, "SortExec: {}", exprs)
+        write!(f, "SortExec: {exprs}")
     }
 }
 
@@ -800,7 +800,7 @@ async fn send_output_batch(
     } else if let Ok(sender) = downcast_any!(sender, WrappedRecordBatchWithKeyRowsSender) {
         let key_rows = Arc::new(key_collector.into_rows(
             pruned_batch.num_rows(),
-            &*prune_sort_keys_from_batch.sort_row_converter.lock(),
+            &prune_sort_keys_from_batch.sort_row_converter.lock(),
         )?);
         let batch =
             prune_sort_keys_from_batch.restore_from_existed_key_rows(pruned_batch, &key_rows)?;
@@ -863,11 +863,11 @@ impl<B: SortedBlock> SortedBlockCursor<B> {
             "calling next_key() on finished sort spill cursor"
         );
 
-        if self.cur_key_row_idx >= self.cur_batches.last().map(|b| b.num_rows()).unwrap_or(0) {
-            if !self.load_next_batch()? {
-                self.finished = true;
-                return Ok(());
-            }
+        if self.cur_key_row_idx >= self.cur_batches.last().map(|b| b.num_rows()).unwrap_or(0)
+            && !self.load_next_batch()?
+        {
+            self.finished = true;
+            return Ok(());
         }
         self.input.next_key()?;
         self.cur_key_row_idx += 1;
@@ -1216,7 +1216,7 @@ impl PruneSortKeysFromBatch {
         key_collector: KC,
     ) -> Result<RecordBatch> {
         let num_rows = pruned_batch.num_rows();
-        let key_rows = key_collector.into_rows(num_rows, &*self.sort_row_converter.lock())?;
+        let key_rows = key_collector.into_rows(num_rows, &self.sort_row_converter.lock())?;
         self.restore_from_existed_key_rows(pruned_batch, &key_rows)
     }
 

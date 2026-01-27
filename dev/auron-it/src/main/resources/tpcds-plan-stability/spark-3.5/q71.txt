@@ -523,25 +523,25 @@ Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, _c4#35]
 Keys [4]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33]
 Functions [1]: [partial_sum(_c4#35)]
 Aggregate Attributes [1]: [sum#36]
-Results [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37#37]
+Results [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37]
 
 (88) NativeShuffleExchange
-Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37#37]
+Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37]
 Arguments: hashpartitioning(i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (89) ShuffleQueryStage
-Output [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37#37]
+Output [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37]
 Arguments: X
 
 (90) AQEShuffleRead
-Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37#37]
+Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37]
 Arguments: coalesced
 
 (91) InputAdapter
-Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37#37]
+Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37]
 
 (92) NativeHashAggregate
-Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37#37]
+Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, #37]
 Keys [4]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33]
 Functions [1]: [sum(UnscaledValue(ext_price#12))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ext_price#12))#38]

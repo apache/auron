@@ -657,25 +657,25 @@ Input [8]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purch
 Keys [8]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#28]
-Results [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29#29]
+Results [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29]
 
 (112) NativeShuffleExchange
-Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29#29]
+Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29]
 Arguments: hashpartitioning(cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (113) ShuffleQueryStage
-Output [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29#29]
+Output [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29]
 Arguments: X
 
 (114) AQEShuffleRead
-Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29#29]
+Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29]
 Arguments: coalesced
 
 (115) InputAdapter
-Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29#29]
+Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29]
 
 (116) NativeHashAggregate
-Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29#29]
+Input [9]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, #29]
 Keys [8]: [cd_gender#20, cd_marital_status#21, cd_education_status#22, cd_purchase_estimate#23, cd_credit_rating#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#30]

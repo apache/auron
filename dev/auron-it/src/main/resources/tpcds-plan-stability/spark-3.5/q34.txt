@@ -347,25 +347,25 @@ Input [2]: [ss_customer_sk#2, ss_ticket_number#5]
 Keys [2]: [ss_ticket_number#5, ss_customer_sk#2]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#15]
-Results [3]: [ss_ticket_number#5, ss_customer_sk#2, #16#16]
+Results [3]: [ss_ticket_number#5, ss_customer_sk#2, #16]
 
 (53) NativeShuffleExchange
-Input [3]: [ss_ticket_number#5, ss_customer_sk#2, #16#16]
+Input [3]: [ss_ticket_number#5, ss_customer_sk#2, #16]
 Arguments: hashpartitioning(ss_ticket_number#5, ss_customer_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (54) ShuffleQueryStage
-Output [3]: [ss_ticket_number#5, ss_customer_sk#2, #16#16]
+Output [3]: [ss_ticket_number#5, ss_customer_sk#2, #16]
 Arguments: X
 
 (55) AQEShuffleRead
-Input [3]: [ss_ticket_number#5, ss_customer_sk#2, #16#16]
+Input [3]: [ss_ticket_number#5, ss_customer_sk#2, #16]
 Arguments: coalesced
 
 (56) InputAdapter
-Input [3]: [ss_ticket_number#5, ss_customer_sk#2, #16#16]
+Input [3]: [ss_ticket_number#5, ss_customer_sk#2, #16]
 
 (57) NativeHashAggregate
-Input [3]: [ss_ticket_number#5, ss_customer_sk#2, #16#16]
+Input [3]: [ss_ticket_number#5, ss_customer_sk#2, #16]
 Keys [2]: [ss_ticket_number#5, ss_customer_sk#2]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#17]

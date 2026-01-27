@@ -333,25 +333,25 @@ Input [5]: [i_category#13, i_class#14, spark_grouping_id#15, _c3#16, _c4#17]
 Keys [3]: [i_category#13, i_class#14, spark_grouping_id#15]
 Functions [2]: [partial_sum(_c3#16), partial_sum(_c4#17)]
 Aggregate Attributes [2]: [sum#18, sum#19]
-Results [4]: [i_category#13, i_class#14, spark_grouping_id#15, #20#20]
+Results [5]: [i_category#13, i_class#14, spark_grouping_id#15, #20, #20]
 
 (54) NativeShuffleExchange
-Input [4]: [i_category#13, i_class#14, spark_grouping_id#15, #20#20]
+Input [5]: [i_category#13, i_class#14, spark_grouping_id#15, #20, #20]
 Arguments: hashpartitioning(i_category#13, i_class#14, spark_grouping_id#15, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (55) ShuffleQueryStage
-Output [4]: [i_category#13, i_class#14, spark_grouping_id#15, #20#20]
+Output [5]: [i_category#13, i_class#14, spark_grouping_id#15, #20, #20]
 Arguments: X
 
 (56) AQEShuffleRead
-Input [4]: [i_category#13, i_class#14, spark_grouping_id#15, #20#20]
+Input [5]: [i_category#13, i_class#14, spark_grouping_id#15, #20, #20]
 Arguments: coalesced
 
 (57) InputAdapter
-Input [4]: [i_category#13, i_class#14, spark_grouping_id#15, #20#20]
+Input [5]: [i_category#13, i_class#14, spark_grouping_id#15, #20, #20]
 
 (58) NativeHashAggregate
-Input [4]: [i_category#13, i_class#14, spark_grouping_id#15, #20#20]
+Input [5]: [i_category#13, i_class#14, spark_grouping_id#15, #20, #20]
 Keys [3]: [i_category#13, i_class#14, spark_grouping_id#15]
 Functions [2]: [sum(UnscaledValue(ss_net_profit#5)), sum(UnscaledValue(ss_ext_sales_price#4))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ss_net_profit#5))#21, sum(UnscaledValue(ss_ext_sales_price#4))#22]

@@ -103,30 +103,30 @@ Input [2]: [_c0#40, _c1#41]
 Keys: []
 Functions [3]: [partial_count(1), partial_avg(_c0#40), partial_avg(_c1#41)]
 Aggregate Attributes [5]: [count#42, sum#43, count#44, sum#45, count#46]
-Results [1]: [#47#47]
+Results [5]: [#47, #48, #47, #48, #47]
 
 (15) NativeShuffleExchange
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1]
 
 (16) ShuffleQueryStage
-Output [1]: [#47#47]
+Output [5]: [#47, #48, #47, #48, #47]
 Arguments: X
 
 (17) NativeHashAggregate
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Keys: []
 Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#38)), avg(UnscaledValue(ss_net_paid#39))]
-Aggregate Attributes [3]: [count(1)#48, avg(UnscaledValue(ss_ext_discount_amt#38))#49, avg(UnscaledValue(ss_net_paid#39))#50]
-Results [3]: [count(1)#48, avg(UnscaledValue(ss_ext_discount_amt#38))#49, avg(UnscaledValue(ss_net_paid#39))#50]
+Aggregate Attributes [3]: [count(1)#49, avg(UnscaledValue(ss_ext_discount_amt#38))#50, avg(UnscaledValue(ss_net_paid#39))#51]
+Results [3]: [count(1)#49, avg(UnscaledValue(ss_ext_discount_amt#38))#50, avg(UnscaledValue(ss_net_paid#39))#51]
 
 (18) NativeProject
-Output [3]: [count(1)#48 AS count(1)#51, cast((avg(UnscaledValue(ss_ext_discount_amt#38))#49 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#52, cast((avg(UnscaledValue(ss_net_paid#39))#50 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#53]
-Input [3]: [count(1)#48, avg(UnscaledValue(ss_ext_discount_amt#38))#49, avg(UnscaledValue(ss_net_paid#39))#50]
+Output [3]: [count(1)#49 AS count(1)#52, cast((avg(UnscaledValue(ss_ext_discount_amt#38))#50 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#53, cast((avg(UnscaledValue(ss_net_paid#39))#51 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#54]
+Input [3]: [count(1)#49, avg(UnscaledValue(ss_ext_discount_amt#38))#50, avg(UnscaledValue(ss_net_paid#39))#51]
 
 (19) NativeProject
-Output [1]: [named_struct(count(1), count(1)#51, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#52, avg(ss_net_paid), avg(ss_net_paid)#53) AS mergedValue#54]
-Input [3]: [count(1)#51, avg(ss_ext_discount_amt)#52, avg(ss_net_paid)#53]
+Output [1]: [named_struct(count(1), count(1)#52, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#53, avg(ss_net_paid), avg(ss_net_paid)#54) AS mergedValue#55]
+Input [3]: [count(1)#52, avg(ss_ext_discount_amt)#53, avg(ss_net_paid)#54]
 
 (20) Scan parquet
 Output [3]: [ss_quantity#37, ss_ext_discount_amt#38, ss_net_paid#39]
@@ -148,25 +148,25 @@ Input [2]: [ss_ext_discount_amt#38, ss_net_paid#39]
 Keys: []
 Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#38)), partial_avg(UnscaledValue(ss_net_paid#39))]
 Aggregate Attributes [5]: [count#42, sum#43, count#44, sum#45, count#46]
-Results [5]: [count#55, sum#56, count#57, sum#58, count#59]
+Results [5]: [count#56, sum#57, count#58, sum#59, count#60]
 
 (24) Exchange
-Input [5]: [count#55, sum#56, count#57, sum#58, count#59]
+Input [5]: [count#56, sum#57, count#58, sum#59, count#60]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
 
 (25) HashAggregate
-Input [5]: [count#55, sum#56, count#57, sum#58, count#59]
+Input [5]: [count#56, sum#57, count#58, sum#59, count#60]
 Keys: []
 Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#38)), avg(UnscaledValue(ss_net_paid#39))]
-Aggregate Attributes [3]: [count(1)#48, avg(UnscaledValue(ss_ext_discount_amt#38))#49, avg(UnscaledValue(ss_net_paid#39))#50]
-Results [3]: [count(1)#48 AS count(1)#51, cast((avg(UnscaledValue(ss_ext_discount_amt#38))#49 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#52, cast((avg(UnscaledValue(ss_net_paid#39))#50 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#53]
+Aggregate Attributes [3]: [count(1)#49, avg(UnscaledValue(ss_ext_discount_amt#38))#50, avg(UnscaledValue(ss_net_paid#39))#51]
+Results [3]: [count(1)#49 AS count(1)#52, cast((avg(UnscaledValue(ss_ext_discount_amt#38))#50 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#53, cast((avg(UnscaledValue(ss_net_paid#39))#51 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#54]
 
 (26) Project
-Output [1]: [named_struct(count(1), count(1)#51, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#52, avg(ss_net_paid), avg(ss_net_paid)#53) AS mergedValue#54]
-Input [3]: [count(1)#51, avg(ss_ext_discount_amt)#52, avg(ss_net_paid)#53]
+Output [1]: [named_struct(count(1), count(1)#52, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#53, avg(ss_net_paid), avg(ss_net_paid)#54) AS mergedValue#55]
+Input [3]: [count(1)#52, avg(ss_ext_discount_amt)#53, avg(ss_net_paid)#54]
 
 (27) AdaptiveSparkPlan
-Output [1]: [mergedValue#54]
+Output [1]: [mergedValue#55]
 Arguments: isFinalPlan=true
 
 Subquery:2 Hosting operator id = 4 Hosting Expression = ReusedSubquery Subquery subquery#2, [id=#3]
@@ -198,97 +198,97 @@ AdaptiveSparkPlan (46)
 
 
 (39) Scan parquet
-Output [3]: [ss_quantity#60, ss_ext_discount_amt#61, ss_net_paid#62]
+Output [3]: [ss_quantity#61, ss_ext_discount_amt#62, ss_net_paid#63]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2),ss_net_paid:decimal(7,2)>
 
 (29) InputAdapter
-Input [3]: [ss_quantity#60, ss_ext_discount_amt#61, ss_net_paid#62]
-Arguments: [#60, #61, #62]
+Input [3]: [ss_quantity#61, ss_ext_discount_amt#62, ss_net_paid#63]
+Arguments: [#61, #62, #63]
 
 (30) NativeFilter
-Input [3]: [#60#60, #61#61, #62#62]
-Condition : ((isnotnull(ss_quantity#60) AND (ss_quantity#60 >= 21)) AND (ss_quantity#60 <= 40))
+Input [3]: [#61#61, #62#62, #63#63]
+Condition : ((isnotnull(ss_quantity#61) AND (ss_quantity#61 >= 21)) AND (ss_quantity#61 <= 40))
 
 (31) NativeProject
-Output [2]: [ss_ext_discount_amt#61, ss_net_paid#62]
-Input [3]: [#60#60, #61#61, #62#62]
+Output [2]: [ss_ext_discount_amt#62, ss_net_paid#63]
+Input [3]: [#61#61, #62#62, #63#63]
 
 (32) NativeProject
-Output [2]: [UnscaledValue(ss_ext_discount_amt#61) AS _c0#63, UnscaledValue(ss_net_paid#62) AS _c1#64]
-Input [2]: [ss_ext_discount_amt#61, ss_net_paid#62]
+Output [2]: [UnscaledValue(ss_ext_discount_amt#62) AS _c0#64, UnscaledValue(ss_net_paid#63) AS _c1#65]
+Input [2]: [ss_ext_discount_amt#62, ss_net_paid#63]
 
 (33) NativeHashAggregate
-Input [2]: [_c0#63, _c1#64]
+Input [2]: [_c0#64, _c1#65]
 Keys: []
-Functions [3]: [partial_count(1), partial_avg(_c0#63), partial_avg(_c1#64)]
-Aggregate Attributes [5]: [count#65, sum#66, count#67, sum#68, count#69]
-Results [1]: [#47#47]
+Functions [3]: [partial_count(1), partial_avg(_c0#64), partial_avg(_c1#65)]
+Aggregate Attributes [5]: [count#66, sum#67, count#68, sum#69, count#70]
+Results [5]: [#47, #48, #47, #48, #47]
 
 (34) NativeShuffleExchange
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=3]
 
 (35) ShuffleQueryStage
-Output [1]: [#47#47]
+Output [5]: [#47, #48, #47, #48, #47]
 Arguments: X
 
 (36) NativeHashAggregate
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Keys: []
-Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#61)), avg(UnscaledValue(ss_net_paid#62))]
-Aggregate Attributes [3]: [count(1)#70, avg(UnscaledValue(ss_ext_discount_amt#61))#71, avg(UnscaledValue(ss_net_paid#62))#72]
-Results [3]: [count(1)#70, avg(UnscaledValue(ss_ext_discount_amt#61))#71, avg(UnscaledValue(ss_net_paid#62))#72]
+Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#62)), avg(UnscaledValue(ss_net_paid#63))]
+Aggregate Attributes [3]: [count(1)#71, avg(UnscaledValue(ss_ext_discount_amt#62))#72, avg(UnscaledValue(ss_net_paid#63))#73]
+Results [3]: [count(1)#71, avg(UnscaledValue(ss_ext_discount_amt#62))#72, avg(UnscaledValue(ss_net_paid#63))#73]
 
 (37) NativeProject
-Output [3]: [count(1)#70 AS count(1)#73, cast((avg(UnscaledValue(ss_ext_discount_amt#61))#71 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#74, cast((avg(UnscaledValue(ss_net_paid#62))#72 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#75]
-Input [3]: [count(1)#70, avg(UnscaledValue(ss_ext_discount_amt#61))#71, avg(UnscaledValue(ss_net_paid#62))#72]
+Output [3]: [count(1)#71 AS count(1)#74, cast((avg(UnscaledValue(ss_ext_discount_amt#62))#72 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#75, cast((avg(UnscaledValue(ss_net_paid#63))#73 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#76]
+Input [3]: [count(1)#71, avg(UnscaledValue(ss_ext_discount_amt#62))#72, avg(UnscaledValue(ss_net_paid#63))#73]
 
 (38) NativeProject
-Output [1]: [named_struct(count(1), count(1)#73, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#74, avg(ss_net_paid), avg(ss_net_paid)#75) AS mergedValue#76]
-Input [3]: [count(1)#73, avg(ss_ext_discount_amt)#74, avg(ss_net_paid)#75]
+Output [1]: [named_struct(count(1), count(1)#74, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#75, avg(ss_net_paid), avg(ss_net_paid)#76) AS mergedValue#77]
+Input [3]: [count(1)#74, avg(ss_ext_discount_amt)#75, avg(ss_net_paid)#76]
 
 (39) Scan parquet
-Output [3]: [ss_quantity#60, ss_ext_discount_amt#61, ss_net_paid#62]
+Output [3]: [ss_quantity#61, ss_ext_discount_amt#62, ss_net_paid#63]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2),ss_net_paid:decimal(7,2)>
 
 (40) Filter
-Input [3]: [ss_quantity#60, ss_ext_discount_amt#61, ss_net_paid#62]
-Condition : ((isnotnull(ss_quantity#60) AND (ss_quantity#60 >= 21)) AND (ss_quantity#60 <= 40))
+Input [3]: [ss_quantity#61, ss_ext_discount_amt#62, ss_net_paid#63]
+Condition : ((isnotnull(ss_quantity#61) AND (ss_quantity#61 >= 21)) AND (ss_quantity#61 <= 40))
 
 (41) Project
-Output [2]: [ss_ext_discount_amt#61, ss_net_paid#62]
-Input [3]: [ss_quantity#60, ss_ext_discount_amt#61, ss_net_paid#62]
+Output [2]: [ss_ext_discount_amt#62, ss_net_paid#63]
+Input [3]: [ss_quantity#61, ss_ext_discount_amt#62, ss_net_paid#63]
 
 (42) HashAggregate
-Input [2]: [ss_ext_discount_amt#61, ss_net_paid#62]
+Input [2]: [ss_ext_discount_amt#62, ss_net_paid#63]
 Keys: []
-Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#61)), partial_avg(UnscaledValue(ss_net_paid#62))]
-Aggregate Attributes [5]: [count#65, sum#66, count#67, sum#68, count#69]
-Results [5]: [count#77, sum#78, count#79, sum#80, count#81]
+Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#62)), partial_avg(UnscaledValue(ss_net_paid#63))]
+Aggregate Attributes [5]: [count#66, sum#67, count#68, sum#69, count#70]
+Results [5]: [count#78, sum#79, count#80, sum#81, count#82]
 
 (43) Exchange
-Input [5]: [count#77, sum#78, count#79, sum#80, count#81]
+Input [5]: [count#78, sum#79, count#80, sum#81, count#82]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 
 (44) HashAggregate
-Input [5]: [count#77, sum#78, count#79, sum#80, count#81]
+Input [5]: [count#78, sum#79, count#80, sum#81, count#82]
 Keys: []
-Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#61)), avg(UnscaledValue(ss_net_paid#62))]
-Aggregate Attributes [3]: [count(1)#70, avg(UnscaledValue(ss_ext_discount_amt#61))#71, avg(UnscaledValue(ss_net_paid#62))#72]
-Results [3]: [count(1)#70 AS count(1)#73, cast((avg(UnscaledValue(ss_ext_discount_amt#61))#71 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#74, cast((avg(UnscaledValue(ss_net_paid#62))#72 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#75]
+Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#62)), avg(UnscaledValue(ss_net_paid#63))]
+Aggregate Attributes [3]: [count(1)#71, avg(UnscaledValue(ss_ext_discount_amt#62))#72, avg(UnscaledValue(ss_net_paid#63))#73]
+Results [3]: [count(1)#71 AS count(1)#74, cast((avg(UnscaledValue(ss_ext_discount_amt#62))#72 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#75, cast((avg(UnscaledValue(ss_net_paid#63))#73 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#76]
 
 (45) Project
-Output [1]: [named_struct(count(1), count(1)#73, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#74, avg(ss_net_paid), avg(ss_net_paid)#75) AS mergedValue#76]
-Input [3]: [count(1)#73, avg(ss_ext_discount_amt)#74, avg(ss_net_paid)#75]
+Output [1]: [named_struct(count(1), count(1)#74, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#75, avg(ss_net_paid), avg(ss_net_paid)#76) AS mergedValue#77]
+Input [3]: [count(1)#74, avg(ss_ext_discount_amt)#75, avg(ss_net_paid)#76]
 
 (46) AdaptiveSparkPlan
-Output [1]: [mergedValue#76]
+Output [1]: [mergedValue#77]
 Arguments: isFinalPlan=true
 
 Subquery:5 Hosting operator id = 4 Hosting Expression = ReusedSubquery Subquery subquery#5, [id=#6]
@@ -320,97 +320,97 @@ AdaptiveSparkPlan (65)
 
 
 (58) Scan parquet
-Output [3]: [ss_quantity#82, ss_ext_discount_amt#83, ss_net_paid#84]
+Output [3]: [ss_quantity#83, ss_ext_discount_amt#84, ss_net_paid#85]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2),ss_net_paid:decimal(7,2)>
 
 (48) InputAdapter
-Input [3]: [ss_quantity#82, ss_ext_discount_amt#83, ss_net_paid#84]
-Arguments: [#82, #83, #84]
+Input [3]: [ss_quantity#83, ss_ext_discount_amt#84, ss_net_paid#85]
+Arguments: [#83, #84, #85]
 
 (49) NativeFilter
-Input [3]: [#82#82, #83#83, #84#84]
-Condition : ((isnotnull(ss_quantity#82) AND (ss_quantity#82 >= 41)) AND (ss_quantity#82 <= 60))
+Input [3]: [#83#83, #84#84, #85#85]
+Condition : ((isnotnull(ss_quantity#83) AND (ss_quantity#83 >= 41)) AND (ss_quantity#83 <= 60))
 
 (50) NativeProject
-Output [2]: [ss_ext_discount_amt#83, ss_net_paid#84]
-Input [3]: [#82#82, #83#83, #84#84]
+Output [2]: [ss_ext_discount_amt#84, ss_net_paid#85]
+Input [3]: [#83#83, #84#84, #85#85]
 
 (51) NativeProject
-Output [2]: [UnscaledValue(ss_ext_discount_amt#83) AS _c0#85, UnscaledValue(ss_net_paid#84) AS _c1#86]
-Input [2]: [ss_ext_discount_amt#83, ss_net_paid#84]
+Output [2]: [UnscaledValue(ss_ext_discount_amt#84) AS _c0#86, UnscaledValue(ss_net_paid#85) AS _c1#87]
+Input [2]: [ss_ext_discount_amt#84, ss_net_paid#85]
 
 (52) NativeHashAggregate
-Input [2]: [_c0#85, _c1#86]
+Input [2]: [_c0#86, _c1#87]
 Keys: []
-Functions [3]: [partial_count(1), partial_avg(_c0#85), partial_avg(_c1#86)]
-Aggregate Attributes [5]: [count#87, sum#88, count#89, sum#90, count#91]
-Results [1]: [#47#47]
+Functions [3]: [partial_count(1), partial_avg(_c0#86), partial_avg(_c1#87)]
+Aggregate Attributes [5]: [count#88, sum#89, count#90, sum#91, count#92]
+Results [5]: [#47, #48, #47, #48, #47]
 
 (53) NativeShuffleExchange
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 
 (54) ShuffleQueryStage
-Output [1]: [#47#47]
+Output [5]: [#47, #48, #47, #48, #47]
 Arguments: X
 
 (55) NativeHashAggregate
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Keys: []
-Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#83)), avg(UnscaledValue(ss_net_paid#84))]
-Aggregate Attributes [3]: [count(1)#92, avg(UnscaledValue(ss_ext_discount_amt#83))#93, avg(UnscaledValue(ss_net_paid#84))#94]
-Results [3]: [count(1)#92, avg(UnscaledValue(ss_ext_discount_amt#83))#93, avg(UnscaledValue(ss_net_paid#84))#94]
+Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#84)), avg(UnscaledValue(ss_net_paid#85))]
+Aggregate Attributes [3]: [count(1)#93, avg(UnscaledValue(ss_ext_discount_amt#84))#94, avg(UnscaledValue(ss_net_paid#85))#95]
+Results [3]: [count(1)#93, avg(UnscaledValue(ss_ext_discount_amt#84))#94, avg(UnscaledValue(ss_net_paid#85))#95]
 
 (56) NativeProject
-Output [3]: [count(1)#92 AS count(1)#95, cast((avg(UnscaledValue(ss_ext_discount_amt#83))#93 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#96, cast((avg(UnscaledValue(ss_net_paid#84))#94 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#97]
-Input [3]: [count(1)#92, avg(UnscaledValue(ss_ext_discount_amt#83))#93, avg(UnscaledValue(ss_net_paid#84))#94]
+Output [3]: [count(1)#93 AS count(1)#96, cast((avg(UnscaledValue(ss_ext_discount_amt#84))#94 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#97, cast((avg(UnscaledValue(ss_net_paid#85))#95 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#98]
+Input [3]: [count(1)#93, avg(UnscaledValue(ss_ext_discount_amt#84))#94, avg(UnscaledValue(ss_net_paid#85))#95]
 
 (57) NativeProject
-Output [1]: [named_struct(count(1), count(1)#95, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#96, avg(ss_net_paid), avg(ss_net_paid)#97) AS mergedValue#98]
-Input [3]: [count(1)#95, avg(ss_ext_discount_amt)#96, avg(ss_net_paid)#97]
+Output [1]: [named_struct(count(1), count(1)#96, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#97, avg(ss_net_paid), avg(ss_net_paid)#98) AS mergedValue#99]
+Input [3]: [count(1)#96, avg(ss_ext_discount_amt)#97, avg(ss_net_paid)#98]
 
 (58) Scan parquet
-Output [3]: [ss_quantity#82, ss_ext_discount_amt#83, ss_net_paid#84]
+Output [3]: [ss_quantity#83, ss_ext_discount_amt#84, ss_net_paid#85]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2),ss_net_paid:decimal(7,2)>
 
 (59) Filter
-Input [3]: [ss_quantity#82, ss_ext_discount_amt#83, ss_net_paid#84]
-Condition : ((isnotnull(ss_quantity#82) AND (ss_quantity#82 >= 41)) AND (ss_quantity#82 <= 60))
+Input [3]: [ss_quantity#83, ss_ext_discount_amt#84, ss_net_paid#85]
+Condition : ((isnotnull(ss_quantity#83) AND (ss_quantity#83 >= 41)) AND (ss_quantity#83 <= 60))
 
 (60) Project
-Output [2]: [ss_ext_discount_amt#83, ss_net_paid#84]
-Input [3]: [ss_quantity#82, ss_ext_discount_amt#83, ss_net_paid#84]
+Output [2]: [ss_ext_discount_amt#84, ss_net_paid#85]
+Input [3]: [ss_quantity#83, ss_ext_discount_amt#84, ss_net_paid#85]
 
 (61) HashAggregate
-Input [2]: [ss_ext_discount_amt#83, ss_net_paid#84]
+Input [2]: [ss_ext_discount_amt#84, ss_net_paid#85]
 Keys: []
-Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#83)), partial_avg(UnscaledValue(ss_net_paid#84))]
-Aggregate Attributes [5]: [count#87, sum#88, count#89, sum#90, count#91]
-Results [5]: [count#99, sum#100, count#101, sum#102, count#103]
+Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#84)), partial_avg(UnscaledValue(ss_net_paid#85))]
+Aggregate Attributes [5]: [count#88, sum#89, count#90, sum#91, count#92]
+Results [5]: [count#100, sum#101, count#102, sum#103, count#104]
 
 (62) Exchange
-Input [5]: [count#99, sum#100, count#101, sum#102, count#103]
+Input [5]: [count#100, sum#101, count#102, sum#103, count#104]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
 
 (63) HashAggregate
-Input [5]: [count#99, sum#100, count#101, sum#102, count#103]
+Input [5]: [count#100, sum#101, count#102, sum#103, count#104]
 Keys: []
-Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#83)), avg(UnscaledValue(ss_net_paid#84))]
-Aggregate Attributes [3]: [count(1)#92, avg(UnscaledValue(ss_ext_discount_amt#83))#93, avg(UnscaledValue(ss_net_paid#84))#94]
-Results [3]: [count(1)#92 AS count(1)#95, cast((avg(UnscaledValue(ss_ext_discount_amt#83))#93 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#96, cast((avg(UnscaledValue(ss_net_paid#84))#94 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#97]
+Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#84)), avg(UnscaledValue(ss_net_paid#85))]
+Aggregate Attributes [3]: [count(1)#93, avg(UnscaledValue(ss_ext_discount_amt#84))#94, avg(UnscaledValue(ss_net_paid#85))#95]
+Results [3]: [count(1)#93 AS count(1)#96, cast((avg(UnscaledValue(ss_ext_discount_amt#84))#94 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#97, cast((avg(UnscaledValue(ss_net_paid#85))#95 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#98]
 
 (64) Project
-Output [1]: [named_struct(count(1), count(1)#95, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#96, avg(ss_net_paid), avg(ss_net_paid)#97) AS mergedValue#98]
-Input [3]: [count(1)#95, avg(ss_ext_discount_amt)#96, avg(ss_net_paid)#97]
+Output [1]: [named_struct(count(1), count(1)#96, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#97, avg(ss_net_paid), avg(ss_net_paid)#98) AS mergedValue#99]
+Input [3]: [count(1)#96, avg(ss_ext_discount_amt)#97, avg(ss_net_paid)#98]
 
 (65) AdaptiveSparkPlan
-Output [1]: [mergedValue#98]
+Output [1]: [mergedValue#99]
 Arguments: isFinalPlan=true
 
 Subquery:8 Hosting operator id = 4 Hosting Expression = ReusedSubquery Subquery subquery#8, [id=#9]
@@ -442,97 +442,97 @@ AdaptiveSparkPlan (84)
 
 
 (77) Scan parquet
-Output [3]: [ss_quantity#104, ss_ext_discount_amt#105, ss_net_paid#106]
+Output [3]: [ss_quantity#105, ss_ext_discount_amt#106, ss_net_paid#107]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2),ss_net_paid:decimal(7,2)>
 
 (67) InputAdapter
-Input [3]: [ss_quantity#104, ss_ext_discount_amt#105, ss_net_paid#106]
-Arguments: [#104, #105, #106]
+Input [3]: [ss_quantity#105, ss_ext_discount_amt#106, ss_net_paid#107]
+Arguments: [#105, #106, #107]
 
 (68) NativeFilter
-Input [3]: [#104#104, #105#105, #106#106]
-Condition : ((isnotnull(ss_quantity#104) AND (ss_quantity#104 >= 61)) AND (ss_quantity#104 <= 80))
+Input [3]: [#105#105, #106#106, #107#107]
+Condition : ((isnotnull(ss_quantity#105) AND (ss_quantity#105 >= 61)) AND (ss_quantity#105 <= 80))
 
 (69) NativeProject
-Output [2]: [ss_ext_discount_amt#105, ss_net_paid#106]
-Input [3]: [#104#104, #105#105, #106#106]
+Output [2]: [ss_ext_discount_amt#106, ss_net_paid#107]
+Input [3]: [#105#105, #106#106, #107#107]
 
 (70) NativeProject
-Output [2]: [UnscaledValue(ss_ext_discount_amt#105) AS _c0#107, UnscaledValue(ss_net_paid#106) AS _c1#108]
-Input [2]: [ss_ext_discount_amt#105, ss_net_paid#106]
+Output [2]: [UnscaledValue(ss_ext_discount_amt#106) AS _c0#108, UnscaledValue(ss_net_paid#107) AS _c1#109]
+Input [2]: [ss_ext_discount_amt#106, ss_net_paid#107]
 
 (71) NativeHashAggregate
-Input [2]: [_c0#107, _c1#108]
+Input [2]: [_c0#108, _c1#109]
 Keys: []
-Functions [3]: [partial_count(1), partial_avg(_c0#107), partial_avg(_c1#108)]
-Aggregate Attributes [5]: [count#109, sum#110, count#111, sum#112, count#113]
-Results [1]: [#47#47]
+Functions [3]: [partial_count(1), partial_avg(_c0#108), partial_avg(_c1#109)]
+Aggregate Attributes [5]: [count#110, sum#111, count#112, sum#113, count#114]
+Results [5]: [#47, #48, #47, #48, #47]
 
 (72) NativeShuffleExchange
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 
 (73) ShuffleQueryStage
-Output [1]: [#47#47]
+Output [5]: [#47, #48, #47, #48, #47]
 Arguments: X
 
 (74) NativeHashAggregate
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Keys: []
-Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#105)), avg(UnscaledValue(ss_net_paid#106))]
-Aggregate Attributes [3]: [count(1)#114, avg(UnscaledValue(ss_ext_discount_amt#105))#115, avg(UnscaledValue(ss_net_paid#106))#116]
-Results [3]: [count(1)#114, avg(UnscaledValue(ss_ext_discount_amt#105))#115, avg(UnscaledValue(ss_net_paid#106))#116]
+Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#106)), avg(UnscaledValue(ss_net_paid#107))]
+Aggregate Attributes [3]: [count(1)#115, avg(UnscaledValue(ss_ext_discount_amt#106))#116, avg(UnscaledValue(ss_net_paid#107))#117]
+Results [3]: [count(1)#115, avg(UnscaledValue(ss_ext_discount_amt#106))#116, avg(UnscaledValue(ss_net_paid#107))#117]
 
 (75) NativeProject
-Output [3]: [count(1)#114 AS count(1)#117, cast((avg(UnscaledValue(ss_ext_discount_amt#105))#115 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#118, cast((avg(UnscaledValue(ss_net_paid#106))#116 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#119]
-Input [3]: [count(1)#114, avg(UnscaledValue(ss_ext_discount_amt#105))#115, avg(UnscaledValue(ss_net_paid#106))#116]
+Output [3]: [count(1)#115 AS count(1)#118, cast((avg(UnscaledValue(ss_ext_discount_amt#106))#116 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#119, cast((avg(UnscaledValue(ss_net_paid#107))#117 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#120]
+Input [3]: [count(1)#115, avg(UnscaledValue(ss_ext_discount_amt#106))#116, avg(UnscaledValue(ss_net_paid#107))#117]
 
 (76) NativeProject
-Output [1]: [named_struct(count(1), count(1)#117, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#118, avg(ss_net_paid), avg(ss_net_paid)#119) AS mergedValue#120]
-Input [3]: [count(1)#117, avg(ss_ext_discount_amt)#118, avg(ss_net_paid)#119]
+Output [1]: [named_struct(count(1), count(1)#118, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#119, avg(ss_net_paid), avg(ss_net_paid)#120) AS mergedValue#121]
+Input [3]: [count(1)#118, avg(ss_ext_discount_amt)#119, avg(ss_net_paid)#120]
 
 (77) Scan parquet
-Output [3]: [ss_quantity#104, ss_ext_discount_amt#105, ss_net_paid#106]
+Output [3]: [ss_quantity#105, ss_ext_discount_amt#106, ss_net_paid#107]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2),ss_net_paid:decimal(7,2)>
 
 (78) Filter
-Input [3]: [ss_quantity#104, ss_ext_discount_amt#105, ss_net_paid#106]
-Condition : ((isnotnull(ss_quantity#104) AND (ss_quantity#104 >= 61)) AND (ss_quantity#104 <= 80))
+Input [3]: [ss_quantity#105, ss_ext_discount_amt#106, ss_net_paid#107]
+Condition : ((isnotnull(ss_quantity#105) AND (ss_quantity#105 >= 61)) AND (ss_quantity#105 <= 80))
 
 (79) Project
-Output [2]: [ss_ext_discount_amt#105, ss_net_paid#106]
-Input [3]: [ss_quantity#104, ss_ext_discount_amt#105, ss_net_paid#106]
+Output [2]: [ss_ext_discount_amt#106, ss_net_paid#107]
+Input [3]: [ss_quantity#105, ss_ext_discount_amt#106, ss_net_paid#107]
 
 (80) HashAggregate
-Input [2]: [ss_ext_discount_amt#105, ss_net_paid#106]
+Input [2]: [ss_ext_discount_amt#106, ss_net_paid#107]
 Keys: []
-Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#105)), partial_avg(UnscaledValue(ss_net_paid#106))]
-Aggregate Attributes [5]: [count#109, sum#110, count#111, sum#112, count#113]
-Results [5]: [count#121, sum#122, count#123, sum#124, count#125]
+Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#106)), partial_avg(UnscaledValue(ss_net_paid#107))]
+Aggregate Attributes [5]: [count#110, sum#111, count#112, sum#113, count#114]
+Results [5]: [count#122, sum#123, count#124, sum#125, count#126]
 
 (81) Exchange
-Input [5]: [count#121, sum#122, count#123, sum#124, count#125]
+Input [5]: [count#122, sum#123, count#124, sum#125, count#126]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
 
 (82) HashAggregate
-Input [5]: [count#121, sum#122, count#123, sum#124, count#125]
+Input [5]: [count#122, sum#123, count#124, sum#125, count#126]
 Keys: []
-Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#105)), avg(UnscaledValue(ss_net_paid#106))]
-Aggregate Attributes [3]: [count(1)#114, avg(UnscaledValue(ss_ext_discount_amt#105))#115, avg(UnscaledValue(ss_net_paid#106))#116]
-Results [3]: [count(1)#114 AS count(1)#117, cast((avg(UnscaledValue(ss_ext_discount_amt#105))#115 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#118, cast((avg(UnscaledValue(ss_net_paid#106))#116 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#119]
+Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#106)), avg(UnscaledValue(ss_net_paid#107))]
+Aggregate Attributes [3]: [count(1)#115, avg(UnscaledValue(ss_ext_discount_amt#106))#116, avg(UnscaledValue(ss_net_paid#107))#117]
+Results [3]: [count(1)#115 AS count(1)#118, cast((avg(UnscaledValue(ss_ext_discount_amt#106))#116 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#119, cast((avg(UnscaledValue(ss_net_paid#107))#117 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#120]
 
 (83) Project
-Output [1]: [named_struct(count(1), count(1)#117, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#118, avg(ss_net_paid), avg(ss_net_paid)#119) AS mergedValue#120]
-Input [3]: [count(1)#117, avg(ss_ext_discount_amt)#118, avg(ss_net_paid)#119]
+Output [1]: [named_struct(count(1), count(1)#118, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#119, avg(ss_net_paid), avg(ss_net_paid)#120) AS mergedValue#121]
+Input [3]: [count(1)#118, avg(ss_ext_discount_amt)#119, avg(ss_net_paid)#120]
 
 (84) AdaptiveSparkPlan
-Output [1]: [mergedValue#120]
+Output [1]: [mergedValue#121]
 Arguments: isFinalPlan=true
 
 Subquery:11 Hosting operator id = 4 Hosting Expression = ReusedSubquery Subquery subquery#11, [id=#12]
@@ -564,97 +564,97 @@ AdaptiveSparkPlan (103)
 
 
 (96) Scan parquet
-Output [3]: [ss_quantity#126, ss_ext_discount_amt#127, ss_net_paid#128]
+Output [3]: [ss_quantity#127, ss_ext_discount_amt#128, ss_net_paid#129]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2),ss_net_paid:decimal(7,2)>
 
 (86) InputAdapter
-Input [3]: [ss_quantity#126, ss_ext_discount_amt#127, ss_net_paid#128]
-Arguments: [#126, #127, #128]
+Input [3]: [ss_quantity#127, ss_ext_discount_amt#128, ss_net_paid#129]
+Arguments: [#127, #128, #129]
 
 (87) NativeFilter
-Input [3]: [#126#126, #127#127, #128#128]
-Condition : ((isnotnull(ss_quantity#126) AND (ss_quantity#126 >= 81)) AND (ss_quantity#126 <= 100))
+Input [3]: [#127#127, #128#128, #129#129]
+Condition : ((isnotnull(ss_quantity#127) AND (ss_quantity#127 >= 81)) AND (ss_quantity#127 <= 100))
 
 (88) NativeProject
-Output [2]: [ss_ext_discount_amt#127, ss_net_paid#128]
-Input [3]: [#126#126, #127#127, #128#128]
+Output [2]: [ss_ext_discount_amt#128, ss_net_paid#129]
+Input [3]: [#127#127, #128#128, #129#129]
 
 (89) NativeProject
-Output [2]: [UnscaledValue(ss_ext_discount_amt#127) AS _c0#129, UnscaledValue(ss_net_paid#128) AS _c1#130]
-Input [2]: [ss_ext_discount_amt#127, ss_net_paid#128]
+Output [2]: [UnscaledValue(ss_ext_discount_amt#128) AS _c0#130, UnscaledValue(ss_net_paid#129) AS _c1#131]
+Input [2]: [ss_ext_discount_amt#128, ss_net_paid#129]
 
 (90) NativeHashAggregate
-Input [2]: [_c0#129, _c1#130]
+Input [2]: [_c0#130, _c1#131]
 Keys: []
-Functions [3]: [partial_count(1), partial_avg(_c0#129), partial_avg(_c1#130)]
-Aggregate Attributes [5]: [count#131, sum#132, count#133, sum#134, count#135]
-Results [1]: [#47#47]
+Functions [3]: [partial_count(1), partial_avg(_c0#130), partial_avg(_c1#131)]
+Aggregate Attributes [5]: [count#132, sum#133, count#134, sum#135, count#136]
+Results [5]: [#47, #48, #47, #48, #47]
 
 (91) NativeShuffleExchange
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 
 (92) ShuffleQueryStage
-Output [1]: [#47#47]
+Output [5]: [#47, #48, #47, #48, #47]
 Arguments: X
 
 (93) NativeHashAggregate
-Input [1]: [#47#47]
+Input [5]: [#47, #48, #47, #48, #47]
 Keys: []
-Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#127)), avg(UnscaledValue(ss_net_paid#128))]
-Aggregate Attributes [3]: [count(1)#136, avg(UnscaledValue(ss_ext_discount_amt#127))#137, avg(UnscaledValue(ss_net_paid#128))#138]
-Results [3]: [count(1)#136, avg(UnscaledValue(ss_ext_discount_amt#127))#137, avg(UnscaledValue(ss_net_paid#128))#138]
+Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#128)), avg(UnscaledValue(ss_net_paid#129))]
+Aggregate Attributes [3]: [count(1)#137, avg(UnscaledValue(ss_ext_discount_amt#128))#138, avg(UnscaledValue(ss_net_paid#129))#139]
+Results [3]: [count(1)#137, avg(UnscaledValue(ss_ext_discount_amt#128))#138, avg(UnscaledValue(ss_net_paid#129))#139]
 
 (94) NativeProject
-Output [3]: [count(1)#136 AS count(1)#139, cast((avg(UnscaledValue(ss_ext_discount_amt#127))#137 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#140, cast((avg(UnscaledValue(ss_net_paid#128))#138 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#141]
-Input [3]: [count(1)#136, avg(UnscaledValue(ss_ext_discount_amt#127))#137, avg(UnscaledValue(ss_net_paid#128))#138]
+Output [3]: [count(1)#137 AS count(1)#140, cast((avg(UnscaledValue(ss_ext_discount_amt#128))#138 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#141, cast((avg(UnscaledValue(ss_net_paid#129))#139 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#142]
+Input [3]: [count(1)#137, avg(UnscaledValue(ss_ext_discount_amt#128))#138, avg(UnscaledValue(ss_net_paid#129))#139]
 
 (95) NativeProject
-Output [1]: [named_struct(count(1), count(1)#139, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#140, avg(ss_net_paid), avg(ss_net_paid)#141) AS mergedValue#142]
-Input [3]: [count(1)#139, avg(ss_ext_discount_amt)#140, avg(ss_net_paid)#141]
+Output [1]: [named_struct(count(1), count(1)#140, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#141, avg(ss_net_paid), avg(ss_net_paid)#142) AS mergedValue#143]
+Input [3]: [count(1)#140, avg(ss_ext_discount_amt)#141, avg(ss_net_paid)#142]
 
 (96) Scan parquet
-Output [3]: [ss_quantity#126, ss_ext_discount_amt#127, ss_net_paid#128]
+Output [3]: [ss_quantity#127, ss_ext_discount_amt#128, ss_net_paid#129]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2),ss_net_paid:decimal(7,2)>
 
 (97) Filter
-Input [3]: [ss_quantity#126, ss_ext_discount_amt#127, ss_net_paid#128]
-Condition : ((isnotnull(ss_quantity#126) AND (ss_quantity#126 >= 81)) AND (ss_quantity#126 <= 100))
+Input [3]: [ss_quantity#127, ss_ext_discount_amt#128, ss_net_paid#129]
+Condition : ((isnotnull(ss_quantity#127) AND (ss_quantity#127 >= 81)) AND (ss_quantity#127 <= 100))
 
 (98) Project
-Output [2]: [ss_ext_discount_amt#127, ss_net_paid#128]
-Input [3]: [ss_quantity#126, ss_ext_discount_amt#127, ss_net_paid#128]
+Output [2]: [ss_ext_discount_amt#128, ss_net_paid#129]
+Input [3]: [ss_quantity#127, ss_ext_discount_amt#128, ss_net_paid#129]
 
 (99) HashAggregate
-Input [2]: [ss_ext_discount_amt#127, ss_net_paid#128]
+Input [2]: [ss_ext_discount_amt#128, ss_net_paid#129]
 Keys: []
-Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#127)), partial_avg(UnscaledValue(ss_net_paid#128))]
-Aggregate Attributes [5]: [count#131, sum#132, count#133, sum#134, count#135]
-Results [5]: [count#143, sum#144, count#145, sum#146, count#147]
+Functions [3]: [partial_count(1), partial_avg(UnscaledValue(ss_ext_discount_amt#128)), partial_avg(UnscaledValue(ss_net_paid#129))]
+Aggregate Attributes [5]: [count#132, sum#133, count#134, sum#135, count#136]
+Results [5]: [count#144, sum#145, count#146, sum#147, count#148]
 
 (100) Exchange
-Input [5]: [count#143, sum#144, count#145, sum#146, count#147]
+Input [5]: [count#144, sum#145, count#146, sum#147, count#148]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 
 (101) HashAggregate
-Input [5]: [count#143, sum#144, count#145, sum#146, count#147]
+Input [5]: [count#144, sum#145, count#146, sum#147, count#148]
 Keys: []
-Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#127)), avg(UnscaledValue(ss_net_paid#128))]
-Aggregate Attributes [3]: [count(1)#136, avg(UnscaledValue(ss_ext_discount_amt#127))#137, avg(UnscaledValue(ss_net_paid#128))#138]
-Results [3]: [count(1)#136 AS count(1)#139, cast((avg(UnscaledValue(ss_ext_discount_amt#127))#137 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#140, cast((avg(UnscaledValue(ss_net_paid#128))#138 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#141]
+Functions [3]: [count(1), avg(UnscaledValue(ss_ext_discount_amt#128)), avg(UnscaledValue(ss_net_paid#129))]
+Aggregate Attributes [3]: [count(1)#137, avg(UnscaledValue(ss_ext_discount_amt#128))#138, avg(UnscaledValue(ss_net_paid#129))#139]
+Results [3]: [count(1)#137 AS count(1)#140, cast((avg(UnscaledValue(ss_ext_discount_amt#128))#138 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#141, cast((avg(UnscaledValue(ss_net_paid#129))#139 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#142]
 
 (102) Project
-Output [1]: [named_struct(count(1), count(1)#139, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#140, avg(ss_net_paid), avg(ss_net_paid)#141) AS mergedValue#142]
-Input [3]: [count(1)#139, avg(ss_ext_discount_amt)#140, avg(ss_net_paid)#141]
+Output [1]: [named_struct(count(1), count(1)#140, avg(ss_ext_discount_amt), avg(ss_ext_discount_amt)#141, avg(ss_net_paid), avg(ss_net_paid)#142) AS mergedValue#143]
+Input [3]: [count(1)#140, avg(ss_ext_discount_amt)#141, avg(ss_net_paid)#142]
 
 (103) AdaptiveSparkPlan
-Output [1]: [mergedValue#142]
+Output [1]: [mergedValue#143]
 Arguments: isFinalPlan=true
 
 Subquery:14 Hosting operator id = 4 Hosting Expression = ReusedSubquery Subquery subquery#14, [id=#15]

@@ -15,13 +15,12 @@
 
 use std::{
     fmt::{Debug, Formatter},
-    io::Cursor,
     sync::Arc,
 };
 
 use arrow::{
-    array::{ArrayRef, BinaryArray, RecordBatchOptions},
-    datatypes::{DataType, Field, Fields, Schema, SchemaRef},
+    array::{Array, ArrayRef, RecordBatchOptions},
+    datatypes::{Field, Fields, Schema, SchemaRef},
     record_batch::RecordBatch,
     row::{RowConverter, Rows, SortField},
 };
@@ -29,20 +28,16 @@ use auron_jni_bridge::{
     conf,
     conf::{BooleanConf, DoubleConf, IntConf},
 };
-use datafusion::{
-    common::{Result, cast::as_binary_array},
-    physical_expr::PhysicalExprRef,
-};
+use datafusion::{common::Result, physical_expr::PhysicalExprRef};
 use datafusion_ext_commons::{downcast_any, suggested_batch_mem_size};
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
 use crate::{
     agg::{
-        AGG_BUF_COLUMN_NAME, AggExecMode, AggExpr, AggMode, GroupingExpr,
+        AggExecMode, AggExpr, AggMode, GroupingExpr,
         acc::AccTable,
         agg::{Agg, IdxSelection},
-        agg_hash_map::AggHashMapKey,
         spark_udaf_wrapper::{AccUDAFBufferRowsColumn, SparkUDAFMemTracker, SparkUDAFWrapper},
     },
     common::{
@@ -63,6 +58,8 @@ pub struct AggContext {
     pub grouping_row_converter: Arc<Mutex<RowConverter>>,
     pub groupings: Vec<GroupingExpr>,
     pub aggs: Vec<AggExpr>,
+    pub input_acc_arrays_len: usize,
+    pub output_acc_arrays_len: usize,
     pub supports_partial_skipping: bool,
     pub partial_skipping_ratio: f64,
     pub partial_skipping_min_rows: usize,
@@ -137,7 +134,11 @@ impl AggContext {
                 ));
             }
         } else {
-            agg_fields.push(Field::new(AGG_BUF_COLUMN_NAME, DataType::Binary, false));
+            for agg in &aggs {
+                for dt in agg.agg.acc_array_data_types() {
+                    agg_fields.push(Field::new("", dt.clone(), true));
+                }
+            }
         }
         let agg_schema = Arc::new(Schema::new(agg_fields));
         let output_schema = Arc::new(Schema::new(
@@ -147,6 +148,17 @@ impl AggContext {
             ]
             .concat(),
         ));
+
+        let input_acc_arrays_len = aggs
+            .iter()
+            .filter(|agg| agg.mode.is_partial_merge() || agg.mode.is_final())
+            .map(|agg| agg.agg.acc_array_data_types().len())
+            .sum();
+        let output_acc_arrays_len = aggs
+            .iter()
+            .filter(|agg| agg.mode.is_partial() || agg.mode.is_partial_merge())
+            .map(|agg| agg.agg.acc_array_data_types().len())
+            .sum();
 
         let agg_exprs_flatten: Vec<PhysicalExprRef> = aggs
             .iter()
@@ -195,6 +207,8 @@ impl AggContext {
             grouping_row_converter,
             groupings,
             aggs,
+            input_acc_arrays_len,
+            output_acc_arrays_len,
             agg_expr_evaluator,
             supports_partial_skipping,
             partial_skipping_ratio,
@@ -277,22 +291,15 @@ impl AggContext {
             let mut merging_acc_table = self.create_acc_table(0);
 
             if self.need_partial_merge {
-                let partial_merged_array =
-                    as_binary_array(batch.columns().last().expect("last column"))?;
-                let array = partial_merged_array
-                    .iter()
-                    .skip(batch_start_idx)
-                    .take(batch_end_idx - batch_start_idx)
-                    .map(|bytes| bytes.expect("non-null bytes"))
-                    .collect::<Vec<_>>();
-                let mut cursors = array
-                    .iter()
-                    .map(|bytes| Cursor::new(bytes.as_bytes()))
-                    .collect::<Vec<_>>();
-
-                for (agg_idx, _agg) in &self.need_partial_merge_aggs {
-                    let acc_col = &mut merging_acc_table.cols_mut()[*agg_idx];
-                    acc_col.unfreeze_from_rows(&mut cursors)?;
+                let mut acc_arrays_start = batch.num_columns() - self.input_acc_arrays_len;
+                for (agg_idx, agg) in &self.need_partial_merge_aggs {
+                    let acc_arrays = &batch.columns()[acc_arrays_start..]
+                        .iter()
+                        .take(agg.acc_array_data_types().len())
+                        .map(|array| array.slice(batch_start_idx, batch_end_idx - batch_start_idx))
+                        .collect::<Vec<_>>();
+                    acc_arrays_start += agg.acc_array_data_types().len();
+                    merging_acc_table.cols_mut()[*agg_idx].unfreeze_from_arrays(&acc_arrays)?;
                 }
             }
             let batch_selection = IdxSelection::Range(0, batch_end_idx - batch_start_idx);
@@ -320,9 +327,7 @@ impl AggContext {
             }
             Ok(agg_columns)
         } else {
-            // output acc as a binary column
-            let freezed = self.freeze_acc_table(acc_table, idx)?;
-            Ok(vec![Arc::new(BinaryArray::from_iter_values(freezed))])
+            self.freeze_acc_table(acc_table, idx)
         }
     }
 
@@ -407,23 +412,23 @@ impl AggContext {
 
     pub fn freeze_acc_table(
         &self,
-        acc_table: &AccTable,
+        acc_table: &mut AccTable,
         acc_idx: IdxSelection,
-    ) -> Result<Vec<Vec<u8>>> {
+    ) -> Result<Vec<ArrayRef>> {
         let udaf_indices_cache = OnceCell::new();
-        let mut vec = vec![vec![]; acc_idx.len()];
-        for acc_col in acc_table.cols() {
+        let mut arrays = vec![];
+
+        for acc_col in acc_table.cols_mut() {
             if let Ok(udaf_acc_col) = downcast_any!(acc_col, AccUDAFBufferRowsColumn) {
-                udaf_acc_col.freeze_to_rows_with_indices_cache(
-                    acc_idx,
-                    &mut vec,
-                    &udaf_indices_cache,
-                )?;
+                arrays.push(
+                    udaf_acc_col
+                        .freeze_to_array_with_indices_cache(acc_idx, &udaf_indices_cache)?,
+                );
             } else {
-                acc_col.freeze_to_rows(acc_idx, &mut vec)?;
+                arrays.extend(acc_col.freeze_to_arrays(acc_idx)?);
             }
         }
-        Ok(vec)
+        Ok(arrays)
     }
 
     pub async fn process_partial_skipped(

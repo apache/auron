@@ -232,12 +232,10 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                         if let Some(&map_idx) = eqs.next() {
                             if P.probe_is_join_side {
                                 probed_joined.set(row_idx, true);
-                            } else {
-                                if !map_joined[map_idx as usize] {
+                            } else if !map_joined[map_idx as usize] {
+                                map_joined.set(map_idx as usize, true);
+                                for &map_idx in eqs {
                                     map_joined.set(map_idx as usize, true);
-                                    for &map_idx in eqs {
-                                        map_joined.set(map_idx as usize, true);
-                                    }
                                 }
                                 // otherwise all map records with this key
                                 // should

@@ -494,25 +494,25 @@ Input [3]: [ca_zip#10, ca_city#9, _c2#18]
 Keys [2]: [ca_zip#10, ca_city#9]
 Functions [1]: [partial_sum(_c2#18)]
 Aggregate Attributes [1]: [sum#19]
-Results [3]: [ca_zip#10, ca_city#9, #20#20]
+Results [3]: [ca_zip#10, ca_city#9, #20]
 
 (84) NativeShuffleExchange
-Input [3]: [ca_zip#10, ca_city#9, #20#20]
+Input [3]: [ca_zip#10, ca_city#9, #20]
 Arguments: hashpartitioning(ca_zip#10, ca_city#9, 100), ENSURE_REQUIREMENTS, [plan_id=11]
 
 (85) ShuffleQueryStage
-Output [3]: [ca_zip#10, ca_city#9, #20#20]
+Output [3]: [ca_zip#10, ca_city#9, #20]
 Arguments: X
 
 (86) AQEShuffleRead
-Input [3]: [ca_zip#10, ca_city#9, #20#20]
+Input [3]: [ca_zip#10, ca_city#9, #20]
 Arguments: coalesced
 
 (87) InputAdapter
-Input [3]: [ca_zip#10, ca_city#9, #20#20]
+Input [3]: [ca_zip#10, ca_city#9, #20]
 
 (88) NativeHashAggregate
-Input [3]: [ca_zip#10, ca_city#9, #20#20]
+Input [3]: [ca_zip#10, ca_city#9, #20]
 Keys [2]: [ca_zip#10, ca_city#9]
 Functions [1]: [sum(UnscaledValue(ws_sales_price#5))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_sales_price#5))#21]

@@ -81,6 +81,10 @@ impl Agg for AggCollect {
         self.innert_collect_list.create_acc_column(num_rows)
     }
 
+    fn acc_array_data_types(&self) -> &[DataType] {
+        self.innert_collect_list.acc_array_data_types()
+    }
+
     fn partial_update(
         &self,
         accs: &mut AccColumnRef,

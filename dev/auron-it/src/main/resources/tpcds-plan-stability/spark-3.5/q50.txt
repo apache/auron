@@ -396,25 +396,25 @@ Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name
 Keys [10]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
 Functions [5]: [partial_sum(_c10#25), partial_sum(_c11#26), partial_sum(_c12#27), partial_sum(_c13#28), partial_sum(_c14#29)]
 Aggregate Attributes [5]: [sum#30, sum#31, sum#32, sum#33, sum#34]
-Results [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Results [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35, #35, #35, #35, #35]
 
 (67) NativeShuffleExchange
-Input [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35, #35, #35, #35, #35]
 Arguments: hashpartitioning(s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (68) ShuffleQueryStage
-Output [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Output [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35, #35, #35, #35, #35]
 Arguments: X
 
 (69) AQEShuffleRead
-Input [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35, #35, #35, #35, #35]
 Arguments: coalesced
 
 (70) InputAdapter
-Input [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35, #35, #35, #35, #35]
 
 (71) NativeHashAggregate
-Input [11]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35#35]
+Input [15]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20, #35, #35, #35, #35, #35]
 Keys [10]: [s_store_name#11, s_company_id#12, s_street_number#13, s_street_name#14, s_street_type#15, s_suite_number#16, s_city#17, s_county#18, s_state#19, s_zip#20]
 Functions [5]: [sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END), sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)]
 Aggregate Attributes [5]: [sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 30) THEN 1 ELSE 0 END)#36, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 30) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 60)) THEN 1 ELSE 0 END)#37, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 60) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 90)) THEN 1 ELSE 0 END)#38, sum(CASE WHEN (((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 90) AND ((sr_returned_date_sk#6 - ss_sold_date_sk#1) <= 120)) THEN 1 ELSE 0 END)#39, sum(CASE WHEN ((sr_returned_date_sk#6 - ss_sold_date_sk#1) > 120) THEN 1 ELSE 0 END)#40]

@@ -927,25 +927,25 @@ Input [3]: [w_warehouse_name#14, i_item_desc#16, d_week_seq#23]
 Keys [3]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#32]
-Results [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33#33]
+Results [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33]
 
 (160) NativeShuffleExchange
-Input [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33#33]
+Input [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33]
 Arguments: hashpartitioning(i_item_desc#16, w_warehouse_name#14, d_week_seq#23, 100), ENSURE_REQUIREMENTS, [plan_id=21]
 
 (161) ShuffleQueryStage
-Output [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33#33]
+Output [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33]
 Arguments: X
 
 (162) AQEShuffleRead
-Input [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33#33]
+Input [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33]
 Arguments: coalesced
 
 (163) InputAdapter
-Input [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33#33]
+Input [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33]
 
 (164) NativeHashAggregate
-Input [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33#33]
+Input [4]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23, #33]
 Keys [3]: [i_item_desc#16, w_warehouse_name#14, d_week_seq#23]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#34]

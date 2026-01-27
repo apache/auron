@@ -119,25 +119,25 @@ Input [1]: [i_manufact#5]
 Keys [1]: [i_manufact#5]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#9]
-Results [2]: [i_manufact#5, #10#10]
+Results [2]: [i_manufact#5, #10]
 
 (15) NativeShuffleExchange
-Input [2]: [i_manufact#5, #10#10]
+Input [2]: [i_manufact#5, #10]
 Arguments: hashpartitioning(i_manufact#5, 100), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (16) ShuffleQueryStage
-Output [2]: [i_manufact#5, #10#10]
+Output [2]: [i_manufact#5, #10]
 Arguments: X
 
 (17) AQEShuffleRead
-Input [2]: [i_manufact#5, #10#10]
+Input [2]: [i_manufact#5, #10]
 Arguments: coalesced
 
 (18) InputAdapter
-Input [2]: [i_manufact#5, #10#10]
+Input [2]: [i_manufact#5, #10]
 
 (19) NativeHashAggregate
-Input [2]: [i_manufact#5, #10#10]
+Input [2]: [i_manufact#5, #10]
 Keys [1]: [i_manufact#5]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#11]
@@ -174,33 +174,33 @@ Input [1]: [i_product_name#3]
 Keys [1]: [i_product_name#3]
 Functions: []
 Aggregate Attributes: []
-Results [2]: [i_product_name#3, #10#10]
+Results [1]: [i_product_name#3]
 
 (27) NativeShuffleExchange
-Input [2]: [i_product_name#3, #10#10]
+Input [1]: [i_product_name#3]
 Arguments: hashpartitioning(i_product_name#3, 100), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (28) ShuffleQueryStage
-Output [2]: [i_product_name#3, #10#10]
+Output [1]: [i_product_name#3]
 Arguments: X
 
 (29) AQEShuffleRead
-Input [2]: [i_product_name#3, #10#10]
+Input [1]: [i_product_name#3]
 Arguments: coalesced
 
 (30) InputAdapter
-Input [2]: [i_product_name#3, #10#10]
+Input [1]: [i_product_name#3]
 
 (31) NativeHashAggregate
-Input [2]: [i_product_name#3, #10#10]
+Input [1]: [i_product_name#3]
 Keys [1]: [i_product_name#3]
 Functions: []
 Aggregate Attributes: []
-Results [2]: [i_product_name#3, #10#10]
+Results [1]: [i_product_name#3]
 
 (32) NativeProject
 Output [1]: [i_product_name#3]
-Input [2]: [i_product_name#3, #10#10]
+Input [1]: [i_product_name#3]
 
 (33) NativeTakeOrdered
 Input [1]: [i_product_name#3]

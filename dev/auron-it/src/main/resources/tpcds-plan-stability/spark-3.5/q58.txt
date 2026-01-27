@@ -464,25 +464,25 @@ Input [2]: [i_item_id#5, _c1#12]
 Keys [1]: [i_item_id#5]
 Functions [1]: [partial_sum(_c1#12)]
 Aggregate Attributes [1]: [sum#13]
-Results [2]: [i_item_id#5, #14#14]
+Results [2]: [i_item_id#5, #14]
 
 (52) NativeShuffleExchange
-Input [2]: [i_item_id#5, #14#14]
+Input [2]: [i_item_id#5, #14]
 Arguments: hashpartitioning(i_item_id#5, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (53) ShuffleQueryStage
-Output [2]: [i_item_id#5, #14#14]
+Output [2]: [i_item_id#5, #14]
 Arguments: X
 
 (54) AQEShuffleRead
-Input [2]: [i_item_id#5, #14#14]
+Input [2]: [i_item_id#5, #14]
 Arguments: coalesced
 
 (55) InputAdapter
-Input [2]: [i_item_id#5, #14#14]
+Input [2]: [i_item_id#5, #14]
 
 (56) NativeHashAggregate
-Input [2]: [i_item_id#5, #14#14]
+Input [2]: [i_item_id#5, #14]
 Keys [1]: [i_item_id#5]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#3))#15]
@@ -626,25 +626,25 @@ Input [2]: [i_item_id#22, _c1#24]
 Keys [1]: [i_item_id#22]
 Functions [1]: [partial_sum(_c1#24)]
 Aggregate Attributes [1]: [sum#25]
-Results [2]: [i_item_id#22, #14#14]
+Results [2]: [i_item_id#22, #14]
 
 (91) NativeShuffleExchange
-Input [2]: [i_item_id#22, #14#14]
+Input [2]: [i_item_id#22, #14]
 Arguments: hashpartitioning(i_item_id#22, 100), ENSURE_REQUIREMENTS, [plan_id=10]
 
 (92) ShuffleQueryStage
-Output [2]: [i_item_id#22, #14#14]
+Output [2]: [i_item_id#22, #14]
 Arguments: X
 
 (93) AQEShuffleRead
-Input [2]: [i_item_id#22, #14#14]
+Input [2]: [i_item_id#22, #14]
 Arguments: coalesced
 
 (94) InputAdapter
-Input [2]: [i_item_id#22, #14#14]
+Input [2]: [i_item_id#22, #14]
 
 (95) NativeHashAggregate
-Input [2]: [i_item_id#22, #14#14]
+Input [2]: [i_item_id#22, #14]
 Keys [1]: [i_item_id#22]
 Functions [1]: [sum(UnscaledValue(cs_ext_sales_price#20))]
 Aggregate Attributes [1]: [sum(UnscaledValue(cs_ext_sales_price#20))#26]
@@ -798,25 +798,25 @@ Input [2]: [i_item_id#33, _c1#35]
 Keys [1]: [i_item_id#33]
 Functions [1]: [partial_sum(_c1#35)]
 Aggregate Attributes [1]: [sum#36]
-Results [2]: [i_item_id#33, #14#14]
+Results [2]: [i_item_id#33, #14]
 
 (132) NativeShuffleExchange
-Input [2]: [i_item_id#33, #14#14]
+Input [2]: [i_item_id#33, #14]
 Arguments: hashpartitioning(i_item_id#33, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (133) ShuffleQueryStage
-Output [2]: [i_item_id#33, #14#14]
+Output [2]: [i_item_id#33, #14]
 Arguments: X
 
 (134) AQEShuffleRead
-Input [2]: [i_item_id#33, #14#14]
+Input [2]: [i_item_id#33, #14]
 Arguments: coalesced
 
 (135) InputAdapter
-Input [2]: [i_item_id#33, #14#14]
+Input [2]: [i_item_id#33, #14]
 
 (136) NativeHashAggregate
-Input [2]: [i_item_id#33, #14#14]
+Input [2]: [i_item_id#33, #14]
 Keys [1]: [i_item_id#33]
 Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#31))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#31))#37]

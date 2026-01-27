@@ -532,25 +532,25 @@ Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_fla
 Keys [8]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16]
 Functions [1]: [partial_sum(_c8#17)]
 Aggregate Attributes [2]: [sum#18, isEmpty#19]
-Results [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20#20]
+Results [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20]
 
 (36) NativeShuffleExchange
-Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20#20]
+Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20]
 Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (37) ShuffleQueryStage
-Output [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20#20]
+Output [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20]
 Arguments: X
 
 (38) AQEShuffleRead
-Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20#20]
+Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20]
 Arguments: coalesced
 
 (39) InputAdapter
-Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20#20]
+Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20]
 
 (40) NativeHashAggregate
-Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20#20]
+Input [9]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16, #20]
 Keys [8]: [c_customer_id#2, c_first_name#3, c_last_name#4, c_preferred_cust_flag#5, c_birth_country#6, c_login#7, c_email_address#8, d_year#16]
 Functions [1]: [sum(((((ss_ext_list_price#14 - ss_ext_wholesale_cost#13) - ss_ext_discount_amt#11) + ss_ext_sales_price#12) / 2))]
 Aggregate Attributes [1]: [sum(((((ss_ext_list_price#14 - ss_ext_wholesale_cost#13) - ss_ext_discount_amt#11) + ss_ext_sales_price#12) / 2))#21]
@@ -658,25 +658,25 @@ Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_
 Keys [8]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37]
 Functions [1]: [partial_sum(_c8#38)]
 Aggregate Attributes [2]: [sum#39, isEmpty#40]
-Results [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20#20]
+Results [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20]
 
 (66) NativeShuffleExchange
-Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20#20]
+Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20]
 Arguments: hashpartitioning(c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, 100), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (67) ShuffleQueryStage
-Output [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20#20]
+Output [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20]
 Arguments: X
 
 (68) AQEShuffleRead
-Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20#20]
+Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20]
 Arguments: coalesced
 
 (69) InputAdapter
-Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20#20]
+Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20]
 
 (70) NativeHashAggregate
-Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20#20]
+Input [9]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37, #20]
 Keys [8]: [c_customer_id#24, c_first_name#25, c_last_name#26, c_preferred_cust_flag#27, c_birth_country#28, c_login#29, c_email_address#30, d_year#37]
 Functions [1]: [sum(((((ss_ext_list_price#35 - ss_ext_wholesale_cost#34) - ss_ext_discount_amt#32) + ss_ext_sales_price#33) / 2))]
 Aggregate Attributes [1]: [sum(((((ss_ext_list_price#35 - ss_ext_wholesale_cost#34) - ss_ext_discount_amt#32) + ss_ext_sales_price#33) / 2))#21]
@@ -837,25 +837,25 @@ Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_
 Keys [8]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64]
 Functions [1]: [partial_sum(_c8#65)]
 Aggregate Attributes [2]: [sum#66, isEmpty#67]
-Results [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20#20]
+Results [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20]
 
 (109) NativeShuffleExchange
-Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20#20]
+Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20]
 Arguments: hashpartitioning(c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, 100), ENSURE_REQUIREMENTS, [plan_id=12]
 
 (110) ShuffleQueryStage
-Output [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20#20]
+Output [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20]
 Arguments: X
 
 (111) AQEShuffleRead
-Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20#20]
+Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20]
 Arguments: coalesced
 
 (112) InputAdapter
-Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20#20]
+Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20]
 
 (113) NativeHashAggregate
-Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20#20]
+Input [9]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64, #20]
 Keys [8]: [c_customer_id#50, c_first_name#51, c_last_name#52, c_preferred_cust_flag#53, c_birth_country#54, c_login#55, c_email_address#56, d_year#64]
 Functions [1]: [sum(((((cs_ext_list_price#62 - cs_ext_wholesale_cost#61) - cs_ext_discount_amt#59) + cs_ext_sales_price#60) / 2))]
 Aggregate Attributes [1]: [sum(((((cs_ext_list_price#62 - cs_ext_wholesale_cost#61) - cs_ext_discount_amt#59) + cs_ext_sales_price#60) / 2))#68]
@@ -961,25 +961,25 @@ Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_
 Keys [8]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84]
 Functions [1]: [partial_sum(_c8#85)]
 Aggregate Attributes [2]: [sum#86, isEmpty#87]
-Results [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20#20]
+Results [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20]
 
 (139) NativeShuffleExchange
-Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20#20]
+Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20]
 Arguments: hashpartitioning(c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, 100), ENSURE_REQUIREMENTS, [plan_id=14]
 
 (140) ShuffleQueryStage
-Output [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20#20]
+Output [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20]
 Arguments: X
 
 (141) AQEShuffleRead
-Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20#20]
+Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20]
 Arguments: coalesced
 
 (142) InputAdapter
-Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20#20]
+Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20]
 
 (143) NativeHashAggregate
-Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20#20]
+Input [9]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84, #20]
 Keys [8]: [c_customer_id#71, c_first_name#72, c_last_name#73, c_preferred_cust_flag#74, c_birth_country#75, c_login#76, c_email_address#77, d_year#84]
 Functions [1]: [sum(((((cs_ext_list_price#82 - cs_ext_wholesale_cost#81) - cs_ext_discount_amt#79) + cs_ext_sales_price#80) / 2))]
 Aggregate Attributes [1]: [sum(((((cs_ext_list_price#82 - cs_ext_wholesale_cost#81) - cs_ext_discount_amt#79) + cs_ext_sales_price#80) / 2))#68]
@@ -1147,25 +1147,25 @@ Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_
 Keys [8]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105]
 Functions [1]: [partial_sum(_c8#106)]
 Aggregate Attributes [2]: [sum#107, isEmpty#108]
-Results [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20#20]
+Results [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20]
 
 (184) NativeShuffleExchange
-Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20#20]
+Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20]
 Arguments: hashpartitioning(c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, 100), ENSURE_REQUIREMENTS, [plan_id=18]
 
 (185) ShuffleQueryStage
-Output [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20#20]
+Output [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20]
 Arguments: X
 
 (186) AQEShuffleRead
-Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20#20]
+Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20]
 Arguments: coalesced
 
 (187) InputAdapter
-Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20#20]
+Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20]
 
 (188) NativeHashAggregate
-Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20#20]
+Input [9]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105, #20]
 Keys [8]: [c_customer_id#91, c_first_name#92, c_last_name#93, c_preferred_cust_flag#94, c_birth_country#95, c_login#96, c_email_address#97, d_year#105]
 Functions [1]: [sum(((((ws_ext_list_price#103 - ws_ext_wholesale_cost#102) - ws_ext_discount_amt#100) + ws_ext_sales_price#101) / 2))]
 Aggregate Attributes [1]: [sum(((((ws_ext_list_price#103 - ws_ext_wholesale_cost#102) - ws_ext_discount_amt#100) + ws_ext_sales_price#101) / 2))#109]
@@ -1271,25 +1271,25 @@ Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cu
 Keys [8]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125]
 Functions [1]: [partial_sum(_c8#126)]
 Aggregate Attributes [2]: [sum#127, isEmpty#128]
-Results [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20#20]
+Results [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20]
 
 (214) NativeShuffleExchange
-Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20#20]
+Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20]
 Arguments: hashpartitioning(c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, 100), ENSURE_REQUIREMENTS, [plan_id=20]
 
 (215) ShuffleQueryStage
-Output [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20#20]
+Output [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20]
 Arguments: X
 
 (216) AQEShuffleRead
-Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20#20]
+Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20]
 Arguments: coalesced
 
 (217) InputAdapter
-Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20#20]
+Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20]
 
 (218) NativeHashAggregate
-Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20#20]
+Input [9]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125, #20]
 Keys [8]: [c_customer_id#112, c_first_name#113, c_last_name#114, c_preferred_cust_flag#115, c_birth_country#116, c_login#117, c_email_address#118, d_year#125]
 Functions [1]: [sum(((((ws_ext_list_price#123 - ws_ext_wholesale_cost#122) - ws_ext_discount_amt#120) + ws_ext_sales_price#121) / 2))]
 Aggregate Attributes [1]: [sum(((((ws_ext_list_price#123 - ws_ext_wholesale_cost#122) - ws_ext_discount_amt#120) + ws_ext_sales_price#121) / 2))#109]

@@ -646,33 +646,33 @@ Input [9]: [i_item_id#24, i_item_desc#25, s_state#22, _c3#26, _c4#27, _c5#28, _c
 Keys [3]: [i_item_id#24, i_item_desc#25, s_state#22]
 Functions [9]: [partial_count(_c3#26), partial_avg(_c3#26), partial_stddev_samp(_c4#27), partial_count(_c5#28), partial_avg(_c5#28), partial_stddev_samp(_c6#29), partial_count(_c7#30), partial_avg(_c7#30), partial_stddev_samp(_c8#31)]
 Aggregate Attributes [18]: [count#32, sum#33, count#34, n#35, avg#36, m2#37, count#38, sum#39, count#40, n#41, avg#42, m2#43, count#44, sum#45, count#46, n#47, avg#48, m2#49]
-Results [4]: [i_item_id#24, i_item_desc#25, s_state#22, #50#50]
+Results [15]: [i_item_id#24, i_item_desc#25, s_state#22, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51]
 
 (111) NativeShuffleExchange
-Input [4]: [i_item_id#24, i_item_desc#25, s_state#22, #50#50]
+Input [15]: [i_item_id#24, i_item_desc#25, s_state#22, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51]
 Arguments: hashpartitioning(i_item_id#24, i_item_desc#25, s_state#22, 100), ENSURE_REQUIREMENTS, [plan_id=14]
 
 (112) ShuffleQueryStage
-Output [4]: [i_item_id#24, i_item_desc#25, s_state#22, #50#50]
+Output [15]: [i_item_id#24, i_item_desc#25, s_state#22, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51]
 Arguments: X
 
 (113) AQEShuffleRead
-Input [4]: [i_item_id#24, i_item_desc#25, s_state#22, #50#50]
+Input [15]: [i_item_id#24, i_item_desc#25, s_state#22, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51]
 Arguments: coalesced
 
 (114) InputAdapter
-Input [4]: [i_item_id#24, i_item_desc#25, s_state#22, #50#50]
+Input [15]: [i_item_id#24, i_item_desc#25, s_state#22, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51]
 
 (115) NativeHashAggregate
-Input [4]: [i_item_id#24, i_item_desc#25, s_state#22, #50#50]
+Input [15]: [i_item_id#24, i_item_desc#25, s_state#22, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51, #50, #51]
 Keys [3]: [i_item_id#24, i_item_desc#25, s_state#22]
 Functions [9]: [count(ss_quantity#6), avg(ss_quantity#6), stddev_samp(cast(ss_quantity#6 as double)), count(sr_return_quantity#11), avg(sr_return_quantity#11), stddev_samp(cast(sr_return_quantity#11 as double)), count(cs_quantity#15), avg(cs_quantity#15), stddev_samp(cast(cs_quantity#15 as double))]
-Aggregate Attributes [9]: [count(ss_quantity#6)#51, avg(ss_quantity#6)#52, stddev_samp(cast(ss_quantity#6 as double))#53, count(sr_return_quantity#11)#54, avg(sr_return_quantity#11)#55, stddev_samp(cast(sr_return_quantity#11 as double))#56, count(cs_quantity#15)#57, avg(cs_quantity#15)#58, stddev_samp(cast(cs_quantity#15 as double))#59]
-Results [12]: [i_item_id#24, i_item_desc#25, s_state#22, count(ss_quantity#6)#51, avg(ss_quantity#6)#52, stddev_samp(cast(ss_quantity#6 as double))#53, count(sr_return_quantity#11)#54, avg(sr_return_quantity#11)#55, stddev_samp(cast(sr_return_quantity#11 as double))#56, count(cs_quantity#15)#57, avg(cs_quantity#15)#58, stddev_samp(cast(cs_quantity#15 as double))#59]
+Aggregate Attributes [9]: [count(ss_quantity#6)#52, avg(ss_quantity#6)#53, stddev_samp(cast(ss_quantity#6 as double))#54, count(sr_return_quantity#11)#55, avg(sr_return_quantity#11)#56, stddev_samp(cast(sr_return_quantity#11 as double))#57, count(cs_quantity#15)#58, avg(cs_quantity#15)#59, stddev_samp(cast(cs_quantity#15 as double))#60]
+Results [12]: [i_item_id#24, i_item_desc#25, s_state#22, count(ss_quantity#6)#52, avg(ss_quantity#6)#53, stddev_samp(cast(ss_quantity#6 as double))#54, count(sr_return_quantity#11)#55, avg(sr_return_quantity#11)#56, stddev_samp(cast(sr_return_quantity#11 as double))#57, count(cs_quantity#15)#58, avg(cs_quantity#15)#59, stddev_samp(cast(cs_quantity#15 as double))#60]
 
 (116) NativeProject
-Output [15]: [i_item_id#24, i_item_desc#25, s_state#22, count(ss_quantity#6)#51 AS store_sales_quantitycount#60, avg(ss_quantity#6)#52 AS store_sales_quantityave#61, stddev_samp(cast(ss_quantity#6 as double))#53 AS store_sales_quantitystdev#62, (stddev_samp(cast(ss_quantity#6 as double))#53 / avg(ss_quantity#6)#52) AS store_sales_quantitycov#63, count(sr_return_quantity#11)#54 AS as_store_returns_quantitycount#64, avg(sr_return_quantity#11)#55 AS as_store_returns_quantityave#65, stddev_samp(cast(sr_return_quantity#11 as double))#56 AS as_store_returns_quantitystdev#66, (stddev_samp(cast(sr_return_quantity#11 as double))#56 / avg(sr_return_quantity#11)#55) AS store_returns_quantitycov#67, count(cs_quantity#15)#57 AS catalog_sales_quantitycount#68, avg(cs_quantity#15)#58 AS catalog_sales_quantityave#69, (stddev_samp(cast(cs_quantity#15 as double))#59 / avg(cs_quantity#15)#58) AS catalog_sales_quantitystdev#70, (stddev_samp(cast(cs_quantity#15 as double))#59 / avg(cs_quantity#15)#58) AS catalog_sales_quantitycov#71]
-Input [12]: [i_item_id#24, i_item_desc#25, s_state#22, count(ss_quantity#6)#51, avg(ss_quantity#6)#52, stddev_samp(cast(ss_quantity#6 as double))#53, count(sr_return_quantity#11)#54, avg(sr_return_quantity#11)#55, stddev_samp(cast(sr_return_quantity#11 as double))#56, count(cs_quantity#15)#57, avg(cs_quantity#15)#58, stddev_samp(cast(cs_quantity#15 as double))#59]
+Output [15]: [i_item_id#24, i_item_desc#25, s_state#22, count(ss_quantity#6)#52 AS store_sales_quantitycount#61, avg(ss_quantity#6)#53 AS store_sales_quantityave#62, stddev_samp(cast(ss_quantity#6 as double))#54 AS store_sales_quantitystdev#63, (stddev_samp(cast(ss_quantity#6 as double))#54 / avg(ss_quantity#6)#53) AS store_sales_quantitycov#64, count(sr_return_quantity#11)#55 AS as_store_returns_quantitycount#65, avg(sr_return_quantity#11)#56 AS as_store_returns_quantityave#66, stddev_samp(cast(sr_return_quantity#11 as double))#57 AS as_store_returns_quantitystdev#67, (stddev_samp(cast(sr_return_quantity#11 as double))#57 / avg(sr_return_quantity#11)#56) AS store_returns_quantitycov#68, count(cs_quantity#15)#58 AS catalog_sales_quantitycount#69, avg(cs_quantity#15)#59 AS catalog_sales_quantityave#70, (stddev_samp(cast(cs_quantity#15 as double))#60 / avg(cs_quantity#15)#59) AS catalog_sales_quantitystdev#71, (stddev_samp(cast(cs_quantity#15 as double))#60 / avg(cs_quantity#15)#59) AS catalog_sales_quantitycov#72]
+Input [12]: [i_item_id#24, i_item_desc#25, s_state#22, count(ss_quantity#6)#52, avg(ss_quantity#6)#53, stddev_samp(cast(ss_quantity#6 as double))#54, count(sr_return_quantity#11)#55, avg(sr_return_quantity#11)#56, stddev_samp(cast(sr_return_quantity#11 as double))#57, count(cs_quantity#15)#58, avg(cs_quantity#15)#59, stddev_samp(cast(cs_quantity#15 as double))#60]
 
 (117) Scan parquet
 Output [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5, ss_quantity#6]
@@ -850,19 +850,19 @@ Input [6]: [ss_item_sk#2, ss_store_sk#4, ss_quantity#6, sr_return_quantity#11, c
 Arguments: [cs_sold_date_sk#12 ASC NULLS FIRST], false, 0
 
 (155) Scan parquet
-Output [2]: [d_date_sk#20, d_quarter_name#72]
+Output [2]: [d_date_sk#20, d_quarter_name#73]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [In(d_quarter_name, [2001Q1,2001Q2,2001Q3]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_quarter_name:string>
 
 (156) Filter
-Input [2]: [d_date_sk#20, d_quarter_name#72]
-Condition : (d_quarter_name#72 IN (2001Q1,2001Q2,2001Q3) AND isnotnull(d_date_sk#20))
+Input [2]: [d_date_sk#20, d_quarter_name#73]
+Condition : (d_quarter_name#73 IN (2001Q1,2001Q2,2001Q3) AND isnotnull(d_date_sk#20))
 
 (157) Project
 Output [1]: [d_date_sk#20]
-Input [2]: [d_date_sk#20, d_quarter_name#72]
+Input [2]: [d_date_sk#20, d_quarter_name#73]
 
 (158) Exchange
 Input [1]: [d_date_sk#20]
@@ -961,24 +961,24 @@ Input [6]: [ss_quantity#6, sr_return_quantity#11, cs_quantity#15, s_state#22, i_
 Keys [3]: [i_item_id#24, i_item_desc#25, s_state#22]
 Functions [9]: [partial_count(ss_quantity#6), partial_avg(ss_quantity#6), partial_stddev_samp(cast(ss_quantity#6 as double)), partial_count(sr_return_quantity#11), partial_avg(sr_return_quantity#11), partial_stddev_samp(cast(sr_return_quantity#11 as double)), partial_count(cs_quantity#15), partial_avg(cs_quantity#15), partial_stddev_samp(cast(cs_quantity#15 as double))]
 Aggregate Attributes [18]: [count#32, sum#33, count#34, n#35, avg#36, m2#37, count#38, sum#39, count#40, n#41, avg#42, m2#43, count#44, sum#45, count#46, n#47, avg#48, m2#49]
-Results [21]: [i_item_id#24, i_item_desc#25, s_state#22, count#73, sum#74, count#75, n#76, avg#77, m2#78, count#79, sum#80, count#81, n#82, avg#83, m2#84, count#85, sum#86, count#87, n#88, avg#89, m2#90]
+Results [21]: [i_item_id#24, i_item_desc#25, s_state#22, count#74, sum#75, count#76, n#77, avg#78, m2#79, count#80, sum#81, count#82, n#83, avg#84, m2#85, count#86, sum#87, count#88, n#89, avg#90, m2#91]
 
 (179) Exchange
-Input [21]: [i_item_id#24, i_item_desc#25, s_state#22, count#73, sum#74, count#75, n#76, avg#77, m2#78, count#79, sum#80, count#81, n#82, avg#83, m2#84, count#85, sum#86, count#87, n#88, avg#89, m2#90]
+Input [21]: [i_item_id#24, i_item_desc#25, s_state#22, count#74, sum#75, count#76, n#77, avg#78, m2#79, count#80, sum#81, count#82, n#83, avg#84, m2#85, count#86, sum#87, count#88, n#89, avg#90, m2#91]
 Arguments: hashpartitioning(i_item_id#24, i_item_desc#25, s_state#22, 100), ENSURE_REQUIREMENTS, [plan_id=29]
 
 (180) HashAggregate
-Input [21]: [i_item_id#24, i_item_desc#25, s_state#22, count#73, sum#74, count#75, n#76, avg#77, m2#78, count#79, sum#80, count#81, n#82, avg#83, m2#84, count#85, sum#86, count#87, n#88, avg#89, m2#90]
+Input [21]: [i_item_id#24, i_item_desc#25, s_state#22, count#74, sum#75, count#76, n#77, avg#78, m2#79, count#80, sum#81, count#82, n#83, avg#84, m2#85, count#86, sum#87, count#88, n#89, avg#90, m2#91]
 Keys [3]: [i_item_id#24, i_item_desc#25, s_state#22]
 Functions [9]: [count(ss_quantity#6), avg(ss_quantity#6), stddev_samp(cast(ss_quantity#6 as double)), count(sr_return_quantity#11), avg(sr_return_quantity#11), stddev_samp(cast(sr_return_quantity#11 as double)), count(cs_quantity#15), avg(cs_quantity#15), stddev_samp(cast(cs_quantity#15 as double))]
-Aggregate Attributes [9]: [count(ss_quantity#6)#51, avg(ss_quantity#6)#52, stddev_samp(cast(ss_quantity#6 as double))#53, count(sr_return_quantity#11)#54, avg(sr_return_quantity#11)#55, stddev_samp(cast(sr_return_quantity#11 as double))#56, count(cs_quantity#15)#57, avg(cs_quantity#15)#58, stddev_samp(cast(cs_quantity#15 as double))#59]
-Results [15]: [i_item_id#24, i_item_desc#25, s_state#22, count(ss_quantity#6)#51 AS store_sales_quantitycount#60, avg(ss_quantity#6)#52 AS store_sales_quantityave#61, stddev_samp(cast(ss_quantity#6 as double))#53 AS store_sales_quantitystdev#62, (stddev_samp(cast(ss_quantity#6 as double))#53 / avg(ss_quantity#6)#52) AS store_sales_quantitycov#63, count(sr_return_quantity#11)#54 AS as_store_returns_quantitycount#64, avg(sr_return_quantity#11)#55 AS as_store_returns_quantityave#65, stddev_samp(cast(sr_return_quantity#11 as double))#56 AS as_store_returns_quantitystdev#66, (stddev_samp(cast(sr_return_quantity#11 as double))#56 / avg(sr_return_quantity#11)#55) AS store_returns_quantitycov#67, count(cs_quantity#15)#57 AS catalog_sales_quantitycount#68, avg(cs_quantity#15)#58 AS catalog_sales_quantityave#69, (stddev_samp(cast(cs_quantity#15 as double))#59 / avg(cs_quantity#15)#58) AS catalog_sales_quantitystdev#70, (stddev_samp(cast(cs_quantity#15 as double))#59 / avg(cs_quantity#15)#58) AS catalog_sales_quantitycov#71]
+Aggregate Attributes [9]: [count(ss_quantity#6)#52, avg(ss_quantity#6)#53, stddev_samp(cast(ss_quantity#6 as double))#54, count(sr_return_quantity#11)#55, avg(sr_return_quantity#11)#56, stddev_samp(cast(sr_return_quantity#11 as double))#57, count(cs_quantity#15)#58, avg(cs_quantity#15)#59, stddev_samp(cast(cs_quantity#15 as double))#60]
+Results [15]: [i_item_id#24, i_item_desc#25, s_state#22, count(ss_quantity#6)#52 AS store_sales_quantitycount#61, avg(ss_quantity#6)#53 AS store_sales_quantityave#62, stddev_samp(cast(ss_quantity#6 as double))#54 AS store_sales_quantitystdev#63, (stddev_samp(cast(ss_quantity#6 as double))#54 / avg(ss_quantity#6)#53) AS store_sales_quantitycov#64, count(sr_return_quantity#11)#55 AS as_store_returns_quantitycount#65, avg(sr_return_quantity#11)#56 AS as_store_returns_quantityave#66, stddev_samp(cast(sr_return_quantity#11 as double))#57 AS as_store_returns_quantitystdev#67, (stddev_samp(cast(sr_return_quantity#11 as double))#57 / avg(sr_return_quantity#11)#56) AS store_returns_quantitycov#68, count(cs_quantity#15)#58 AS catalog_sales_quantitycount#69, avg(cs_quantity#15)#59 AS catalog_sales_quantityave#70, (stddev_samp(cast(cs_quantity#15 as double))#60 / avg(cs_quantity#15)#59) AS catalog_sales_quantitystdev#71, (stddev_samp(cast(cs_quantity#15 as double))#60 / avg(cs_quantity#15)#59) AS catalog_sales_quantitycov#72]
 
 (181) TakeOrderedAndProject
-Input [15]: [i_item_id#24, i_item_desc#25, s_state#22, store_sales_quantitycount#60, store_sales_quantityave#61, store_sales_quantitystdev#62, store_sales_quantitycov#63, as_store_returns_quantitycount#64, as_store_returns_quantityave#65, as_store_returns_quantitystdev#66, store_returns_quantitycov#67, catalog_sales_quantitycount#68, catalog_sales_quantityave#69, catalog_sales_quantitystdev#70, catalog_sales_quantitycov#71]
-Arguments: X, [i_item_id#24 ASC NULLS FIRST, i_item_desc#25 ASC NULLS FIRST, s_state#22 ASC NULLS FIRST], [i_item_id#24, i_item_desc#25, s_state#22, store_sales_quantitycount#60, store_sales_quantityave#61, store_sales_quantitystdev#62, store_sales_quantitycov#63, as_store_returns_quantitycount#64, as_store_returns_quantityave#65, as_store_returns_quantitystdev#66, store_returns_quantitycov#67, catalog_sales_quantitycount#68, catalog_sales_quantityave#69, catalog_sales_quantitystdev#70, catalog_sales_quantitycov#71]
+Input [15]: [i_item_id#24, i_item_desc#25, s_state#22, store_sales_quantitycount#61, store_sales_quantityave#62, store_sales_quantitystdev#63, store_sales_quantitycov#64, as_store_returns_quantitycount#65, as_store_returns_quantityave#66, as_store_returns_quantitystdev#67, store_returns_quantitycov#68, catalog_sales_quantitycount#69, catalog_sales_quantityave#70, catalog_sales_quantitystdev#71, catalog_sales_quantitycov#72]
+Arguments: X, [i_item_id#24 ASC NULLS FIRST, i_item_desc#25 ASC NULLS FIRST, s_state#22 ASC NULLS FIRST], [i_item_id#24, i_item_desc#25, s_state#22, store_sales_quantitycount#61, store_sales_quantityave#62, store_sales_quantitystdev#63, store_sales_quantitycov#64, as_store_returns_quantitycount#65, as_store_returns_quantityave#66, as_store_returns_quantitystdev#67, store_returns_quantitycov#68, catalog_sales_quantitycount#69, catalog_sales_quantityave#70, catalog_sales_quantitystdev#71, catalog_sales_quantitycov#72]
 
 (182) AdaptiveSparkPlan
-Output [15]: [i_item_id#24, i_item_desc#25, s_state#22, store_sales_quantitycount#60, store_sales_quantityave#61, store_sales_quantitystdev#62, store_sales_quantitycov#63, as_store_returns_quantitycount#64, as_store_returns_quantityave#65, as_store_returns_quantitystdev#66, store_returns_quantitycov#67, catalog_sales_quantitycount#68, catalog_sales_quantityave#69, catalog_sales_quantitystdev#70, catalog_sales_quantitycov#71]
+Output [15]: [i_item_id#24, i_item_desc#25, s_state#22, store_sales_quantitycount#61, store_sales_quantityave#62, store_sales_quantitystdev#63, store_sales_quantitycov#64, as_store_returns_quantitycount#65, as_store_returns_quantityave#66, as_store_returns_quantitystdev#67, store_returns_quantitycov#68, catalog_sales_quantitycount#69, catalog_sales_quantityave#70, catalog_sales_quantitystdev#71, catalog_sales_quantitycov#72]
 Arguments: isFinalPlan=true
 

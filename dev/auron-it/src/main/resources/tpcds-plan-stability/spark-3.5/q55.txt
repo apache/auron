@@ -230,25 +230,25 @@ Input [3]: [i_brand#9, i_brand_id#8, _c2#11]
 Keys [2]: [i_brand#9, i_brand_id#8]
 Functions [1]: [partial_sum(_c2#11)]
 Aggregate Attributes [1]: [sum#12]
-Results [3]: [i_brand#9, i_brand_id#8, #13#13]
+Results [3]: [i_brand#9, i_brand_id#8, #13]
 
 (38) NativeShuffleExchange
-Input [3]: [i_brand#9, i_brand_id#8, #13#13]
+Input [3]: [i_brand#9, i_brand_id#8, #13]
 Arguments: hashpartitioning(i_brand#9, i_brand_id#8, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (39) ShuffleQueryStage
-Output [3]: [i_brand#9, i_brand_id#8, #13#13]
+Output [3]: [i_brand#9, i_brand_id#8, #13]
 Arguments: X
 
 (40) AQEShuffleRead
-Input [3]: [i_brand#9, i_brand_id#8, #13#13]
+Input [3]: [i_brand#9, i_brand_id#8, #13]
 Arguments: coalesced
 
 (41) InputAdapter
-Input [3]: [i_brand#9, i_brand_id#8, #13#13]
+Input [3]: [i_brand#9, i_brand_id#8, #13]
 
 (42) NativeHashAggregate
-Input [3]: [i_brand#9, i_brand_id#8, #13#13]
+Input [3]: [i_brand#9, i_brand_id#8, #13]
 Keys [2]: [i_brand#9, i_brand_id#8]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#6))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#6))#14]

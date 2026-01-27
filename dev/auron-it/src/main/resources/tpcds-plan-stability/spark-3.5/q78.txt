@@ -367,25 +367,25 @@ Input [6]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, _c3#12, _c4#13, _c5#14]
 Keys [3]: [d_year#11, ss_item_sk#2, ss_customer_sk#3]
 Functions [3]: [partial_sum(_c3#12), partial_sum(_c4#13), partial_sum(_c5#14)]
 Aggregate Attributes [3]: [sum#15, sum#16, sum#17]
-Results [4]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18#18]
+Results [6]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18, #18, #18]
 
 (37) NativeShuffleExchange
-Input [4]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18#18]
+Input [6]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18, #18, #18]
 Arguments: hashpartitioning(d_year#11, ss_item_sk#2, ss_customer_sk#3, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (38) ShuffleQueryStage
-Output [4]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18#18]
+Output [6]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18, #18, #18]
 Arguments: X
 
 (39) AQEShuffleRead
-Input [4]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18#18]
+Input [6]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18, #18, #18]
 Arguments: coalesced
 
 (40) InputAdapter
-Input [4]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18#18]
+Input [6]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18, #18, #18]
 
 (41) NativeHashAggregate
-Input [4]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18#18]
+Input [6]: [d_year#11, ss_item_sk#2, ss_customer_sk#3, #18, #18, #18]
 Keys [3]: [d_year#11, ss_item_sk#2, ss_customer_sk#3]
 Functions [3]: [sum(ss_quantity#5), sum(UnscaledValue(ss_wholesale_cost#6)), sum(UnscaledValue(ss_sales_price#7))]
 Aggregate Attributes [3]: [sum(ss_quantity#5)#19, sum(UnscaledValue(ss_wholesale_cost#6))#20, sum(UnscaledValue(ss_sales_price#7))#21]
@@ -541,25 +541,25 @@ Input [6]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, _c3#37, _c4#38, _c
 Keys [3]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28]
 Functions [3]: [partial_sum(_c3#37), partial_sum(_c4#38), partial_sum(_c5#39)]
 Aggregate Attributes [3]: [sum#40, sum#41, sum#42]
-Results [4]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18#18]
+Results [6]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18, #18, #18]
 
 (78) NativeShuffleExchange
-Input [4]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18#18]
+Input [6]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18, #18, #18]
 Arguments: hashpartitioning(d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (79) ShuffleQueryStage
-Output [4]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18#18]
+Output [6]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18, #18, #18]
 Arguments: X
 
 (80) AQEShuffleRead
-Input [4]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18#18]
+Input [6]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18, #18, #18]
 Arguments: coalesced
 
 (81) InputAdapter
-Input [4]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18#18]
+Input [6]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18, #18, #18]
 
 (82) NativeHashAggregate
-Input [4]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18#18]
+Input [6]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28, #18, #18, #18]
 Keys [3]: [d_year#36, ws_item_sk#27, ws_bill_customer_sk#28]
 Functions [3]: [sum(ws_quantity#30), sum(UnscaledValue(ws_wholesale_cost#31)), sum(UnscaledValue(ws_sales_price#32))]
 Aggregate Attributes [3]: [sum(ws_quantity#30)#43, sum(UnscaledValue(ws_wholesale_cost#31))#44, sum(UnscaledValue(ws_sales_price#32))#45]
@@ -729,25 +729,25 @@ Input [6]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, _c3#62, _c4#63, _c
 Keys [3]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52]
 Functions [3]: [partial_sum(_c3#62), partial_sum(_c4#63), partial_sum(_c5#64)]
 Aggregate Attributes [3]: [sum#65, sum#66, sum#67]
-Results [4]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18#18]
+Results [6]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18, #18, #18]
 
 (122) NativeShuffleExchange
-Input [4]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18#18]
+Input [6]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18, #18, #18]
 Arguments: hashpartitioning(d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (123) ShuffleQueryStage
-Output [4]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18#18]
+Output [6]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18, #18, #18]
 Arguments: X
 
 (124) AQEShuffleRead
-Input [4]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18#18]
+Input [6]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18, #18, #18]
 Arguments: coalesced
 
 (125) InputAdapter
-Input [4]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18#18]
+Input [6]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18, #18, #18]
 
 (126) NativeHashAggregate
-Input [4]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18#18]
+Input [6]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52, #18, #18, #18]
 Keys [3]: [d_year#61, cs_item_sk#53, cs_bill_customer_sk#52]
 Functions [3]: [sum(cs_quantity#55), sum(UnscaledValue(cs_wholesale_cost#56)), sum(UnscaledValue(cs_sales_price#57))]
 Aggregate Attributes [3]: [sum(cs_quantity#55)#68, sum(UnscaledValue(cs_wholesale_cost#56))#69, sum(UnscaledValue(cs_sales_price#57))#70]

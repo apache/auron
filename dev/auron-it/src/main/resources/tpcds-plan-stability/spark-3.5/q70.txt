@@ -436,25 +436,25 @@ Input [2]: [s_state#13, _c1#15]
 Keys [1]: [s_state#13]
 Functions [1]: [partial_sum(_c1#15)]
 Aggregate Attributes [1]: [sum#16]
-Results [2]: [s_state#13, #17#17]
+Results [2]: [s_state#13, #17]
 
 (66) NativeShuffleExchange
-Input [2]: [s_state#13, #17#17]
+Input [2]: [s_state#13, #17]
 Arguments: hashpartitioning(s_state#13, 100), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (67) ShuffleQueryStage
-Output [2]: [s_state#13, #17#17]
+Output [2]: [s_state#13, #17]
 Arguments: X
 
 (68) AQEShuffleRead
-Input [2]: [s_state#13, #17#17]
+Input [2]: [s_state#13, #17]
 Arguments: coalesced
 
 (69) InputAdapter
-Input [2]: [s_state#13, #17#17]
+Input [2]: [s_state#13, #17]
 
 (70) NativeHashAggregate
-Input [2]: [s_state#13, #17#17]
+Input [2]: [s_state#13, #17]
 Keys [1]: [s_state#13]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#11))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#11))#18]
@@ -532,25 +532,25 @@ Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, _c3#25]
 Keys [3]: [s_state#22, s_county#23, spark_grouping_id#24]
 Functions [1]: [partial_sum(_c3#25)]
 Aggregate Attributes [1]: [sum#26]
-Results [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17#17]
+Results [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17]
 
 (88) NativeShuffleExchange
-Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17#17]
+Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17]
 Arguments: hashpartitioning(s_state#22, s_county#23, spark_grouping_id#24, 100), ENSURE_REQUIREMENTS, [plan_id=10]
 
 (89) ShuffleQueryStage
-Output [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17#17]
+Output [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17]
 Arguments: X
 
 (90) AQEShuffleRead
-Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17#17]
+Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17]
 Arguments: coalesced
 
 (91) InputAdapter
-Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17#17]
+Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17]
 
 (92) NativeHashAggregate
-Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17#17]
+Input [4]: [s_state#22, s_county#23, spark_grouping_id#24, #17]
 Keys [3]: [s_state#22, s_county#23, spark_grouping_id#24]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#27]
