@@ -366,7 +366,7 @@ fn parse_writer_props(prop_kvs: &[(String, String)]) -> WriterProperties {
                     "PARQUET_1_0" => WriterVersion::PARQUET_1_0,
                     "PARQUET_2_0" => WriterVersion::PARQUET_2_0,
                     _ => {
-                        log::warn!("unsupported parquet writer version: {}", value);
+                        log::warn!("unsupported parquet writer version: {value}");
                         WriterVersion::PARQUET_1_0
                     }
                 })
@@ -390,7 +390,7 @@ fn parse_writer_props(prop_kvs: &[(String, String)]) -> WriterProperties {
                         Compression::ZSTD(ZstdLevel::try_new(level).unwrap_or_default())
                     }
                     _ => {
-                        log::warn!("unsupported parquet compression: {}", value);
+                        log::warn!("unsupported parquet compression: {value}");
                         Compression::UNCOMPRESSED
                     }
                 })

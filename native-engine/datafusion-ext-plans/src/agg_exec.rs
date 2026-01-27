@@ -765,7 +765,7 @@ mod fuzztest {
         let partial_agg = Arc::new(AggExec::try_new(
             HashAgg,
             vec![GroupingExpr {
-                field_name: format!("key"),
+                field_name: "key".to_string(),
                 expr: phys_expr::col("key", &schema)?,
             }],
             vec![
@@ -792,7 +792,7 @@ mod fuzztest {
         let final_agg = Arc::new(AggExec::try_new(
             HashAgg,
             vec![GroupingExpr {
-                field_name: format!("key"),
+                field_name: "key".to_string(),
                 expr: phys_expr::col("key", &schema)?,
             }],
             vec![

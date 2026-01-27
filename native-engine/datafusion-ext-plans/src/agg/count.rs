@@ -16,7 +16,6 @@
 use std::{
     any::Any,
     fmt::{Debug, Formatter},
-    io::Cursor,
     sync::Arc,
 };
 
@@ -33,7 +32,7 @@ use crate::{
         acc::{AccColumn, AccColumnRef},
         agg::{Agg, IdxSelection},
     },
-    idx_for, idx_for_zipped, idx_with_iter,
+    idx_for, idx_for_zipped,
 };
 
 pub struct AggCount {
@@ -149,15 +148,11 @@ impl Agg for AggCount {
     }
 
     fn final_merge(&self, accs: &mut AccColumnRef, acc_idx: IdxSelection<'_>) -> Result<ArrayRef> {
-        let accs = downcast_any!(accs, mut AccCountColumn)?;
+        Ok(accs.freeze_to_arrays(acc_idx)?[0].clone())
+    }
 
-        idx_with_iter! {
-            (acc_idx_iter @ acc_idx) => {
-                Ok(Arc::new(Int64Array::from_iter_values(
-                    acc_idx_iter.map(|idx| accs.values[idx])
-                )))
-            }
-        }
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &[DataType::Int64]
     }
 }
 
@@ -190,27 +185,23 @@ impl AccColumn for AccCountColumn {
         self.values.capacity() * 2 * size_of::<i64>()
     }
 
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
-        let mut array_idx = 0;
-
+    fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
+        let mut values = Vec::with_capacity(idx.len());
         idx_for! {
             (idx in idx) => {
-                write_len(self.values[idx] as usize, &mut array[array_idx])?;
-                array_idx += 1;
+                values.push(self.values[idx]);
             }
         }
+        Ok(vec![Arc::new(Int64Array::from(values))])
+    }
+
+    fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
+        let array = downcast_any!(arrays[0], Int64Array)?;
+        self.values = array.iter().map(|v| v.unwrap_or(0)).collect();
         Ok(())
     }
 
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
-        assert_eq!(self.num_records(), 0, "expect empty AccColumn");
-        for cursor in cursors {
-            self.values.push(read_len(cursor)? as i64);
-        }
-        Ok(())
-    }
-
-    fn spill(&self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
+    fn spill(&mut self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
         idx_for! {
             (idx in idx) => {
                 write_len(self.values[idx] as usize, w)?;

@@ -21,7 +21,7 @@ use std::{
 };
 
 use arrow::{
-    array::{ArrayRef, AsArray, BinaryBuilder},
+    array::{ArrayRef, AsArray, BinaryArray, BinaryBuilder},
     datatypes::{DataType, Int64Type},
 };
 use auron_memmgr::spill::{SpillCompressedReader, SpillCompressedWriter};
@@ -106,6 +106,10 @@ impl Agg for AggBloomFilter {
         });
         bloom_filters.resize(num_rows);
         bloom_filters
+    }
+
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &[DataType::Binary]
     }
 
     fn partial_update(
@@ -245,36 +249,41 @@ impl AccColumn for AccBloomFilterColumn {
             .sum()
     }
 
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
+    fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
+        let mut array = vec![];
+
         idx_for! {
             (idx in idx) => {
-                let w = &mut array[idx];
                 if let Some(bloom_filter) = &self.bloom_filters[idx] {
+                    let mut w = vec![];
                     w.write_u8(1)?;
-                    bloom_filter.write_to(w)?;
+                    bloom_filter.write_to(&mut w)?;
+                    array.push(Some(w));
                 } else {
-                    w.write_u8(0)?;
+                    array.push(None);
                 }
+            }
+        }
+
+        let array = Arc::new(BinaryArray::from_iter(array));
+        Ok(vec![array])
+    }
+
+    fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
+        let array = downcast_any!(arrays[0], BinaryArray)?;
+
+        for v in array {
+            if let Some(w) = v {
+                self.bloom_filters
+                    .push(Some(SparkBloomFilter::read_from(&mut Cursor::new(w))?));
+            } else {
+                self.bloom_filters.push(None);
             }
         }
         Ok(())
     }
 
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
-        assert_eq!(self.num_records(), 0, "expect empty AccColumn");
-        for r in cursors {
-            self.bloom_filters.push({
-                if r.read_u8()? == 1 {
-                    Some(SparkBloomFilter::read_from(r)?)
-                } else {
-                    None
-                }
-            });
-        }
-        Ok(())
-    }
-
-    fn spill(&self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
+    fn spill(&mut self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
         idx_for! {
             (idx in idx) => {
                 if let Some(bloom_filter) = &self.bloom_filters[idx] {

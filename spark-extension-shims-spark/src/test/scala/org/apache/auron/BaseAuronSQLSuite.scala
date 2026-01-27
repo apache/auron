@@ -16,10 +16,37 @@
  */
 package org.apache.auron
 
+import java.io.File
+
+import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait BaseAuronSQLSuite extends SharedSparkSession {
+  protected val suiteWorkspace: String = getClass.getResource("/").getPath + "auron-tests-workdir"
+  protected val warehouseDir: String = suiteWorkspace + "/spark-warehouse"
+  protected val metastoreDir: String = suiteWorkspace + "/meta"
+
+  protected def resetSuiteWorkspace(): Unit = {
+    val workdir = new File(suiteWorkspace)
+    if (workdir.exists()) {
+      FileUtils.forceDelete(workdir)
+    }
+    FileUtils.forceMkdir(workdir)
+    FileUtils.forceMkdir(new File(warehouseDir))
+    FileUtils.forceMkdir(new File(metastoreDir))
+  }
+
+  override def beforeAll(): Unit = {
+    // Prepare a clean workspace before SparkSession initialization
+    resetSuiteWorkspace()
+    super.beforeAll()
+    spark.sparkContext.setLogLevel("WARN")
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+  }
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
@@ -30,6 +57,6 @@ trait BaseAuronSQLSuite extends SharedSparkSession {
       .set("spark.memory.offHeap.enabled", "false")
       .set("spark.auron.enable", "true")
       .set("spark.ui.enabled", "false")
+      .set("spark.sql.warehouse.dir", warehouseDir)
   }
-
 }

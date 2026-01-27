@@ -189,16 +189,15 @@ impl ExecutionContext {
 
                             // short path for not coalescable batches
                             let batch_num_rows = batch.batch().num_rows();
-                            if self.staging_batches.is_empty() {
-                                if batch_num_rows > batch_size() / 4 {
-                                    return Poll::Ready(Some(Ok(batch)));
-                                }
+                            if self.staging_batches.is_empty() && batch_num_rows > batch_size() / 4
+                            {
+                                return Poll::Ready(Some(Ok(batch)));
                             }
                             let batch_mem_size = batch.batch().get_batch_mem_size();
-                            if self.staging_batches.is_empty() {
-                                if batch_mem_size >= suggested_batch_mem_size() / 4 {
-                                    return Poll::Ready(Some(Ok(batch)));
-                                }
+                            if self.staging_batches.is_empty()
+                                && batch_mem_size >= suggested_batch_mem_size() / 4
+                            {
+                                return Poll::Ready(Some(Ok(batch)));
                             }
 
                             self.staging_rows += batch_num_rows;
@@ -593,7 +592,7 @@ impl ExecutionContext {
                 if !task_running {
                     panic!("output_with_sender[{desc}] canceled due to task finished/killed");
                 } else {
-                    panic!("output_with_sender[{desc}] error: {}", err.to_string());
+                    panic!("output_with_sender[{desc}] error: {err}");
                 }
             }
             Ok::<_, DataFusionError>(())

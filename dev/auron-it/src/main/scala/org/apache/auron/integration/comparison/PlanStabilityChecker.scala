@@ -73,6 +73,7 @@ class PlanStabilityChecker(
                  |
                  |--- Actual ---
                  |$actualPlan
+                 |----------------
                  |""".stripMargin)
       false
     }

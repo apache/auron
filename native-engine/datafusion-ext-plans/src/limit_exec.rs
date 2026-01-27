@@ -41,16 +41,18 @@ use crate::common::execution_context::ExecutionContext;
 #[derive(Debug)]
 pub struct LimitExec {
     input: Arc<dyn ExecutionPlan>,
-    limit: u64,
+    limit: usize,
+    offset: usize,
     pub metrics: ExecutionPlanMetricsSet,
     props: OnceCell<PlanProperties>,
 }
 
 impl LimitExec {
-    pub fn new(input: Arc<dyn ExecutionPlan>, limit: u64) -> Self {
+    pub fn new(input: Arc<dyn ExecutionPlan>, limit: usize, offset: usize) -> Self {
         Self {
             input,
             limit,
+            offset,
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
         }
@@ -59,7 +61,7 @@ impl LimitExec {
 
 impl DisplayAs for LimitExec {
     fn fmt_as(&self, _t: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "LimitExec(limit={})", self.limit)
+        write!(f, "LimitExec(limit={},offset={})", self.limit, self.offset)
     }
 }
 
@@ -95,7 +97,11 @@ impl ExecutionPlan for LimitExec {
         self: Arc<Self>,
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        Ok(Arc::new(Self::new(children[0].clone(), self.limit)))
+        Ok(Arc::new(Self::new(
+            children[0].clone(),
+            self.limit,
+            self.offset,
+        )))
     }
 
     fn execute(
@@ -105,15 +111,19 @@ impl ExecutionPlan for LimitExec {
     ) -> Result<SendableRecordBatchStream> {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
         let input = exec_ctx.execute_with_input_stats(&self.input)?;
-        execute_limit(input, self.limit, exec_ctx)
+        if self.offset == 0 {
+            execute_limit(input, self.limit, exec_ctx)
+        } else {
+            execute_limit_with_offset(input, self.limit, self.offset, exec_ctx)
+        }
     }
 
     fn statistics(&self) -> Result<Statistics> {
         Statistics::with_fetch(
             self.input.statistics()?,
             self.schema(),
-            Some(self.limit as usize),
-            0,
+            Some(self.limit),
+            self.offset,
             1,
         )
     }
@@ -121,7 +131,7 @@ impl ExecutionPlan for LimitExec {
 
 fn execute_limit(
     mut input: SendableRecordBatchStream,
-    limit: u64,
+    limit: usize,
     exec_ctx: Arc<ExecutionContext>,
 ) -> Result<SendableRecordBatchStream> {
     Ok(exec_ctx
@@ -131,11 +141,49 @@ fn execute_limit(
             while remaining > 0
                 && let Some(mut batch) = input.next().await.transpose()?
             {
-                if remaining < batch.num_rows() as u64 {
-                    batch = batch.slice(0, remaining as usize);
+                if remaining < batch.num_rows() {
+                    batch = batch.slice(0, remaining);
                     remaining = 0;
                 } else {
-                    remaining -= batch.num_rows() as u64;
+                    remaining -= batch.num_rows();
+                }
+                exec_ctx.baseline_metrics().record_output(batch.num_rows());
+                sender.send(batch).await;
+            }
+            Ok(())
+        }))
+}
+
+fn execute_limit_with_offset(
+    mut input: SendableRecordBatchStream,
+    limit: usize,
+    offset: usize,
+    exec_ctx: Arc<ExecutionContext>,
+) -> Result<SendableRecordBatchStream> {
+    Ok(exec_ctx
+        .clone()
+        .output_with_sender("Limit", move |sender| async move {
+            let mut skip = offset;
+            let mut remaining = limit - skip;
+            while remaining > 0
+                && let Some(mut batch) = input.next().await.transpose()?
+            {
+                if skip > 0 {
+                    let rows = batch.num_rows();
+                    if skip >= rows {
+                        skip -= rows;
+                        continue;
+                    }
+
+                    batch = batch.slice(skip, rows - skip);
+                    skip = 0;
+                }
+
+                if remaining < batch.num_rows() {
+                    batch = batch.slice(0, remaining);
+                    remaining = 0;
+                } else {
+                    remaining -= batch.num_rows();
                 }
                 exec_ctx.baseline_metrics().record_output(batch.num_rows());
                 sender.send(batch).await;
@@ -207,7 +255,7 @@ mod test {
             ("b", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
             ("c", &vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4]),
         )?;
-        let limit_exec = LimitExec::new(input, 2_u64);
+        let limit_exec = LimitExec::new(input, 2, 0);
         let session_ctx = SessionContext::new();
         let task_ctx = session_ctx.task_ctx();
         let output = limit_exec.execute(0, task_ctx)?;
@@ -224,6 +272,33 @@ mod test {
         ];
         assert_batches_eq!(expected, &batches);
         assert_eq!(row_count, Precision::Exact(2));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_limit_with_offset() -> Result<()> {
+        let input = build_table(
+            ("a", &vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+            ("b", &vec![9, 8, 7, 6, 5, 4, 3, 2, 1, 0]),
+            ("c", &vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4]),
+        )?;
+        let limit_exec = LimitExec::new(input, 7, 5);
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+        let output = limit_exec.execute(0, task_ctx)?;
+        let batches = common::collect(output).await?;
+        let row_count: usize = batches.iter().map(|batch| batch.num_rows()).sum();
+
+        let expected = vec![
+            "+---+---+---+",
+            "| a | b | c |",
+            "+---+---+---+",
+            "| 5 | 4 | 0 |",
+            "| 6 | 3 | 1 |",
+            "+---+---+---+",
+        ];
+        assert_batches_eq!(expected, &batches);
+        assert_eq!(row_count, 2);
         Ok(())
     }
 }

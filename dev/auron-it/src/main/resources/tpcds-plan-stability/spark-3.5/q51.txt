@@ -229,25 +229,25 @@ Input [3]: [ws_item_sk#2, d_date#5, _c2#7]
 Keys [2]: [ws_item_sk#2, d_date#5]
 Functions [1]: [partial_sum(_c2#7)]
 Aggregate Attributes [1]: [sum#8]
-Results [3]: [ws_item_sk#2, d_date#5, #9#9]
+Results [3]: [ws_item_sk#2, d_date#5, #9]
 
 (22) NativeShuffleExchange
-Input [3]: [ws_item_sk#2, d_date#5, #9#9]
+Input [3]: [ws_item_sk#2, d_date#5, #9]
 Arguments: hashpartitioning(ws_item_sk#2, d_date#5, 100), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (23) ShuffleQueryStage
-Output [3]: [ws_item_sk#2, d_date#5, #9#9]
+Output [3]: [ws_item_sk#2, d_date#5, #9]
 Arguments: X
 
 (24) AQEShuffleRead
-Input [3]: [ws_item_sk#2, d_date#5, #9#9]
+Input [3]: [ws_item_sk#2, d_date#5, #9]
 Arguments: coalesced
 
 (25) InputAdapter
-Input [3]: [ws_item_sk#2, d_date#5, #9#9]
+Input [3]: [ws_item_sk#2, d_date#5, #9]
 
 (26) NativeHashAggregate
-Input [3]: [ws_item_sk#2, d_date#5, #9#9]
+Input [3]: [ws_item_sk#2, d_date#5, #9]
 Keys [2]: [ws_item_sk#2, d_date#5]
 Functions [1]: [sum(UnscaledValue(ws_sales_price#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_sales_price#3))#10]
@@ -381,25 +381,25 @@ Input [3]: [ss_item_sk#15, d_date#18, _c2#19]
 Keys [2]: [ss_item_sk#15, d_date#18]
 Functions [1]: [partial_sum(_c2#19)]
 Aggregate Attributes [1]: [sum#20]
-Results [3]: [ss_item_sk#15, d_date#18, #9#9]
+Results [3]: [ss_item_sk#15, d_date#18, #9]
 
 (59) NativeShuffleExchange
-Input [3]: [ss_item_sk#15, d_date#18, #9#9]
+Input [3]: [ss_item_sk#15, d_date#18, #9]
 Arguments: hashpartitioning(ss_item_sk#15, d_date#18, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (60) ShuffleQueryStage
-Output [3]: [ss_item_sk#15, d_date#18, #9#9]
+Output [3]: [ss_item_sk#15, d_date#18, #9]
 Arguments: X
 
 (61) AQEShuffleRead
-Input [3]: [ss_item_sk#15, d_date#18, #9#9]
+Input [3]: [ss_item_sk#15, d_date#18, #9]
 Arguments: coalesced
 
 (62) InputAdapter
-Input [3]: [ss_item_sk#15, d_date#18, #9#9]
+Input [3]: [ss_item_sk#15, d_date#18, #9]
 
 (63) NativeHashAggregate
-Input [3]: [ss_item_sk#15, d_date#18, #9#9]
+Input [3]: [ss_item_sk#15, d_date#18, #9]
 Keys [2]: [ss_item_sk#15, d_date#18]
 Functions [1]: [sum(UnscaledValue(ss_sales_price#16))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#16))#21]

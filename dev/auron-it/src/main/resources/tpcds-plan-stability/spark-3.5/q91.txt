@@ -580,25 +580,25 @@ Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, 
 Keys [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20]
 Functions [1]: [partial_sum(_c5#23)]
 Aggregate Attributes [1]: [sum#24]
-Results [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25#25]
+Results [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25]
 
 (99) NativeShuffleExchange
-Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25#25]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25]
 Arguments: hashpartitioning(cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (100) ShuffleQueryStage
-Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25#25]
+Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25]
 Arguments: X
 
 (101) AQEShuffleRead
-Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25#25]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25]
 Arguments: coalesced
 
 (102) InputAdapter
-Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25#25]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25]
 
 (103) NativeHashAggregate
-Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25#25]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20, #25]
 Keys [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#19, cd_education_status#20]
 Functions [1]: [sum(UnscaledValue(cr_net_loss#8))]
 Aggregate Attributes [1]: [sum(UnscaledValue(cr_net_loss#8))#26]

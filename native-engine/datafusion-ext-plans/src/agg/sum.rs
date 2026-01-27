@@ -26,9 +26,7 @@ use datafusion_ext_commons::{df_unimplemented_err, downcast_any};
 use crate::{
     agg::{
         Agg,
-        acc::{
-            AccColumnRef, AccPrimColumn, acc_generic_column_to_array, create_acc_generic_column,
-        },
+        acc::{AccColumnRef, AccPrimColumn, create_acc_generic_column},
         agg::IdxSelection,
     },
     idx_for_zipped,
@@ -37,11 +35,17 @@ use crate::{
 pub struct AggSum {
     child: PhysicalExprRef,
     data_type: DataType,
+    acc_array_data_types: Vec<DataType>,
 }
 
 impl AggSum {
     pub fn try_new(child: PhysicalExprRef, data_type: DataType) -> Result<Self> {
-        Ok(Self { child, data_type })
+        let acc_array_data_types = vec![data_type.clone()];
+        Ok(Self {
+            child,
+            data_type,
+            acc_array_data_types,
+        })
     }
 }
 
@@ -84,7 +88,11 @@ impl Agg for AggSum {
     }
 
     fn create_acc_column(&self, num_rows: usize) -> AccColumnRef {
-        create_acc_generic_column(&self.data_type, num_rows)
+        create_acc_generic_column(self.data_type.clone(), num_rows)
+    }
+
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &self.acc_array_data_types
     }
 
     fn partial_update(
@@ -145,6 +153,6 @@ impl Agg for AggSum {
     }
 
     fn final_merge(&self, accs: &mut AccColumnRef, acc_idx: IdxSelection<'_>) -> Result<ArrayRef> {
-        acc_generic_column_to_array(accs, &self.data_type, acc_idx)
+        Ok(accs.freeze_to_arrays(acc_idx)?[0].clone())
     }
 }

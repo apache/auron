@@ -401,18 +401,18 @@ Input [1]: [ss_quantity#5]
 Keys: []
 Functions [1]: [partial_sum(ss_quantity#5)]
 Aggregate Attributes [1]: [sum#17]
-Results [1]: [#18#18]
+Results [1]: [#18]
 
 (69) NativeShuffleExchange
-Input [1]: [#18#18]
+Input [1]: [#18]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 
 (70) ShuffleQueryStage
-Output [1]: [#18#18]
+Output [1]: [#18]
 Arguments: X
 
 (71) NativeHashAggregate
-Input [1]: [#18#18]
+Input [1]: [#18]
 Keys: []
 Functions [1]: [sum(ss_quantity#5)]
 Aggregate Attributes [1]: [sum(ss_quantity#5)#19]

@@ -53,14 +53,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.CoalescedPartitionSpec
-import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.PartialMapperPartitionSpec
-import org.apache.spark.sql.execution.PartialReducerPartitionSpec
-import org.apache.spark.sql.execution.ShuffledRowRDD
-import org.apache.spark.sql.execution.ShufflePartitionSpec
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, BroadcastQueryStageExec, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.auron.plan._
 import org.apache.spark.sql.execution.auron.plan.ConvertToNativeExec
@@ -98,7 +91,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeWindowBase
 import org.apache.spark.sql.execution.auron.plan.NativeWindowExec
 import org.apache.spark.sql.execution.auron.shuffle.{AuronBlockStoreShuffleReaderBase, AuronRssShuffleManagerBase, RssPartitionWriterBase}
 import org.apache.spark.sql.execution.datasources.PartitionedFile
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 import org.apache.spark.sql.execution.joins.auron.plan.NativeShuffledHashJoinExecProvider
@@ -292,16 +285,39 @@ class ShimsImpl extends Shims with Logging {
       child: SparkPlan): NativeGenerateBase =
     NativeGenerateExec(generator, requiredChildOutput, outer, generatorOutput, child)
 
-  override def createNativeGlobalLimitExec(limit: Long, child: SparkPlan): NativeGlobalLimitBase =
-    NativeGlobalLimitExec(limit, child)
+  @sparkver("3.4 / 3.5")
+  private def effectiveLimit(rawLimit: Int): Int =
+    if (rawLimit == -1) Int.MaxValue else rawLimit
 
-  override def createNativeLocalLimitExec(limit: Long, child: SparkPlan): NativeLocalLimitBase =
+  @sparkver("3.4 / 3.5")
+  override def getLimitAndOffset(plan: GlobalLimitExec): (Int, Int) = {
+    (effectiveLimit(plan.limit), plan.offset)
+  }
+
+  @sparkver("3.4 / 3.5")
+  override def getLimitAndOffset(plan: TakeOrderedAndProjectExec): (Int, Int) = {
+    (effectiveLimit(plan.limit), plan.offset)
+  }
+
+  override def createNativeGlobalLimitExec(
+      limit: Int,
+      offset: Int,
+      child: SparkPlan): NativeGlobalLimitBase =
+    NativeGlobalLimitExec(limit, offset, child)
+
+  override def createNativeLocalLimitExec(limit: Int, child: SparkPlan): NativeLocalLimitBase =
     NativeLocalLimitExec(limit, child)
+
+  @sparkver("3.4 / 3.5")
+  override def getLimitAndOffset(plan: CollectLimitExec): (Int, Int) = {
+    (effectiveLimit(plan.limit), plan.offset)
+  }
 
   override def createNativeCollectLimitExec(
       limit: Int,
+      offset: Int,
       child: SparkPlan): NativeCollectLimitBase =
-    NativeCollectLimitExec(limit, child)
+    NativeCollectLimitExec(limit, offset, child)
 
   override def createNativeParquetInsertIntoHiveTableExec(
       cmd: InsertIntoHiveTable,
@@ -338,13 +354,14 @@ class ShimsImpl extends Shims with Logging {
     NativeSortExec(sortOrder, global, child)
 
   override def createNativeTakeOrderedExec(
-      limit: Long,
+      limit: Int,
+      offset: Int,
       sortOrder: Seq[SortOrder],
       child: SparkPlan): NativeTakeOrderedBase =
-    NativeTakeOrderedExec(limit, sortOrder, child)
+    NativeTakeOrderedExec(limit, offset, sortOrder, child)
 
   override def createNativePartialTakeOrderedExec(
-      limit: Long,
+      limit: Int,
       sortOrder: Seq[SortOrder],
       child: SparkPlan,
       metrics: Map[String, SQLMetric]): NativePartialTakeOrderedBase =
@@ -1086,6 +1103,25 @@ class ShimsImpl extends Shims with Logging {
         case _ => false
       })
   }
+
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  override def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
+
+  @sparkver("3.0 / 3.1")
+  override def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  override def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
+
+  @sparkver("3.0")
+  override def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = None
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  override def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean =
+    exec.isNullAwareAntiJoin
+
+  @sparkver("3.0")
+  override def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = false
 }
 
 case class ForceNativeExecutionWrapper(override val child: SparkPlan)
