@@ -204,18 +204,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               .toDF("c1", "c2")
               .write
               .orc(path)
-            val correctAnswer = Seq(Row(1, 2), Row(3, 4), Row(5, 6), Row(null, null))
             checkSparkAnswerAndOperator(() => spark.read.orc(path))
 
             withTable("t") {
               sql(s"CREATE EXTERNAL TABLE t(c3 INT, c2 INT) USING ORC LOCATION '$path'")
-
-              val _ = if (forcePositionalEvolution) {
-                correctAnswer
-              } else {
-                Seq(Row(null, 2), Row(null, 4), Row(null, 6), Row(null, null))
-              }
-
               checkSparkAnswerAndOperator(() => spark.table("t"))
             }
           }
@@ -236,7 +228,6 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               .write
               .partitionBy("p")
               .orc(path)
-            val correctAnswer = Seq(Row(1, 2, 1), Row(3, 4, 2), Row(5, 6, 3), Row(null, null, 4))
             checkSparkAnswerAndOperator(() => spark.read.orc(path))
 
             withTable("t") {
@@ -247,12 +238,6 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                      |LOCATION '$path'
                      |""".stripMargin)
               sql("MSCK REPAIR TABLE t")
-              val _ = if (forcePositionalEvolution) {
-                correctAnswer
-              } else {
-                Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3), Row(null, null, 4))
-              }
-
               checkSparkAnswerAndOperator(() => spark.table("t"))
             }
           }
