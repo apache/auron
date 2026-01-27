@@ -1454,6 +1454,7 @@ mod test {
         prelude::SessionContext,
     };
 
+    use super::common_prefix_len;
     use crate::sort_exec::SortExec;
 
     fn build_table_i32(
@@ -1490,6 +1491,21 @@ mod test {
             schema,
             None,
         )?))
+    }
+
+    // Verify that `common_prefix_len` correctly computes prefixes of small fixed
+    // sizes. This ensures compiler optimizations do not incorrectly transform
+    // the function for small lengths.
+    #[test]
+    fn has_common_prefix_len_been_optimized_into_bogusness() {
+        let cpl = common_prefix_len(&[0; 8], &[0; 8]);
+        assert_eq!(cpl, 8);
+        let cpl = common_prefix_len(&[0; 4], &[0; 4]);
+        assert_eq!(cpl, 4);
+        let cpl = common_prefix_len(&[0; 2], &[0; 2]);
+        assert_eq!(cpl, 2);
+        let cpl = common_prefix_len(&[0; 1], &[0; 1]);
+        assert_eq!(cpl, 1);
     }
 
     #[tokio::test]
