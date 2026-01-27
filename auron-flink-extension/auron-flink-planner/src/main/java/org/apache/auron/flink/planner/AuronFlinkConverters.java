@@ -16,6 +16,8 @@
  */
 package org.apache.auron.flink.planner;
 
+import java.io.File;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.auron.protobuf.ArrowType;
@@ -64,9 +66,12 @@ public class AuronFlinkConverters {
         // Build the file group
         FileGroup.Builder fileGroupBuilder = FileGroup.newBuilder();
         for (String path : filePaths) {
+            // Get actual file size from filesystem
+            long fileSize = getFileSize(path);
+
             PartitionedFile partitionedFile = PartitionedFile.newBuilder()
                     .setPath(path)
-                    .setSize(0) // Size will be determined at runtime
+                    .setSize(fileSize) // Actual file size from filesystem
                     .setLastModifiedNs(0)
                     .build();
             fileGroupBuilder.addFiles(partitionedFile);
@@ -279,5 +284,34 @@ public class AuronFlinkConverters {
             }
         }
         result.add(condition);
+    }
+
+
+    /**
+     * Gets the file size for a given file path (supports file:// URLs).
+     *
+     * @param path File path (can be file:// URL or absolute path)
+     * @return File size in bytes, or 0 if file cannot be accessed
+     */
+    private static long getFileSize(String path) {
+        try {
+            File file;
+            if (path.startsWith("file://")) {
+                // Handle file:// URL
+                URI uri = new URI(path);
+                file = new File(uri);
+            } else {
+                // Handle absolute path
+                file = new File(path);
+            }
+
+            if (file.exists() && file.isFile()) {
+                return file.length();
+            }
+        } catch (Exception e) {
+            // Log warning but don't fail - return 0 and let native code handle it
+            System.err.println("Warning: Could not get file size for " + path + ": " + e.getMessage());
+        }
+        return 0;
     }
 }

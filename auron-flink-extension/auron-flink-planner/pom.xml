@@ -205,16 +205,16 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- Hadoop for Parquet tests -->
+    <!-- Hadoop for Parquet support (provided by Flink runtime) -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-api</artifactId>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-runtime</artifactId>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
