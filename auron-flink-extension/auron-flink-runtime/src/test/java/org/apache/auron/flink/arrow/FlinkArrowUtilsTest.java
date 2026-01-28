@@ -38,6 +38,7 @@ import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.MapType;
+import org.apache.flink.table.types.logical.NullType;
 import org.apache.flink.table.types.logical.RawType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.SmallIntType;
@@ -53,6 +54,9 @@ public class FlinkArrowUtilsTest {
 
     @Test
     public void testBasicTypeConversion() {
+        // Null
+        assertEquals(ArrowType.Null.INSTANCE, FlinkArrowUtils.toArrowType(new NullType()));
+
         // Boolean
         assertEquals(ArrowType.Bool.INSTANCE, FlinkArrowUtils.toArrowType(new BooleanType()));
 
@@ -82,6 +86,7 @@ public class FlinkArrowUtilsTest {
         assertTrue(arrowDecimal instanceof ArrowType.Decimal);
         assertEquals(10, ((ArrowType.Decimal) arrowDecimal).getPrecision());
         assertEquals(2, ((ArrowType.Decimal) arrowDecimal).getScale());
+        assertEquals(128, ((ArrowType.Decimal) arrowDecimal).getBitWidth());
 
         // Date and timestamp types
         assertEquals(new ArrowType.Date(DateUnit.DAY), FlinkArrowUtils.toArrowType(new DateType()));
