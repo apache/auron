@@ -461,7 +461,7 @@ object AuronConverters extends Logging {
           assert(
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
             s"Parquet scan with timestamp type is not supported for table: ${tableIdentifier
-              .getOrElse("unknown")}. " +
+                .getOrElse("unknown")}. " +
               "Set spark.auron.enable.scan.parquet.timestamp=true to enable timestamp support " +
               "or remove timestamp columns from the query.")
         }
@@ -472,7 +472,7 @@ object AuronConverters extends Logging {
           assert(
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
             s"ORC scan with timestamp type is not supported for tableIdentifier: ${tableIdentifier
-              .getOrElse("unknown")}. " +
+                .getOrElse("unknown")}. " +
               "Set spark.auron.enable.scan.orc.timestamp=true to enable timestamp support " +
               "or remove timestamp columns from the query.")
         }
@@ -480,7 +480,7 @@ object AuronConverters extends Logging {
       case p =>
         throw new NotImplementedError(
           s"Cannot convert FileSourceScanExec tableIdentifier: ${tableIdentifier.getOrElse(
-            "unknown")}, class: ${p.getClass.getName}")
+              "unknown")}, class: ${p.getClass.getName}")
     }
   }
 

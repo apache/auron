@@ -60,13 +60,21 @@ impl RandnExpr {
 
 impl Display for RandnExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Randn(seed={}, partition={})", self.seed, self.partition_id)
+        write!(
+            f,
+            "Randn(seed={}, partition={})",
+            self.seed, self.partition_id
+        )
     }
 }
 
 impl Debug for RandnExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Randn(seed={}, partition={})", self.seed, self.partition_id)
+        write!(
+            f,
+            "Randn(seed={}, partition={})",
+            self.seed, self.partition_id
+        )
     }
 }
 
@@ -219,7 +227,10 @@ mod tests {
 
         // At least one value should be different
         let any_different = (0..5).any(|i| arr1.value(i) != arr2.value(i));
-        assert!(any_different, "Different seeds should produce different values");
+        assert!(
+            any_different,
+            "Different seeds should produce different values"
+        );
 
         Ok(())
     }
