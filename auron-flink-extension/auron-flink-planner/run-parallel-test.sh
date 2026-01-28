@@ -1,21 +1,17 @@
 #!/bin/bash
 
-# Robust E2E test runner that copies all dependencies first
-# This ensures all Flink jars (including provided scope) are available
-#
-# Usage:
-#   ./run-e2e-test-final.sh                    # Runs AuronExecutionVerificationTest
+# Test runner for parallelism > 1 (AuronParallelExecutionTest)
+# Verifies that file splitting works correctly and data is not duplicated
 
 set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 AURON_ROOT="$SCRIPT_DIR/../.."
 
-# Use the main test class
-TEST_CLASS="AuronExecutionVerificationTest"
+TEST_CLASS="AuronParallelExecutionTest"
 
 echo "=========================================="
-echo "Running Auron Flink Test: $TEST_CLASS"
+echo "Running Auron Parallel Execution Test"
 echo "=========================================="
 echo ""
 
@@ -41,7 +37,7 @@ if [ ! -f "$NATIVE_LIB" ]; then
 fi
 
 # Ensure test classes are compiled (skipping native library rebuild)
-TEST_CLASS_FILE="$SCRIPT_DIR/target/test-classes/org/apache/auron/flink/planner/AuronExecutionVerificationTest.class"
+TEST_CLASS_FILE="$SCRIPT_DIR/target/test-classes/org/apache/auron/flink/planner/$TEST_CLASS.class"
 if [ ! -f "$TEST_CLASS_FILE" ]; then
     echo "Compiling test classes only (skipping native rebuild with -DskipBuildNative)..."
     cd "$AURON_ROOT"
@@ -81,21 +77,18 @@ CP="$CP:$AURON_ROOT/auron-flink-extension/auron-flink-runtime/target/classes"
 echo "Classpath configured successfully"
 echo ""
 echo "=========================================="
-echo "Starting E2E Test"
+echo "Starting Parallel Execution Test"
 echo "=========================================="
 echo ""
 
 # Set up native library path
-# Use x86_64 build for compatibility with x86_64 JVMs (like Java 8)
-NATIVE_LIB_DIR="$AURON_ROOT/target/x86_64-apple-darwin/release"
+NATIVE_LIB_DIR="$AURON_ROOT/target/release"
 if [ ! -f "$NATIVE_LIB_DIR/libauron.dylib" ]; then
     echo "WARNING: Native library not found at $NATIVE_LIB_DIR/libauron.dylib"
-    echo "The test will likely fail. To build it for x86_64, run:"
-    echo "  cd $AURON_ROOT && CARGO_BUILD_TARGET=x86_64-apple-darwin ./dev/mvn-build-helper/build-native.sh release"
     echo ""
 fi
 
-# Set library path in environment (for Flink workers)
+# Set library path in environment
 export LD_LIBRARY_PATH="$NATIVE_LIB_DIR:${LD_LIBRARY_PATH:-}"
 export DYLD_LIBRARY_PATH="$NATIVE_LIB_DIR:${DYLD_LIBRARY_PATH:-}"
 
@@ -107,14 +100,11 @@ else
     ARROW_FLAGS=""
 fi
 
-# Run the test with logging configuration and native library path
+# Run the test
 LOG_CONFIG="$SCRIPT_DIR/log4j2-auron-test.properties"
 if [ -f "$LOG_CONFIG" ]; then
     echo "Using log configuration: log4j2-auron-test.properties"
-    echo "(This will show INFO logs from AuronExecNodeGraphProcessor)"
     echo "Native library path: $NATIVE_LIB_DIR"
-    echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-    echo "DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
     echo ""
     "$JAVA_HOME/bin/java" \
         $ARROW_FLAGS \
@@ -124,7 +114,7 @@ if [ -f "$LOG_CONFIG" ]; then
         -cp "$CP" \
         org.apache.auron.flink.planner.$TEST_CLASS
 else
-    echo "Log configuration not found, running without explicit logging config"
+    echo "Running without explicit logging config"
     echo "Native library path: $NATIVE_LIB_DIR"
     echo ""
     "$JAVA_HOME/bin/java" \
@@ -140,9 +130,9 @@ EXIT_CODE=$?
 echo ""
 echo "=========================================="
 if [ $EXIT_CODE -eq 0 ]; then
-    echo "✅ E2E Test Completed Successfully"
+    echo "✅ Parallel Execution Test Completed Successfully"
 else
-    echo "❌ E2E Test Failed with exit code: $EXIT_CODE"
+    echo "❌ Parallel Execution Test Failed with exit code: $EXIT_CODE"
 fi
 echo "=========================================="
 

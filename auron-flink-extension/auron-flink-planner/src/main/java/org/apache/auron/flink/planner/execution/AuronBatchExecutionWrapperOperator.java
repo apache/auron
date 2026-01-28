@@ -80,6 +80,27 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
         super.open(parameters);
         isRunning = true;
 
+        // Get runtime parallelism information from Flink
+        int taskIndex = getRuntimeContext().getIndexOfThisSubtask();
+        int totalParallelism = getRuntimeContext().getNumberOfParallelSubtasks();
+
+        LOG.info(
+                "Initializing Auron execution for task {}/{} (partition={}, stage={})",
+                taskIndex,
+                totalParallelism,
+                partitionId,
+                stageId);
+
+        // Modify plan for distributed execution
+        PhysicalPlanNode taskPlan = org.apache.auron.flink.planner.runtime.PlanModifier.modifyForTask(
+                nativePlan, taskIndex, totalParallelism);
+
+        // Extract the resource ID from the modified plan (PlanModifier sets this)
+        // We need to traverse the plan to find the ParquetScan and get its resource ID
+        fsResourceId = extractResourceIdFromPlan(taskPlan);
+
+        LOG.info("Using FileSystem resource ID from plan: {}", fsResourceId);
+
         // Get Flink configuration and set in thread context
         // Check if GlobalJobParameters is actually a Configuration
         Configuration config = parameters;
@@ -93,7 +114,6 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
         try {
             org.apache.hadoop.conf.Configuration hadoopConf = new org.apache.hadoop.conf.Configuration();
             FileSystem fs = FileSystem.get(hadoopConf);
-            fsResourceId = "flink-parquet-scan-" + partitionId;
 
             // Register FileSystem for this task
             // Multiple tasks may share the same resource ID, so we use synchronized access
@@ -119,8 +139,9 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
 
         LOG.info("Initializing Auron native execution for partition {} stage {} task {}", partitionId, stageId, taskId);
 
+        // Use task-specific plan for native wrapper
         nativeWrapper = new AuronCallNativeWrapper(
-                allocator, nativePlan, emptyMetrics, partitionId, stageId, taskId, nativeMemory);
+                allocator, taskPlan, emptyMetrics, partitionId, stageId, taskId, nativeMemory);
 
         LOG.info("Auron native execution initialized successfully");
     }
@@ -240,6 +261,44 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
             super.close();
         }
         LOG.info("Closed Auron native execution wrapper");
+    }
+
+    /**
+     * Recursively extracts the FileSystem resource ID from a plan tree.
+     * Traverses the plan looking for ParquetScan nodes and returns the first resource ID found.
+     */
+    private String extractResourceIdFromPlan(PhysicalPlanNode plan) {
+        switch (plan.getPhysicalPlanTypeCase()) {
+            case PARQUET_SCAN:
+                return plan.getParquetScan().getFsResourceId();
+
+            case PROJECTION:
+                if (plan.getProjection().hasInput()) {
+                    return extractResourceIdFromPlan(plan.getProjection().getInput());
+                }
+                break;
+
+            case FILTER:
+                if (plan.getFilter().hasInput()) {
+                    return extractResourceIdFromPlan(plan.getFilter().getInput());
+                }
+                break;
+
+            case LIMIT:
+                if (plan.getLimit().hasInput()) {
+                    return extractResourceIdFromPlan(plan.getLimit().getInput());
+                }
+                break;
+
+            default:
+                LOG.warn("Unknown or unsupported plan type: {}", plan.getPhysicalPlanTypeCase());
+        }
+
+        // Fallback: this shouldn't happen with valid Parquet scan plans
+        LOG.error("Could not find ParquetScan in plan tree, using fallback resource ID");
+        return String.format(
+                "flink-parquet-scan-%d-task-%d",
+                partitionId, getRuntimeContext().getIndexOfThisSubtask());
     }
 
     @Override
