@@ -33,3 +33,13 @@ NOTICE*
 docs/**
 build/apache-maven-*/**
 src/main/resources/auron-build-info.properties
+# Temporary verification and test scripts (not part of production codebase)
+verify-auron-conversion.sh
+run-verification-standalone.sh
+verify-simple.sh
+QuickVerify.java
+SimpleVerification.java
+**/run-test-direct.sh
+**/run-e2e-test.sh
+**/run-parallel-test.sh
+**/run-e2e-test-maven.sh

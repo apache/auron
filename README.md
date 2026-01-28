@@ -101,6 +101,8 @@ spark-sql -f tpcds/q01.sql
 
 Auron also supports Apache Flink integration. This section describes how to run tests and examples with Auron-accelerated Flink execution.
 
+**For comprehensive build instructions** (including building Flink with Auron integration), see [BUILD-GUIDE.md](BUILD-GUIDE.md).
+
 ### Prerequisites
 
 **Java 17** is required for building and running Flink tests:
@@ -111,11 +113,26 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/H
 
 While Auron compiles to Java 8 bytecode for compatibility, Maven plugins (especially spotless) and Apache Arrow require Java 11+. Java 17 is recommended for all development work.
 
-### Building Auron with Flink Support
+### Building - Complete Stack
 
-#### Quick Build (Recommended)
+To build both Flink (with Auron integration) and Auron:
 
-Use the simplified build script:
+```bash
+# Build everything with one command (recommended for first time)
+./build-all.sh
+
+# Fast build (skip tests)
+./build-all.sh --skip-tests
+
+# Build only Auron (assumes Flink already built)
+./build-all.sh --auron-only
+```
+
+See [BUILD-GUIDE.md](BUILD-GUIDE.md) for complete details.
+
+### Building - Auron Only
+
+If Flink 1.18-SNAPSHOT is already built, use the Auron-only build script:
 
 ```bash
 ./build-flink.sh          # Build and install (skip tests)
@@ -123,17 +140,13 @@ Use the simplified build script:
 ./build-flink.sh test     # Build and run tests
 ```
 
-#### Manual Build
-
-Or build manually with Maven:
+Or manually with Maven:
 
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/Home
 ./build/apache-maven-3.9.12/bin/mvn clean install -DskipTests \
   -Pflink-1.18 -Pscala-2.12
 ```
-
-**Note**: The `-Pspark-3.5` profile is optional and only needed if you're also building Spark modules.
 
 ### Running Tests
 

@@ -7,10 +7,44 @@ This guide provides simplified commands for building and testing Auron with Flin
 - Java 17: `/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/Home`
 - Rust nightly toolchain (for native library)
 - Maven 3.9.12 (bundled in `build/` directory)
+- Flink 1.18 with Auron integration: `/Users/vsowrira/git/flink` (branch: `auron-flink-1.18-integration`)
 
 ## Build
 
-### Quick Build
+### Unified Build (Recommended)
+
+Build both Flink and Auron with a single command:
+
+```bash
+# Build everything (first time: ~15-20 minutes)
+./build-all.sh
+
+# Fast build (skip tests, ~5-8 minutes)
+./build-all.sh --skip-tests
+
+# Build only Auron (assumes Flink already built)
+./build-all.sh --auron-only
+
+# Build only Flink
+./build-all.sh --flink-only
+
+# Clean rebuild from scratch
+./build-all.sh --clean
+```
+
+**What this does:**
+1. Checks if Flink needs to be built (smart detection)
+2. Builds Flink 1.18-SNAPSHOT with Auron integration (if needed)
+3. Builds Auron against those Flink JARs
+4. Verifies integration classes are present
+
+**First build**: 15-20 minutes (Flink: 10-15 min, Auron: 3-5 min)
+**Subsequent builds**: 3-5 minutes (Flink build is skipped if up-to-date)
+
+### Auron-Only Build
+
+If Flink is already built and you only need to rebuild Auron:
+
 ```bash
 ./build-flink.sh          # Build and install (skip tests) - DEFAULT
 ./build-flink.sh clean    # Clean build from scratch
@@ -18,10 +52,13 @@ This guide provides simplified commands for building and testing Auron with Flin
 ```
 
 ### Manual Build
+
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/Home
 ./build/apache-maven-3.9.12/bin/mvn clean install -DskipTests -Pflink-1.18 -Pscala-2.12
 ```
+
+For comprehensive build documentation, see [BUILD-GUIDE.md](BUILD-GUIDE.md).
 
 ## Run Examples
 
