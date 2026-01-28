@@ -1211,6 +1211,8 @@ dependencies = [
  "log",
  "once_cell",
  "parking_lot",
+ "rand",
+ "rand_distr",
 ]
 
 [[package]]

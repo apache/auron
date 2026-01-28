@@ -31,7 +31,6 @@ mod spark_make_array;
 mod spark_make_decimal;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
-mod spark_randn;
 mod spark_round;
 mod spark_strings;
 mod spark_unscaled_value;
@@ -85,7 +84,6 @@ pub fn create_auron_ext_function(
             Arc::new(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
         "Spark_IsNaN" => Arc::new(spark_isnan::spark_isnan),
-        "Spark_Randn" => Arc::new(spark_randn::spark_randn),
         _ => df_unimplemented_err!("spark ext function not implemented: {name}")?,
     })
 }

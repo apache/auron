@@ -113,6 +113,9 @@ message PhysicalExprNode {
     // RowNum
     RowNumExprNode row_num_expr = 20100;
 
+    // Randn
+    RandnExprNode randn_expr = 20101;
+
     // BloomFilterMightContain
     BloomFilterMightContainExprNode bloom_filter_might_contain_expr = 20200;
   }
@@ -360,6 +363,10 @@ message StringContainsExprNode {
 }
 
 message RowNumExprNode {
+}
+
+message RandnExprNode {
+  int64 seed = 1;
 }
 
 message BloomFilterMightContainExprNode {

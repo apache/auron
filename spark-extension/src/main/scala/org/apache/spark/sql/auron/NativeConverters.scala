@@ -855,7 +855,14 @@ object NativeConverters extends Logging {
       case e: IsNaN =>
         buildExtScalarFunction("Spark_IsNaN", e.children, e.dataType)
       case e: Randn =>
-        buildExtScalarFunction("Spark_Randn", e.children, e.dataType)
+        val seed = e.child match {
+          case Literal(s: Long, _) => s
+          case Literal(s: Int, _) => s.toLong
+          case _ => 0L
+        }
+        buildExprNode {
+          _.setRandnExpr(pb.RandnExprNode.newBuilder().setSeed(seed))
+        }
       case e: Round =>
         e.scale match {
           case Literal(n: Int, _) =>
