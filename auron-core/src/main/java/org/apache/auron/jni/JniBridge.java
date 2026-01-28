@@ -60,6 +60,18 @@ public class JniBridge {
         return resourcesMap.remove(key);
     }
 
+    /**
+     * Gets a resource without removing it from the map.
+     * This is useful for shared resources like FileSystem in Flink where
+     * multiple tasks need to access the same resource.
+     *
+     * @param key The resource key
+     * @return The resource, or null if not found
+     */
+    public static Object getResourceShared(String key) {
+        return resourcesMap.get(key);
+    }
+
     public static void putResource(String key, Object value) {
         resourcesMap.put(key, value);
     }

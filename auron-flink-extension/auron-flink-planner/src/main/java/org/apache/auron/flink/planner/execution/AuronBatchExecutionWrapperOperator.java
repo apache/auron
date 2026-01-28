@@ -57,6 +57,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
     private transient AuronCallNativeWrapper nativeWrapper;
     private transient volatile boolean isRunning;
     private transient String fsResourceId;
+    private transient boolean registeredFs; // Track if we registered the FileSystem
 
     /**
      * Creates a new Auron batch execution wrapper.
@@ -87,12 +88,23 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
         }
         FlinkAuronAdaptor.setThreadConfiguration(config);
         // Initialize and register Hadoop FileSystem for native Parquet reading
+        // NOTE: FileSystem must be registered BEFORE native execution starts
+        // The resource ID must match what's in the PhysicalPlanNode protobuf
         try {
             org.apache.hadoop.conf.Configuration hadoopConf = new org.apache.hadoop.conf.Configuration();
             FileSystem fs = FileSystem.get(hadoopConf);
             fsResourceId = "flink-parquet-scan-" + partitionId;
-            JniBridge.putResource(fsResourceId, fs);
-            LOG.info("Registered Hadoop FileSystem with resource ID: {}", fsResourceId);
+
+            // Register FileSystem for this task
+            // Multiple tasks may share the same resource ID, so we use synchronized access
+            synchronized (JniBridge.class) {
+                JniBridge.putResource(fsResourceId, fs);
+                registeredFs = true;
+            }
+            LOG.info(
+                    "Registered Hadoop FileSystem with resource ID: {} for task {}",
+                    fsResourceId,
+                    getRuntimeContext().getIndexOfThisSubtask());
         } catch (Exception e) {
             LOG.error("Failed to initialize Hadoop FileSystem", e);
             throw new RuntimeException("Failed to initialize Hadoop FileSystem for Auron native execution", e);
@@ -217,18 +229,11 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
                 allocator.close();
                 allocator = null;
             }
-            // Close and unregister Hadoop FileSystem
-            if (fsResourceId != null) {
-                try {
-                    Object fsObj = JniBridge.getResource(fsResourceId);
-                    if (fsObj instanceof FileSystem) {
-                        ((FileSystem) fsObj).close();
-                    }
-                    JniBridge.getResource(fsResourceId); // Remove from map
-                } catch (Exception e) {
-                    LOG.warn("Failed to close Hadoop FileSystem: {}", e.getMessage());
-                }
-                LOG.info("Closed Hadoop FileSystem with resource ID: {}", fsResourceId);
+            // Note: We don't close the Hadoop FileSystem here because it may be shared
+            // across multiple tasks. Hadoop FileSystem.get() returns a cached instance
+            // that shouldn't be closed by individual tasks.
+            if (fsResourceId != null && registeredFs) {
+                LOG.info("Task cleanup complete for resource ID: {}", fsResourceId);
             }
             FlinkAuronAdaptor.clearThreadConfiguration();
         } finally {

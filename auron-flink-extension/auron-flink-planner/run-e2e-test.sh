@@ -103,6 +103,14 @@ fi
 export LD_LIBRARY_PATH="$NATIVE_LIB_DIR:${LD_LIBRARY_PATH:-}"
 export DYLD_LIBRARY_PATH="$NATIVE_LIB_DIR:${DYLD_LIBRARY_PATH:-}"
 
+# Java 17+ requires additional JVM flags for Arrow memory access
+JAVA_VERSION=$("$JAVA_HOME/bin/java" -version 2>&1 | awk -F '"' '/version/ {print $2}' | cut -d. -f1)
+if [ "$JAVA_VERSION" -ge 9 ]; then
+    ARROW_FLAGS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+else
+    ARROW_FLAGS=""
+fi
+
 # Run the test with logging configuration and native library path
 LOG_CONFIG="$SCRIPT_DIR/log4j2-auron-test.properties"
 if [ -f "$LOG_CONFIG" ]; then
@@ -113,6 +121,7 @@ if [ -f "$LOG_CONFIG" ]; then
     echo "DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
     echo ""
     "$JAVA_HOME/bin/java" \
+        $ARROW_FLAGS \
         -Djava.library.path="$NATIVE_LIB_DIR" \
         -Denv.java.opts="-Djava.library.path=$NATIVE_LIB_DIR" \
         -Dlog4j.configurationFile="file://$LOG_CONFIG" \
@@ -123,6 +132,7 @@ else
     echo "Native library path: $NATIVE_LIB_DIR"
     echo ""
     "$JAVA_HOME/bin/java" \
+        $ARROW_FLAGS \
         -Djava.library.path="$NATIVE_LIB_DIR" \
         -Denv.java.opts="-Djava.library.path=$NATIVE_LIB_DIR" \
         -cp "$CP" \

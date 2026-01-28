@@ -159,6 +159,9 @@ impl ExecutionPlan for ParquetExec {
 
         // get fs object from jni bridge resource
         let resource_id = jni_new_string!(&self.fs_resource_id)?;
+        #[cfg(feature = "flink")]
+        let fs = jni_call_static!(JniBridge.getResourceShared(resource_id.as_obj()) -> JObject)?;
+        #[cfg(not(feature = "flink"))]
         let fs = jni_call_static!(JniBridge.getResource(resource_id.as_obj()) -> JObject)?;
         let fs_provider = Arc::new(FsProvider::new(jni_new_global_ref!(fs.as_obj())?, &io_time));
 

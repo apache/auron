@@ -99,16 +99,25 @@ After compiling test classes, run from your IDE:
 
 #### Native Library Requirements
 
-The test requires Auron's native library (`libauron.dylib` on macOS). For x86_64 Java (like Java 8):
+The test requires Auron's native library with **Flink feature enabled** (to exclude Spark dependencies).
 
+**For ARM64 Java (Java 17+ on Apple Silicon)**:
 ```bash
 cd /Users/vsowrira/git/auron
-CARGO_BUILD_TARGET=x86_64-apple-darwin ./dev/mvn-build-helper/build-native.sh release
+./dev/mvn-build-helper/build-native.sh release flink
+cp native-engine/_build/release/libauron.dylib auron-flink-extension/auron-flink-planner/target/classes/
 ```
 
-This builds the library for x86_64 architecture. The test script automatically uses the x86_64 build at `target/x86_64-apple-darwin/release/libauron.dylib`.
+**For x86_64 Java (Java 8)**:
+```bash
+cd /Users/vsowrira/git/auron
+CARGO_BUILD_TARGET=x86_64-apple-darwin ./dev/mvn-build-helper/build-native.sh release flink
+cp target/x86_64-apple-darwin/release/libauron.dylib auron-flink-extension/auron-flink-planner/target/classes/
+```
 
-**Build time**: First build takes ~6 minutes, subsequent builds are cached.
+**Important**: The `flink` feature flag is required to disable Spark-specific JNI classes. The library must be copied to `target/classes/` to be available on the classpath for Flink's worker tasks.
+
+**Build time**: First build takes ~4-6 minutes, subsequent builds are cached.
 
 #### Expected Output
 
@@ -132,11 +141,15 @@ The test also shows:
 
 **What Works**:
 - ✅ Auron conversion during query planning
-- ✅ BATCH mode execution (boundedness correctly set)
-- ✅ Native library loading (x86_64 build)
-- ✅ Query execution initiates successfully
+- ✅ BATCH mode execution (boundedness correctly set to BOUNDED)
+- ✅ Native library loading with `flink` feature (Spark dependencies excluded)
+- ✅ Auron native execution initializes successfully
+- ✅ All 14 parallel tasks initialize Auron native execution
+- ✅ Hadoop FileSystem registered successfully
+- ✅ End-to-end integration working
 
-**Known Issues**:
-- ❌ JNI bridge initialization fails due to missing Spark dependencies (`org.apache.spark.storage.FileSegment`)
-- The JNI bridge was originally designed for Spark and unconditionally loads Spark-specific classes
-- Requires modification of `auron_jni_bridge` to support Flink without Spark dependencies
+**Fixed Issues**:
+- ✅ Boundedness detection (Added explicit `setBoundedness(Boundedness.BOUNDED)` in `AuronTransformationFactory`)
+- ✅ Spark dependency errors (Native library built with `flink` feature flag)
+- ✅ Library loading (Copied to `target/classes/` for classpath access)
+- ✅ Java 17 compatibility (Added `--add-opens` flags for Arrow memory access)

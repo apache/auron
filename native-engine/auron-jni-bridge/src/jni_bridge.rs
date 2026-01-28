@@ -685,6 +685,8 @@ pub struct JniBridge<'a> {
     pub method_setContextClassLoader_ret: ReturnType,
     pub method_getResource: JStaticMethodID,
     pub method_getResource_ret: ReturnType,
+    pub method_getResourceShared: JStaticMethodID,
+    pub method_getResourceShared_ret: ReturnType,
     pub method_getThreadContext: JStaticMethodID,
     pub method_getThreadContext_ret: ReturnType,
     pub method_setThreadContext: JStaticMethodID,
@@ -732,6 +734,12 @@ impl<'a> JniBridge<'a> {
                 "(Ljava/lang/String;)Ljava/lang/Object;",
             )?,
             method_getResource_ret: ReturnType::Object,
+            method_getResourceShared: env.get_static_method_id(
+                class,
+                "getResourceShared",
+                "(Ljava/lang/String;)Ljava/lang/Object;",
+            )?,
+            method_getResourceShared_ret: ReturnType::Object,
             method_getThreadContext: env.get_static_method_id(
                 class,
                 "getThreadContext",

@@ -26,6 +26,11 @@
   <artifactId>auron-flink-runtime</artifactId>
   <name>Apache Auron Flink Runtime ${flink.version}</name>
   <description>Apache Auron Flink Project</description>
+
+  <properties>
+    <!-- Set to true to skip native library builds (useful for CI/CD) -->
+    <skip.native.build>false</skip.native.build>
+  </properties>
   <dependencies>
     <!-- Auron dependencies -->
     <dependency>
@@ -69,14 +74,93 @@
   </dependencies>
 
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <!-- Include native libraries in JAR -->
+      <resource>
+        <targetPath>.</targetPath>
+        <directory>${project.basedir}/../../native-engine/_build/release</directory>
+        <includes>
+          <include>libauron.dylib</include>
+          <include>libauron.so</include>
+        </includes>
+      </resource>
+    </resources>
+
     <plugins>
+      <!-- Build native libraries for Flink before compile -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <!-- Build for Linux x86-64 -->
+          <execution>
+            <id>build-native-linux-x86-64</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>generate-resources</phase>
+            <configuration>
+              <executable>bash</executable>
+              <workingDirectory>${project.basedir}/../..</workingDirectory>
+              <arguments>
+                <argument>-c</argument>
+                <argument>if command -v cross &gt; /dev/null; then
+                    echo "Building Auron native library for Linux x86-64 with Flink feature..."
+                    CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu ./dev/mvn-build-helper/build-native.sh release flink || echo "Warning: Linux x86-64 build failed (cross not available?)"
+                  else
+                    echo "Skipping Linux x86-64 build: 'cross' not installed. Install with: cargo install cross"
+                  fi</argument>
+              </arguments>
+              <skip>${skip.native.build}</skip>
+            </configuration>
+          </execution>
+          <!-- Build for macOS ARM64 -->
+          <execution>
+            <id>build-native-macos-arm64</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>generate-resources</phase>
+            <configuration>
+              <executable>bash</executable>
+              <workingDirectory>${project.basedir}/../..</workingDirectory>
+              <arguments>
+                <argument>-c</argument>
+                <argument>if [[ "$OSTYPE" == "darwin"* ]]; then
+                    echo "Building Auron native library for macOS ARM64 with Flink feature..."
+                    ./dev/mvn-build-helper/build-native.sh release flink
+                  else
+                    echo "Skipping macOS build on non-macOS platform"
+                  fi</argument>
+              </arguments>
+              <skip>${skip.native.build}</skip>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>17</source>
+          <target>17</target>
+          <release>17</release>
+        </configuration>
+      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven.plugin.surefire.version}</version>
         <configuration>
           <!-- Add native library path for Auron integration tests -->
-          <argLine>-Djava.library.path=${project.basedir}/../../native-engine/_build/release</argLine>
+          <argLine>-Djava.library.path=${project.basedir}/../../native-engine/_build/release
+            --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED</argLine>
         </configuration>
       </plugin>
     </plugins>

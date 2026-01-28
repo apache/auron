@@ -205,6 +205,7 @@ public class AuronExecNodeConverter {
      * Extracts file paths from a table source.
      *
      * <p>This method extracts file paths from the table metadata.
+     * If the path is a directory, it scans for actual Parquet files.
      *
      * @param resolvedTable The resolved table metadata
      * @return List of file paths
@@ -215,9 +216,35 @@ public class AuronExecNodeConverter {
         try {
             // Get the path from table options (standard way for filesystem connector tables)
             if (resolvedTable.getResolvedTable().getOptions().containsKey("path")) {
-                String path = resolvedTable.getResolvedTable().getOptions().get("path");
-                filePaths.add(path);
-                LOG.debug("Extracted path from table options: {}", path);
+                String basePath = resolvedTable.getResolvedTable().getOptions().get("path");
+                LOG.debug("Extracted path from table options: {}", basePath);
+
+                // Check if this is a directory and scan for Parquet files
+                java.io.File baseFile = new java.io.File(basePath);
+                if (baseFile.isDirectory()) {
+                    LOG.debug("Path is a directory, scanning for Parquet files...");
+                    java.io.File[] files =
+                            baseFile.listFiles((dir, name) -> name.endsWith(".parquet") || name.startsWith("part-"));
+
+                    if (files != null && files.length > 0) {
+                        for (java.io.File file : files) {
+                            if (file.isFile()) {
+                                filePaths.add(file.getAbsolutePath());
+                                LOG.debug("Found Parquet file: {}", file.getAbsolutePath());
+                            }
+                        }
+                    } else {
+                        LOG.warn("No Parquet files found in directory: {}", basePath);
+                        // Still add the directory path as fallback
+                        filePaths.add(basePath);
+                    }
+                } else if (baseFile.isFile()) {
+                    // Single file
+                    filePaths.add(basePath);
+                } else {
+                    // Path doesn't exist yet or is remote - add as-is
+                    filePaths.add(basePath);
+                }
             }
 
             if (filePaths.isEmpty()) {
