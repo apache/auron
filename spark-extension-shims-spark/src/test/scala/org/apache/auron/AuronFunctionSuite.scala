@@ -20,7 +20,7 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
 
-import org.apache.auron.util.AuronTestUtils
+import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
@@ -83,6 +83,9 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("spark hash function") {
+    // TODO: Fix flaky codegen cache failures in SPARK-4.x, https://github.com/apache/auron/issues/1961
+    assume(!SparkVersionUtil.isSparkV40OrGreater)
+
     withTable("t1") {
       sql("create table t1 using parquet as select array(1, 2) as arr")
       val functions =
@@ -94,6 +97,9 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("expm1 function") {
+    // TODO: Fix flaky codegen cache failures in SPARK-4.x, https://github.com/apache/auron/issues/1961
+    assume(!SparkVersionUtil.isSparkV40OrGreater)
+
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")
       sql("insert into t1 values(0.0), (1.1), (2.2)")
@@ -416,8 +422,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
       val sqlStr = s"""SELECT
                       |nvl2(null_int, int_val, 999)          AS int_only,
-                      |nvl2(1,  str_val, int_val)            AS has_str,
-                      |nvl2(null_int, int_val, str_val)      AS str_in_false,
+                      |nvl2(1,  str_val, cast(int_val AS STRING))            AS has_str,
+                      |nvl2(null_int, cast(int_val AS STRING), str_val)      AS str_in_false,
                       |nvl2(1,  arr_val, array(888))         AS has_array,
                       |nvl2(null_int, null_str,  null_str)   AS all_null
                       |FROM  t1""".stripMargin

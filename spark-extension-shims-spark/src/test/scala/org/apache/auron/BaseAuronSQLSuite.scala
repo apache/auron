@@ -58,5 +58,8 @@ trait BaseAuronSQLSuite extends SharedSparkSession {
       .set("spark.auron.enable", "true")
       .set("spark.ui.enabled", "false")
       .set("spark.sql.warehouse.dir", warehouseDir)
+      // Avoid the code size overflow error in Spark code generation.
+      .set("spark.sql.codegen.wholeStage", "false")
+      .set("spark.sql.codegen.factoryMode", "NO_CODEGEN")
   }
 }

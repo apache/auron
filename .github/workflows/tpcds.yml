@@ -87,3 +87,12 @@ jobs:
       javaver: '21'
       scalaver: '2.13'
       hadoop-profile: 'hadoop3'
+
+  test-spark-41-jdk21-scala-2-13:
+    name: Test spark-4.1 JDK21 Scala-2.13
+    uses: ./.github/workflows/tpcds-reusable.yml
+    with:
+      sparkver: spark-4.1
+      javaver: '21'
+      scalaver: '2.13'
+      hadoop-profile: 'hadoop3'

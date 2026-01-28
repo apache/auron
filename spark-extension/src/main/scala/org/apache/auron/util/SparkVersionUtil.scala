@@ -14,21 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.auron.plan
+package org.apache.auron.util
 
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.SPARK_VERSION
 
-import org.apache.auron.sparkver
-
-case class NativeFilterExec(condition: Expression, override val child: SparkPlan)
-    extends NativeFilterBase(condition, child) {
-
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
-    copy(child = newChild)
-
-  @sparkver("3.0 / 3.1")
-  override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
-    copy(child = newChildren.head)
+object SparkVersionUtil {
+  lazy val SPARK_RUNTIME_VERSION: SemanticVersion = SemanticVersion(SPARK_VERSION)
+  lazy val isSparkV40OrGreater: Boolean = SPARK_RUNTIME_VERSION >= "4.0"
 }

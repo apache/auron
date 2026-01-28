@@ -23,6 +23,6 @@ import org.apache.auron.sparkver
 class AuronShuffleWriter[K, V](metrics: ShuffleWriteMetricsReporter)
     extends AuronShuffleWriterBase[K, V](metrics) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def getPartitionLengths(): Array[Long] = partitionLengths
 }

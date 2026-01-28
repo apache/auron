@@ -34,8 +34,9 @@ import org.apache.spark.sql.types.MapType
 import org.apache.spark.sql.types.ShortType
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+
+import org.apache.auron.sparkver
 
 class AuronColumnarStruct(data: AuronColumnVector, rowId: Int) extends InternalRow {
   override def numFields: Int = data.dataType.asInstanceOf[StructType].size
@@ -141,6 +142,21 @@ class AuronColumnarStruct(data: AuronColumnVector, rowId: Int) extends InternalR
   }
 
   override def setNullAt(ordinal: Int): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  @sparkver("4.1")
+  override def getGeography(i: Int): org.apache.spark.unsafe.types.GeographyVal = {
+    throw new UnsupportedOperationException
+  }
+
+  @sparkver("4.1")
+  override def getGeometry(i: Int): org.apache.spark.unsafe.types.GeometryVal = {
+    throw new UnsupportedOperationException
+  }
+
+  @sparkver("4.1")
+  override def getVariant(i: Int): org.apache.spark.unsafe.types.VariantVal = {
     throw new UnsupportedOperationException
   }
 }

@@ -54,8 +54,11 @@
     <protobufVersion>3.25.5</protobufVersion>
     <nettyVersion>4.2.7.Final</nettyVersion>
     <javaVersion>8</javaVersion>
+    <maven.compiler.source>${javaVersion}</maven.compiler.source>
+    <maven.compiler.target>${javaVersion}</maven.compiler.target>
     <scalaVersion>2.12</scalaVersion>
     <scalaLongVersion>2.12.18</scalaLongVersion>
+    <scala-xml.version>2.1.0</scala-xml.version>
     <scalaJava8CompatVersion>1.0.2</scalaJava8CompatVersion>
     <maven.version>3.9.12</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
@@ -383,6 +386,9 @@
             <arg>-feature</arg>
             <arg>-Ywarn-unused</arg>
             <arg>-Xfatal-warnings</arg>
+
+            <arg>-Wconf:msg=method newInstance in class Class is deprecated:s</arg>
+            <arg>-Wconf:msg=class ThreadDeath in package lang is deprecated:s</arg>
           </args>
         </configuration>
         <dependencies>
@@ -465,6 +471,8 @@
         <version>${maven.plugin.surefire.version}</version>
         <!-- Note config is repeated in scalatest config -->
         <configuration>
+          <forkCount>1</forkCount>
+          <reuseForks>false</reuseForks>
           <skipTests>false</skipTests>
           <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
           <argLine>${extraJavaTestArgs}</argLine>
@@ -486,6 +494,7 @@
           <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
           <junitxml>.</junitxml>
           <filereports>TestSuite.txt</filereports>
+          <forkMode>once</forkMode>
           <argLine>${extraJavaTestArgs}</argLine>
           <environmentVariables />
           <systemProperties>
@@ -828,6 +837,48 @@
     </profile>
 
     <profile>
+      <id>spark-4.1</id>
+      <properties>
+        <shimName>spark-4.1</shimName>
+        <scalaTestVersion>3.2.9</scalaTestVersion>
+        <sparkVersion>4.1.1</sparkVersion>
+        <shortSparkVersion>4.1</shortSparkVersion>
+        <nettyVersion>4.1.118.Final</nettyVersion>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark41-enforce-java-scala-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <!-- Spark 4.1 requires JDK 17+ and Scala 2.13.x -->
+                    <requireJavaVersion>
+                      <version>[17,)</version>
+                      <message>Spark 4.1 requires JDK 17 or higher. Current: ${java.version}</message>
+                    </requireJavaVersion>
+                    <requireProperty>
+                      <property>scalaLongVersion</property>
+                      <regex>2\.13\.\d+</regex>
+                      <regexMessage>Spark 4.1 requires Scala 2.13.x. Current: ${scalaLongVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
       <id>jdk-8</id>
       <activation>
         <jdk>1.8</jdk>
@@ -835,7 +886,7 @@
       <properties>
         <javaVersion>8</javaVersion>
         <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.8</semanticdb.version>
+        <semanticdb.version>4.14.5</semanticdb.version>
         <scalafmtVersion>3.0.0</scalafmtVersion>
       </properties>
     </profile>
@@ -848,7 +899,7 @@
       <properties>
         <javaVersion>11</javaVersion>
         <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.8</semanticdb.version>
+        <semanticdb.version>4.14.5</semanticdb.version>
         <scalafmtVersion>3.0.0</scalafmtVersion>
       </properties>
     </profile>
@@ -861,7 +912,7 @@
       <properties>
         <javaVersion>17</javaVersion>
         <spotless.plugin.version>2.45.0</spotless.plugin.version>
-        <semanticdb.version>4.9.9</semanticdb.version>
+        <semanticdb.version>4.14.5</semanticdb.version>
         <scalafmtVersion>3.9.9</scalafmtVersion>
       </properties>
     </profile>
@@ -874,7 +925,7 @@
       <properties>
         <javaVersion>21</javaVersion>
         <spotless.plugin.version>2.45.0</spotless.plugin.version>
-        <semanticdb.version>4.9.9</semanticdb.version>
+        <semanticdb.version>4.14.5</semanticdb.version>
         <scalafmtVersion>3.9.9</scalafmtVersion>
       </properties>
     </profile>
@@ -921,7 +972,7 @@
       </activation>
       <properties>
         <scalaVersion>2.13</scalaVersion>
-        <scalaLongVersion>2.13.13</scalaLongVersion>
+        <scalaLongVersion>2.13.17</scalaLongVersion>
       </properties>
       <build>
         <plugins>
@@ -944,11 +995,14 @@
                 <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
                 <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
                 <arg>-Wconf:msg=object JavaConverters in package collection is deprecated:s</arg>
+                <arg>-Wconf:msg=method newInstance in class Class is deprecated:s</arg>
+                <arg>-Wconf:msg=class ThreadDeath in package lang is deprecated:s</arg>
                 <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
                 <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
                 <arg>-Wconf:cat=unused-nowarn:s</arg>
                 <arg>-Wconf:msg=early initializers are deprecated:s</arg>
                 <arg>-Wconf:cat=other-match-analysis:s</arg>
+                <arg>-Wconf:cat=feature-existentials:s</arg>
               </args>
               <compilerPlugins>
                 <compilerPlugin>

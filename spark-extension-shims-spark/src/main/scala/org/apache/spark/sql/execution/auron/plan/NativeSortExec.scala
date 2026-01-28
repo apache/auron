@@ -27,7 +27,7 @@ case class NativeSortExec(
     override val child: SparkPlan)
     extends NativeSortBase(sortOrder, global, child) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 

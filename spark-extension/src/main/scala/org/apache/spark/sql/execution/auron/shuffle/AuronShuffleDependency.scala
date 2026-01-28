@@ -25,6 +25,8 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleHandle, ShuffleWriteProcessor}
 import org.apache.spark.sql.types.StructType
 
+import org.apache.auron.sparkver
+
 class AuronShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient private val _rdd: RDD[_ <: Product2[K, V]],
     override val partitioner: Partitioner,
@@ -41,7 +43,19 @@ class AuronShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
       keyOrdering,
       aggregator,
       mapSideCombine,
-      shuffleWriterProcessor) {}
+      shuffleWriterProcessor) {
+
+  // Serialize _rdd
+  val inputRdd: RDD[_ <: Product2[K, V]] = getInputRdd
+
+  // Spark 3+: Not required
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  def getInputRdd: RDD[_ <: Product2[K, V]] = null
+
+  // For Spark 4+ compatibility: _rdd is required to create NativeRDD.ShuffleWrite in ShuffleWriteProcessor.write
+  @sparkver("4.1")
+  def getInputRdd: RDD[_ <: Product2[K, V]] = _rdd
+}
 
 object AuronShuffleDependency extends Logging {
   def isArrowShuffle(handle: ShuffleHandle): Boolean = {

@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.auron.plan
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -70,7 +69,26 @@ case class NativeParquetInsertIntoHiveTableExec(
       metrics)
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("4.1")
+  override protected def getInsertIntoHiveTableCommand(
+      table: CatalogTable,
+      partition: Map[String, Option[String]],
+      query: LogicalPlan,
+      overwrite: Boolean,
+      ifPartitionNotExists: Boolean,
+      outputColumnNames: Seq[String],
+      metrics: Map[String, SQLMetric]): InsertIntoHiveTable = {
+    new AuronInsertIntoHiveTable41(
+      table,
+      partition,
+      query,
+      overwrite,
+      ifPartitionNotExists,
+      outputColumnNames,
+      metrics)
+  }
+
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
@@ -97,7 +115,9 @@ case class NativeParquetInsertIntoHiveTableExec(
 
     override lazy val metrics: Map[String, SQLMetric] = outerMetrics
 
-    override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
+    override def run(
+        sparkSession: org.apache.spark.sql.SparkSession,
+        child: SparkPlan): Seq[Row] = {
       val nativeParquetSink =
         Shims.get.createNativeParquetSinkExec(sparkSession, table, partition, child, metrics)
       super.run(sparkSession, nativeParquetSink)
@@ -266,7 +286,57 @@ case class NativeParquetInsertIntoHiveTableExec(
 
     override lazy val metrics: Map[String, SQLMetric] = outerMetrics
 
-    override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
+    override def run(
+        sparkSession: org.apache.spark.sql.SparkSession,
+        child: SparkPlan): Seq[Row] = {
+      val nativeParquetSink =
+        Shims.get.createNativeParquetSinkExec(sparkSession, table, partition, child, metrics)
+      super.run(sparkSession, nativeParquetSink)
+    }
+  }
+
+  @sparkver("4.1")
+  class AuronInsertIntoHiveTable41(
+      table: CatalogTable,
+      partition: Map[String, Option[String]],
+      query: LogicalPlan,
+      overwrite: Boolean,
+      ifPartitionNotExists: Boolean,
+      outputColumnNames: Seq[String],
+      outerMetrics: Map[String, SQLMetric])
+      extends {
+        private val insertIntoHiveTable = InsertIntoHiveTable(
+          table,
+          partition,
+          query,
+          overwrite,
+          ifPartitionNotExists,
+          outputColumnNames)
+        private val initPartitionColumns = insertIntoHiveTable.partitionColumns
+        private val initBucketSpec = insertIntoHiveTable.bucketSpec
+        private val initOptions = insertIntoHiveTable.options
+        private val initFileFormat = insertIntoHiveTable.fileFormat
+        private val initHiveTmpPath = insertIntoHiveTable.hiveTmpPath
+
+      }
+      with InsertIntoHiveTable(
+        table,
+        partition,
+        query,
+        overwrite,
+        ifPartitionNotExists,
+        outputColumnNames,
+        initPartitionColumns,
+        initBucketSpec,
+        initOptions,
+        initFileFormat,
+        initHiveTmpPath) {
+
+    override lazy val metrics: Map[String, SQLMetric] = outerMetrics
+
+    override def run(
+        sparkSession: org.apache.spark.sql.classic.SparkSession,
+        child: SparkPlan): Seq[Row] = {
       val nativeParquetSink =
         Shims.get.createNativeParquetSinkExec(sparkSession, table, partition, child, metrics)
       super.run(sparkSession, nativeParquetSink)
