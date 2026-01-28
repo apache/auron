@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.joins.auron.plan
 
+import scala.annotation.nowarn
+
 import org.apache.spark.sql.auron.join.JoinBuildSides.JoinBuildSide
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.JoinType
@@ -80,6 +82,7 @@ case object NativeShuffledHashJoinExecProvider {
     NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, buildSide, isSkewJoin)
   }
 
+  @nowarn("cat=unused") // Some params temporarily unused
   @sparkver("3.1")
   def provide(
       left: SparkPlan,
@@ -127,6 +130,7 @@ case object NativeShuffledHashJoinExecProvider {
     NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, buildSide)
   }
 
+  @nowarn("cat=unused") // Some params temporarily unused
   @sparkver("3.0")
   def provide(
       left: SparkPlan,

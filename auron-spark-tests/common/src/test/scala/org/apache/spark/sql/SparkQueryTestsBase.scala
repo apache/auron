@@ -162,7 +162,7 @@ object AuronQueryTestUtil extends Assertions {
   private def genError(
       expectedAnswer: Seq[Row],
       sparkAnswer: Seq[Row],
-      isSorted: Boolean = false): String = {
+      isSorted: Boolean): String = {
     val getRowType: Option[Row] => String = row =>
       row
         .map(row =>
