@@ -286,7 +286,6 @@ public class AuronFlinkConverters {
         result.add(condition);
     }
 
-
     /**
      * Gets the file size for a given file path (supports file:// URLs).
      *

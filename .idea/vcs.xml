@@ -15,6 +15,10 @@
           <option name="issueRegexp" value="#(\d+)" />
           <option name="linkRegexp" value="https://github.com/apache/auron/pull/$1" />
         </IssueNavigationLink>
+        <IssueNavigationLink>
+          <option name="issueRegexp" value="\(#(\d+)\)" />
+          <option name="linkRegexp" value="https://github.com/venkata91/auron/issues/$1" />
+        </IssueNavigationLink>
       </list>
     </option>
   </component>

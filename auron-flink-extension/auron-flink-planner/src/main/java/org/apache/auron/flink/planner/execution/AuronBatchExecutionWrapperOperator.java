@@ -22,6 +22,7 @@ import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.auron.jni.AuronCallNativeWrapper;
 import org.apache.auron.jni.FlinkAuronAdaptor;
+import org.apache.auron.jni.JniBridge;
 import org.apache.auron.metric.MetricNode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -34,17 +35,16 @@ import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.hadoop.fs.FileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.auron.jni.JniBridge;
-import org.apache.hadoop.fs.FileSystem;
 
 /**
  * Flink SourceFunction that wraps Auron native execution.
  * Executes a PhysicalPlanNode using the Auron native engine and emits results as Flink RowData.
  */
 public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowData>
-    implements ResultTypeQueryable<RowData> {
+        implements ResultTypeQueryable<RowData> {
 
     private static final Logger LOG = LoggerFactory.getLogger(AuronBatchExecutionWrapperOperator.class);
 
@@ -86,7 +86,7 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
             config = (Configuration) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
         }
         FlinkAuronAdaptor.setThreadConfiguration(config);
-// Initialize and register Hadoop FileSystem for native Parquet reading
+        // Initialize and register Hadoop FileSystem for native Parquet reading
         try {
             org.apache.hadoop.conf.Configuration hadoopConf = new org.apache.hadoop.conf.Configuration();
             FileSystem fs = FileSystem.get(hadoopConf);

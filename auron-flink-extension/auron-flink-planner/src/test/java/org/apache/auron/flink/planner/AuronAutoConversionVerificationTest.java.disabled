@@ -18,21 +18,98 @@ package org.apache.auron.flink.planner;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.ExecutionOptions;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.apache.flink.table.api.EnvironmentSettings;
+import org.apache.flink.table.api.ExplainDetail;
+import org.apache.flink.table.api.TableEnvironment;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.io.File;
 
 /**
  * Verification test to confirm that Flink SQL queries are automatically converted to Auron native
  * execution when the configuration flag is enabled.
  *
  * <p>This test verifies the integration between Flink's ExecNodeGraphProcessor and Auron's
- * converter without requiring actual Parquet files or native execution.
+ * converter by creating actual test Parquet files and comparing execution plans.
  */
 public class AuronAutoConversionVerificationTest {
+
+    private static String testDataPath;
+
+    @BeforeAll
+    public static void setupTestData() throws Exception {
+        // Create a unique directory for test data
+        testDataPath = "/tmp/auron_test_data_" + System.currentTimeMillis();
+
+        // Create test Parquet files using Flink
+        EnvironmentSettings settings = EnvironmentSettings.newInstance()
+                .inBatchMode()
+                .build();
+
+        TableEnvironment tEnv = TableEnvironment.create(settings);
+
+        // Create a source table with generated data
+        tEnv.executeSql("CREATE TABLE test_source ("
+                + "  id BIGINT,"
+                + "  product STRING,"
+                + "  amount DOUBLE,"
+                + "  sale_date DATE"
+                + ") WITH ("
+                + "  'connector' = 'datagen',"
+                + "  'number-of-rows' = '100',"
+                + "  'fields.id.kind' = 'sequence',"
+                + "  'fields.id.start' = '1',"
+                + "  'fields.id.end' = '100',"
+                + "  'fields.product.length' = '10',"
+                + "  'fields.amount.min' = '10.0',"
+                + "  'fields.amount.max' = '500.0'"
+                + ")");
+
+        // Create a Parquet sink table
+        tEnv.executeSql("CREATE TABLE test_sink ("
+                + "  id BIGINT,"
+                + "  product STRING,"
+                + "  amount DOUBLE,"
+                + "  sale_date DATE"
+                + ") WITH ("
+                + "  'connector' = 'filesystem',"
+                + "  'path' = 'file://" + testDataPath + "',"
+                + "  'format' = 'parquet'"
+                + ")");
+
+        // Write test data to Parquet
+        System.out.println("Creating test Parquet files at: " + testDataPath);
+        tEnv.executeSql("INSERT INTO test_sink SELECT * FROM test_source").await();
+        System.out.println("✅ Test Parquet files created successfully");
+    }
+
+    @AfterAll
+    public static void cleanupTestData() {
+        // Clean up test directory
+        if (testDataPath != null) {
+            deleteDirectory(new File(testDataPath));
+            System.out.println("✅ Test data cleaned up");
+        }
+    }
+
+    private static void deleteDirectory(File directory) {
+        if (directory.exists()) {
+            File[] files = directory.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isDirectory()) {
+                        deleteDirectory(file);
+                    } else {
+                        file.delete();
+                    }
+                }
+            }
+            directory.delete();
+        }
+    }
 
     /**
      * Tests that enabling Auron changes the execution plan.
@@ -151,14 +228,16 @@ public class AuronAutoConversionVerificationTest {
     // Helper methods
 
     private String getExecutionPlan(boolean auronEnabled) {
-        Configuration config = new Configuration();
-        config.setBoolean("table.optimizer.auron.enabled", auronEnabled);
-        config.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.BATCH);
+        EnvironmentSettings settings = EnvironmentSettings.newInstance()
+                .inBatchMode()
+                .build();
 
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(config);
-        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+        TableEnvironment tEnv = TableEnvironment.create(settings);
 
-        // Create a test table
+        // Configure Auron after environment creation
+        tEnv.getConfig().getConfiguration().setBoolean("table.optimizer.auron.enabled", auronEnabled);
+
+        // Create a test table pointing to the real Parquet files
         tEnv.executeSql("CREATE TABLE sales ("
                 + "  id BIGINT,"
                 + "  product STRING,"
@@ -166,33 +245,38 @@ public class AuronAutoConversionVerificationTest {
                 + "  sale_date DATE"
                 + ") WITH ("
                 + "  'connector' = 'filesystem',"
-                + "  'path' = 'file:///tmp/test_sales.parquet',"
+                + "  'path' = 'file://" + testDataPath + "',"
                 + "  'format' = 'parquet'"
                 + ")");
 
-        // Get execution plan
-        return tEnv.explainSql("SELECT id, product FROM sales WHERE amount > 100");
+        // Get execution plan - use EXECUTION_PLAN detail level to get ExecNode plan
+        // without trying to instantiate actual source operators
+        return tEnv.sqlQuery("SELECT id, product FROM sales WHERE amount > 100")
+                .explain(ExplainDetail.EXECUTION_PLAN);
     }
 
     private String getExecutionPlanForQuery(String query, boolean auronEnabled) {
-        Configuration config = new Configuration();
-        config.setBoolean("table.optimizer.auron.enabled", auronEnabled);
-        config.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.BATCH);
+        EnvironmentSettings settings = EnvironmentSettings.newInstance()
+                .inBatchMode()
+                .build();
 
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(config);
-        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+        TableEnvironment tEnv = TableEnvironment.create(settings);
 
+        // Configure Auron after environment creation
+        tEnv.getConfig().getConfiguration().setBoolean("table.optimizer.auron.enabled", auronEnabled);
+
+        // Create test table pointing to the real Parquet files
         tEnv.executeSql("CREATE TABLE sales ("
                 + "  id BIGINT,"
                 + "  product STRING,"
                 + "  amount DOUBLE"
                 + ") WITH ("
                 + "  'connector' = 'filesystem',"
-                + "  'path' = 'file:///tmp/sales.parquet',"
+                + "  'path' = 'file://" + testDataPath + "',"
                 + "  'format' = 'parquet'"
                 + ")");
 
-        return tEnv.explainSql(query);
+        return tEnv.sqlQuery(query).explain(ExplainDetail.EXECUTION_PLAN);
     }
 
     private String getPlanSnippet(String fullPlan) {

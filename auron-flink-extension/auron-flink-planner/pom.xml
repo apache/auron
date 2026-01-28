@@ -354,6 +354,34 @@
           <reuseForks>false</reuseForks>
         </configuration>
       </plugin>
+
+      <!-- Maven Assembly Plugin to create fat jar with test classes -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <version>3.7.1</version>
+        <executions>
+          <execution>
+            <id>make-e2e-test-jar</id>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <phase>package</phase>
+            <configuration>
+              <archive>
+                <manifest>
+                  <mainClass>org.apache.auron.flink.planner.AuronEndToEndManualTest</mainClass>
+                </manifest>
+              </archive>
+              <descriptorRefs>
+                <descriptorRef>jar-with-dependencies</descriptorRef>
+              </descriptorRefs>
+              <finalName>auron-flink-e2e-test</finalName>
+              <appendAssemblyId>false</appendAssemblyId>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>

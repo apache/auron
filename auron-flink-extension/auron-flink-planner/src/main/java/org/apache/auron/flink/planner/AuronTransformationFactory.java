@@ -18,10 +18,12 @@ package org.apache.auron.flink.planner;
 
 import org.apache.auron.flink.planner.execution.AuronBatchExecutionWrapperOperator;
 import org.apache.auron.protobuf.PhysicalPlanNode;
+import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.transformations.LegacySourceTransformation;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.types.logical.RowType;
@@ -91,6 +93,13 @@ public class AuronTransformationFactory {
 
         // Get the transformation from the data stream
         Transformation<RowData> transformation = dataStream.getTransformation();
+
+        // CRITICAL: Set boundedness to BOUNDED for batch execution
+        // Auron is a batch processing engine and produces bounded results
+        if (transformation instanceof LegacySourceTransformation) {
+            ((LegacySourceTransformation<RowData>) transformation).setBoundedness(Boundedness.BOUNDED);
+            LOG.info("Set Auron transformation boundedness to BOUNDED for batch execution");
+        }
 
         // Set parallelism - default to the environment's parallelism
         int parallelism = env.getParallelism();
