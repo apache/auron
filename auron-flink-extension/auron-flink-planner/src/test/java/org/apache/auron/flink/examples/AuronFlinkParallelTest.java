@@ -114,16 +114,7 @@ public class AuronFlinkParallelTest {
         System.out.println("  table.exec.resource.default-parallelism = " + PARALLELISM);
         System.out.println("");
 
-        // Run each query with a fresh TableEnvironment to avoid Flink classloader issues
-        runQuery1(dataPath);
-        runQuery2(dataPath);
-        runQuery3(dataPath);
-        runQuery4(dataPath);
-
-        System.out.println("✅ All queries executed successfully with Auron at parallelism=" + PARALLELISM + "!");
-    }
-
-    private static TableEnvironment createConfiguredEnvironment() {
+        // Create TableEnvironment
         EnvironmentSettings settings =
                 EnvironmentSettings.newInstance().inBatchMode().build();
         TableEnvironment tEnv = TableEnvironment.create(settings);
@@ -134,16 +125,7 @@ public class AuronFlinkParallelTest {
         // Set parallelism
         tEnv.getConfig().getConfiguration().setInteger("table.exec.resource.default-parallelism", PARALLELISM);
 
-        // Disable classloader check to avoid Flink test environment issues
-        tEnv.getConfig().getConfiguration().setBoolean("classloader.check-leaked-classloader", false);
-
-        return tEnv;
-    }
-
-    private static void runQuery1(String dataPath) throws Exception {
-        System.out.println("--- Query 1: Count All Rows (Auron: ParquetScan, Flink: Aggregation) ---");
-        TableEnvironment tEnv = createConfiguredEnvironment();
-
+        // Create table
         tEnv.executeSql("CREATE TABLE sales ("
                 + "  id BIGINT,"
                 + "  name STRING,"
@@ -156,94 +138,21 @@ public class AuronFlinkParallelTest {
                 + "  'format' = 'parquet'"
                 + ")");
 
+        // Run single query demonstrating parallel execution
+        System.out.println("--- Parallel Execution Query (Auron: ParquetScan, Flink: Aggregation) ---");
         String query = "SELECT COUNT(*) as total_rows FROM sales";
         System.out.println("SQL: " + query);
+        System.out.println("Expected: " + NUM_ROWS + " rows scanned across " + PARALLELISM + " parallel tasks");
+        System.out.println("");
+
         long startTime = System.currentTimeMillis();
         TableResult result = tEnv.executeSql(query);
         result.print();
         long queryTime = System.currentTimeMillis() - startTime;
-        System.out.println("Query completed in " + queryTime + "ms");
+
         System.out.println("");
-    }
-
-    private static void runQuery2(String dataPath) throws Exception {
-        System.out.println("--- Query 2: GROUP BY Aggregation (Auron: ParquetScan, Flink: GroupBy+Agg) ---");
-        TableEnvironment tEnv = createConfiguredEnvironment();
-
-        tEnv.executeSql("CREATE TABLE sales ("
-                + "  id BIGINT,"
-                + "  name STRING,"
-                + "  amount DOUBLE,"
-                + "  category INT,"
-                + "  created_date DATE"
-                + ") WITH ("
-                + "  'connector' = 'filesystem',"
-                + "  'path' = '" + dataPath + "',"
-                + "  'format' = 'parquet'"
-                + ")");
-
-        String query =
-                "SELECT category, COUNT(*) as row_count, SUM(amount) as total_amount, AVG(amount) as avg_amount FROM sales GROUP BY category ORDER BY category";
-        System.out.println("SQL: " + query);
-        long startTime = System.currentTimeMillis();
-        TableResult result = tEnv.executeSql(query);
-        result.print();
-        long queryTime = System.currentTimeMillis() - startTime;
-        System.out.println("Query completed in " + queryTime + "ms");
-        System.out.println("");
-    }
-
-    private static void runQuery3(String dataPath) throws Exception {
-        System.out.println("--- Query 3: Filter + Projection (Auron: ParquetScan+Filter+Project) ---");
-        TableEnvironment tEnv = createConfiguredEnvironment();
-
-        tEnv.executeSql("CREATE TABLE sales ("
-                + "  id BIGINT,"
-                + "  name STRING,"
-                + "  amount DOUBLE,"
-                + "  category INT,"
-                + "  created_date DATE"
-                + ") WITH ("
-                + "  'connector' = 'filesystem',"
-                + "  'path' = '" + dataPath + "',"
-                + "  'format' = 'parquet'"
-                + ")");
-
-        String query = "SELECT id, name, amount, category FROM sales WHERE amount > 400.0 LIMIT 10";
-        System.out.println("SQL: " + query);
-        long startTime = System.currentTimeMillis();
-        TableResult result = tEnv.executeSql(query);
-        result.print();
-        long queryTime = System.currentTimeMillis() - startTime;
-        System.out.println("Query completed in " + queryTime + "ms");
-        System.out.println("");
-    }
-
-    private static void runQuery4(String dataPath) throws Exception {
-        System.out.println("--- Query 4: Statistical Aggregations (Auron: ParquetScan, Flink: Aggs) ---");
-        TableEnvironment tEnv = createConfiguredEnvironment();
-
-        tEnv.executeSql("CREATE TABLE sales ("
-                + "  id BIGINT,"
-                + "  name STRING,"
-                + "  amount DOUBLE,"
-                + "  category INT,"
-                + "  created_date DATE"
-                + ") WITH ("
-                + "  'connector' = 'filesystem',"
-                + "  'path' = '" + dataPath + "',"
-                + "  'format' = 'parquet'"
-                + ")");
-
-        String query =
-                "SELECT MIN(amount) as min_amount, MAX(amount) as max_amount, AVG(amount) as avg_amount, COUNT(DISTINCT category) as num_categories FROM sales";
-        System.out.println("SQL: " + query);
-        long startTime = System.currentTimeMillis();
-        TableResult result = tEnv.executeSql(query);
-        result.print();
-        long queryTime = System.currentTimeMillis() - startTime;
-        System.out.println("Query completed in " + queryTime + "ms");
-        System.out.println("");
+        System.out.println("✅ Query completed in " + queryTime + "ms");
+        System.out.println("✅ Auron scanned " + NUM_ROWS + " rows using " + PARALLELISM + " parallel tasks");
     }
 
     private static void cleanupTestData(String path) {

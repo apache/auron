@@ -113,7 +113,19 @@ While Auron compiles to Java 8 bytecode for compatibility, Maven plugins (especi
 
 ### Building Auron with Flink Support
 
-Build Auron with the Flink profile:
+#### Quick Build (Recommended)
+
+Use the simplified build script:
+
+```bash
+./build-flink.sh          # Build and install (skip tests)
+./build-flink.sh clean    # Clean build from scratch
+./build-flink.sh test     # Build and run tests
+```
+
+#### Manual Build
+
+Or build manually with Maven:
 
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/Home
@@ -125,9 +137,28 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/H
 
 ### Running Tests
 
-#### Option 1: Shell Script (Fastest - Recommended)
+#### Quick Test Execution (Recommended)
 
-The quickest way to run tests after building is using the provided shell scripts:
+Use the simplified example runner:
+
+```bash
+cd auron-flink-extension/auron-flink-planner
+
+./run-example.sh groupby   # GROUP BY with hybrid execution (default)
+./run-example.sh parallel  # 50K rows with parallelism=4
+./run-example.sh mvp       # MVP example with parallelism=1
+```
+
+**What these tests demonstrate:**
+- `groupby`: Auron native ParquetScan + Flink GROUP BY aggregations (hybrid execution)
+- `parallel`: Distributed file splitting across 4 parallel tasks
+- `mvp`: Basic Auron integration with multiple query types
+
+**Performance**: First run copies dependencies (~30 seconds), subsequent runs start immediately.
+
+#### Integration Tests
+
+For comprehensive integration tests:
 
 ```bash
 cd auron-flink-extension/auron-flink-planner
@@ -141,8 +172,6 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/H
 ./run-e2e-test-final.sh Simple     # AuronSimpleVerificationTest
 ./run-e2e-test-final.sh Manual     # AuronEndToEndManualTest
 ```
-
-**Performance**: First run takes ~30 seconds (copies dependencies), subsequent runs start in <1 second.
 
 #### Option 2: Maven Test
 
@@ -158,30 +187,22 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/H
 
 Replace `AuronExecutionVerificationTest` with other test class names as needed.
 
-#### Option 3: Run MVP Working Example
+#### Option 3: Direct Java Execution
 
-Run a complete working example that generates test data and executes multiple query types:
+For advanced users who want full control:
 
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/Home
 
-# First, ensure dependencies are copied (one-time setup)
-./build/apache-maven-3.9.12/bin/mvn dependency:copy-dependencies \
-  -pl auron-flink-extension/auron-flink-planner -am \
-  -DoutputDirectory=target/lib -DincludeScope=test \
-  -Pflink-1.18 -Pscala-2.12
-
-# Run the example
 CLASSPATH="auron-flink-extension/auron-flink-planner/target/test-classes:auron-flink-extension/auron-flink-planner/target/classes:auron-flink-extension/auron-flink-planner/target/lib/*" \
   $JAVA_HOME/bin/java --add-opens=java.base/java.nio=ALL-UNNAMED \
-  org.apache.auron.flink.examples.AuronFlinkMVPWorkingExample
+  org.apache.auron.flink.examples.AuronFlinkGroupByTest
 ```
 
-This example demonstrates:
-- Dynamic test data generation
-- Auron configuration with parallelism=1
-- Multiple query types (full scan, projection, filter, count)
-- Successful native execution with detailed logs
+Available test classes:
+- `AuronFlinkGroupByTest` - GROUP BY hybrid execution
+- `AuronFlinkParallelTest` - 50K rows, parallelism=4
+- `AuronFlinkMVPWorkingExample` - MVP with multiple queries
 
 ### Expected Output
 
