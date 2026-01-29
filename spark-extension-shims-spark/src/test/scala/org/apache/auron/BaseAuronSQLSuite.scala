@@ -22,6 +22,8 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.test.SharedSparkSession
 
+import org.apache.auron.util.SparkVersionUtil
+
 trait BaseAuronSQLSuite extends SharedSparkSession {
   protected val suiteWorkspace: String = getClass.getResource("/").getPath + "auron-tests-workdir"
   protected val warehouseDir: String = suiteWorkspace + "/spark-warehouse"
@@ -49,7 +51,7 @@ trait BaseAuronSQLSuite extends SharedSparkSession {
   }
 
   override protected def sparkConf: SparkConf = {
-    super.sparkConf
+    val conf = super.sparkConf
       .set("spark.sql.extensions", "org.apache.spark.sql.auron.AuronSparkSessionExtension")
       .set(
         "spark.shuffle.manager",
@@ -58,8 +60,13 @@ trait BaseAuronSQLSuite extends SharedSparkSession {
       .set("spark.auron.enable", "true")
       .set("spark.ui.enabled", "false")
       .set("spark.sql.warehouse.dir", warehouseDir)
-      // Avoid the code size overflow error in Spark code generation.
-      .set("spark.sql.codegen.wholeStage", "false")
-      .set("spark.sql.codegen.factoryMode", "NO_CODEGEN")
+
+    if (SparkVersionUtil.isSparkV40OrGreater) {
+      // Spark 4.0+: Disable session artifact isolation, align with Spark 3.x behavior
+      // Fix Catalyst codegen failure: prevent org.apache.spark.sql.catalyst.expressions.Object
+      // in isolated dirs from REPL classloader lookup failure
+      conf.set("spark.sql.artifact.isolation.enabled", "false")
+    }
+    conf
   }
 }

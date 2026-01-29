@@ -20,7 +20,7 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
 
-import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
+import org.apache.auron.util.AuronTestUtils
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
@@ -83,9 +83,6 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("spark hash function") {
-    // TODO: Fix flaky codegen cache failures in SPARK-4.x, https://github.com/apache/auron/issues/1961
-    assume(!SparkVersionUtil.isSparkV40OrGreater)
-
     withTable("t1") {
       sql("create table t1 using parquet as select array(1, 2) as arr")
       val functions =
@@ -97,9 +94,6 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("expm1 function") {
-    // TODO: Fix flaky codegen cache failures in SPARK-4.x, https://github.com/apache/auron/issues/1961
-    assume(!SparkVersionUtil.isSparkV40OrGreater)
-
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")
       sql("insert into t1 values(0.0), (1.1), (2.2)")

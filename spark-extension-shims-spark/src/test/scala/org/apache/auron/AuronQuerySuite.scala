@@ -20,7 +20,7 @@ import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
-import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
+import org.apache.auron.util.AuronTestUtils
 
 class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
   import testImplicits._
@@ -42,9 +42,6 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with year function") {
-    // TODO: Fix flaky codegen cache failures in SPARK-4.x, https://github.com/apache/auron/issues/1961
-    assume(!SparkVersionUtil.isSparkV40OrGreater)
-
     withTable("t1") {
       sql("create table t1 using parquet as select '2024-12-18' as event_time")
       checkSparkAnswerAndOperator(s"""
@@ -57,9 +54,6 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test select multiple spark ext functions with the same signature") {
-    // TODO: Fix flaky codegen cache failures in SPARK-4.x, https://github.com/apache/auron/issues/1961
-    assume(!SparkVersionUtil.isSparkV40OrGreater)
-
     withTable("t1") {
       sql("create table t1 using parquet as select '2024-12-18' as event_time")
       checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
@@ -177,9 +171,6 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("floor function with long input") {
-    // TODO: Fix flaky codegen cache failures in SPARK-4.x, https://github.com/apache/auron/issues/1961
-    assume(!SparkVersionUtil.isSparkV40OrGreater)
-
     withTable("t1") {
       sql("create table t1 using parquet as select 1L as c1, 2.2 as c2")
       checkSparkAnswerAndOperator("select floor(c1), floor(c2) from t1")
