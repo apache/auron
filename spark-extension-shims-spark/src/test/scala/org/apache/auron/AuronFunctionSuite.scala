@@ -128,10 +128,12 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("regexp_extract function with UDF failback") {
-    withTable("t1") {
-      sql("create table t1(c1 string) using parquet")
-      sql("insert into t1 values('Auron Spark SQL')")
-      checkSparkAnswerAndOperator("select regexp_extract(c1, '^A(.*)L$', 1) from t1")
+    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1(c1 string) using parquet")
+        sql("insert into t1 values('Auron Spark SQL')")
+        checkSparkAnswerAndOperator("select regexp_extract(c1, '^A(.*)L$', 1) from t1")
+      }
     }
   }
 
