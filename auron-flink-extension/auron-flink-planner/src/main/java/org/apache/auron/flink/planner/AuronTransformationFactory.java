@@ -21,11 +21,11 @@ import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.transformations.LegacySourceTransformation;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.delegation.PlannerBase;
+import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,20 +86,34 @@ public class AuronTransformationFactory {
                 1 // stageId - incrementing stage ID for Auron metrics
                 );
 
-        // Create a source transformation
+        // Create a BOUNDED source transformation directly
         // Note: For MVP, we use the old SourceFunction API
         // Future versions should migrate to the new Source API (FLIP-27)
-        DataStream<RowData> dataStream = env.addSource(sourceFunction).name("AuronNativeScan");
+        //
+        // CRITICAL CONFIGURATION FOR CLUSTER EXECUTION:
+        // 1. We create LegacySourceTransformation directly (not env.addSource())
+        //    - env.addSource() defaults to CONTINUOUS_UNBOUNDED which breaks batch mode
+        // 2. Boundedness MUST be set to BOUNDED for batch execution
+        // 3. isParallelSource MUST be true for distributed cluster execution
+        //    - The operator uses taskIndex/totalParallelism for data partitioning
+        //    - Setting this to false causes boundedness detection issues on clusters
+        org.apache.flink.streaming.api.operators.StreamSource<RowData, ?> streamSourceOperator =
+                new org.apache.flink.streaming.api.operators.StreamSource<>(sourceFunction);
 
-        // Get the transformation from the data stream
-        Transformation<RowData> transformation = dataStream.getTransformation();
+        Transformation<RowData> transformation = new LegacySourceTransformation<>(
+                "Auron Native Scan",
+                streamSourceOperator,
+                InternalTypeInfo.of(outputSchema),
+                env.getParallelism(),
+                Boundedness.BOUNDED, // MUST be BOUNDED for batch mode
+                true); // MUST be true for parallel cluster execution
 
-        // CRITICAL: Set boundedness to BOUNDED for batch execution
-        // Auron is a batch processing engine and produces bounded results
-        if (transformation instanceof LegacySourceTransformation) {
-            ((LegacySourceTransformation<RowData>) transformation).setBoundedness(Boundedness.BOUNDED);
-            LOG.info("Set Auron transformation boundedness to BOUNDED for batch execution");
-        }
+        LOG.info(
+                "Created Auron LegacySourceTransformation: boundedness=BOUNDED, parallel=true, parallelism={}",
+                env.getParallelism());
+
+        // Register the transformation with the environment
+        env.addOperator(transformation);
 
         // Set parallelism - default to the environment's parallelism
         int parallelism = env.getParallelism();

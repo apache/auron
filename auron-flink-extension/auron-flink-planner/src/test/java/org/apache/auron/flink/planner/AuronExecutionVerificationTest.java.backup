@@ -122,7 +122,7 @@ public class AuronExecutionVerificationTest {
                 + "  category STRING"
                 + ") WITH ("
                 + "  'connector' = 'datagen',"
-                + "  'number-of-rows' = '100000',"
+                + "  'number-of-rows' = '100',"
                 + "  'fields.id.kind' = 'sequence',"
                 + "  'fields.id.start' = '1',"
                 + "  'fields.id.end' = '100',"

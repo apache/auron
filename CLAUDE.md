@@ -30,6 +30,39 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/H
   -Pflink-1.18 -Pspark-3.5 -Pscala-2.12
 ```
 
+## Generating Test Data
+
+Two scripts are available for generating 100k rows of Parquet test data:
+
+### run-execution-test.sh (Recommended for Verification)
+
+Runs `AuronExecutionVerificationTest` to generate data, execute queries, and verify Auron integration:
+
+```bash
+cd auron-flink-extension/auron-flink-planner
+./run-execution-test.sh
+```
+
+This script:
+- Generates 100k rows of Parquet test data
+- Executes queries WITH Auron enabled
+- Executes queries WITHOUT Auron (for comparison)
+- Shows Auron native execution logs
+- Cleans up data automatically
+
+### generate-100k-data.sh (For Cluster Testing)
+
+Generates persistent test data for querying on a Flink cluster:
+
+```bash
+cd auron-flink-extension/auron-flink-planner
+./generate-100k-data.sh
+```
+
+Outputs data to `/tmp/flink_auron_100k_<timestamp>` which can be queried via Flink SQL Client.
+
+See [PARQUET_TEST_DATA_GUIDE.md](auron-flink-extension/auron-flink-planner/PARQUET_TEST_DATA_GUIDE.md) for complete documentation.
+
 ## Flink-Auron Integration
 
 The Flink-Auron integration is located in `auron-flink-extension/auron-flink-planner` and works with Flink 1.18-SNAPSHOT built from the `auron-integration` branch.

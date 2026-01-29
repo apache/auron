@@ -42,6 +42,20 @@ import org.slf4j.LoggerFactory;
 /**
  * Flink SourceFunction that wraps Auron native execution.
  * Executes a PhysicalPlanNode using the Auron native engine and emits results as Flink RowData.
+ *
+ * <p><b>IMPORTANT:</b> This operator is designed for parallel execution in batch mode.
+ * It MUST be configured with:
+ * <ul>
+ *   <li>Boundedness: BOUNDED (set via LegacySourceTransformation)</li>
+ *   <li>Parallel execution: true (isParallelSource in LegacySourceTransformation)</li>
+ *   <li>Runtime mode: BATCH (execution.runtime-mode=BATCH)</li>
+ * </ul>
+ *
+ * <p>The operator uses Flink's runtime context to determine task parallelism and
+ * distributes data processing across parallel instances using PlanModifier.
+ *
+ * @see org.apache.auron.flink.planner.AuronTransformationFactory
+ * @see org.apache.auron.flink.planner.runtime.PlanModifier
  */
 public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowData>
         implements ResultTypeQueryable<RowData> {
@@ -90,6 +104,12 @@ public class AuronBatchExecutionWrapperOperator extends RichSourceFunction<RowDa
                 totalParallelism,
                 partitionId,
                 stageId);
+
+        // Validate parallel execution is enabled
+        if (totalParallelism <= 0) {
+            throw new IllegalStateException("Invalid parallelism configuration: totalParallelism=" + totalParallelism
+                    + ". Auron operator requires parallel execution to be enabled.");
+        }
 
         // Modify plan for distributed execution
         PhysicalPlanNode taskPlan = org.apache.auron.flink.planner.runtime.PlanModifier.modifyForTask(
