@@ -17,7 +17,7 @@
 package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
-import org.apache.spark.sql.auron.{AuronConf, NativeConverters}
+import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
 
@@ -51,25 +51,25 @@ class NativeConvertersSuite
   }
 
   test("cast from string to numeric adds trim wrapper before native cast when enabled") {
-    withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "true") {
+    withSQLConf("spark.auron.cast.trimString" -> "true") {
       assertTrimmedCast(" 42 ", IntegerType)
     }
   }
 
   test("cast from string to boolean adds trim wrapper before native cast when enabled") {
-    withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "true") {
+    withSQLConf("spark.auron.cast.trimString" -> "true") {
       assertTrimmedCast(" true ", BooleanType)
     }
   }
 
   test("cast trim disabled via auron conf") {
-    withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "false") {
+    withSQLConf("spark.auron.cast.trimString" -> "false") {
       assertNonTrimmedCast(" 42 ", IntegerType)
     }
   }
 
   test("cast trim disabled via auron conf for boolean cast") {
-    withSQLConf(AuronConf.CAST_STRING_TRIM_ENABLE.key -> "false") {
+    withSQLConf("spark.auron.cast.trimString" -> "false") {
       assertNonTrimmedCast(" true ", BooleanType)
     }
   }

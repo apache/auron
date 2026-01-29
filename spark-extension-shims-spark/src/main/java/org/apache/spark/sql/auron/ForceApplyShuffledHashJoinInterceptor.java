@@ -18,6 +18,7 @@ package org.apache.spark.sql.auron;
 
 import net.bytebuddy.implementation.bind.annotation.Argument;
 import net.bytebuddy.implementation.bind.annotation.RuntimeType;
+import org.apache.auron.spark.configuration.SparkAuronConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +28,6 @@ public class ForceApplyShuffledHashJoinInterceptor {
     @RuntimeType
     public static Object intercept(@Argument(0) Object conf) {
         logger.debug("calling JoinSelectionHelper.forceApplyShuffledHashJoin() intercepted by auron");
-        return AuronConf.FORCE_SHUFFLED_HASH_JOIN.booleanConf();
+        return SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN.get();
     }
 }

@@ -447,7 +447,6 @@ pub struct JavaClasses<'a> {
     pub cSparkUDAFWrapperContext: SparkUDAFWrapperContext<'a>,
     pub cSparkUDTFWrapperContext: SparkUDTFWrapperContext<'a>,
     pub cSparkUDAFMemTracker: SparkUDAFMemTracker<'a>,
-    pub cAuronConf: AuronConf<'a>,
     pub cAuronRssPartitionWriterBase: AuronRssPartitionWriterBase<'a>,
     pub cAuronCallNativeWrapper: AuronCallNativeWrapper<'a>,
     pub cAuronOnHeapSpillManager: AuronOnHeapSpillManager<'a>,
@@ -513,7 +512,6 @@ impl JavaClasses<'static> {
                 cSparkUDAFWrapperContext: SparkUDAFWrapperContext::new(env)?,
                 cSparkUDTFWrapperContext: SparkUDTFWrapperContext::new(env)?,
                 cSparkUDAFMemTracker: SparkUDAFMemTracker::new(env)?,
-                cAuronConf: AuronConf::new(env)?,
                 cAuronRssPartitionWriterBase: AuronRssPartitionWriterBase::new(env)?,
                 cAuronCallNativeWrapper: AuronCallNativeWrapper::new(env)?,
                 cAuronOnHeapSpillManager: AuronOnHeapSpillManager::new(env)?,
@@ -577,9 +575,18 @@ pub struct JniBridge<'a> {
     pub method_getTotalMemoryLimited_ret: ReturnType,
     pub method_getDirectWriteSpillToDiskFile: JStaticMethodID,
     pub method_getDirectWriteSpillToDiskFile_ret: ReturnType,
-
     pub method_getAuronUDFWrapperContext: JStaticMethodID,
     pub method_getAuronUDFWrapperContext_ret: ReturnType,
+    pub method_intConf: JStaticMethodID,
+    pub method_intConf_ret: ReturnType,
+    pub method_longConf: JStaticMethodID,
+    pub method_longConf_ret: ReturnType,
+    pub method_doubleConf: JStaticMethodID,
+    pub method_doubleConf_ret: ReturnType,
+    pub method_booleanConf: JStaticMethodID,
+    pub method_booleanConf_ret: ReturnType,
+    pub method_stringConf: JStaticMethodID,
+    pub method_stringConf_ret: ReturnType,
 }
 impl<'a> JniBridge<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/auron/jni/JniBridge";
@@ -663,6 +670,36 @@ impl<'a> JniBridge<'a> {
                 "(Ljava/nio/ByteBuffer;)Lorg/apache/auron/functions/AuronUDFWrapperContext;",
             )?,
             method_getAuronUDFWrapperContext_ret: ReturnType::Object,
+            method_intConf: env.get_static_method_id(
+                class,
+                "intConf",
+                "(Ljava/lang/String;)I",
+            )?,
+            method_intConf_ret: ReturnType::Primitive(Primitive::Int),
+            method_longConf: env.get_static_method_id(
+                class,
+                "longConf",
+                "(Ljava/lang/String;)J",
+            )?,
+            method_longConf_ret: ReturnType::Primitive(Primitive::Long),
+            method_doubleConf: env.get_static_method_id(
+                class,
+                "doubleConf",
+                "(Ljava/lang/String;)D",
+            )?,
+            method_doubleConf_ret: ReturnType::Primitive(Primitive::Double),
+            method_booleanConf: env.get_static_method_id(
+                class,
+                "booleanConf",
+                "(Ljava/lang/String;)Z",
+            )?,
+            method_booleanConf_ret: ReturnType::Primitive(Primitive::Boolean),
+            method_stringConf: env.get_static_method_id(
+                class,
+                "stringConf",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+            )?,
+            method_stringConf_ret: ReturnType::Object,
         })
     }
 }
@@ -1117,58 +1154,6 @@ impl<'a> SparkMetricNode<'a> {
             method_getChild_ret: ReturnType::Object,
             method_add: env.get_method_id(class, "add", "(Ljava/lang/String;J)V")?,
             method_add_ret: ReturnType::Primitive(Primitive::Void),
-        })
-    }
-}
-
-#[allow(non_snake_case)]
-pub struct AuronConf<'a> {
-    pub class: JClass<'a>,
-    pub method_booleanConf: JStaticMethodID,
-    pub method_booleanConf_ret: ReturnType,
-    pub method_intConf: JStaticMethodID,
-    pub method_intConf_ret: ReturnType,
-    pub method_longConf: JStaticMethodID,
-    pub method_longConf_ret: ReturnType,
-    pub method_doubleConf: JStaticMethodID,
-    pub method_doubleConf_ret: ReturnType,
-    pub method_stringConf: JStaticMethodID,
-    pub method_stringConf_ret: ReturnType,
-}
-
-impl<'a> AuronConf<'_> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/AuronConf";
-
-    pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronConf<'a>> {
-        let class = get_global_jclass(env, Self::SIG_TYPE)?;
-        Ok(AuronConf {
-            class,
-            method_booleanConf: env.get_static_method_id(
-                class,
-                "booleanConf",
-                "(Ljava/lang/String;)Z",
-            )?,
-            method_booleanConf_ret: ReturnType::Primitive(Primitive::Boolean),
-            method_intConf: env.get_static_method_id(class, "intConf", "(Ljava/lang/String;)I")?,
-            method_intConf_ret: ReturnType::Primitive(Primitive::Int),
-            method_longConf: env.get_static_method_id(
-                class,
-                "longConf",
-                "(Ljava/lang/String;)J",
-            )?,
-            method_longConf_ret: ReturnType::Primitive(Primitive::Long),
-            method_doubleConf: env.get_static_method_id(
-                class,
-                "doubleConf",
-                "(Ljava/lang/String;)D",
-            )?,
-            method_doubleConf_ret: ReturnType::Primitive(Primitive::Double),
-            method_stringConf: env.get_static_method_id(
-                class,
-                "stringConf",
-                "(Ljava/lang/String;)Ljava/lang/String;",
-            )?,
-            method_stringConf_ret: ReturnType::Object,
         })
     }
 }

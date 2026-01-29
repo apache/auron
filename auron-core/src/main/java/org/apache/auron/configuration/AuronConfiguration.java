@@ -23,25 +23,23 @@ import java.util.Optional;
  */
 public abstract class AuronConfiguration {
 
-    public static final ConfigOption<Integer> BATCH_SIZE = ConfigOptions.key("auron.batchSize")
-            .description("Suggested batch size for arrow batches.")
-            .intType()
-            .defaultValue(10000);
+    public static final ConfigOption<Integer> BATCH_SIZE = new ConfigOption<>(Integer.class)
+            .withKey("auron.batchSize")
+            .withDescription("Suggested batch size for arrow batches.")
+            .withDefaultValue(10000);
 
-    public static final ConfigOption<Double> MEMORY_FRACTION = ConfigOptions.key("auron.memoryFraction")
-            .description("Suggested fraction of off-heap memory used in native execution. "
+    public static final ConfigOption<Double> MEMORY_FRACTION = new ConfigOption<>(Double.class)
+            .withKey("auron.memoryFraction")
+            .withDescription("Suggested fraction of off-heap memory used in native execution. "
                     + "actual off-heap memory usage is expected to be spark.executor.memoryOverhead * fraction.")
-            .doubleType()
-            .defaultValue(0.6);
+            .withDefaultValue(0.6);
 
-    public static final ConfigOption<String> NATIVE_LOG_LEVEL = ConfigOptions.key("auron.native.log.level")
-            .description("Log level for native execution.")
-            .stringType()
-            .defaultValue("info");
+    public static final ConfigOption<String> NATIVE_LOG_LEVEL = new ConfigOption<>(String.class)
+            .withKey("auron.native.log.level")
+            .withDescription("Log level for native execution.")
+            .withDefaultValue("info");
 
     public abstract <T> Optional<T> getOptional(ConfigOption<T> option);
-
-    public abstract <T> Optional<T> getOptional(String key);
 
     public <T> T get(ConfigOption<T> option) {
         return getOptional(option).orElseGet(() -> getOptionDefaultValue(option));
@@ -58,18 +56,6 @@ public abstract class AuronConfiguration {
     }
 
     /**
-     * Returns the value associated with the given config option as a string. If no value is mapped
-     * under any key of the option, it returns the specified default instead of the option's default
-     * value.
-     *
-     * @param configOption The configuration option
-     * @return the (default) value associated with the given config option
-     */
-    public String getString(ConfigOption<String> configOption, String overrideDefault) {
-        return getOptional(configOption).orElse(overrideDefault);
-    }
-
-    /**
      * Returns the value associated with the given config option as an integer.
      *
      * @param configOption The configuration option
@@ -80,19 +66,6 @@ public abstract class AuronConfiguration {
     }
 
     /**
-     * Returns the value associated with the given config option as an integer. If no value is
-     * mapped under any key of the option, it returns the specified default instead of the option's
-     * default value.
-     *
-     * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapped for any key of the option
-     * @return the configured value associated with the given config option, or the overrideDefault
-     */
-    public int getInteger(ConfigOption<Integer> configOption, int overrideDefault) {
-        return getOptional(configOption).orElse(overrideDefault);
-    }
-
-    /**
      * Returns the value associated with the given config option as a long integer.
      *
      * @param configOption The configuration option
@@ -100,19 +73,6 @@ public abstract class AuronConfiguration {
      */
     public long getLong(ConfigOption<Long> configOption) {
         return getOptional(configOption).orElseGet(() -> getOptionDefaultValue(configOption));
-    }
-
-    /**
-     * Returns the value associated with the given config option as a long integer. If no value is
-     * mapped under any key of the option, it returns the specified default instead of the option's
-     * default value.
-     *
-     * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapped for any key of the option
-     * @return the configured value associated with the given config option, or the overrideDefault
-     */
-    public long getLong(ConfigOption<Long> configOption, long overrideDefault) {
-        return getOptional(configOption).orElse(overrideDefault);
     }
 
     /**
@@ -149,19 +109,6 @@ public abstract class AuronConfiguration {
     }
 
     /**
-     * Returns the value associated with the given config option as a float. If no value is mapped
-     * under any key of the option, it returns the specified default instead of the option's default
-     * value.
-     *
-     * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapped for any key of the option
-     * @return the configured value associated with the given config option, or the overrideDefault
-     */
-    public float getFloat(ConfigOption<Float> configOption, float overrideDefault) {
-        return getOptional(configOption).orElse(overrideDefault);
-    }
-
-    /**
      * Returns the value associated with the given config option as a {@code double}.
      *
      * @param configOption The configuration option
@@ -169,19 +116,6 @@ public abstract class AuronConfiguration {
      */
     public double getDouble(ConfigOption<Double> configOption) {
         return getOptional(configOption).orElseGet(() -> getOptionDefaultValue(configOption));
-    }
-
-    /**
-     * Returns the value associated with the given config option as a {@code double}. If no value is
-     * mapped under any key of the option, it returns the specified default instead of the option's
-     * default value.
-     *
-     * @param configOption The configuration option
-     * @param overrideDefault The value to return if no value was mapped for any key of the option
-     * @return the configured value associated with the given config option, or the overrideDefault
-     */
-    public double getDouble(ConfigOption<Double> configOption, double overrideDefault) {
-        return getOptional(configOption).orElse(overrideDefault);
     }
 
     /**

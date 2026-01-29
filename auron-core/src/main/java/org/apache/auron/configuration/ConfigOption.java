@@ -16,9 +16,10 @@
  */
 package org.apache.auron.configuration;
 
-import static org.apache.auron.util.Preconditions.checkNotNull;
-
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
+import org.apache.auron.jni.AuronAdaptor;
 
 /**
  * A {@code ConfigOption} describes a configuration parameter. It encapsulates the configuration
@@ -35,16 +36,22 @@ public class ConfigOption<T> {
     public static final String EMPTY_DESCRIPTION = "";
 
     /** The current key for that config option. */
-    private final String key;
+    private String key;
+
+    /** The current key for that config option. */
+    private List<String> altKeys = new ArrayList<>();
 
     /** The default value for this option. */
-    private final T defaultValue;
+    private T defaultValue;
+
+    /** The current category for that config option. */
+    private String category = "Uncategorized";
 
     /** The description for this option. */
-    private final String description;
+    private String description;
 
     /** The function to compute the default value. */
-    private final Function<AuronConfiguration, T> dynamicDefaultValueFunction;
+    private Function<AuronConfiguration, T> dynamicDefaultValueFunction;
 
     /**
      * Type of the value that this ConfigOption describes.
@@ -55,27 +62,40 @@ public class ConfigOption<T> {
      *   <li>typeClass == atomic class and isList == true for {@code ConfigOption<List<Integer>>}
      * </ul>
      */
-    private final Class<?> clazz;
+    private Class<T> clazz;
 
-    /**
-     * Creates a new config option with fallback keys.
-     *
-     * @param key The current key for that config option
-     * @param clazz describes type of the ConfigOption, see description of the clazz field
-     * @param description Description for that option
-     * @param defaultValue The default value for this option
-     */
-    ConfigOption(
-            String key,
-            Class<?> clazz,
-            T defaultValue,
-            String description,
-            Function<AuronConfiguration, T> dynamicDefaultValueFunction) {
-        this.key = checkNotNull(key);
-        this.description = description;
+    public ConfigOption(Class<T> clazz) {
+        this.clazz = clazz;
+    }
+
+    public ConfigOption<T> withKey(String key) {
+        this.key = key;
+        return this;
+    }
+
+    public ConfigOption<T> addAltKey(String altKey) {
+        this.altKeys.add(altKey);
+        return this;
+    }
+
+    public ConfigOption<T> withDefaultValue(T defaultValue) {
         this.defaultValue = defaultValue;
-        this.clazz = checkNotNull(clazz);
+        return this;
+    }
+
+    public ConfigOption<T> withCategory(String category) {
+        this.category = category;
+        return this;
+    }
+
+    public ConfigOption<T> withDescription(String description) {
+        this.description = description;
+        return this;
+    }
+
+    public ConfigOption<T> withDynamicDefaultValue(Function<AuronConfiguration, T> dynamicDefaultValueFunction) {
         this.dynamicDefaultValueFunction = dynamicDefaultValueFunction;
+        return this;
     }
 
     /**
@@ -88,21 +108,24 @@ public class ConfigOption<T> {
     }
 
     /**
-     * Gets the description of configuration key
-     *
-     * @return
+     * Gets the alternative configuration keys.
      */
-    public String description() {
-        return description;
+    public List<String> altKeys() {
+        return altKeys;
     }
 
     /**
-     * Checks if this option has a default value.
-     *
-     * @return True if it has a default value, false if not.
+     * Gets the category of configuration key
      */
-    public boolean hasDefaultValue() {
-        return defaultValue != null;
+    public String category() {
+        return category;
+    }
+
+    /**
+     * Gets the description of configuration key
+     */
+    public String description() {
+        return description;
     }
 
     /**
@@ -130,5 +153,23 @@ public class ConfigOption<T> {
      */
     public Function<AuronConfiguration, T> dynamicDefaultValueFunction() {
         return dynamicDefaultValueFunction;
+    }
+
+    /**
+     * Gets the type class of the value that this ConfigOption describes.
+     *
+     * @return The type class of the value that this ConfigOption describes.
+     */
+    public Class<T> getValueClass() {
+        return clazz;
+    }
+
+    /**
+     * Retrieves the current value of this configuration option.
+     *
+     * @return the current value associated with this configuration option.
+     */
+    public T get() {
+        return AuronAdaptor.getInstance().getAuronConfiguration().get(this);
     }
 }

@@ -18,7 +18,6 @@ package org.apache.spark.sql.auron
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -26,6 +25,8 @@ import org.apache.spark.sql.execution.ColumnarRule
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
+
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class AuronSparkSessionExtension extends (SparkSessionExtensions => Unit) with Logging {
   Shims.get.initExtension()
@@ -35,7 +36,6 @@ class AuronSparkSessionExtension extends (SparkSessionExtensions => Unit) with L
     SparkEnv.get.conf.set(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key, "true")
     logInfo(s"${classOf[AuronSparkSessionExtension].getName} enabled")
 
-    assert(AuronSparkSessionExtension.auronEnabledKey != null)
     Shims.get.onApplyingExtension()
 
     extensions.injectColumnar(sparkSession => {
@@ -45,11 +45,6 @@ class AuronSparkSessionExtension extends (SparkSessionExtensions => Unit) with L
 }
 
 object AuronSparkSessionExtension extends Logging {
-  lazy val auronEnabledKey: ConfigEntry[Boolean] = SQLConf
-    .buildConf("spark.auron.enable")
-    .booleanConf
-    .createWithDefault(true)
-
   def dumpSimpleSparkPlanTreeNode(exec: SparkPlan, depth: Int = 0): Unit = {
     val nodeName = exec.nodeName
     val convertible = exec
@@ -68,7 +63,7 @@ case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
   override def preColumnarTransitions: Rule[SparkPlan] = {
     new Rule[SparkPlan] {
       override def apply(sparkPlan: SparkPlan): SparkPlan = {
-        if (!sparkPlan.conf.getConf(auronEnabledKey)) {
+        if (!SparkAuronConfiguration.AURON_ENABLED.get()) {
           return sparkPlan // performs no conversion if auron is not enabled
         }
 

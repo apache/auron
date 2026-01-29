@@ -17,9 +17,9 @@
 package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
-import org.apache.spark.sql.auron.AuronConf
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.util.AuronTestUtils
 
 class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
@@ -197,7 +197,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     if (AuronTestUtils.isSparkV32OrGreater) {
       Seq(true, false).foreach { forcePositionalEvolution =>
         withEnvConf(
-          AuronConf.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
+          SparkAuronConfiguration.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
             Seq[(Integer, Integer)]((1, 2), (3, 4), (5, 6), (null, null))
@@ -220,7 +220,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     if (AuronTestUtils.isSparkV32OrGreater) {
       Seq(true, false).foreach { forcePositionalEvolution =>
         withEnvConf(
-          AuronConf.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
+          SparkAuronConfiguration.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
             Seq[(Integer, Integer, Integer)]((1, 2, 1), (3, 4, 2), (5, 6, 3), (null, null, 4))

@@ -16,53 +16,51 @@
  */
 package org.apache.auron.configuration;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 public class MockAuronConfiguration extends AuronConfiguration {
 
-    public static final ConfigOption<String> STRING_CONFIG_OPTION =
-            ConfigOptions.key("string").stringType().defaultValue("zm");
+    // Basic configuration options with descriptions
+    public static final ConfigOption<String> STRING_CONFIG_OPTION = new ConfigOption<>(String.class)
+            .withKey("string")
+            .withDescription("A string configuration option for testing.")
+            .withDefaultValue("zm");
 
-    public static final ConfigOption<String> STRING_WITHOUT_DEFAULT_CONFIG_OPTION =
-            ConfigOptions.key("string_without_default").stringType().noDefaultValue();
+    public static final ConfigOption<Integer> INT_CONFIG_OPTION = new ConfigOption<>(Integer.class)
+            .withKey("int")
+            .withDescription("An integer configuration option for testing.")
+            .withDefaultValue(1);
 
-    public static final ConfigOption<Integer> INT_CONFIG_OPTION =
-            ConfigOptions.key("int").intType().defaultValue(1);
+    public static final ConfigOption<Long> LONG_CONFIG_OPTION = new ConfigOption<>(Long.class)
+            .withKey("long")
+            .withDescription("A long configuration option for testing.")
+            .withDefaultValue(1L);
 
-    public static final ConfigOption<Long> LONG_CONFIG_OPTION =
-            ConfigOptions.key("long").longType().defaultValue(1L);
+    public static final ConfigOption<Boolean> BOOLEAN_CONFIG_OPTION = new ConfigOption<>(Boolean.class)
+            .withKey("boolean")
+            .withDescription("A boolean configuration option for testing.")
+            .withDefaultValue(true);
 
-    public static final ConfigOption<Boolean> BOOLEAN_CONFIG_OPTION =
-            ConfigOptions.key("boolean").booleanType().defaultValue(true);
+    public static final ConfigOption<Double> DOUBLE_CONFIG_OPTION = new ConfigOption<>(Double.class)
+            .withKey("double")
+            .withDescription("A double configuration option for testing.")
+            .withDefaultValue(1.0);
 
-    public static final ConfigOption<Double> DOUBLE_CONFIG_OPTION =
-            ConfigOptions.key("double").doubleType().defaultValue(1.0);
+    public static final ConfigOption<Float> FLOAT_CONFIG_OPTION = new ConfigOption<>(Float.class)
+            .withKey("float")
+            .withDescription("A float configuration option for testing.")
+            .withDefaultValue(1.0f);
 
-    public static final ConfigOption<Float> FLOAT_CONFIG_OPTION =
-            ConfigOptions.key("float").floatType().defaultValue(1.0f);
-
-    public static final ConfigOption<Integer> INT_WITH_DYNAMIC_DEFAULT_CONFIG_OPTION = ConfigOptions.key(
-                    "int_with_dynamic_default")
-            .intType()
-            .dynamicDefaultValue(config -> config.getInteger(INT_CONFIG_OPTION) * 5);
-
-    private Map<String, Object> configMap = new HashMap<>();
+    public static final ConfigOption<Integer> INT_WITH_DYNAMIC_DEFAULT_CONFIG_OPTION = new ConfigOption<>(Integer.class)
+            .withKey("int_with_dynamic_default")
+            .withDescription("An integer configuration option with dynamic default value.")
+            .withDynamicDefaultValue(
+                    config -> config.getOptional(INT_CONFIG_OPTION).orElse(1) * 5);
 
     public MockAuronConfiguration() {}
 
-    public void addConfig(String key, Object value) {
-        configMap.put(key, value);
-    }
-
     @Override
     public <T> Optional<T> getOptional(ConfigOption<T> option) {
-        return Optional.ofNullable((T) configMap.getOrDefault(option.key(), getOptionDefaultValue(option)));
-    }
-
-    @Override
-    public <T> Optional<T> getOptional(String key) {
-        return Optional.ofNullable((T) configMap.get(key));
+        return Optional.empty(); // always use default value
     }
 }

@@ -81,31 +81,17 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 import org.apache.auron.{protobuf => pb}
-import org.apache.auron.configuration.AuronConfiguration
-import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 object NativeConverters extends Logging {
-
-  private def sparkAuronConfig: AuronConfiguration =
-    AuronAdaptor.getInstance.getAuronConfiguration
-  def udfEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.udf.enabled", defaultValue = true)
-  def udfJsonEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.udf.UDFJson.enabled", defaultValue = true)
-  def udfBrickHouseEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.udf.brickhouse.enabled", defaultValue = true)
-  def decimalArithOpEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.decimal.arithOp.enabled", defaultValue = false)
-  def datetimeExtractEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.datetime.extract.enabled", defaultValue = false)
-  def castTrimStringEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.cast.trimString", defaultValue = true)
+  def udfJsonEnabled: Boolean = SparkAuronConfiguration.UDF_JSON_ENABLED.get()
+  def udfBrickHouseEnabled: Boolean = SparkAuronConfiguration.UDF_BRICKHOUSE_ENABLED.get()
+  def decimalArithOpEnabled: Boolean = SparkAuronConfiguration.DECIMAL_ARITH_OP_ENABLED.get()
+  def datetimeExtractEnabled: Boolean = SparkAuronConfiguration.DATETIME_EXTRACT_ENABLED.get()
+  def castTrimStringEnabled: Boolean = SparkAuronConfiguration.CAST_STRING_TRIM_ENABLE.get()
   def singleChildFallbackEnabled: Boolean =
-    AuronConverters.getBooleanConf(
-      "spark.auron.expression.singleChildFallback.enabled",
-      defaultValue = true)
+    SparkAuronConfiguration.UDF_SINGLE_CHILD_FALLBACK_ENABLED.get()
 
   /**
    * Is the data type(scalar or complex) supported by Auron.
@@ -781,7 +767,7 @@ object NativeConverters extends Logging {
       // if rhs is complex in and/or operators, use short-circuiting implementation
       // or if forceShortCircuitAndOr is enabled, always use short-circuiting
       case And(lhs, rhs)
-          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR)
+          if SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR.get()
             || rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
         buildExprNode {
           _.setScAndExpr(
@@ -791,7 +777,7 @@ object NativeConverters extends Logging {
               .setRight(convertExprWithFallback(rhs, isPruningExpr, fallback)))
         }
       case Or(lhs, rhs)
-          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR)
+          if SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR.get()
             || rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
         buildExprNode {
           _.setScOrExpr(
@@ -889,11 +875,9 @@ object NativeConverters extends Logging {
       case Length(arg) if arg.dataType == StringType =>
         buildScalarFunction(pb.ScalarFunction.CharacterLength, arg :: Nil, IntegerType)
 
-      case e: Lower
-          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE) =>
+      case e: Lower if SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE.get() =>
         buildExtScalarFunction("Spark_StringLower", e.children, e.dataType)
-      case e: Upper
-          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE) =>
+      case e: Upper if SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE.get() =>
         buildExtScalarFunction("Spark_StringUpper", e.children, e.dataType)
 
       case e: StringTrim =>
@@ -1254,7 +1238,7 @@ object NativeConverters extends Logging {
         }
 
         // fallback to UDAF
-        if (sparkAuronConfig.getBoolean(SparkAuronConfiguration.UDAF_FALLBACK_ENABLE)) {
+        if (SparkAuronConfiguration.UDAF_FALLBACK_ENABLE.get()) {
           udaf match {
             case _: DeclarativeAggregate =>
             case _: TypedImperativeAggregate[_] =>

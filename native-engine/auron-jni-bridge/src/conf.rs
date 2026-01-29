@@ -67,7 +67,7 @@ pub trait BooleanConf {
     fn value(&self) -> Result<bool> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
-        jni_call_static!(AuronConf.booleanConf(key.as_obj()) -> bool)
+        jni_call_static!(JniBridge.booleanConf(key.as_obj()) -> bool)
     }
 }
 
@@ -76,7 +76,7 @@ pub trait IntConf {
     fn value(&self) -> Result<i32> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
-        jni_call_static!(AuronConf.intConf(key.as_obj()) -> i32)
+        jni_call_static!(JniBridge.intConf(key.as_obj()) -> i32)
     }
 }
 
@@ -85,7 +85,7 @@ pub trait LongConf {
     fn value(&self) -> Result<i64> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
-        jni_call_static!(AuronConf.longConf(key.as_obj()) -> i64)
+        jni_call_static!(JniBridge.longConf(key.as_obj()) -> i64)
     }
 }
 
@@ -94,7 +94,7 @@ pub trait DoubleConf {
     fn value(&self) -> Result<f64> {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
-        jni_call_static!(AuronConf.doubleConf(key.as_obj()) -> f64)
+        jni_call_static!(JniBridge.doubleConf(key.as_obj()) -> f64)
     }
 }
 
@@ -104,7 +104,7 @@ pub trait StringConf {
         ensure_jni_bridge_inited()?;
         let key = jni_new_string!(self.key())?;
         let value = jni_get_string!(
-            jni_call_static!(AuronConf.stringConf(key.as_obj()) -> JObject)?
+            jni_call_static!(JniBridge.stringConf(key.as_obj()) -> JObject)?
                 .as_obj()
                 .into()
         )?;

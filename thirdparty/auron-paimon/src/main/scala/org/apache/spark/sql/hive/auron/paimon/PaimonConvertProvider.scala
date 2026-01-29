@@ -24,11 +24,11 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.execution.auron.plan.NativePaimonTableScanExec
 
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
+
 class PaimonConvertProvider extends AuronConvertProvider with Logging {
 
-  override def isEnabled: Boolean = {
-    AuronConverters.getBooleanConf("spark.auron.enable.paimon.scan", defaultValue = false)
-  }
+  override def isEnabled: Boolean = SparkAuronConfiguration.ENABLE_PAIMON_SCAN.get()
 
   override def isSupported(exec: SparkPlan): Boolean = {
     exec match {
