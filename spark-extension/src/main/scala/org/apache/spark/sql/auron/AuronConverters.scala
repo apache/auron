@@ -80,58 +80,34 @@ import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 object AuronConverters extends Logging {
-  def enableScan: Boolean =
-    getBooleanConf("spark.auron.enable.scan", defaultValue = true)
-  def enableProject: Boolean =
-    getBooleanConf("spark.auron.enable.project", defaultValue = true)
-  def enableFilter: Boolean =
-    getBooleanConf("spark.auron.enable.filter", defaultValue = true)
-  def enableSort: Boolean =
-    getBooleanConf("spark.auron.enable.sort", defaultValue = true)
-  def enableUnion: Boolean =
-    getBooleanConf("spark.auron.enable.union", defaultValue = true)
-  def enableSmj: Boolean =
-    getBooleanConf("spark.auron.enable.smj", defaultValue = true)
-  def enableShj: Boolean =
-    getBooleanConf("spark.auron.enable.shj", defaultValue = true)
-  def enableBhj: Boolean =
-    getBooleanConf("spark.auron.enable.bhj", defaultValue = true)
-  def enableBnlj: Boolean =
-    getBooleanConf("spark.auron.enable.bnlj", defaultValue = true)
-  def enableLocalLimit: Boolean =
-    getBooleanConf("spark.auron.enable.local.limit", defaultValue = true)
-  def enableGlobalLimit: Boolean =
-    getBooleanConf("spark.auron.enable.global.limit", defaultValue = true)
+  def enableScan: Boolean = SparkAuronConfiguration.ENABLE_SCAN.get()
+  def enableProject: Boolean = SparkAuronConfiguration.ENABLE_PROJECT.get()
+  def enableFilter: Boolean = SparkAuronConfiguration.ENABLE_FILTER.get()
+  def enableSort: Boolean = SparkAuronConfiguration.ENABLE_SORT.get()
+  def enableUnion: Boolean = SparkAuronConfiguration.ENABLE_UNION.get()
+  def enableSmj: Boolean = SparkAuronConfiguration.ENABLE_SMJ.get()
+  def enableShj: Boolean = SparkAuronConfiguration.ENABLE_SHJ.get()
+  def enableBhj: Boolean = SparkAuronConfiguration.ENABLE_BHJ.get()
+  def enableBnlj: Boolean = SparkAuronConfiguration.ENABLE_BNLJ.get()
+  def enableLocalLimit: Boolean = SparkAuronConfiguration.ENABLE_LOCAL_LIMIT.get()
+  def enableGlobalLimit: Boolean = SparkAuronConfiguration.ENABLE_GLOBAL_LIMIT.get()
   def enableTakeOrderedAndProject: Boolean =
-    getBooleanConf("spark.auron.enable.take.ordered.and.project", defaultValue = true)
-  def enableCollectLimit: Boolean =
-    getBooleanConf("spark.auron.enable.collectLimit", defaultValue = true)
-  def enableAggr: Boolean =
-    getBooleanConf("spark.auron.enable.aggr", defaultValue = true)
-  def enableExpand: Boolean =
-    getBooleanConf("spark.auron.enable.expand", defaultValue = true)
-  def enableWindow: Boolean =
-    getBooleanConf("spark.auron.enable.window", defaultValue = true)
-  def enableWindowGroupLimit: Boolean =
-    getBooleanConf("spark.auron.enable.window.group.limit", defaultValue = true)
-  def enableGenerate: Boolean =
-    getBooleanConf("spark.auron.enable.generate", defaultValue = true)
-  def enableLocalTableScan: Boolean =
-    getBooleanConf("spark.auron.enable.local.table.scan", defaultValue = true)
-  def enableDataWriting: Boolean =
-    getBooleanConf("spark.auron.enable.data.writing", defaultValue = false)
-  def enableScanParquet: Boolean =
-    getBooleanConf("spark.auron.enable.scan.parquet", defaultValue = true)
+    SparkAuronConfiguration.ENABLE_TAKE_ORDERED_AND_PROJECT.get()
+  def enableCollectLimit: Boolean = SparkAuronConfiguration.ENABLE_COLLECT_LIMIT.get()
+  def enableAggr: Boolean = SparkAuronConfiguration.ENABLE_AGGR.get()
+  def enableExpand: Boolean = SparkAuronConfiguration.ENABLE_EXPAND.get()
+  def enableWindow: Boolean = SparkAuronConfiguration.ENABLE_WINDOW.get()
+  def enableWindowGroupLimit: Boolean = SparkAuronConfiguration.ENABLE_WINDOW_GROUP_LIMIT.get()
+  def enableGenerate: Boolean = SparkAuronConfiguration.ENABLE_GENERATE.get()
+  def enableLocalTableScan: Boolean = SparkAuronConfiguration.ENABLE_LOCAL_TABLE_SCAN.get()
+  def enableDataWriting: Boolean = SparkAuronConfiguration.ENABLE_DATA_WRITING.get()
+  def enableScanParquet: Boolean = SparkAuronConfiguration.ENABLE_SCAN_PARQUET.get()
   def enableScanParquetTimestamp: Boolean =
-    getBooleanConf("spark.auron.enable.scan.parquet.timestamp", defaultValue = true)
-  def enableScanOrc: Boolean =
-    getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
-  def enableScanOrcTimestamp: Boolean =
-    getBooleanConf("spark.auron.enable.scan.orc.timestamp", defaultValue = true)
-  def enableBroadcastExchange: Boolean =
-    getBooleanConf("spark.auron.enable.broadcastExchange", defaultValue = true)
-  def enableShuffleExechange: Boolean =
-    getBooleanConf("spark.auron.enable.shuffleExchange", defaultValue = true)
+    SparkAuronConfiguration.ENABLE_SCAN_PARQUET_TIMESTAMP.get()
+  def enableScanOrc: Boolean = SparkAuronConfiguration.ENABLE_SCAN_ORC.get()
+  def enableScanOrcTimestamp: Boolean = SparkAuronConfiguration.ENABLE_SCAN_ORC_TIMESTAMP.get()
+  def enableBroadcastExchange: Boolean = SparkAuronConfiguration.ENABLE_BROADCAST_EXCHANGE.get()
+  def enableShuffleExechange: Boolean = SparkAuronConfiguration.ENABLE_SHUFFLE_EXCHANGE.get()
 
   private val extConvertProviders = ServiceLoader.load(classOf[AuronConvertProvider]).asScala
 

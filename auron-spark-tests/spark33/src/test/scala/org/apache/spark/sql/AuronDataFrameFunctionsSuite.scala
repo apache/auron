@@ -14,20 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.auron;
+package org.apache.spark.sql
 
-import net.bytebuddy.implementation.bind.annotation.Argument;
-import net.bytebuddy.implementation.bind.annotation.RuntimeType;
-import org.apache.auron.spark.configuration.SparkAuronConfiguration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-public class ForceApplyShuffledHashJoinInterceptor {
-    private static final Logger logger = LoggerFactory.getLogger(ForceApplyShuffledHashJoinInterceptor.class);
-
-    @RuntimeType
-    public static Object intercept(@Argument(0) Object conf) {
-        logger.debug("calling JoinSelectionHelper.forceApplyShuffledHashJoin() intercepted by auron");
-        return SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN.get();
-    }
-}
+class AuronDataFrameFunctionsSuite extends DataFrameFunctionsSuite with SparkQueryTestsBase {}
