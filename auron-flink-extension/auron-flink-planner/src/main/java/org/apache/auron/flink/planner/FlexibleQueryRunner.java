@@ -58,8 +58,7 @@ public class FlexibleQueryRunner {
         // Create batch table environment
         EnvironmentSettings settings =
                 EnvironmentSettings.newInstance().inBatchMode().build();
-        org.apache.flink.table.api.TableEnvironment tEnv =
-                org.apache.flink.table.api.TableEnvironment.create(settings);
+        org.apache.flink.table.api.TableEnvironment tEnv = org.apache.flink.table.api.TableEnvironment.create(settings);
 
         // Configure execution
         tEnv.getConfig().getConfiguration().setString("execution.runtime-mode", "BATCH");
@@ -72,11 +71,10 @@ public class FlexibleQueryRunner {
         System.out.println();
 
         // Create table with provided schema
-        String createTableSql = "CREATE TABLE sales (" + tableSchema + ") WITH (" +
-                "  'connector' = 'filesystem'," +
-                "  'path' = '" + dataPath + "'," +
-                "  'format' = 'parquet'" +
-                ")";
+        String createTableSql = "CREATE TABLE sales (" + tableSchema + ") WITH (" + "  'connector' = 'filesystem',"
+                + "  'path' = '"
+                + dataPath + "'," + "  'format' = 'parquet'"
+                + ")";
 
         tEnv.executeSql(createTableSql);
         System.out.println("Table created with schema:");

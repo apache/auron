@@ -125,23 +125,20 @@ public class CompareQueryRunner {
         System.out.println(separator);
     }
 
-    private static QueryResult executeQuery(
-            String dataPath, String tableSchema, String sqlQuery, boolean auronEnabled)
+    private static QueryResult executeQuery(String dataPath, String tableSchema, String sqlQuery, boolean auronEnabled)
             throws Exception {
 
         EnvironmentSettings settings =
                 EnvironmentSettings.newInstance().inBatchMode().build();
-        org.apache.flink.table.api.TableEnvironment tEnv =
-                org.apache.flink.table.api.TableEnvironment.create(settings);
+        org.apache.flink.table.api.TableEnvironment tEnv = org.apache.flink.table.api.TableEnvironment.create(settings);
 
         tEnv.getConfig().getConfiguration().setString("execution.runtime-mode", "BATCH");
         tEnv.getConfig().getConfiguration().setBoolean("table.optimizer.auron.enabled", auronEnabled);
 
-        String createTableSql = "CREATE TABLE sales (" + tableSchema + ") WITH (" +
-                "  'connector' = 'filesystem'," +
-                "  'path' = '" + dataPath + "'," +
-                "  'format' = 'parquet'" +
-                ")";
+        String createTableSql = "CREATE TABLE sales (" + tableSchema + ") WITH (" + "  'connector' = 'filesystem',"
+                + "  'path' = '"
+                + dataPath + "'," + "  'format' = 'parquet'"
+                + ")";
 
         tEnv.executeSql(createTableSql);
 

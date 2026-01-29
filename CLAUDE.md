@@ -30,38 +30,67 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/H
   -Pflink-1.18 -Pspark-3.5 -Pscala-2.12
 ```
 
-## Generating Test Data
+## Testing and Benchmarking Scripts
 
-Two scripts are available for generating 100k rows of Parquet test data:
+Essential scripts for testing and benchmarking are located in `auron-flink-extension/auron-flink-planner/scripts/`:
 
-### run-execution-test.sh (Recommended for Verification)
+### Verification Test
 
-Runs `AuronExecutionVerificationTest` to generate data, execute queries, and verify Auron integration:
+Run end-to-end verification tests:
 
 ```bash
 cd auron-flink-extension/auron-flink-planner
-./run-execution-test.sh
+./scripts/run-e2e-test.sh
 ```
 
 This script:
-- Generates 100k rows of Parquet test data
+- Generates Parquet test data
 - Executes queries WITH Auron enabled
 - Executes queries WITHOUT Auron (for comparison)
 - Shows Auron native execution logs
 - Cleans up data automatically
 
-### generate-100k-data.sh (For Cluster Testing)
+### Generating Test Data
 
-Generates persistent test data for querying on a Flink cluster:
+Generate test data using Flink cluster parallelism:
 
 ```bash
 cd auron-flink-extension/auron-flink-planner
-./generate-100k-data.sh
+
+# Generate 10M rows with standard schema (4 columns)
+./scripts/generate-data-on-cluster.sh 10000000
+
+# Generate 5M rows with wide schema (50 columns)
+./scripts/generate-data-on-cluster.sh 5000000 wide
 ```
 
-Outputs data to `/tmp/flink_auron_100k_<timestamp>` which can be queried via Flink SQL Client.
+### Running Custom Queries
 
-See [PARQUET_TEST_DATA_GUIDE.md](auron-flink-extension/auron-flink-planner/PARQUET_TEST_DATA_GUIDE.md) for complete documentation.
+Execute arbitrary SQL queries with Auron and/or Flink native:
+
+```bash
+cd auron-flink-extension/auron-flink-planner
+
+# Run with both Auron and Flink native
+./scripts/run-query.sh <data_path> <table_schema> <sql_query> both
+
+# Example
+./scripts/run-query.sh /tmp/flink_auron_10000000_1769658711 \
+  'id BIGINT, product STRING, amount DOUBLE, category STRING' \
+  'SELECT id, amount FROM sales WHERE amount > 1000 LIMIT 100'
+```
+
+### Validating Correctness
+
+Compare query results between Auron and Flink native:
+
+```bash
+cd auron-flink-extension/auron-flink-planner
+
+./scripts/compare-query.sh <data_path> <table_schema> <sql_query>
+```
+
+See [scripts/README.md](auron-flink-extension/auron-flink-planner/scripts/README.md) for complete documentation.
 
 ## Flink-Auron Integration
 
@@ -105,7 +134,7 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk17.0.5-msft.jdk/Contents/H
 cd auron-flink-extension/auron-flink-planner
 
 # Run the test
-./run-e2e-test.sh
+./scripts/run-e2e-test.sh
 ```
 
 **Performance**:
