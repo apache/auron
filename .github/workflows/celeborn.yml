@@ -37,16 +37,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - celebornver: "celeborn-0.6"
-          - celebornver: "celeborn-0.5"
+        celebornver: [ "celeborn-0.6", "celeborn-0.5" ]
+        sparkver: [ "spark-3.5", "spark-4.1" ]
+        scalaver: [ "2.12", "2.13" ]
+        javaver: [ "8", "21" ]
+        exclude:
+          - sparkver: "spark-3.5"
+            scalaver: "2.13"
+          - sparkver: "spark-3.5"
+            javaver: "21"
+          - sparkver: "spark-4.1"
+            scalaver: "2.12"
+          - sparkver: "spark-4.1"
+            javaver: "8"
     uses: ./.github/workflows/tpcds-reusable.yml
-    name: Test Celeborn ${{ matrix.celebornver }}
+    name: Test Celeborn ${{ matrix.celebornver }}, ${{ matrix.sparkver }}, scala-${{ matrix.scalaver }}, jdk-${{ matrix.javaver }}
     with:
       celebornver: ${{ matrix.celebornver }}
-      sparkver: "spark-3.5"
+      sparkver: ${{ matrix.sparkver }}
+      scalaver: ${{ matrix.scalaver }}
+      javaver: ${{ matrix.javaver }}
       hadoop-profile: 'hadoop3'
-      scalaver: "2.12"
       extrasparkconf: >-
         --conf spark.shuffle.manager=org.apache.spark.sql.execution.auron.shuffle.celeborn.AuronCelebornShuffleManager
         --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
