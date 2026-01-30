@@ -17,16 +17,12 @@
 package org.apache.spark.sql.execution.auron.plan
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.expressions.ExprId
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.auron.plan.NativeAggBase.AggExecMode
-import org.apache.spark.sql.types.BinaryType
 
 import org.apache.auron.sparkver
 
@@ -48,31 +44,22 @@ case class NativeAggExec(
       child)
     with BaseAggregateExec {
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override val requiredChildDistributionExpressions: Option[Seq[Expression]] =
     theRequiredChildDistributionExpressions
 
-  @sparkver("3.3 / 3.4 / 3.5")
+  @sparkver("3.3 / 3.4 / 3.5 / 4.1")
   override val initialInputBufferOffset: Int = theInitialInputBufferOffset
 
-  override def output: Seq[Attribute] =
-    if (aggregateExpressions.map(_.mode).contains(Final)) {
-      groupingExpressions.map(_.toAttribute) ++ aggregateAttributes
-    } else {
-      groupingExpressions.map(_.toAttribute) :+
-        AttributeReference(NativeAggBase.AGG_BUF_COLUMN_NAME, BinaryType, nullable = false)(
-          ExprId.apply(NativeAggBase.AGG_BUF_COLUMN_EXPR_ID))
-    }
-
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def isStreaming: Boolean = false
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def numShufflePartitions: Option[Int] = None
 
-  override def resultExpressions: Seq[NamedExpression] = output
+  override def resultExpressions: Seq[NamedExpression] = outputAttributes
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 

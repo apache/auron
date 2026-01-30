@@ -20,6 +20,9 @@ name = "auron-memmgr"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }

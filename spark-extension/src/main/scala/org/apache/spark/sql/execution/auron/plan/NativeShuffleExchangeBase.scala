@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.auron.plan
 
 import java.util.UUID
 
+import scala.annotation.nowarn
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -308,6 +309,7 @@ abstract class NativeShuffleExchangeBase(
     dependency
   }
 
+  @nowarn("cat=unused") // Some params temporarily unused
   private def rangePartitioningBound[K: Ordering: ClassTag, V](
       partitions: Int,
       rdd: RDD[_ <: Product2[K, V]],

@@ -23,10 +23,13 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.auron.configuration.AuronConfiguration;
+import org.apache.auron.configuration.ConfigOption;
 import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.hadoop.fs.FSDataInputWrapper;
 import org.apache.auron.hadoop.fs.FSDataOutputWrapper;
 import org.apache.auron.memory.OnHeapSpillManager;
+import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
@@ -105,5 +108,36 @@ public class JniBridge {
 
     public static AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
         return AuronAdaptor.getInstance().getAuronUDFWrapperContext(udfSerialized);
+    }
+
+    public static int intConf(String confKey) {
+        return getConfValue(confKey);
+    }
+
+    public static long longConf(String confKey) {
+        return getConfValue(confKey);
+    }
+
+    public static double doubleConf(String confKey) {
+        return getConfValue(confKey);
+    }
+
+    public static boolean booleanConf(String confKey) {
+        return getConfValue(confKey);
+    }
+
+    public static String stringConf(String confKey) {
+        return getConfValue(confKey);
+    }
+
+    static <T> T getConfValue(String confKey) {
+        Class<? extends AuronConfiguration> confClass =
+                AuronAdaptor.getInstance().getAuronConfiguration().getClass();
+        try {
+            ConfigOption<T> configOption = (ConfigOption<T>) FieldUtils.readStaticField(confClass, confKey);
+            return configOption.get();
+        } catch (IllegalAccessException | ClassCastException e) {
+            throw new RuntimeException("error reading conf value: " + confKey, e);
+        }
     }
 }

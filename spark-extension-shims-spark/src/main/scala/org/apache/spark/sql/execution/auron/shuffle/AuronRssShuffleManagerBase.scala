@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.auron.shuffle
 
+import scala.annotation.nowarn
+
 import org.apache.spark.{ShuffleDependency, SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
@@ -23,6 +25,7 @@ import org.apache.spark.sql.execution.auron.shuffle.AuronShuffleDependency.isArr
 
 import org.apache.auron.sparkver
 
+@nowarn("cat=unused") // _conf temporarily unused
 abstract class AuronRssShuffleManagerBase(_conf: SparkConf) extends ShuffleManager with Logging {
   override def registerShuffle[K, V, C](
       shuffleId: Int,
@@ -74,7 +77,7 @@ abstract class AuronRssShuffleManagerBase(_conf: SparkConf) extends ShuffleManag
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V]
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def getReader[K, C](
       handle: ShuffleHandle,
       startMapIndex: Int,

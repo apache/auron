@@ -40,7 +40,7 @@ impl SparkBitArray {
             num_bits <= i32::MAX as usize,
             "cannot allocate enough space for {num_bits} bits"
         );
-        let data_len = (num_bits + 63) / 64;
+        let data_len = num_bits.div_ceil(64);
         Self::new(vec![0; data_len])
     }
 

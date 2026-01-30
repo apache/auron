@@ -32,7 +32,7 @@ PROFILES="-P${SPARK_VERSION},scala-${SCALA_VERSION}"
 PROJECT_VERSION="$("${MVN_CMD}" -f "${AURON_DIR}/pom.xml" -q ${PROFILES} help:evaluate -Dexpression=project.version -DforceStdout)"
 
 AURON_SPARK_JAR="${AURON_SPARK_JAR:-${AURON_DIR}/dev/mvn-build-helper/assembly/target/auron-${SPARK_VERSION}_${SCALA_VERSION}-${PROJECT_VERSION}.jar}"
-AURON_IT_JAR="${AURON_DIR}/dev/auron-it/target/auron-it-${PROJECT_VERSION}-jar-with-dependencies.jar"
+AURON_IT_JAR="${AURON_IT_JAR:-${AURON_DIR}/dev/auron-it/target/auron-it-${SPARK_VERSION}_${SCALA_VERSION}-${PROJECT_VERSION}-jar-with-dependencies.jar}"
 
 
 if [[ -z "${SPARK_HOME:-}" ]]; then
@@ -70,8 +70,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 exec $SPARK_HOME/bin/spark-submit \
-  --driver-memory 5g \
-  --conf spark.driver.memoryOverhead=3072 \
+  --driver-memory 10g \
+  --conf spark.driver.memoryOverhead=4g \
   --conf spark.auron.memoryFraction=0.8 \
   --conf spark.driver.extraJavaOptions=-XX:+UseG1GC \
   --conf spark.ui.enabled=false \

@@ -17,9 +17,9 @@
 package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
-import org.apache.spark.sql.auron.AuronConf
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.util.AuronTestUtils
 
 class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
@@ -197,25 +197,17 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     if (AuronTestUtils.isSparkV32OrGreater) {
       Seq(true, false).foreach { forcePositionalEvolution =>
         withEnvConf(
-          AuronConf.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
+          SparkAuronConfiguration.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
             Seq[(Integer, Integer)]((1, 2), (3, 4), (5, 6), (null, null))
               .toDF("c1", "c2")
               .write
               .orc(path)
-            val correctAnswer = Seq(Row(1, 2), Row(3, 4), Row(5, 6), Row(null, null))
             checkSparkAnswerAndOperator(() => spark.read.orc(path))
 
             withTable("t") {
               sql(s"CREATE EXTERNAL TABLE t(c3 INT, c2 INT) USING ORC LOCATION '$path'")
-
-              val expected = if (forcePositionalEvolution) {
-                correctAnswer
-              } else {
-                Seq(Row(null, 2), Row(null, 4), Row(null, 6), Row(null, null))
-              }
-
               checkSparkAnswerAndOperator(() => spark.table("t"))
             }
           }
@@ -228,7 +220,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     if (AuronTestUtils.isSparkV32OrGreater) {
       Seq(true, false).foreach { forcePositionalEvolution =>
         withEnvConf(
-          AuronConf.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
+          SparkAuronConfiguration.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
             Seq[(Integer, Integer, Integer)]((1, 2, 1), (3, 4, 2), (5, 6, 3), (null, null, 4))
@@ -236,7 +228,6 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               .write
               .partitionBy("p")
               .orc(path)
-            val correctAnswer = Seq(Row(1, 2, 1), Row(3, 4, 2), Row(5, 6, 3), Row(null, null, 4))
             checkSparkAnswerAndOperator(() => spark.read.orc(path))
 
             withTable("t") {
@@ -247,12 +238,6 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                      |LOCATION '$path'
                      |""".stripMargin)
               sql("MSCK REPAIR TABLE t")
-              if (forcePositionalEvolution) {
-                correctAnswer
-              } else {
-                Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3), Row(null, null, 4))
-              }
-
               checkSparkAnswerAndOperator(() => spark.table("t"))
             }
           }

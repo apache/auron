@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.auron.columnar
 
+import scala.annotation.nowarn
+
 import org.apache.arrow.vector.BigIntVector
 import org.apache.arrow.vector.BitVector
 import org.apache.arrow.vector.DateDayVector
@@ -143,6 +145,7 @@ class AuronArrowColumnVector(vector: ValueVector)
 }
 
 object AuronArrowColumnVector {
+  @nowarn("cat=unused") // Data type get methods unimplemented (placeholder)
   abstract private class ArrowVectorAccessor(private val vector: ValueVector) {
     def isNullAt(rowId: Int): Boolean =
       if (vector.getValueCount > 0 && vector.getValidityBuffer.capacity == 0) false
@@ -190,7 +193,7 @@ object AuronArrowColumnVector {
 
   private class NullAccessor(vector: NullVector)
       extends AuronArrowColumnVector.ArrowVectorAccessor(vector) {
-    override def isNullAt(rowId: Int) = true
+    override def isNullAt(rowId: Int): Boolean = true
   }
 
   private class BooleanAccessor(vector: BitVector)
@@ -215,7 +218,7 @@ object AuronArrowColumnVector {
 
   private class UInt4Accessor(vector: UInt4Vector)
       extends AuronArrowColumnVector.ArrowVectorAccessor(vector) {
-    final override def getInt(rowId: Int) = vector.get(rowId)
+    final override def getInt(rowId: Int): Int = vector.get(rowId)
   }
 
   private class UInt8Accessor(vector: UInt8Vector)
@@ -260,14 +263,15 @@ object AuronArrowColumnVector {
       extends AuronArrowColumnVector.ArrowVectorAccessor(vector) {
     final private val stringResult = new NullableVarCharHolder
 
-    final override def getUTF8String(rowId: Int) = {
+    final override def getUTF8String(rowId: Int): UTF8String = {
       vector.get(rowId, stringResult)
       if (stringResult.isSet == 0) null
-      else
+      else {
         UTF8String.fromAddress(
           null,
           stringResult.buffer.memoryAddress + stringResult.start,
           stringResult.end - stringResult.start)
+      }
     }
   }
 

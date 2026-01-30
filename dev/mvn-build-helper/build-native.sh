@@ -87,18 +87,9 @@ fi
 
 if [ ! -f "$cache_libpath" ] || [ "$new_checksum" != "$old_checksum" ]; then
     export RUSTFLAGS=${RUSTFLAGS:-"-C target-cpu=native"}
-    echo "Running cargo fix..."
-    cargo fix --all --allow-dirty --allow-staged --allow-no-vcs  2>&1
-
-    echo "Running cargo fmt..."
-    cargo fmt --all -q -- 2>&1
-
-    echo "Running cargo clippy..."
-    # First eliminate unwrap; then enable -D warnings to enforce all default lints.
-    cargo clippy --all-targets --workspace -- -A warnings  -A clippy::all  -D clippy::unwrap_used 2>&1
 
     echo "Building native with [$profile] profile..."
-    cargo build --profile="$profile" $features_arg --verbose --locked --frozen 2>&1
+    cargo build --profile="$profile" $features_arg --verbose --locked 2>&1
 
     mkdir -p "$cache_dir"
     cp -f "$cargo_libpath" "$cache_libpath"

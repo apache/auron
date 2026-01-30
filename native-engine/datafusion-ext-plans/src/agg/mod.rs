@@ -34,8 +34,6 @@ use std::{fmt::Debug, sync::Arc};
 use agg::Agg;
 use datafusion::physical_expr::PhysicalExprRef;
 
-pub const AGG_BUF_COLUMN_NAME: &str = "#9223372036854775807";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AggExecMode {
     HashAgg,

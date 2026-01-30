@@ -217,7 +217,7 @@ mod test {
         let output_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("cccccc1", output_array, true)])?;
 
-        let expected = vec![
+        let expected = [
             "+---------+",
             "| cccccc1 |",
             "+---------+",
@@ -235,7 +235,7 @@ mod test {
         let output_array = get_indexed.evaluate(&input_batch)?.into_array(0)?;
         let output_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("cccccc1", output_array, true)])?;
-        let expected = vec![
+        let expected = [
             "+---------+",
             "| cccccc1 |",
             "+---------+",

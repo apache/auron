@@ -23,13 +23,13 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.auron.sparkver
 
 case class NativePartialTakeOrderedExec(
-    limit: Long,
+    limit: Int,
     sortOrder: Seq[SortOrder],
     override val child: SparkPlan,
     override val metrics: Map[String, SQLMetric])
     extends NativePartialTakeOrderedBase(limit, sortOrder, child, metrics) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 

@@ -95,8 +95,7 @@ pub fn from_proto_binary_op(op: &str) -> Result<Operator, PlanSerDeError> {
         "RegexNotMatch" => Ok(Operator::RegexNotMatch),
         "StringConcat" => Ok(Operator::StringConcat),
         other => Err(proto_error(format!(
-            "Unsupported binary operator '{:?}'",
-            other
+            "Unsupported binary operator '{other:?}'"
         ))),
     }
 }

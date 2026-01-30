@@ -16,7 +16,6 @@
 use std::{
     any::Any,
     fmt::{Debug, Formatter},
-    io::Cursor,
     sync::Arc,
 };
 
@@ -44,6 +43,7 @@ pub struct AggAvg {
     data_type: DataType,
     agg_sum: AggSum,
     agg_count: AggCount,
+    acc_array_data_types: Vec<DataType>,
 }
 
 impl AggAvg {
@@ -51,6 +51,7 @@ impl AggAvg {
         let agg_sum = AggSum::try_new(child.clone(), data_type.clone())?;
         let agg_count = AggCount::try_new(vec![child.clone()], DataType::Int64)?;
         Ok(Self {
+            acc_array_data_types: vec![data_type.clone(), DataType::Int64],
             child,
             data_type,
             agg_sum,
@@ -102,6 +103,10 @@ impl Agg for AggAvg {
             sum: self.agg_sum.create_acc_column(num_rows),
             count: self.agg_count.create_acc_column(num_rows),
         })
+    }
+
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &self.acc_array_data_types
     }
 
     fn partial_update(
@@ -206,19 +211,19 @@ impl AccColumn for AccAvgColumn {
         self.sum.mem_used() + self.count.mem_used()
     }
 
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
-        self.sum.freeze_to_rows(idx, array)?;
-        self.count.freeze_to_rows(idx, array)?;
+    fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
+        let sum_array = self.sum.freeze_to_arrays(idx)?[0].clone();
+        let count_array = self.count.freeze_to_arrays(idx)?[0].clone();
+        Ok(vec![sum_array, count_array])
+    }
+
+    fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
+        self.sum.unfreeze_from_arrays(&arrays[0..1])?;
+        self.count.unfreeze_from_arrays(&arrays[1..2])?;
         Ok(())
     }
 
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
-        self.sum.unfreeze_from_rows(cursors)?;
-        self.count.unfreeze_from_rows(cursors)?;
-        Ok(())
-    }
-
-    fn spill(&self, idx: IdxSelection<'_>, buf: &mut SpillCompressedWriter) -> Result<()> {
+    fn spill(&mut self, idx: IdxSelection<'_>, buf: &mut SpillCompressedWriter) -> Result<()> {
         self.sum.spill(idx, buf)?;
         self.count.spill(idx, buf)?;
         Ok(())

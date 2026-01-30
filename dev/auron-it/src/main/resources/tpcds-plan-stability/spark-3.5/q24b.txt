@@ -494,25 +494,25 @@ Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_sta
 Keys [10]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15]
 Functions [1]: [partial_sum(_c10#26)]
 Aggregate Attributes [1]: [sum#27]
-Results [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28#28]
+Results [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28]
 
 (82) NativeShuffleExchange
-Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28#28]
+Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28]
 Arguments: hashpartitioning(c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, 100), ENSURE_REQUIREMENTS, [plan_id=11]
 
 (83) ShuffleQueryStage
-Output [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28#28]
+Output [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28]
 Arguments: X
 
 (84) AQEShuffleRead
-Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28#28]
+Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28]
 Arguments: coalesced
 
 (85) InputAdapter
-Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28#28]
+Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28]
 
 (86) NativeHashAggregate
-Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28#28]
+Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, #28]
 Keys [10]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15]
 Functions [1]: [sum(UnscaledValue(ss_net_paid#5))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#5))#29]
@@ -527,37 +527,37 @@ Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, netpaid#30]
 Keys [3]: [c_last_name#21, c_first_name#20, s_store_name#9]
 Functions [1]: [partial_sum(netpaid#30)]
 Aggregate Attributes [2]: [sum#31, isEmpty#32]
-Results [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #28#28]
+Results [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #33]
 
 (89) NativeShuffleExchange
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #28#28]
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #33]
 Arguments: hashpartitioning(c_last_name#21, c_first_name#20, s_store_name#9, 100), ENSURE_REQUIREMENTS, [plan_id=12]
 
 (90) ShuffleQueryStage
-Output [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #28#28]
+Output [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #33]
 Arguments: X
 
 (91) AQEShuffleRead
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #28#28]
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #33]
 Arguments: coalesced
 
 (92) InputAdapter
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #28#28]
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #33]
 
 (93) NativeHashAggregate
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #28#28]
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, #33]
 Keys [3]: [c_last_name#21, c_first_name#20, s_store_name#9]
 Functions [1]: [sum(netpaid#30)]
-Aggregate Attributes [1]: [sum(netpaid#30)#33]
-Results [4]: [c_last_name#21, c_first_name#20, s_store_name#9, sum(netpaid#30)#33]
+Aggregate Attributes [1]: [sum(netpaid#30)#34]
+Results [4]: [c_last_name#21, c_first_name#20, s_store_name#9, sum(netpaid#30)#34]
 
 (94) NativeProject
-Output [4]: [c_last_name#21, c_first_name#20, s_store_name#9, sum(netpaid#30)#33 AS paid#34]
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, sum(netpaid#30)#33]
+Output [4]: [c_last_name#21, c_first_name#20, s_store_name#9, sum(netpaid#30)#34 AS paid#35]
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, sum(netpaid#30)#34]
 
 (95) NativeFilter
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#34]
-Condition : (isnotnull(paid#34) AND (cast(paid#34 as decimal(33,8)) > cast(Subquery subquery#35, [id=#36] as decimal(33,8))))
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#35]
+Condition : (isnotnull(paid#35) AND (cast(paid#35 as decimal(33,8)) > cast(Subquery subquery#36, [id=#37] as decimal(33,8))))
 
 (96) Scan parquet
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
@@ -764,14 +764,14 @@ Input [11]: [ss_net_paid#5, s_store_name#9, s_state#11, i_current_price#14, i_si
 Keys [10]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#5))]
 Aggregate Attributes [1]: [sum#27]
-Results [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#37]
+Results [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#38]
 
 (140) Exchange
-Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#37]
+Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#38]
 Arguments: hashpartitioning(c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, 100), ENSURE_REQUIREMENTS, [plan_id=23]
 
 (141) HashAggregate
-Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#37]
+Input [11]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#38]
 Keys [10]: [c_last_name#21, c_first_name#20, s_store_name#9, ca_state#23, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15]
 Functions [1]: [sum(UnscaledValue(ss_net_paid#5))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#5))#29]
@@ -782,38 +782,38 @@ Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, netpaid#30]
 Keys [3]: [c_last_name#21, c_first_name#20, s_store_name#9]
 Functions [1]: [partial_sum(netpaid#30)]
 Aggregate Attributes [2]: [sum#31, isEmpty#32]
-Results [5]: [c_last_name#21, c_first_name#20, s_store_name#9, sum#38, isEmpty#39]
+Results [5]: [c_last_name#21, c_first_name#20, s_store_name#9, sum#39, isEmpty#40]
 
 (143) Exchange
-Input [5]: [c_last_name#21, c_first_name#20, s_store_name#9, sum#38, isEmpty#39]
+Input [5]: [c_last_name#21, c_first_name#20, s_store_name#9, sum#39, isEmpty#40]
 Arguments: hashpartitioning(c_last_name#21, c_first_name#20, s_store_name#9, 100), ENSURE_REQUIREMENTS, [plan_id=24]
 
 (144) HashAggregate
-Input [5]: [c_last_name#21, c_first_name#20, s_store_name#9, sum#38, isEmpty#39]
+Input [5]: [c_last_name#21, c_first_name#20, s_store_name#9, sum#39, isEmpty#40]
 Keys [3]: [c_last_name#21, c_first_name#20, s_store_name#9]
 Functions [1]: [sum(netpaid#30)]
-Aggregate Attributes [1]: [sum(netpaid#30)#33]
-Results [4]: [c_last_name#21, c_first_name#20, s_store_name#9, sum(netpaid#30)#33 AS paid#34]
+Aggregate Attributes [1]: [sum(netpaid#30)#34]
+Results [4]: [c_last_name#21, c_first_name#20, s_store_name#9, sum(netpaid#30)#34 AS paid#35]
 
 (145) Filter
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#34]
-Condition : (isnotnull(paid#34) AND (cast(paid#34 as decimal(33,8)) > cast(Subquery subquery#35, [id=#40] as decimal(33,8))))
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#35]
+Condition : (isnotnull(paid#35) AND (cast(paid#35 as decimal(33,8)) > cast(Subquery subquery#36, [id=#41] as decimal(33,8))))
 
 (146) Exchange
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#34]
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#35]
 Arguments: rangepartitioning(c_last_name#21 ASC NULLS FIRST, c_first_name#20 ASC NULLS FIRST, s_store_name#9 ASC NULLS FIRST, 100), ENSURE_REQUIREMENTS, [plan_id=25]
 
 (147) Sort
-Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#34]
+Input [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#35]
 Arguments: [c_last_name#21 ASC NULLS FIRST, c_first_name#20 ASC NULLS FIRST, s_store_name#9 ASC NULLS FIRST], true, 0
 
 (148) AdaptiveSparkPlan
-Output [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#34]
+Output [4]: [c_last_name#21, c_first_name#20, s_store_name#9, paid#35]
 Arguments: isFinalPlan=true
 
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 95 Hosting Expression = Subquery subquery#35, [id=#36]
+Subquery:1 Hosting operator id = 95 Hosting Expression = Subquery subquery#36, [id=#37]
 AdaptiveSparkPlan (253)
 +- == Final Plan ==
    NativeProject (203)
@@ -924,474 +924,474 @@ AdaptiveSparkPlan (253)
 
 
 (149) ReusedExchange [Reuses operator id: 35]
-Output [6]: [ss_item_sk#41, ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46]
+Output [6]: [ss_item_sk#42, ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47]
 
 (150) ShuffleQueryStage
-Output [6]: [ss_item_sk#41, ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46]
+Output [6]: [ss_item_sk#42, ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47]
 Arguments: X
 
 (151) AQEShuffleRead
-Input [6]: [ss_item_sk#41, ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46]
+Input [6]: [ss_item_sk#42, ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47]
 Arguments: coalesced
 
 (152) InputAdapter
-Input [6]: [ss_item_sk#41, ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46]
-Arguments: [#41, #42, #43, #44, #45, #46]
+Input [6]: [ss_item_sk#42, ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47]
+Arguments: [#42, #43, #44, #45, #46, #47]
 
 (153) InputAdapter
-Input [6]: [#41#41, #42#42, #43#43, #44#44, #45#45, #46#46]
+Input [6]: [#42#42, #43#43, #44#44, #45#45, #46#46, #47#47]
 
 (154) NativeSort
-Input [6]: [#41#41, #42#42, #43#43, #44#44, #45#45, #46#46]
-Arguments: [ss_item_sk#41 ASC NULLS FIRST], false
+Input [6]: [#42#42, #43#43, #44#44, #45#45, #46#46, #47#47]
+Arguments: [ss_item_sk#42 ASC NULLS FIRST], false
 
 (225) Scan parquet
-Output [6]: [i_item_sk#47, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
+Output [6]: [i_item_sk#48, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
 (156) InputAdapter
-Input [6]: [i_item_sk#47, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Arguments: [#47, #48, #49, #50, #51, #52]
+Input [6]: [i_item_sk#48, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Arguments: [#48, #49, #50, #51, #52, #53]
 
 (157) NativeFilter
-Input [6]: [#47#47, #48#48, #49#49, #50#50, #51#51, #52#52]
-Condition : isnotnull(i_item_sk#47)
+Input [6]: [#48#48, #49#49, #50#50, #51#51, #52#52, #53#53]
+Condition : isnotnull(i_item_sk#48)
 
 (158) NativeShuffleExchange
-Input [6]: [#47#47, #48#48, #49#49, #50#50, #51#51, #52#52]
-Arguments: hashpartitioning(i_item_sk#47, 100), ENSURE_REQUIREMENTS, [plan_id=26]
+Input [6]: [#48#48, #49#49, #50#50, #51#51, #52#52, #53#53]
+Arguments: hashpartitioning(i_item_sk#48, 100), ENSURE_REQUIREMENTS, [plan_id=26]
 
 (159) ShuffleQueryStage
-Output [6]: [#47#47, #48#48, #49#49, #50#50, #51#51, #52#52]
+Output [6]: [#48#48, #49#49, #50#50, #51#51, #52#52, #53#53]
 Arguments: X
 
 (160) AQEShuffleRead
-Input [6]: [#47#47, #48#48, #49#49, #50#50, #51#51, #52#52]
+Input [6]: [#48#48, #49#49, #50#50, #51#51, #52#52, #53#53]
 Arguments: coalesced
 
 (161) InputAdapter
-Input [6]: [#47#47, #48#48, #49#49, #50#50, #51#51, #52#52]
+Input [6]: [#48#48, #49#49, #50#50, #51#51, #52#52, #53#53]
 
 (162) NativeSort
-Input [6]: [#47#47, #48#48, #49#49, #50#50, #51#51, #52#52]
-Arguments: [i_item_sk#47 ASC NULLS FIRST], false
+Input [6]: [#48#48, #49#49, #50#50, #51#51, #52#52, #53#53]
+Arguments: [i_item_sk#48 ASC NULLS FIRST], false
 
 (163) NativeSortMergeJoin
-Left keys [1]: [ss_item_sk#41]
-Right keys [1]: [i_item_sk#47]
+Left keys [1]: [ss_item_sk#42]
+Right keys [1]: [i_item_sk#48]
 Join type: Inner
 Join condition: None
 
 (164) NativeProject
-Output [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Input [12]: [#41#41, #42#42, #43#43, #44#44, #45#45, #46#46, #47#47, #48#48, #49#49, #50#50, #51#51, #52#52]
+Output [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Input [12]: [#42#42, #43#43, #44#44, #45#45, #46#46, #47#47, #48#48, #49#49, #50#50, #51#51, #52#52, #53#53]
 
 (165) NativeShuffleExchange
-Input [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Arguments: hashpartitioning(ss_customer_sk#42, 100), ENSURE_REQUIREMENTS, [plan_id=27]
+Input [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Arguments: hashpartitioning(ss_customer_sk#43, 100), ENSURE_REQUIREMENTS, [plan_id=27]
 
 (166) ShuffleQueryStage
-Output [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
+Output [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
 Arguments: X
 
 (167) AQEShuffleRead
-Input [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
+Input [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
 Arguments: coalesced
 
 (168) InputAdapter
-Input [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
+Input [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
 
 (169) NativeSort
-Input [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Arguments: [ss_customer_sk#42 ASC NULLS FIRST], false
+Input [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Arguments: [ss_customer_sk#43 ASC NULLS FIRST], false
 
 (170) ReusedExchange [Reuses operator id: 58]
-Output [4]: [c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
+Output [4]: [c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
 
 (171) ShuffleQueryStage
-Output [4]: [c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
+Output [4]: [c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
 Arguments: X
 
 (172) AQEShuffleRead
-Input [4]: [c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
+Input [4]: [c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
 Arguments: coalesced
 
 (173) InputAdapter
-Input [4]: [c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
-Arguments: [#53, #54, #55, #56]
+Input [4]: [c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
+Arguments: [#54, #55, #56, #57]
 
 (174) InputAdapter
-Input [4]: [#53#53, #54#54, #55#55, #56#56]
+Input [4]: [#54#54, #55#55, #56#56, #57#57]
 
 (175) NativeSort
-Input [4]: [#53#53, #54#54, #55#55, #56#56]
-Arguments: [c_customer_sk#53 ASC NULLS FIRST], false
+Input [4]: [#54#54, #55#55, #56#56, #57#57]
+Arguments: [c_customer_sk#54 ASC NULLS FIRST], false
 
 (176) NativeSortMergeJoin
-Left keys [1]: [ss_customer_sk#42]
-Right keys [1]: [c_customer_sk#53]
+Left keys [1]: [ss_customer_sk#43]
+Right keys [1]: [c_customer_sk#54]
 Join type: Inner
 Join condition: None
 
 (177) NativeProject
-Output [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
-Input [14]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, #53#53, #54#54, #55#55, #56#56]
+Output [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
+Input [14]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, #54#54, #55#55, #56#56, #57#57]
 
 (178) NativeShuffleExchange
-Input [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
-Arguments: hashpartitioning(c_birth_country#56, s_zip#46, 100), ENSURE_REQUIREMENTS, [plan_id=28]
+Input [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
+Arguments: hashpartitioning(c_birth_country#57, s_zip#47, 100), ENSURE_REQUIREMENTS, [plan_id=28]
 
 (179) ShuffleQueryStage
-Output [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
+Output [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
 Arguments: X
 
 (180) AQEShuffleRead
-Input [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
+Input [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
 Arguments: coalesced
 
 (181) InputAdapter
-Input [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
+Input [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
 
 (182) NativeSort
-Input [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
-Arguments: [c_birth_country#56 ASC NULLS FIRST, s_zip#46 ASC NULLS FIRST], false
+Input [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
+Arguments: [c_birth_country#57 ASC NULLS FIRST, s_zip#47 ASC NULLS FIRST], false
 
 (183) ReusedExchange [Reuses operator id: 73]
-Output [3]: [ca_state#57, ca_zip#58, ca_country#59]
+Output [3]: [ca_state#58, ca_zip#59, ca_country#60]
 
 (184) ShuffleQueryStage
-Output [3]: [ca_state#57, ca_zip#58, ca_country#59]
+Output [3]: [ca_state#58, ca_zip#59, ca_country#60]
 Arguments: X
 
 (185) AQEShuffleRead
-Input [3]: [ca_state#57, ca_zip#58, ca_country#59]
+Input [3]: [ca_state#58, ca_zip#59, ca_country#60]
 Arguments: coalesced
 
 (186) InputAdapter
-Input [3]: [ca_state#57, ca_zip#58, ca_country#59]
-Arguments: [#57, #58, #59]
+Input [3]: [ca_state#58, ca_zip#59, ca_country#60]
+Arguments: [#58, #59, #60]
 
 (187) InputAdapter
-Input [3]: [#57#57, #58#58, #59#59]
+Input [3]: [#58#58, #59#59, #60#60]
 
 (188) NativeSort
-Input [3]: [#57#57, #58#58, #59#59]
-Arguments: [upper(ca_country#59) ASC NULLS FIRST, ca_zip#58 ASC NULLS FIRST], false
+Input [3]: [#58#58, #59#59, #60#60]
+Arguments: [upper(ca_country#60) ASC NULLS FIRST, ca_zip#59 ASC NULLS FIRST], false
 
 (189) NativeSortMergeJoin
-Left keys [2]: [c_birth_country#56, s_zip#46]
-Right keys [2]: [upper(ca_country#59), ca_zip#58]
+Left keys [2]: [c_birth_country#57, s_zip#47]
+Right keys [2]: [upper(ca_country#60), ca_zip#59]
 Join type: Inner
 Join condition: None
 
 (190) NativeProject
-Output [11]: [ss_net_paid#43, s_store_name#44, s_state#45, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, ca_state#57]
-Input [15]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56, #57#57, #58#58, #59#59]
+Output [11]: [ss_net_paid#44, s_store_name#45, s_state#46, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, ca_state#58]
+Input [15]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57, #58#58, #59#59, #60#60]
 
 (191) NativeProject
-Output [11]: [c_last_name#55 AS c_last_name#55, c_first_name#54 AS c_first_name#54, s_store_name#44 AS s_store_name#44, ca_state#57 AS ca_state#57, s_state#45 AS s_state#45, i_color#50 AS i_color#50, i_current_price#48 AS i_current_price#48, i_manager_id#52 AS i_manager_id#52, i_units#51 AS i_units#51, i_size#49 AS i_size#49, UnscaledValue(ss_net_paid#43) AS _c10#60]
-Input [11]: [ss_net_paid#43, s_store_name#44, s_state#45, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, ca_state#57]
+Output [11]: [c_last_name#56 AS c_last_name#56, c_first_name#55 AS c_first_name#55, s_store_name#45 AS s_store_name#45, ca_state#58 AS ca_state#58, s_state#46 AS s_state#46, i_color#51 AS i_color#51, i_current_price#49 AS i_current_price#49, i_manager_id#53 AS i_manager_id#53, i_units#52 AS i_units#52, i_size#50 AS i_size#50, UnscaledValue(ss_net_paid#44) AS _c10#61]
+Input [11]: [ss_net_paid#44, s_store_name#45, s_state#46, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, ca_state#58]
 
 (192) NativeHashAggregate
-Input [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, _c10#60]
-Keys [10]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49]
-Functions [1]: [partial_sum(_c10#60)]
-Aggregate Attributes [1]: [sum#61]
-Results [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, #28#28]
+Input [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, _c10#61]
+Keys [10]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50]
+Functions [1]: [partial_sum(_c10#61)]
+Aggregate Attributes [1]: [sum#62]
+Results [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, #28]
 
 (193) NativeShuffleExchange
-Input [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, #28#28]
-Arguments: hashpartitioning(c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, 100), ENSURE_REQUIREMENTS, [plan_id=29]
+Input [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, #28]
+Arguments: hashpartitioning(c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, 100), ENSURE_REQUIREMENTS, [plan_id=29]
 
 (194) ShuffleQueryStage
-Output [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, #28#28]
+Output [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, #28]
 Arguments: X
 
 (195) AQEShuffleRead
-Input [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, #28#28]
+Input [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, #28]
 Arguments: coalesced
 
 (196) InputAdapter
-Input [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, #28#28]
+Input [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, #28]
 
 (197) NativeHashAggregate
-Input [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, #28#28]
-Keys [10]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49]
-Functions [1]: [sum(UnscaledValue(ss_net_paid#43))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#43))#29]
-Results [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, sum(UnscaledValue(ss_net_paid#43))#29]
+Input [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, #28]
+Keys [10]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50]
+Functions [1]: [sum(UnscaledValue(ss_net_paid#44))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#44))#29]
+Results [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, sum(UnscaledValue(ss_net_paid#44))#29]
 
 (198) NativeProject
-Output [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#43))#29,17,2) AS netpaid#62]
-Input [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, sum(UnscaledValue(ss_net_paid#43))#29]
+Output [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#44))#29,17,2) AS netpaid#63]
+Input [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, sum(UnscaledValue(ss_net_paid#44))#29]
 
 (199) NativeHashAggregate
-Input [1]: [netpaid#62]
+Input [1]: [netpaid#63]
 Keys: []
-Functions [1]: [partial_avg(netpaid#62)]
-Aggregate Attributes [2]: [sum#63, count#64]
-Results [1]: [#28#28]
+Functions [1]: [partial_avg(netpaid#63)]
+Aggregate Attributes [2]: [sum#64, count#65]
+Results [2]: [#33, #28]
 
 (200) NativeShuffleExchange
-Input [1]: [#28#28]
+Input [2]: [#33, #28]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=30]
 
 (201) ShuffleQueryStage
-Output [1]: [#28#28]
+Output [2]: [#33, #28]
 Arguments: X
 
 (202) NativeHashAggregate
-Input [1]: [#28#28]
+Input [2]: [#33, #28]
 Keys: []
-Functions [1]: [avg(netpaid#62)]
-Aggregate Attributes [1]: [avg(netpaid#62)#65]
-Results [1]: [avg(netpaid#62)#65]
+Functions [1]: [avg(netpaid#63)]
+Aggregate Attributes [1]: [avg(netpaid#63)#66]
+Results [1]: [avg(netpaid#63)#66]
 
 (203) NativeProject
-Output [1]: [(0.05 * avg(netpaid#62)#65) AS (0.05 * avg(netpaid))#66]
-Input [1]: [avg(netpaid#62)#65]
+Output [1]: [(0.05 * avg(netpaid#63)#66) AS (0.05 * avg(netpaid))#67]
+Input [1]: [avg(netpaid#63)#66]
 
 (204) Scan parquet
-Output [5]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_ticket_number#68, ss_net_paid#43]
+Output [5]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_ticket_number#69, ss_net_paid#44]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
 
 (205) Filter
-Input [5]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_ticket_number#68, ss_net_paid#43]
-Condition : (((isnotnull(ss_ticket_number#68) AND isnotnull(ss_item_sk#41)) AND isnotnull(ss_store_sk#67)) AND isnotnull(ss_customer_sk#42))
+Input [5]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_ticket_number#69, ss_net_paid#44]
+Condition : (((isnotnull(ss_ticket_number#69) AND isnotnull(ss_item_sk#42)) AND isnotnull(ss_store_sk#68)) AND isnotnull(ss_customer_sk#43))
 
 (206) Exchange
-Input [5]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_ticket_number#68, ss_net_paid#43]
-Arguments: hashpartitioning(ss_ticket_number#68, ss_item_sk#41, 100), ENSURE_REQUIREMENTS, [plan_id=31]
+Input [5]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_ticket_number#69, ss_net_paid#44]
+Arguments: hashpartitioning(ss_ticket_number#69, ss_item_sk#42, 100), ENSURE_REQUIREMENTS, [plan_id=31]
 
 (207) Sort
-Input [5]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_ticket_number#68, ss_net_paid#43]
-Arguments: [ss_ticket_number#68 ASC NULLS FIRST, ss_item_sk#41 ASC NULLS FIRST], false, 0
+Input [5]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_ticket_number#69, ss_net_paid#44]
+Arguments: [ss_ticket_number#69 ASC NULLS FIRST, ss_item_sk#42 ASC NULLS FIRST], false, 0
 
 (208) Scan parquet
-Output [2]: [sr_item_sk#69, sr_ticket_number#70]
+Output [2]: [sr_item_sk#70, sr_ticket_number#71]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
 
 (209) Filter
-Input [2]: [sr_item_sk#69, sr_ticket_number#70]
-Condition : (isnotnull(sr_ticket_number#70) AND isnotnull(sr_item_sk#69))
+Input [2]: [sr_item_sk#70, sr_ticket_number#71]
+Condition : (isnotnull(sr_ticket_number#71) AND isnotnull(sr_item_sk#70))
 
 (210) Exchange
-Input [2]: [sr_item_sk#69, sr_ticket_number#70]
-Arguments: hashpartitioning(sr_ticket_number#70, sr_item_sk#69, 100), ENSURE_REQUIREMENTS, [plan_id=32]
+Input [2]: [sr_item_sk#70, sr_ticket_number#71]
+Arguments: hashpartitioning(sr_ticket_number#71, sr_item_sk#70, 100), ENSURE_REQUIREMENTS, [plan_id=32]
 
 (211) Sort
-Input [2]: [sr_item_sk#69, sr_ticket_number#70]
-Arguments: [sr_ticket_number#70 ASC NULLS FIRST, sr_item_sk#69 ASC NULLS FIRST], false, 0
+Input [2]: [sr_item_sk#70, sr_ticket_number#71]
+Arguments: [sr_ticket_number#71 ASC NULLS FIRST, sr_item_sk#70 ASC NULLS FIRST], false, 0
 
 (212) SortMergeJoin
-Left keys [2]: [ss_ticket_number#68, ss_item_sk#41]
-Right keys [2]: [sr_ticket_number#70, sr_item_sk#69]
+Left keys [2]: [ss_ticket_number#69, ss_item_sk#42]
+Right keys [2]: [sr_ticket_number#71, sr_item_sk#70]
 Join type: Inner
 Join condition: None
 
 (213) Project
-Output [4]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_net_paid#43]
-Input [7]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_ticket_number#68, ss_net_paid#43, sr_item_sk#69, sr_ticket_number#70]
+Output [4]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_net_paid#44]
+Input [7]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_ticket_number#69, ss_net_paid#44, sr_item_sk#70, sr_ticket_number#71]
 
 (214) Exchange
-Input [4]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_net_paid#43]
-Arguments: hashpartitioning(ss_store_sk#67, 100), ENSURE_REQUIREMENTS, [plan_id=33]
+Input [4]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_net_paid#44]
+Arguments: hashpartitioning(ss_store_sk#68, 100), ENSURE_REQUIREMENTS, [plan_id=33]
 
 (215) Sort
-Input [4]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_net_paid#43]
-Arguments: [ss_store_sk#67 ASC NULLS FIRST], false, 0
+Input [4]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_net_paid#44]
+Arguments: [ss_store_sk#68 ASC NULLS FIRST], false, 0
 
 (216) Scan parquet
-Output [5]: [s_store_sk#71, s_store_name#44, s_market_id#72, s_state#45, s_zip#46]
+Output [5]: [s_store_sk#72, s_store_name#45, s_market_id#73, s_state#46, s_zip#47]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
 (217) Filter
-Input [5]: [s_store_sk#71, s_store_name#44, s_market_id#72, s_state#45, s_zip#46]
-Condition : (((isnotnull(s_market_id#72) AND (s_market_id#72 = 8)) AND isnotnull(s_store_sk#71)) AND isnotnull(s_zip#46))
+Input [5]: [s_store_sk#72, s_store_name#45, s_market_id#73, s_state#46, s_zip#47]
+Condition : (((isnotnull(s_market_id#73) AND (s_market_id#73 = 8)) AND isnotnull(s_store_sk#72)) AND isnotnull(s_zip#47))
 
 (218) Project
-Output [4]: [s_store_sk#71, s_store_name#44, s_state#45, s_zip#46]
-Input [5]: [s_store_sk#71, s_store_name#44, s_market_id#72, s_state#45, s_zip#46]
+Output [4]: [s_store_sk#72, s_store_name#45, s_state#46, s_zip#47]
+Input [5]: [s_store_sk#72, s_store_name#45, s_market_id#73, s_state#46, s_zip#47]
 
 (219) Exchange
-Input [4]: [s_store_sk#71, s_store_name#44, s_state#45, s_zip#46]
-Arguments: hashpartitioning(s_store_sk#71, 100), ENSURE_REQUIREMENTS, [plan_id=34]
+Input [4]: [s_store_sk#72, s_store_name#45, s_state#46, s_zip#47]
+Arguments: hashpartitioning(s_store_sk#72, 100), ENSURE_REQUIREMENTS, [plan_id=34]
 
 (220) Sort
-Input [4]: [s_store_sk#71, s_store_name#44, s_state#45, s_zip#46]
-Arguments: [s_store_sk#71 ASC NULLS FIRST], false, 0
+Input [4]: [s_store_sk#72, s_store_name#45, s_state#46, s_zip#47]
+Arguments: [s_store_sk#72 ASC NULLS FIRST], false, 0
 
 (221) SortMergeJoin
-Left keys [1]: [ss_store_sk#67]
-Right keys [1]: [s_store_sk#71]
+Left keys [1]: [ss_store_sk#68]
+Right keys [1]: [s_store_sk#72]
 Join type: Inner
 Join condition: None
 
 (222) Project
-Output [6]: [ss_item_sk#41, ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46]
-Input [8]: [ss_item_sk#41, ss_customer_sk#42, ss_store_sk#67, ss_net_paid#43, s_store_sk#71, s_store_name#44, s_state#45, s_zip#46]
+Output [6]: [ss_item_sk#42, ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47]
+Input [8]: [ss_item_sk#42, ss_customer_sk#43, ss_store_sk#68, ss_net_paid#44, s_store_sk#72, s_store_name#45, s_state#46, s_zip#47]
 
 (223) Exchange
-Input [6]: [ss_item_sk#41, ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46]
-Arguments: hashpartitioning(ss_item_sk#41, 100), ENSURE_REQUIREMENTS, [plan_id=35]
+Input [6]: [ss_item_sk#42, ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47]
+Arguments: hashpartitioning(ss_item_sk#42, 100), ENSURE_REQUIREMENTS, [plan_id=35]
 
 (224) Sort
-Input [6]: [ss_item_sk#41, ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46]
-Arguments: [ss_item_sk#41 ASC NULLS FIRST], false, 0
+Input [6]: [ss_item_sk#42, ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47]
+Arguments: [ss_item_sk#42 ASC NULLS FIRST], false, 0
 
 (225) Scan parquet
-Output [6]: [i_item_sk#47, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
+Output [6]: [i_item_sk#48, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
 (226) Filter
-Input [6]: [i_item_sk#47, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Condition : isnotnull(i_item_sk#47)
+Input [6]: [i_item_sk#48, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Condition : isnotnull(i_item_sk#48)
 
 (227) Exchange
-Input [6]: [i_item_sk#47, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Arguments: hashpartitioning(i_item_sk#47, 100), ENSURE_REQUIREMENTS, [plan_id=36]
+Input [6]: [i_item_sk#48, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Arguments: hashpartitioning(i_item_sk#48, 100), ENSURE_REQUIREMENTS, [plan_id=36]
 
 (228) Sort
-Input [6]: [i_item_sk#47, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Arguments: [i_item_sk#47 ASC NULLS FIRST], false, 0
+Input [6]: [i_item_sk#48, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Arguments: [i_item_sk#48 ASC NULLS FIRST], false, 0
 
 (229) SortMergeJoin
-Left keys [1]: [ss_item_sk#41]
-Right keys [1]: [i_item_sk#47]
+Left keys [1]: [ss_item_sk#42]
+Right keys [1]: [i_item_sk#48]
 Join type: Inner
 Join condition: None
 
 (230) Project
-Output [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Input [12]: [ss_item_sk#41, ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_item_sk#47, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
+Output [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Input [12]: [ss_item_sk#42, ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_item_sk#48, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
 
 (231) Exchange
-Input [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Arguments: hashpartitioning(ss_customer_sk#42, 100), ENSURE_REQUIREMENTS, [plan_id=37]
+Input [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Arguments: hashpartitioning(ss_customer_sk#43, 100), ENSURE_REQUIREMENTS, [plan_id=37]
 
 (232) Sort
-Input [10]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52]
-Arguments: [ss_customer_sk#42 ASC NULLS FIRST], false, 0
+Input [10]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53]
+Arguments: [ss_customer_sk#43 ASC NULLS FIRST], false, 0
 
 (233) Scan parquet
-Output [4]: [c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
+Output [4]: [c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_birth_country)]
 ReadSchema: struct<c_customer_sk:int,c_first_name:string,c_last_name:string,c_birth_country:string>
 
 (234) Filter
-Input [4]: [c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
-Condition : (isnotnull(c_customer_sk#53) AND isnotnull(c_birth_country#56))
+Input [4]: [c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
+Condition : (isnotnull(c_customer_sk#54) AND isnotnull(c_birth_country#57))
 
 (235) Exchange
-Input [4]: [c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
-Arguments: hashpartitioning(c_customer_sk#53, 100), ENSURE_REQUIREMENTS, [plan_id=38]
+Input [4]: [c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
+Arguments: hashpartitioning(c_customer_sk#54, 100), ENSURE_REQUIREMENTS, [plan_id=38]
 
 (236) Sort
-Input [4]: [c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
-Arguments: [c_customer_sk#53 ASC NULLS FIRST], false, 0
+Input [4]: [c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
+Arguments: [c_customer_sk#54 ASC NULLS FIRST], false, 0
 
 (237) SortMergeJoin
-Left keys [1]: [ss_customer_sk#42]
-Right keys [1]: [c_customer_sk#53]
+Left keys [1]: [ss_customer_sk#43]
+Right keys [1]: [c_customer_sk#54]
 Join type: Inner
 Join condition: None
 
 (238) Project
-Output [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
-Input [14]: [ss_customer_sk#42, ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_customer_sk#53, c_first_name#54, c_last_name#55, c_birth_country#56]
+Output [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
+Input [14]: [ss_customer_sk#43, ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_customer_sk#54, c_first_name#55, c_last_name#56, c_birth_country#57]
 
 (239) Exchange
-Input [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
-Arguments: hashpartitioning(c_birth_country#56, s_zip#46, 100), ENSURE_REQUIREMENTS, [plan_id=39]
+Input [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
+Arguments: hashpartitioning(c_birth_country#57, s_zip#47, 100), ENSURE_REQUIREMENTS, [plan_id=39]
 
 (240) Sort
-Input [12]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56]
-Arguments: [c_birth_country#56 ASC NULLS FIRST, s_zip#46 ASC NULLS FIRST], false, 0
+Input [12]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57]
+Arguments: [c_birth_country#57 ASC NULLS FIRST, s_zip#47 ASC NULLS FIRST], false, 0
 
 (241) Scan parquet
-Output [3]: [ca_state#57, ca_zip#58, ca_country#59]
+Output [3]: [ca_state#58, ca_zip#59, ca_country#60]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ca_country), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_state:string,ca_zip:string,ca_country:string>
 
 (242) Filter
-Input [3]: [ca_state#57, ca_zip#58, ca_country#59]
-Condition : (isnotnull(ca_country#59) AND isnotnull(ca_zip#58))
+Input [3]: [ca_state#58, ca_zip#59, ca_country#60]
+Condition : (isnotnull(ca_country#60) AND isnotnull(ca_zip#59))
 
 (243) Exchange
-Input [3]: [ca_state#57, ca_zip#58, ca_country#59]
-Arguments: hashpartitioning(upper(ca_country#59), ca_zip#58, 100), ENSURE_REQUIREMENTS, [plan_id=40]
+Input [3]: [ca_state#58, ca_zip#59, ca_country#60]
+Arguments: hashpartitioning(upper(ca_country#60), ca_zip#59, 100), ENSURE_REQUIREMENTS, [plan_id=40]
 
 (244) Sort
-Input [3]: [ca_state#57, ca_zip#58, ca_country#59]
-Arguments: [upper(ca_country#59) ASC NULLS FIRST, ca_zip#58 ASC NULLS FIRST], false, 0
+Input [3]: [ca_state#58, ca_zip#59, ca_country#60]
+Arguments: [upper(ca_country#60) ASC NULLS FIRST, ca_zip#59 ASC NULLS FIRST], false, 0
 
 (245) SortMergeJoin
-Left keys [2]: [c_birth_country#56, s_zip#46]
-Right keys [2]: [upper(ca_country#59), ca_zip#58]
+Left keys [2]: [c_birth_country#57, s_zip#47]
+Right keys [2]: [upper(ca_country#60), ca_zip#59]
 Join type: Inner
 Join condition: None
 
 (246) Project
-Output [11]: [ss_net_paid#43, s_store_name#44, s_state#45, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, ca_state#57]
-Input [15]: [ss_net_paid#43, s_store_name#44, s_state#45, s_zip#46, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, c_birth_country#56, ca_state#57, ca_zip#58, ca_country#59]
+Output [11]: [ss_net_paid#44, s_store_name#45, s_state#46, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, ca_state#58]
+Input [15]: [ss_net_paid#44, s_store_name#45, s_state#46, s_zip#47, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, c_birth_country#57, ca_state#58, ca_zip#59, ca_country#60]
 
 (247) HashAggregate
-Input [11]: [ss_net_paid#43, s_store_name#44, s_state#45, i_current_price#48, i_size#49, i_color#50, i_units#51, i_manager_id#52, c_first_name#54, c_last_name#55, ca_state#57]
-Keys [10]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49]
-Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#43))]
-Aggregate Attributes [1]: [sum#61]
-Results [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, sum#73]
+Input [11]: [ss_net_paid#44, s_store_name#45, s_state#46, i_current_price#49, i_size#50, i_color#51, i_units#52, i_manager_id#53, c_first_name#55, c_last_name#56, ca_state#58]
+Keys [10]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50]
+Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#44))]
+Aggregate Attributes [1]: [sum#62]
+Results [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, sum#74]
 
 (248) Exchange
-Input [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, sum#73]
-Arguments: hashpartitioning(c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, 100), ENSURE_REQUIREMENTS, [plan_id=41]
+Input [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, sum#74]
+Arguments: hashpartitioning(c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, 100), ENSURE_REQUIREMENTS, [plan_id=41]
 
 (249) HashAggregate
-Input [11]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49, sum#73]
-Keys [10]: [c_last_name#55, c_first_name#54, s_store_name#44, ca_state#57, s_state#45, i_color#50, i_current_price#48, i_manager_id#52, i_units#51, i_size#49]
-Functions [1]: [sum(UnscaledValue(ss_net_paid#43))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#43))#29]
-Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#43))#29,17,2) AS netpaid#62]
+Input [11]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50, sum#74]
+Keys [10]: [c_last_name#56, c_first_name#55, s_store_name#45, ca_state#58, s_state#46, i_color#51, i_current_price#49, i_manager_id#53, i_units#52, i_size#50]
+Functions [1]: [sum(UnscaledValue(ss_net_paid#44))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#44))#29]
+Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#44))#29,17,2) AS netpaid#63]
 
 (250) HashAggregate
-Input [1]: [netpaid#62]
+Input [1]: [netpaid#63]
 Keys: []
-Functions [1]: [partial_avg(netpaid#62)]
-Aggregate Attributes [2]: [sum#63, count#64]
-Results [2]: [sum#74, count#75]
+Functions [1]: [partial_avg(netpaid#63)]
+Aggregate Attributes [2]: [sum#64, count#65]
+Results [2]: [sum#75, count#76]
 
 (251) Exchange
-Input [2]: [sum#74, count#75]
+Input [2]: [sum#75, count#76]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=42]
 
 (252) HashAggregate
-Input [2]: [sum#74, count#75]
+Input [2]: [sum#75, count#76]
 Keys: []
-Functions [1]: [avg(netpaid#62)]
-Aggregate Attributes [1]: [avg(netpaid#62)#65]
-Results [1]: [(0.05 * avg(netpaid#62)#65) AS (0.05 * avg(netpaid))#66]
+Functions [1]: [avg(netpaid#63)]
+Aggregate Attributes [1]: [avg(netpaid#63)#66]
+Results [1]: [(0.05 * avg(netpaid#63)#66) AS (0.05 * avg(netpaid))#67]
 
 (253) AdaptiveSparkPlan
-Output [1]: [(0.05 * avg(netpaid))#66]
+Output [1]: [(0.05 * avg(netpaid))#67]
 Arguments: isFinalPlan=true
 
 

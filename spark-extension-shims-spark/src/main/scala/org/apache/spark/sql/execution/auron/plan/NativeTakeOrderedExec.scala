@@ -22,12 +22,13 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.auron.sparkver
 
 case class NativeTakeOrderedExec(
-    limit: Long,
+    limit: Int,
+    offset: Int,
     sortOrder: Seq[SortOrder],
     override val child: SparkPlan)
-    extends NativeTakeOrderedBase(limit, sortOrder, child) {
+    extends NativeTakeOrderedBase(limit, offset, sortOrder, child) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 

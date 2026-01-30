@@ -178,18 +178,18 @@ mod test {
         let key_data = ArrayData::builder(DataType::Int32)
             .len(8)
             .add_buffer(Buffer::from_slice_ref(
-                &[0, 1, 2, 3, 4, 5, 6, 7].to_byte_slice(),
+                [0, 1, 2, 3, 4, 5, 6, 7].to_byte_slice(),
             ))
             .build()?;
         let value_data = ArrayData::builder(DataType::UInt32)
             .len(8)
             .add_buffer(Buffer::from_slice_ref(
-                &[0u32, 10, 20, 0, 40, 0, 60, 70].to_byte_slice(),
+                [0u32, 10, 20, 0, 40, 0, 60, 70].to_byte_slice(),
             ))
-            .null_bit_buffer(Some(Buffer::from_slice_ref(&[0b11010110])))
+            .null_bit_buffer(Some(Buffer::from_slice_ref([0b11010110])))
             .build()?;
 
-        let entry_offsets = Buffer::from_slice_ref(&[0, 3, 6, 8].to_byte_slice());
+        let entry_offsets = Buffer::from_slice_ref([0, 3, 6, 8].to_byte_slice());
 
         let keys_field = Arc::new(Field::new("keys", DataType::Int32, false));
         let values_field = Arc::new(Field::new("values", DataType::UInt32, true));
@@ -223,7 +223,7 @@ mod test {
         let output_array = get_indexed.evaluate(&input_batch)?.into_array(0)?;
         let output_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("test col", output_array, true)])?;
-        let expected = vec![
+        let expected = [
             "+----------+",
             "| test col |",
             "+----------+",
@@ -239,7 +239,7 @@ mod test {
         let output_array = get_indexed.evaluate(&input_batch)?.into_array(0)?;
         let output_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("test col", output_array, true)])?;
-        let expected = vec![
+        let expected = [
             "+----------+",
             "| test col |",
             "+----------+",
@@ -274,7 +274,7 @@ mod test {
         let output_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("test col", output_array, true)])?;
 
-        let expected = vec![
+        let expected = [
             "+----------+",
             "| test col |",
             "+----------+",
@@ -290,7 +290,7 @@ mod test {
         let output_array = get_indexed.evaluate(&input_batch)?.into_array(0)?;
         let output_batch =
             RecordBatch::try_from_iter_with_nullable(vec![("test col", output_array, true)])?;
-        let expected = vec![
+        let expected = [
             "+----------+",
             "| test col |",
             "+----------+",

@@ -447,10 +447,10 @@ Input [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, _c4#
 Keys [4]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19]
 Functions [3]: [partial_sum(_c4#20), partial_sum(_c5#21), partial_sum(_c6#22)]
 Aggregate Attributes [3]: [sum#23, sum#24, sum#25]
-Results [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, #26#26]
+Results [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, #26, #26, #26]
 
 (69) NativeHashAggregate
-Input [5]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, #26#26]
+Input [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19, #26, #26, #26]
 Keys [4]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#19]
 Functions [3]: [sum(UnscaledValue(ss_ext_sales_price#7)), sum(UnscaledValue(ss_ext_list_price#8)), sum(UnscaledValue(ss_ext_tax#9))]
 Aggregate Attributes [3]: [sum(UnscaledValue(ss_ext_sales_price#7))#27, sum(UnscaledValue(ss_ext_list_price#8))#28, sum(UnscaledValue(ss_ext_tax#9))#29]
@@ -564,13 +564,13 @@ Input [2]: [#38#38, #39#39]
 Input [2]: [#38#38, #39#39]
 Arguments: [ca_address_sk#38 ASC NULLS FIRST], false
 
-(97) SortMergeJoin [codegen id : 1]
+(97) SortMergeJoin [codegen id : X]
 Left keys [1]: [c_current_addr_sk#35]
 Right keys [1]: [ca_address_sk#38]
 Join type: Inner
 Join condition: NOT (ca_city#39 = bought_city#30)
 
-(98) Project [codegen id : 1]
+(98) Project [codegen id : X]
 Output [8]: [c_last_name#37, c_first_name#36, ca_city#39, bought_city#30, ss_ticket_number#6, extended_price#31, extended_tax#33, list_price#32]
 Input [10]: [ss_ticket_number#6, bought_city#30, extended_price#31, list_price#32, extended_tax#33, c_current_addr_sk#35, c_first_name#36, c_last_name#37, #38#38, #39#39]
 

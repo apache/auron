@@ -32,6 +32,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.commons.lang3.reflect.FieldUtils
 import org.apache.commons.lang3.reflect.MethodUtils
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.util.Using
 import org.apache.spark.sql.catalyst.InternalRow
@@ -80,27 +81,17 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 import org.apache.auron.{protobuf => pb}
-import org.apache.auron.configuration.AuronConfiguration
-import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 object NativeConverters extends Logging {
-
-  private def sparkAuronConfig: AuronConfiguration =
-    AuronAdaptor.getInstance.getAuronConfiguration
-  def udfEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.udf.enabled", defaultValue = true)
-  def udfJsonEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.udf.UDFJson.enabled", defaultValue = true)
-  def udfBrickHouseEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.udf.brickhouse.enabled", defaultValue = true)
-  def decimalArithOpEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.decimal.arithOp.enabled", defaultValue = false)
-  def datetimeExtractEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.datetime.extract.enabled", defaultValue = false)
-  def castTrimStringEnabled: Boolean =
-    AuronConverters.getBooleanConf("spark.auron.cast.trimString", defaultValue = true)
+  def udfJsonEnabled: Boolean = SparkAuronConfiguration.UDF_JSON_ENABLED.get()
+  def udfBrickHouseEnabled: Boolean = SparkAuronConfiguration.UDF_BRICKHOUSE_ENABLED.get()
+  def decimalArithOpEnabled: Boolean = SparkAuronConfiguration.DECIMAL_ARITH_OP_ENABLED.get()
+  def datetimeExtractEnabled: Boolean = SparkAuronConfiguration.DATETIME_EXTRACT_ENABLED.get()
+  def castTrimStringEnabled: Boolean = SparkAuronConfiguration.CAST_STRING_TRIM_ENABLE.get()
+  def singleChildFallbackEnabled: Boolean =
+    SparkAuronConfiguration.UDF_SINGLE_CHILD_FALLBACK_ENABLED.get()
 
   /**
    * Is the data type(scalar or complex) supported by Auron.
@@ -286,6 +277,10 @@ object NativeConverters extends Logging {
   def convertExpr(sparkExpr: Expression): pb.PhysicalExprNode = {
     def fallbackToError: Expression => pb.PhysicalExprNode = { e =>
       throw new NotImplementedError(s"unsupported expression: (${e.getClass}) $e")
+    }
+
+    if (!singleChildFallbackEnabled) {
+      return convertExprWithFallback(sparkExpr, isPruningExpr = false, fallbackToError)
     }
 
     try {
@@ -772,7 +767,7 @@ object NativeConverters extends Logging {
       // if rhs is complex in and/or operators, use short-circuiting implementation
       // or if forceShortCircuitAndOr is enabled, always use short-circuiting
       case And(lhs, rhs)
-          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR)
+          if SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR.get()
             || rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
         buildExprNode {
           _.setScAndExpr(
@@ -782,7 +777,7 @@ object NativeConverters extends Logging {
               .setRight(convertExprWithFallback(rhs, isPruningExpr, fallback)))
         }
       case Or(lhs, rhs)
-          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR)
+          if SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR.get()
             || rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
         buildExprNode {
           _.setScOrExpr(
@@ -889,11 +884,9 @@ object NativeConverters extends Logging {
       case Length(arg) if arg.dataType == StringType =>
         buildScalarFunction(pb.ScalarFunction.CharacterLength, arg :: Nil, IntegerType)
 
-      case e: Lower
-          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE) =>
+      case e: Lower if SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE.get() =>
         buildExtScalarFunction("Spark_StringLower", e.children, e.dataType)
-      case e: Upper
-          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE) =>
+      case e: Upper if SparkAuronConfiguration.CASE_CONVERT_FUNCTIONS_ENABLE.get() =>
         buildExtScalarFunction("Spark_StringUpper", e.children, e.dataType)
 
       case e: StringTrim =>
@@ -1010,12 +1003,12 @@ object NativeConverters extends Logging {
         val children = e.children.map(Cast(_, e.dataType))
         buildScalarFunction(pb.ScalarFunction.Coalesce, children, e.dataType)
 
-      case e @ StringLPad(str, len, pad) =>
+      case _ @StringLPad(str, len, pad) =>
         buildScalarFunction(
           pb.ScalarFunction.Lpad,
           Seq(str, castIfNecessary(len, LongType), pad),
           StringType)
-      case e @ StringRPad(str, len, pad) =>
+      case _ @StringRPad(str, len, pad) =>
         buildScalarFunction(
           pb.ScalarFunction.Rpad,
           Seq(str, castIfNecessary(len, LongType), pad),
@@ -1134,6 +1127,11 @@ object NativeConverters extends Logging {
           _.setRowNumExpr(pb.RowNumExprNode.newBuilder())
         }
 
+      case StubExpr("SparkPartitionID", _, _) =>
+        buildExprNode {
+          _.setSparkPartitionIdExpr(pb.SparkPartitionIdExprNode.newBuilder())
+        }
+
       // hive UDFJson
       case e
           if udfJsonEnabled && (
@@ -1249,7 +1247,7 @@ object NativeConverters extends Logging {
         }
 
         // fallback to UDAF
-        if (sparkAuronConfig.getBoolean(SparkAuronConfiguration.UDAF_FALLBACK_ENABLE)) {
+        if (SparkAuronConfiguration.UDAF_FALLBACK_ENABLE.get()) {
           udaf match {
             case _: DeclarativeAggregate =>
             case _: TypedImperativeAggregate[_] =>
@@ -1409,9 +1407,20 @@ object NativeConverters extends Logging {
       serialized: Array[Byte]): (E with Serializable, S) = {
     Utils.tryWithResource(new ByteArrayInputStream(serialized)) { bis =>
       Utils.tryWithResource(new ObjectInputStream(bis)) { ois =>
-        val expr = ois.readObject().asInstanceOf[E with Serializable]
-        val payload = ois.readObject().asInstanceOf[S with Serializable]
-        (expr, payload)
+        def read(): (E with Serializable, S) = {
+          val expr = ois.readObject().asInstanceOf[E with Serializable]
+          val payload = ois.readObject().asInstanceOf[S with Serializable]
+          (expr, payload)
+        }
+        // Spark TaskMetrics#externalAccums is not thread-safe
+        val taskContext = TaskContext.get()
+        if (taskContext != null) {
+          taskContext.taskMetrics().synchronized {
+            read()
+          }
+        } else {
+          read()
+        }
       }
     }
   }

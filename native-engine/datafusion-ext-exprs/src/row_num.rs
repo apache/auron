@@ -80,7 +80,7 @@ impl PhysicalExpr for RowNumExpr {
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
         let num_rows = batch.num_rows();
         let cur = self.cur.fetch_add(num_rows as i64, SeqCst);
-        let array: Int64Array = (cur..cur + num_rows as i64).into_iter().collect();
+        let array: Int64Array = (cur..cur + num_rows as i64).collect();
         Ok(ColumnarValue::Array(Arc::new(array)))
     }
 

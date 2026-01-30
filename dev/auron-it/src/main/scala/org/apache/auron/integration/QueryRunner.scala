@@ -52,7 +52,7 @@ class QueryRunner(readQuery: String => String) {
     }
 
     val durationSec = (System.currentTimeMillis() - startTime) / 1000.0
-
+    // scalastyle:off println
     result match {
       case Success((rows, rowCount, planStr)) =>
         println(s"Query $queryId executed successfully in $durationSec seconds.")
@@ -75,5 +75,6 @@ class QueryRunner(readQuery: String => String) {
           plan = "",
           errorMsg = Some(e.getMessage))
     }
+    // scalastyle:on
   }
 }

@@ -30,7 +30,7 @@ use crate::{
         Agg,
         acc::{
             AccBooleanColumn, AccBytes, AccBytesColumn, AccColumn, AccColumnRef, AccPrimColumn,
-            AccScalarValueColumn, acc_generic_column_to_array, create_acc_generic_column,
+            AccScalarValueColumn, create_acc_generic_column,
         },
         agg::IdxSelection,
     },
@@ -43,14 +43,17 @@ pub type AggMin = AggMaxMin<AggMinParams>;
 pub struct AggMaxMin<P: AggMaxMinParams> {
     child: PhysicalExprRef,
     data_type: DataType,
+    acc_array_data_types: Vec<DataType>,
     _phantom: PhantomData<P>,
 }
 
 impl<P: AggMaxMinParams> AggMaxMin<P> {
     pub fn try_new(child: PhysicalExprRef, data_type: DataType) -> Result<Self> {
+        let acc_array_data_types = vec![data_type.clone()];
         Ok(Self {
             child,
             data_type,
+            acc_array_data_types,
             _phantom: Default::default(),
         })
     }
@@ -87,7 +90,11 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
     }
 
     fn create_acc_column(&self, num_rows: usize) -> AccColumnRef {
-        create_acc_generic_column(&self.data_type, num_rows)
+        create_acc_generic_column(self.data_type.clone(), num_rows)
+    }
+
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &self.acc_array_data_types
     }
 
     fn partial_update(
@@ -286,7 +293,7 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
     }
 
     fn final_merge(&self, accs: &mut AccColumnRef, acc_idx: IdxSelection<'_>) -> Result<ArrayRef> {
-        acc_generic_column_to_array(accs, &self.data_type, acc_idx)
+        Ok(accs.freeze_to_arrays(acc_idx)?[0].clone())
     }
 }
 

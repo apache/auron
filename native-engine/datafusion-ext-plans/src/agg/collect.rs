@@ -116,6 +116,10 @@ impl<C: AccCollectionColumn> Agg for AggGenericCollect<C> {
         col
     }
 
+    fn acc_array_data_types(&self) -> &[DataType] {
+        &[DataType::Binary]
+    }
+
     fn partial_update(
         &self,
         accs: &mut AccColumnRef,
@@ -292,15 +296,23 @@ impl AccColumn for AccSetColumn {
         self.mem_used + self.set.capacity() * size_of::<AccSet>()
     }
 
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
-        AccCollectionColumn::freeze_to_rows(self, idx, array)
+    fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
+        let mut array = vec![vec![]; idx.len()];
+        AccCollectionColumn::freeze_to_rows(self, idx, &mut array)?;
+        Ok(vec![Arc::new(BinaryArray::from_iter_values(array))])
     }
 
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
-        AccCollectionColumn::unfreeze_from_rows(self, cursors)
+    fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
+        let array = downcast_any!(arrays[0], BinaryArray)?;
+        let mut cursors = vec![];
+
+        for i in 0..array.len() {
+            cursors.push(Cursor::new(array.value(i)));
+        }
+        AccCollectionColumn::unfreeze_from_rows(self, &mut cursors)
     }
 
-    fn spill(&self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
+    fn spill(&mut self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
         idx_for! {
             (idx in idx) => {
                 self.save_raw(idx, w)?;
@@ -404,15 +416,23 @@ impl AccColumn for AccListColumn {
         self.mem_used + self.list.capacity() * size_of::<AccList>()
     }
 
-    fn freeze_to_rows(&self, idx: IdxSelection<'_>, array: &mut [Vec<u8>]) -> Result<()> {
-        AccCollectionColumn::freeze_to_rows(self, idx, array)
+    fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
+        let mut array = vec![vec![]; idx.len()];
+        AccCollectionColumn::freeze_to_rows(self, idx, &mut array)?;
+        Ok(vec![Arc::new(BinaryArray::from_iter_values(array))])
     }
 
-    fn unfreeze_from_rows(&mut self, cursors: &mut [Cursor<&[u8]>]) -> Result<()> {
-        AccCollectionColumn::unfreeze_from_rows(self, cursors)
+    fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
+        let array = downcast_any!(arrays[0], BinaryArray)?;
+        let mut cursors = vec![];
+
+        for i in 0..array.len() {
+            cursors.push(Cursor::new(array.value(i)));
+        }
+        AccCollectionColumn::unfreeze_from_rows(self, &mut cursors)
     }
 
-    fn spill(&self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
+    fn spill(&mut self, idx: IdxSelection<'_>, w: &mut SpillCompressedWriter) -> Result<()> {
         idx_for! {
             (idx in idx) => {
                 self.save_raw(idx, w)?;

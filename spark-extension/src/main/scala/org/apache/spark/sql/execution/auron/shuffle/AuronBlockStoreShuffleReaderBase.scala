@@ -90,8 +90,10 @@ object AuronBlockStoreShuffleReaderBase extends Logging {
   }
 
   private def unwrapInputStream(in: InputStream): InputStream = {
+    // scalastyle:off classforname
     val bufferReleasingInputStreamCls =
       Class.forName("org.apache.spark.storage.BufferReleasingInputStream")
+    // scalastyle:on classforname
     if (in.getClass != bufferReleasingInputStreamCls) {
       return in
     }
@@ -180,5 +182,5 @@ trait BlockObject extends AutoCloseable {
   def getFileLength: Long = throw new UnsupportedOperationException
   def getByteBuffer: ByteBuffer = throw new UnsupportedOperationException
   def getChannel: ReadableByteChannel = throw new UnsupportedOperationException
-  def throwFetchFailed(errmsg: String): Unit = throw new UnsupportedOperationException
+  def throwFetchFailed(errmsg: String): Unit = throw new UnsupportedOperationException(errmsg)
 }

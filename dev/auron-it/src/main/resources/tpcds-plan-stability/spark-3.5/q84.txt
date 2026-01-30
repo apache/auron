@@ -471,7 +471,7 @@ Input [5]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#9, #15#15
 
 (81) NativeTakeOrdered
 Input [3]: [customer_id#16, customername#17, c_customer_id#1]
-Arguments: X, [c_customer_id#1 ASC NULLS FIRST]
+Arguments: X, X, [c_customer_id#1 ASC NULLS FIRST]
 
 (82) NativeProject
 Output [2]: [customer_id#16, customername#17]

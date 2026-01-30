@@ -33,8 +33,7 @@ pub fn spark_make_decimal(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     };
     assert!(
         precision >= 1,
-        "make_decimal: illegal precision: {}",
-        precision
+        "make_decimal: illegal precision: {precision}"
     );
 
     Ok(match &args[0] {

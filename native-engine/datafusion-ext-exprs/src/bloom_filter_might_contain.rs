@@ -198,7 +198,7 @@ fn get_cached_bloom_filter(
 ) -> Result<Arc<Option<SparkBloomFilter>>> {
     // remove expire keys and insert new key
     let slot = {
-        let cached_bloom_filter = CACHED_BLOOM_FILTER.get_or_init(|| Arc::default());
+        let cached_bloom_filter = CACHED_BLOOM_FILTER.get_or_init(Arc::default);
         let mut cached_bloom_filter = cached_bloom_filter.lock();
         cached_bloom_filter
             .entry(uuid.to_string())
@@ -217,7 +217,7 @@ fn get_cached_bloom_filter(
 }
 
 fn clear_cached_bloom_filter() {
-    let cached_bloom_filter = CACHED_BLOOM_FILTER.get_or_init(|| Arc::default());
+    let cached_bloom_filter = CACHED_BLOOM_FILTER.get_or_init(Arc::default);
     let mut cached_bloom_filter = cached_bloom_filter.lock();
     cached_bloom_filter.retain(|_, v| Arc::strong_count(v) > 0);
 }

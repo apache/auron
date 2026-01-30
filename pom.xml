@@ -54,12 +54,16 @@
     <protobufVersion>3.25.5</protobufVersion>
     <nettyVersion>4.2.7.Final</nettyVersion>
     <javaVersion>8</javaVersion>
+    <maven.compiler.source>${javaVersion}</maven.compiler.source>
+    <maven.compiler.target>${javaVersion}</maven.compiler.target>
     <scalaVersion>2.12</scalaVersion>
     <scalaLongVersion>2.12.18</scalaLongVersion>
+    <scala-xml.version>2.1.0</scala-xml.version>
     <scalaJava8CompatVersion>1.0.2</scalaJava8CompatVersion>
     <maven.version>3.9.12</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
     <maven.plugin.scalatest.version>2.2.0</maven.plugin.scalatest.version>
+    <maven.plugin.scalastyle.version>1.0.0</maven.plugin.scalastyle.version>
     <maven.plugin.scalatest.exclude.tags />
     <maven.plugin.scalatest.include.tags />
     <maven.plugin.scalatest.debug.enabled>false</maven.plugin.scalatest.debug.enabled>
@@ -72,6 +76,7 @@
     <maven.plugin.flatten.version>1.3.0</maven.plugin.flatten.version>
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
 
+    <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
     <scalamacros.paradise.version>2.1.1</scalamacros.paradise.version>
     <junit.jupiter.version>5.13.4</junit.jupiter.version>
     <restrict-imports.enforcer.version>2.6.0</restrict-imports.enforcer.version>
@@ -377,7 +382,13 @@
           <target>${javaVersion}</target>
           <scalaVersion>${scalaLongVersion}</scalaVersion>
           <args>
+            <arg>-deprecation</arg>
+            <arg>-feature</arg>
             <arg>-Ywarn-unused</arg>
+            <arg>-Xfatal-warnings</arg>
+
+            <arg>-Wconf:msg=method newInstance in class Class is deprecated:s</arg>
+            <arg>-Wconf:msg=class ThreadDeath in package lang is deprecated:s</arg>
           </args>
         </configuration>
         <dependencies>
@@ -416,6 +427,43 @@
         </executions>
       </plugin>
 
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${checkstyle-plugin.version}</version>
+        <configuration>
+          <failOnViolation>true</failOnViolation>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+          <sourceDirectories>
+            <directory>${project.basedir}/src/main/java</directory>
+            <directory>${project.basedir}/src/main/scala</directory>
+          </sourceDirectories>
+          <testSourceDirectories>
+            <directory>${project.basedir}/src/test/java</directory>
+          </testSourceDirectories>
+          <suppressionsLocation>${maven.multiModuleProjectDirectory}/dev/checkstyle-suppressions.xml</suppressionsLocation>
+          <configLocation>${maven.multiModuleProjectDirectory}/dev/checkstyle.xml</configLocation>
+          <outputFile>${project.basedir}/target/checkstyle-output.xml</outputFile>
+          <inputEncoding>UTF-8</inputEncoding>
+          <outputEncoding>UTF-8</outputEncoding>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>8.29</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <phase>validate</phase>
+          </execution>
+        </executions>
+      </plugin>
+
       <!-- disable surefire globally, only enable it on pure Java modules -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -423,6 +471,8 @@
         <version>${maven.plugin.surefire.version}</version>
         <!-- Note config is repeated in scalatest config -->
         <configuration>
+          <forkCount>1</forkCount>
+          <reuseForks>false</reuseForks>
           <skipTests>false</skipTests>
           <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
           <argLine>${extraJavaTestArgs}</argLine>
@@ -444,6 +494,7 @@
           <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
           <junitxml>.</junitxml>
           <filereports>TestSuite.txt</filereports>
+          <forkMode>once</forkMode>
           <argLine>${extraJavaTestArgs}</argLine>
           <environmentVariables />
           <systemProperties>
@@ -462,6 +513,32 @@
             <goals>
               <goal>test</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.scalastyle</groupId>
+        <artifactId>scalastyle-maven-plugin</artifactId>
+        <version>${maven.plugin.scalastyle.version}</version>
+        <configuration>
+          <verbose>false</verbose>
+          <failOnViolation>true</failOnViolation>
+          <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          <failOnWarning>false</failOnWarning>
+          <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
+          <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
+          <configLocation>${maven.multiModuleProjectDirectory}/dev/scalastyle-config.xml</configLocation>
+          <outputFile>${basedir}/target/scalastyle-output.xml</outputFile>
+          <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
+          <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <phase>validate</phase>
           </execution>
         </executions>
       </plugin>
@@ -760,6 +837,48 @@
     </profile>
 
     <profile>
+      <id>spark-4.1</id>
+      <properties>
+        <shimName>spark-4.1</shimName>
+        <scalaTestVersion>3.2.9</scalaTestVersion>
+        <sparkVersion>4.1.1</sparkVersion>
+        <shortSparkVersion>4.1</shortSparkVersion>
+        <nettyVersion>4.1.118.Final</nettyVersion>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark41-enforce-java-scala-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <!-- Spark 4.1 requires JDK 17+ and Scala 2.13.x -->
+                    <requireJavaVersion>
+                      <version>[17,)</version>
+                      <message>Spark 4.1 requires JDK 17 or higher. Current: ${java.version}</message>
+                    </requireJavaVersion>
+                    <requireProperty>
+                      <property>scalaLongVersion</property>
+                      <regex>2\.13\.\d+</regex>
+                      <regexMessage>Spark 4.1 requires Scala 2.13.x. Current: ${scalaLongVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
       <id>jdk-8</id>
       <activation>
         <jdk>1.8</jdk>
@@ -767,7 +886,7 @@
       <properties>
         <javaVersion>8</javaVersion>
         <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.8</semanticdb.version>
+        <semanticdb.version>4.14.5</semanticdb.version>
         <scalafmtVersion>3.0.0</scalafmtVersion>
       </properties>
     </profile>
@@ -780,7 +899,7 @@
       <properties>
         <javaVersion>11</javaVersion>
         <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.8.8</semanticdb.version>
+        <semanticdb.version>4.14.5</semanticdb.version>
         <scalafmtVersion>3.0.0</scalafmtVersion>
       </properties>
     </profile>
@@ -793,7 +912,7 @@
       <properties>
         <javaVersion>17</javaVersion>
         <spotless.plugin.version>2.45.0</spotless.plugin.version>
-        <semanticdb.version>4.9.9</semanticdb.version>
+        <semanticdb.version>4.14.5</semanticdb.version>
         <scalafmtVersion>3.9.9</scalafmtVersion>
       </properties>
     </profile>
@@ -806,7 +925,7 @@
       <properties>
         <javaVersion>21</javaVersion>
         <spotless.plugin.version>2.45.0</spotless.plugin.version>
-        <semanticdb.version>4.9.9</semanticdb.version>
+        <semanticdb.version>4.14.5</semanticdb.version>
         <scalafmtVersion>3.9.9</scalafmtVersion>
       </properties>
     </profile>
@@ -853,7 +972,7 @@
       </activation>
       <properties>
         <scalaVersion>2.13</scalaVersion>
-        <scalaLongVersion>2.13.13</scalaLongVersion>
+        <scalaLongVersion>2.13.17</scalaLongVersion>
       </properties>
       <build>
         <plugins>
@@ -862,11 +981,28 @@
             <artifactId>scala-maven-plugin</artifactId>
             <configuration>
               <args>
+                <arg>-deprecation</arg>
+                <arg>-feature</arg>
                 <arg>-Ywarn-unused</arg>
                 <!-- https://github.com/scalamacros/paradise is no longer actively developed. -->
                 <!-- In Scala 2.13, the plugin's functionality has been included in the compiler -->
                 <!-- directly under the -Ymacro-annotations flag.  -->
                 <arg>-Ymacro-annotations</arg>
+                <arg>-Xfatal-warnings</arg>
+
+                <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+                <arg>-Wconf:cat=other-nullary-override:s</arg>
+                <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
+                <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
+                <arg>-Wconf:msg=object JavaConverters in package collection is deprecated:s</arg>
+                <arg>-Wconf:msg=method newInstance in class Class is deprecated:s</arg>
+                <arg>-Wconf:msg=class ThreadDeath in package lang is deprecated:s</arg>
+                <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
+                <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
+                <arg>-Wconf:cat=unused-nowarn:s</arg>
+                <arg>-Wconf:msg=early initializers are deprecated:s</arg>
+                <arg>-Wconf:cat=other-match-analysis:s</arg>
+                <arg>-Wconf:cat=feature-existentials:s</arg>
               </args>
               <compilerPlugins>
                 <compilerPlugin>

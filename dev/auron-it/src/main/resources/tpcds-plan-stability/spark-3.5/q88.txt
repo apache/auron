@@ -796,18 +796,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#12]
-Results [1]: [#13#13]
+Results [1]: [#13]
 
 (53) NativeShuffleExchange
-Input [1]: [#13#13]
+Input [1]: [#13]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 
 (54) ShuffleQueryStage
-Output [1]: [#13#13]
+Output [1]: [#13]
 Arguments: X
 
 (55) NativeHashAggregate
-Input [1]: [#13#13]
+Input [1]: [#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#14]
@@ -943,18 +943,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#22]
-Results [1]: [#13#13]
+Results [1]: [#13]
 
 (88) NativeShuffleExchange
-Input [1]: [#13#13]
+Input [1]: [#13]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 
 (89) ShuffleQueryStage
-Output [1]: [#13#13]
+Output [1]: [#13]
 Arguments: X
 
 (90) NativeHashAggregate
-Input [1]: [#13#13]
+Input [1]: [#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#23]
@@ -1094,18 +1094,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#31]
-Results [1]: [#13#13]
+Results [1]: [#13]
 
 (124) NativeShuffleExchange
-Input [1]: [#13#13]
+Input [1]: [#13]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=13]
 
 (125) ShuffleQueryStage
-Output [1]: [#13#13]
+Output [1]: [#13]
 Arguments: X
 
 (126) NativeHashAggregate
-Input [1]: [#13#13]
+Input [1]: [#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#32]
@@ -1245,18 +1245,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#40]
-Results [1]: [#13#13]
+Results [1]: [#13]
 
 (160) NativeShuffleExchange
-Input [1]: [#13#13]
+Input [1]: [#13]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=16]
 
 (161) ShuffleQueryStage
-Output [1]: [#13#13]
+Output [1]: [#13]
 Arguments: X
 
 (162) NativeHashAggregate
-Input [1]: [#13#13]
+Input [1]: [#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#41]
@@ -1396,18 +1396,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#49]
-Results [1]: [#13#13]
+Results [1]: [#13]
 
 (196) NativeShuffleExchange
-Input [1]: [#13#13]
+Input [1]: [#13]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=19]
 
 (197) ShuffleQueryStage
-Output [1]: [#13#13]
+Output [1]: [#13]
 Arguments: X
 
 (198) NativeHashAggregate
-Input [1]: [#13#13]
+Input [1]: [#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#50]
@@ -1547,18 +1547,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#58]
-Results [1]: [#13#13]
+Results [1]: [#13]
 
 (232) NativeShuffleExchange
-Input [1]: [#13#13]
+Input [1]: [#13]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=22]
 
 (233) ShuffleQueryStage
-Output [1]: [#13#13]
+Output [1]: [#13]
 Arguments: X
 
 (234) NativeHashAggregate
-Input [1]: [#13#13]
+Input [1]: [#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#59]
@@ -1698,18 +1698,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#67]
-Results [1]: [#13#13]
+Results [1]: [#13]
 
 (268) NativeShuffleExchange
-Input [1]: [#13#13]
+Input [1]: [#13]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=25]
 
 (269) ShuffleQueryStage
-Output [1]: [#13#13]
+Output [1]: [#13]
 Arguments: X
 
 (270) NativeHashAggregate
-Input [1]: [#13#13]
+Input [1]: [#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#68]
@@ -1849,18 +1849,18 @@ Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#76]
-Results [1]: [#13#13]
+Results [1]: [#13]
 
 (304) NativeShuffleExchange
-Input [1]: [#13#13]
+Input [1]: [#13]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=28]
 
 (305) ShuffleQueryStage
-Output [1]: [#13#13]
+Output [1]: [#13]
 Arguments: X
 
 (306) NativeHashAggregate
-Input [1]: [#13#13]
+Input [1]: [#13]
 Keys: []
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#77]

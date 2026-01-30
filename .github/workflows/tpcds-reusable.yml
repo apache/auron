@@ -73,7 +73,7 @@ on:
             "q1,q2,q3,q4,q5,q6,q7,q8,q9",
             "q10,q11,q12,q13,q14a,q14b,q15,q16,q17,q18,q19",
             "q20,q21,q22,q23a,q23b,q24a,q24b,q25,q26,q27,q28,q29",
-            "q31,q33,q34,q35,q36,q37,q38,q39a,q39b",
+            "q30,q31,q32,q33,q34,q35,q36,q37,q38,q39a,q39b",
             "q40,q41,q42,q43,q44,q45,q46,q47,q48,q49",
             "q50,q51,q52,q53,q54,q55,q56,q57,q58,q59",
             "q60,q61,q62,q63,q64,q65,q66,q67,q68,q69",
@@ -88,45 +88,6 @@ env:
   WGET_OPTS: "--tries=3 --timeout=30 -c"
 
 jobs:
-  build-validator:
-    name: Build TPC-DS Validator
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Cache TPC-DS Validator
-        uses: actions/cache@v5
-        id: cache-tpcds-validator
-        with:
-          key: tpcds-validator_${{ inputs.scalaver }}
-          path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
-
-      - name: Checkout TPC-DS Validator
-        uses: actions/checkout@v6
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        with:
-          repository: auron-project/tpcds-validator
-
-      - name: Setup Java and Maven cache
-        uses: actions/setup-java@v5
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        with:
-          distribution: 'adopt-hotspot'
-          java-version: ${{ inputs.javaver }}
-          cache: 'maven'
-
-      - name: Build TPC-DS Validator
-        if: steps.cache-tpcds-validator.outputs.cache-hit != 'true'
-        run: ./build/mvn package -DskipTests -Pscala-${{ inputs.scalaver }}
-
-      - name: Upload TPC-DS Validator
-        uses: actions/upload-artifact@v6
-        with:
-          name: >
-            tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
-            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
-            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
-          path: target/tpcds-validator_${{ inputs.scalaver }}-0.1.0-SNAPSHOT-with-dependencies.jar
-          overwrite: true
-
   build-auron-jar:
     name: Build Auron JAR
     runs-on: ubuntu-24.04
@@ -155,22 +116,9 @@ jobs:
           rustflags: --allow warnings -C target-feature=+aes
           components:
             cargo
-            rustfmt
-            clippy
-
-      - name: Cargo clippy
-        run: |
-#         First eliminate unwrap; then enable -D warnings to enforce all default lints.
-          cargo clippy --all-targets --workspace -- -A warnings  -A clippy::all  -D clippy::unwrap_used
-
-      - name: Cargo test
-        run: |
-          cargo --version
-          cargo test --workspace --all-features
 
       - name: Build auron (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
         run: |
-          sed -i 's/opt-level = 1/opt-level = 0/g' Cargo.toml # use opt-level 0
           rm -f .build-checksum_*.cache
           
           SPARK_NUMBER="${{ inputs.sparkver }}"
@@ -224,9 +172,20 @@ jobs:
           path: target/auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-pre-*.jar
           overwrite: true
 
+      - name: Build auron-it (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
+        run: |
+          cd dev/auron-it
+          ${{ github.workspace }}/build/mvn package -P${{ inputs.sparkver }} -Pscala-${{ inputs.scalaver }}
+      - name: Upload auron it (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
+        uses: actions/upload-artifact@v6
+        with:
+          name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
+          path: dev/auron-it/target/auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}*-jar-with-dependencies.jar
+          overwrite: true
+
   run-tpcds-test:
     name: Run TPC-DS test ${{ matrix.query }}
-    needs: [build-validator, build-auron-jar]
+    needs: [build-auron-jar]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -267,7 +226,7 @@ jobs:
         if: steps.cache-spark-bin.outputs.cache-hit != 'true'
         run: |
           SPARK_PATH="spark/spark-${{ steps.get-dependency-version.outputs.sparkversion }}"
-          if [ ${{ inputs.scalaver }} = "2.13" ]; then
+          if [ ${{ inputs.scalaver }} = "2.13" && "${{ inputs.sparkver }}" != "spark-4.1" ]; then
             SPARK_FILE="spark-${{ steps.get-dependency-version.outputs.sparkversion }}-bin-${{ inputs.hadoop-profile }}-scala${{ inputs.scalaver }}.tgz"
           else
             SPARK_FILE="spark-${{ steps.get-dependency-version.outputs.sparkversion }}-bin-${{ inputs.hadoop-profile }}.tgz"
@@ -286,13 +245,10 @@ jobs:
             }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
-      - name: Download TPC-DS Validator JAR
+      - name: Download auron-it JAR
         uses: actions/download-artifact@v7
         with:
-          name: >
-            tpcds-validator-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
-            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
-            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
+          name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
 
       - name: Checkout TPC-DS Data
         uses: actions/checkout@v6
@@ -303,7 +259,10 @@ jobs:
       - name: Install Auron JAR
         run: |
           ls -la
-          cp auron-*${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
+          jar=$(ls -1 auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar | head -n1)
+          [ -n "$jar" ] || { echo "No jar matched: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar"; exit 1; }
+          echo "AURON_SPARK_JAR=$jar" >> "$GITHUB_ENV"
+          cp "$jar" spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Setup Java and Maven cache
         uses: actions/setup-java@v5
@@ -311,6 +270,13 @@ jobs:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
           cache: 'maven'
+
+      - name: Install auron-it JAR
+        run: |
+          ls -la
+          jar=$(ls -1 auron-it-*-jar-with-dependencies.jar | head -n1)
+          [ -n "$jar" ] || { echo "No jar matched: auron-it-*-jar-with-dependencies.jar"; exit 1; }
+          echo "AURON_IT_JAR=$jar" >> "$GITHUB_ENV"
 
       - name: Cache Celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}
         uses: actions/cache@v5
@@ -406,16 +372,21 @@ jobs:
           cp uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }}/jars/client/spark3/*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Run TPC-DS Query ${{ matrix.query }}
+        env:
+          RUST_LOG: ERROR
+          RUST_BACKTRACE: 1
+          SPARK_VERSION: ${{ inputs.sparkver }}
+          SCALA_VERSION: ${{ inputs.scalaver }}
+          SPARK_HOME: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
         run: |
           ls -la
-          export RUST_LOG=ERROR
-          export RUST_BACKTRACE=1
-          export SCALA_VERSION=${{ inputs.scalaver }}
-          export SPARK_HOME=spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
-          dev/run-tpcds-test \
+          dev/auron-it/run-it.sh  \
             ${{ inputs.extrasparkconf }} \
+            --type tpcds \
             --data-location dev/tpcds_1g \
-            --query-filter ${{ matrix.query }}
+            --query-filter ${{ matrix.query }} \
+            --result-check \
+            --plan-check
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
@@ -435,3 +406,4 @@ jobs:
           rm -f celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar
           rm -f rss-client-spark*.jar
           ls -la ./
+

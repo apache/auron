@@ -20,15 +20,15 @@ use log::{Level, LevelFilter, Log, Metadata, Record};
 use once_cell::sync::OnceCell;
 
 thread_local! {
-    pub static THREAD_TID: Cell<usize> = Cell::new(0);
-    pub static THREAD_STAGE_ID: Cell<usize> = Cell::new(0);
-    pub static THREAD_PARTITION_ID: Cell<usize> = Cell::new(0);
+    pub static THREAD_TID: Cell<usize> = const { Cell::new(0) };
+    pub static THREAD_STAGE_ID: Cell<usize> = const { Cell::new(0) };
+    pub static THREAD_PARTITION_ID: Cell<usize> = const { Cell::new(0) };
 }
 
 const DEFAULT_MAX_LEVEL: Level = Level::Info;
 
 pub fn init_logging(level: &str) {
-    let log_level = Level::from_str(level).unwrap_or_else(|_| DEFAULT_MAX_LEVEL);
+    let log_level = Level::from_str(level).unwrap_or(DEFAULT_MAX_LEVEL);
     static LOGGER: OnceCell<SimpleLogger> = OnceCell::new();
     let logger = LOGGER.get_or_init(|| SimpleLogger {
         start_instant: Instant::now(),

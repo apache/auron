@@ -99,7 +99,7 @@ impl Drop for FsDataInputWrapper {
     fn drop(&mut self) {
         let _timer = self.io_time.timer();
         if let Err(e) = jni_call!(JavaAutoCloseable(self.obj.as_obj()).close() -> ()) {
-            log::warn!("error closing hadoop FSDataInputStream: {:?}", e);
+            log::warn!("error closing hadoop FSDataInputStream: {e:?}");
         }
     }
 }

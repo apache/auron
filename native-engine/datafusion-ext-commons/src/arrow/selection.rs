@@ -53,7 +53,7 @@ fn take_cols_internal<T: ArrowPrimitiveType>(
     cols: &[ArrayRef],
     indices: &PrimitiveArray<T>,
 ) -> Result<Vec<ArrayRef>> {
-    cols.into_iter()
+    cols.iter()
         .map(|c| Ok(arrow::compute::take(&c, indices, None)?))
         .collect::<Result<_>>()
 }
@@ -108,7 +108,7 @@ pub fn create_array_interleaver(
         }
 
         fn nulls(&self, indices: &[(usize, usize)]) -> Option<NullBuffer> {
-            let nulls = match self.has_nulls {
+            match self.has_nulls {
                 true => {
                     let mut builder = BooleanBufferBuilder::new(indices.len());
                     for (a, b) in indices {
@@ -118,8 +118,7 @@ pub fn create_array_interleaver(
                     Some(NullBuffer::new(builder.finish()))
                 }
                 false => None,
-            };
-            nulls
+            }
         }
     }
 
@@ -139,10 +138,11 @@ pub fn create_array_interleaver(
                     let (prefetch_array_idx, prefetch_value_idx) = indices[i + PREFETCH_AHEAD];
                     prefetch_read_data!({
                         let array = interleaver.arrays.get_unchecked(prefetch_array_idx);
-                        let ptr = array
+
+                        (array
                             .values()
-                            .get_unchecked(array.offset() + prefetch_value_idx);
-                        ptr
+                            .get_unchecked(array.offset() + prefetch_value_idx))
+                            as _
                     });
                 }
             }

@@ -37,6 +37,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.unsafe.types.UTF8String
 
+import org.apache.auron.sparkver
+
 class AuronColumnarBatchRow(columns: Array[AuronColumnVector], var rowId: Int = 0)
     extends InternalRow {
   override def numFields: Int = columns.length
@@ -131,6 +133,21 @@ class AuronColumnarBatchRow(columns: Array[AuronColumnVector], var rowId: Int = 
   }
 
   override def setNullAt(ordinal: Int): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  @sparkver("4.1")
+  override def getGeography(i: Int): org.apache.spark.unsafe.types.GeographyVal = {
+    throw new UnsupportedOperationException
+  }
+
+  @sparkver("4.1")
+  override def getGeometry(i: Int): org.apache.spark.unsafe.types.GeometryVal = {
+    throw new UnsupportedOperationException
+  }
+
+  @sparkver("4.1")
+  override def getVariant(i: Int): org.apache.spark.unsafe.types.VariantVal = {
     throw new UnsupportedOperationException
   }
 }

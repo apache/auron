@@ -78,61 +78,36 @@ import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.EmptyPartitionsExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
-import org.apache.auron.sparkver
 
 object AuronConverters extends Logging {
-  def enableScan: Boolean =
-    getBooleanConf("spark.auron.enable.scan", defaultValue = true)
-  def enableProject: Boolean =
-    getBooleanConf("spark.auron.enable.project", defaultValue = true)
-  def enableFilter: Boolean =
-    getBooleanConf("spark.auron.enable.filter", defaultValue = true)
-  def enableSort: Boolean =
-    getBooleanConf("spark.auron.enable.sort", defaultValue = true)
-  def enableUnion: Boolean =
-    getBooleanConf("spark.auron.enable.union", defaultValue = true)
-  def enableSmj: Boolean =
-    getBooleanConf("spark.auron.enable.smj", defaultValue = true)
-  def enableShj: Boolean =
-    getBooleanConf("spark.auron.enable.shj", defaultValue = true)
-  def enableBhj: Boolean =
-    getBooleanConf("spark.auron.enable.bhj", defaultValue = true)
-  def enableBnlj: Boolean =
-    getBooleanConf("spark.auron.enable.bnlj", defaultValue = true)
-  def enableLocalLimit: Boolean =
-    getBooleanConf("spark.auron.enable.local.limit", defaultValue = true)
-  def enableGlobalLimit: Boolean =
-    getBooleanConf("spark.auron.enable.global.limit", defaultValue = true)
+  def enableScan: Boolean = SparkAuronConfiguration.ENABLE_SCAN.get()
+  def enableProject: Boolean = SparkAuronConfiguration.ENABLE_PROJECT.get()
+  def enableFilter: Boolean = SparkAuronConfiguration.ENABLE_FILTER.get()
+  def enableSort: Boolean = SparkAuronConfiguration.ENABLE_SORT.get()
+  def enableUnion: Boolean = SparkAuronConfiguration.ENABLE_UNION.get()
+  def enableSmj: Boolean = SparkAuronConfiguration.ENABLE_SMJ.get()
+  def enableShj: Boolean = SparkAuronConfiguration.ENABLE_SHJ.get()
+  def enableBhj: Boolean = SparkAuronConfiguration.ENABLE_BHJ.get()
+  def enableBnlj: Boolean = SparkAuronConfiguration.ENABLE_BNLJ.get()
+  def enableLocalLimit: Boolean = SparkAuronConfiguration.ENABLE_LOCAL_LIMIT.get()
+  def enableGlobalLimit: Boolean = SparkAuronConfiguration.ENABLE_GLOBAL_LIMIT.get()
   def enableTakeOrderedAndProject: Boolean =
-    getBooleanConf("spark.auron.enable.take.ordered.and.project", defaultValue = true)
-  def enableCollectLimit: Boolean =
-    getBooleanConf("spark.auron.enable.collectLimit", defaultValue = true)
-  def enableAggr: Boolean =
-    getBooleanConf("spark.auron.enable.aggr", defaultValue = true)
-  def enableExpand: Boolean =
-    getBooleanConf("spark.auron.enable.expand", defaultValue = true)
-  def enableWindow: Boolean =
-    getBooleanConf("spark.auron.enable.window", defaultValue = true)
-  def enableWindowGroupLimit: Boolean =
-    getBooleanConf("spark.auron.enable.window.group.limit", defaultValue = true)
-  def enableGenerate: Boolean =
-    getBooleanConf("spark.auron.enable.generate", defaultValue = true)
-  def enableLocalTableScan: Boolean =
-    getBooleanConf("spark.auron.enable.local.table.scan", defaultValue = true)
-  def enableDataWriting: Boolean =
-    getBooleanConf("spark.auron.enable.data.writing", defaultValue = false)
-  def enableScanParquet: Boolean =
-    getBooleanConf("spark.auron.enable.scan.parquet", defaultValue = true)
+    SparkAuronConfiguration.ENABLE_TAKE_ORDERED_AND_PROJECT.get()
+  def enableCollectLimit: Boolean = SparkAuronConfiguration.ENABLE_COLLECT_LIMIT.get()
+  def enableAggr: Boolean = SparkAuronConfiguration.ENABLE_AGGR.get()
+  def enableExpand: Boolean = SparkAuronConfiguration.ENABLE_EXPAND.get()
+  def enableWindow: Boolean = SparkAuronConfiguration.ENABLE_WINDOW.get()
+  def enableWindowGroupLimit: Boolean = SparkAuronConfiguration.ENABLE_WINDOW_GROUP_LIMIT.get()
+  def enableGenerate: Boolean = SparkAuronConfiguration.ENABLE_GENERATE.get()
+  def enableLocalTableScan: Boolean = SparkAuronConfiguration.ENABLE_LOCAL_TABLE_SCAN.get()
+  def enableDataWriting: Boolean = SparkAuronConfiguration.ENABLE_DATA_WRITING.get()
+  def enableScanParquet: Boolean = SparkAuronConfiguration.ENABLE_SCAN_PARQUET.get()
   def enableScanParquetTimestamp: Boolean =
-    getBooleanConf("spark.auron.enable.scan.parquet.timestamp", defaultValue = true)
-  def enableScanOrc: Boolean =
-    getBooleanConf("spark.auron.enable.scan.orc", defaultValue = true)
-  def enableScanOrcTimestamp: Boolean =
-    getBooleanConf("spark.auron.enable.scan.orc.timestamp", defaultValue = true)
-  def enableBroadcastExchange: Boolean =
-    getBooleanConf("spark.auron.enable.broadcastExchange", defaultValue = true)
-  def enableShuffleExechange: Boolean =
-    getBooleanConf("spark.auron.enable.shuffleExchange", defaultValue = true)
+    SparkAuronConfiguration.ENABLE_SCAN_PARQUET_TIMESTAMP.get()
+  def enableScanOrc: Boolean = SparkAuronConfiguration.ENABLE_SCAN_ORC.get()
+  def enableScanOrcTimestamp: Boolean = SparkAuronConfiguration.ENABLE_SCAN_ORC_TIMESTAMP.get()
+  def enableBroadcastExchange: Boolean = SparkAuronConfiguration.ENABLE_BROADCAST_EXCHANGE.get()
+  def enableShuffleExechange: Boolean = SparkAuronConfiguration.ENABLE_SHUFFLE_EXCHANGE.get()
 
   private val extConvertProviders = ServiceLoader.load(classOf[AuronConvertProvider]).asScala
 
@@ -412,20 +387,8 @@ object AuronConverters extends Logging {
     Shims.get.createNativeShuffleExchangeExec(
       outputPartitioning,
       addRenameColumnsExec(convertedChild),
-      getShuffleOrigin(exec))
+      Shims.get.getShuffleOrigin(exec))
   }
-
-  @sparkver(" 3.2 / 3.3 / 3.4 / 3.5")
-  def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = exec.isSkewJoin
-
-  @sparkver("3.0 / 3.1")
-  def getIsSkewJoinFromSHJ(exec: ShuffledHashJoinExec): Boolean = false
-
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-  def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = Some(exec.shuffleOrigin)
-
-  @sparkver("3.0")
-  def getShuffleOrigin(exec: ShuffleExchangeExec): Option[Any] = None
 
   def convertFileSourceScanExec(exec: FileSourceScanExec): SparkPlan = {
     val (
@@ -606,8 +569,7 @@ object AuronConverters extends Logging {
         rightKeys,
         joinType,
         buildSide,
-        getIsSkewJoinFromSHJ(exec))
-
+        Shims.get.getIsSkewJoinFromSHJ(exec))
     } catch {
       case _ if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN) =>
         logWarning(
@@ -646,12 +608,6 @@ object AuronConverters extends Logging {
     }
   }
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5")
-  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = exec.isNullAwareAntiJoin
-
-  @sparkver("3.0")
-  def isNullAwareAntiJoin(exec: BroadcastHashJoinExec): Boolean = false
-
   def convertBroadcastHashJoinExec(exec: BroadcastHashJoinExec): SparkPlan = {
     val buildSide = Shims.get.getJoinBuildSide(exec)
     try {
@@ -663,7 +619,7 @@ object AuronConverters extends Logging {
           exec.condition,
           exec.left,
           exec.right,
-          isNullAwareAntiJoin(exec))
+          Shims.get.isNullAwareAntiJoin(exec))
       logDebugPlanConversion(
         exec,
         Seq(
@@ -752,18 +708,21 @@ object AuronConverters extends Logging {
 
   def convertLocalLimitExec(exec: LocalLimitExec): SparkPlan = {
     logDebugPlanConversion(exec)
-    Shims.get.createNativeLocalLimitExec(exec.limit.toLong, exec.child)
+    Shims.get.createNativeLocalLimitExec(exec.limit, exec.child)
   }
 
   def convertGlobalLimitExec(exec: GlobalLimitExec): SparkPlan = {
     logDebugPlanConversion(exec)
-    Shims.get.createNativeGlobalLimitExec(exec.limit.toLong, exec.child)
+    val (limit, offset) = Shims.get.getLimitAndOffset(exec)
+    Shims.get.createNativeGlobalLimitExec(limit, offset, exec.child)
   }
 
   def convertTakeOrderedAndProjectExec(exec: TakeOrderedAndProjectExec): SparkPlan = {
     logDebugPlanConversion(exec)
+    val (limit, offset) = Shims.get.getLimitAndOffset(exec)
     val nativeTakeOrdered = Shims.get.createNativeTakeOrderedExec(
-      exec.limit,
+      limit,
+      offset,
       exec.sortOrder,
       addRenameColumnsExec(convertToNative(exec.child)))
 
@@ -777,7 +736,8 @@ object AuronConverters extends Logging {
 
   def convertCollectLimitExec(exec: CollectLimitExec): SparkPlan = {
     logDebugPlanConversion(exec)
-    Shims.get.createNativeCollectLimitExec(exec.limit, exec.child)
+    val (limit, offset) = Shims.get.getLimitAndOffset(exec)
+    Shims.get.createNativeCollectLimitExec(limit, offset, exec.child)
   }
 
   def convertHashAggregateExec(exec: HashAggregateExec): SparkPlan = {
@@ -836,8 +796,7 @@ object AuronConverters extends Logging {
           addRenameColumnsExec(convertToNative(exec.child))
         case _ =>
           if (needRenameColumns(exec.child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(exec.child), newNames)
           } else {
             convertToNative(exec.child)
@@ -893,8 +852,7 @@ object AuronConverters extends Logging {
           addRenameColumnsExec(convertToNative(exec.child))
         case _ =>
           if (needRenameColumns(exec.child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(exec.child), newNames)
           } else {
             convertToNative(exec.child)
@@ -947,8 +905,7 @@ object AuronConverters extends Logging {
           addRenameColumnsExec(convertToNative(child))
         case _ =>
           if (needRenameColumns(child)) {
-            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId) :+
-              NativeAggBase.AGG_BUF_COLUMN_NAME
+            val newNames = exec.groupingExpressions.map(Util.getFieldNameByExprId)
             Shims.get.createNativeRenameColumnsExec(convertToNative(child), newNames)
           } else {
             convertToNative(child)

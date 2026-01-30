@@ -248,14 +248,14 @@ impl NativeExecutionRuntime {
         };
 
         match next_batch() {
-            Ok(ret) => return ret,
+            Ok(ret) => ret,
             Err(err) => {
                 let _ = set_error(
                     &self.native_wrapper,
                     &format!("poll record batch error: {err}"),
                     None,
                 );
-                return false;
+                false
             }
         }
     }

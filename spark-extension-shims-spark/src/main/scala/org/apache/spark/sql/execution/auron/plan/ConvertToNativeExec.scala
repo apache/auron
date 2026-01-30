@@ -22,7 +22,7 @@ import org.apache.auron.sparkver
 
 case class ConvertToNativeExec(override val child: SparkPlan) extends ConvertToNativeBase(child) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 

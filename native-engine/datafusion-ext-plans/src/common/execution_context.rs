@@ -76,6 +76,7 @@ pub struct ExecutionContext {
     input_stat_metrics: Arc<OnceCell<Option<InputBatchStatistics>>>,
 }
 
+#[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 impl ExecutionContext {
     pub fn new(
         task_ctx: Arc<TaskContext>,
@@ -188,16 +189,15 @@ impl ExecutionContext {
 
                             // short path for not coalescable batches
                             let batch_num_rows = batch.batch().num_rows();
-                            if self.staging_batches.is_empty() {
-                                if batch_num_rows > batch_size() / 4 {
-                                    return Poll::Ready(Some(Ok(batch)));
-                                }
+                            if self.staging_batches.is_empty() && batch_num_rows > batch_size() / 4
+                            {
+                                return Poll::Ready(Some(Ok(batch)));
                             }
                             let batch_mem_size = batch.batch().get_batch_mem_size();
-                            if self.staging_batches.is_empty() {
-                                if batch_mem_size >= suggested_batch_mem_size() / 4 {
-                                    return Poll::Ready(Some(Ok(batch)));
-                                }
+                            if self.staging_batches.is_empty()
+                                && batch_mem_size >= suggested_batch_mem_size() / 4
+                            {
+                                return Poll::Ready(Some(Ok(batch)));
                             }
 
                             self.staging_rows += batch_num_rows;
@@ -592,7 +592,7 @@ impl ExecutionContext {
                 if !task_running {
                     panic!("output_with_sender[{desc}] canceled due to task finished/killed");
                 } else {
-                    panic!("output_with_sender[{desc}] error: {}", err.to_string());
+                    panic!("output_with_sender[{desc}] error: {err}");
                 }
             }
             Ok::<_, DataFusionError>(())
@@ -690,6 +690,7 @@ pub struct WrappedSender<T: RecordBatchWithPayload> {
     exclude_time: OnceCell<Time>,
 }
 
+#[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 impl<T: RecordBatchWithPayload> WrappedSender<T> {
     pub fn new(exec_ctx: Arc<ExecutionContext>, sender: Sender<Result<T>>) -> Arc<Self> {
         let wrapped = Arc::new(Self {
