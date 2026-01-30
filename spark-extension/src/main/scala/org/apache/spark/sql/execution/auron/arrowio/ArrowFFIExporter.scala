@@ -66,6 +66,7 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
   } else {
     s"no-context-${System.identityHashCode(this)}"
   }
+  private val closed = new java.util.concurrent.atomic.AtomicBoolean(false)
   private val outputQueue: BlockingQueue[QueueState] = new ArrayBlockingQueue[QueueState](16)
   private val processingQueue: BlockingQueue[Unit] = new ArrayBlockingQueue[Unit](16)
   private var currentRoot: VectorSchemaRoot = _
@@ -172,6 +173,28 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
   }
 
   override def close(): Unit = {
-    outputThread.interrupt()
+    // Ensure close() is idempotent - only execute once
+    if (!closed.compareAndSet(false, true)) {
+      logDebug(s"ArrowFFIExporter-$exporterId: close() already called, skipping")
+      return
+    }
+
+    if (outputThread.isAlive) {
+      logDebug(s"ArrowFFIExporter-$exporterId: interrupting outputThread")
+      outputThread.interrupt()
+      // Wait for the thread to terminate to ensure resources are properly released
+      try {
+        outputThread.join(5000) // Wait up to 5 seconds
+        if (outputThread.isAlive) {
+          logWarning(
+            s"ArrowFFIExporter-$exporterId: outputThread did not terminate within 5 seconds")
+        }
+      } catch {
+        case _: InterruptedException =>
+          // Ignore - we don't need to propagate this to caller
+          logDebug(s"ArrowFFIExporter-$exporterId: interrupted while waiting for outputThread")
+      }
+      logDebug(s"ArrowFFIExporter-$exporterId: close() completed")
+    }
   }
 }
