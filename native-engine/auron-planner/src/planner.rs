@@ -52,7 +52,9 @@ use datafusion::{
 use datafusion_ext_exprs::{
     bloom_filter_might_contain::BloomFilterMightContainExpr, cast::TryCastExpr,
     get_indexed_field::GetIndexedFieldExpr, get_map_value::GetMapValueExpr,
-    named_struct::NamedStructExpr, row_num::RowNumExpr, spark_partition_id::SparkPartitionIdExpr,
+    named_struct::NamedStructExpr, row_num::RowNumExpr,
+    spark_monotonically_increasing_id::SparkMonotonicallyIncreasingIdExpr,
+    spark_partition_id::SparkPartitionIdExpr,
     spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
     spark_udf_wrapper::SparkUDFWrapperExpr, string_contains::StringContainsExpr,
     string_ends_with::StringEndsWithExpr, string_starts_with::StringStartsWithExpr,
@@ -972,6 +974,9 @@ impl PhysicalPlanner {
             ExprType::RowNumExpr(_) => Arc::new(RowNumExpr::default()),
             ExprType::SparkPartitionIdExpr(_) => {
                 Arc::new(SparkPartitionIdExpr::new(self.partition_id))
+            }
+            ExprType::MonotonicIncreasingIdExpr(_) => {
+                Arc::new(SparkMonotonicallyIncreasingIdExpr::new(self.partition_id))
             }
             ExprType::BloomFilterMightContainExpr(e) => Arc::new(BloomFilterMightContainExpr::new(
                 e.uuid.clone(),

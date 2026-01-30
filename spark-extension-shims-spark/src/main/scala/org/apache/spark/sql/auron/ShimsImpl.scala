@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.Generator
 import org.apache.spark.sql.catalyst.expressions.Like
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.expressions.SparkPartitionID
@@ -547,6 +548,13 @@ class ShimsImpl extends Shims with Logging {
           pb.PhysicalExprNode
             .newBuilder()
             .setSparkPartitionIdExpr(pb.SparkPartitionIdExprNode.newBuilder())
+            .build())
+
+      case _: MonotonicallyIncreasingID =>
+        Some(
+          pb.PhysicalExprNode
+            .newBuilder()
+            .setMonotonicIncreasingIdExpr(pb.MonotonicIncreasingIdExprNode.newBuilder())
             .build())
 
       case StringSplit(str, pat @ Literal(_, StringType), Literal(-1, IntegerType))
