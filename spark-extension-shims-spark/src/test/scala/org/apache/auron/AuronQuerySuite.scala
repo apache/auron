@@ -42,21 +42,25 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with year function") {
-    withTable("t1") {
-      sql("create table t1 using parquet as select '2024-12-18' as event_time")
-      checkSparkAnswerAndOperator(s"""
-            |select year, count(*)
-            |from (select event_time, year(event_time) as year from t1) t
-            |where year <= 2024
-            |group by year
-            |""".stripMargin)
+    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1 using parquet as select '2024-12-18' as event_time")
+        checkSparkAnswerAndOperator(s"""
+             |select year, count(*)
+             |from (select event_time, year(event_time) as year from t1) t
+             |where year <= 2024
+             |group by year
+             |""".stripMargin)
+      }
     }
   }
 
   test("test select multiple spark ext functions with the same signature") {
-    withTable("t1") {
-      sql("create table t1 using parquet as select '2024-12-18' as event_time")
-      checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
+    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1 using parquet as select '2024-12-18' as event_time")
+        checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
+      }
     }
   }
 
@@ -171,9 +175,11 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("floor function with long input") {
-    withTable("t1") {
-      sql("create table t1 using parquet as select 1L as c1, 2.2 as c2")
-      checkSparkAnswerAndOperator("select floor(c1), floor(c2) from t1")
+    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1 using parquet as select 1L as c1, 2.2 as c2")
+        checkSparkAnswerAndOperator("select floor(c1), floor(c2) from t1")
+      }
     }
   }
 
