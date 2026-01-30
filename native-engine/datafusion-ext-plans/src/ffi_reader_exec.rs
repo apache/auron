@@ -26,7 +26,7 @@ use arrow::{
 };
 use auron_jni_bridge::{jni_call, jni_call_static, jni_new_global_ref, jni_new_string};
 use datafusion::{
-    error::Result,
+    error::{DataFusionError, Result},
     execution::context::TaskContext,
     physical_expr::EquivalenceProperties,
     physical_plan::{
@@ -37,7 +37,7 @@ use datafusion::{
         metrics::{ExecutionPlanMetricsSet, MetricsSet},
     },
 };
-use datafusion_ext_commons::arrow::array_size::BatchSize;
+use datafusion_ext_commons::{arrow::array_size::BatchSize, df_execution_err};
 use jni::objects::GlobalRef;
 use once_cell::sync::OnceCell;
 
@@ -192,27 +192,41 @@ fn read_ffi(
             struct AutoCloseableExporter(GlobalRef);
             impl Drop for AutoCloseableExporter {
                 fn drop(&mut self) {
-                    let _ = jni_call!(JavaAutoCloseable(self.0.as_obj()).close() -> ());
+                    if let Err(e) = jni_call!(JavaAutoCloseable(self.0.as_obj()).close() -> ()) {
+                        log::error!("FFIReader: JNI close() failed: {:?}", e);
+                    }
                 }
             }
             let exporter = AutoCloseableExporter(exporter);
+            log::info!("FFIReader: starting to read from ArrowFFIExporter");
 
             loop {
                 let batch = {
                     // load batch from ffi
-                    let mut ffi_arrow_array = FFI_ArrowArray::empty();
-                    let ffi_arrow_array_ptr = &mut ffi_arrow_array as *mut FFI_ArrowArray as i64;
+                    // IMPORTANT: FFI_ArrowArray is created inside spawn_blocking to ensure its
+                    // lifetime is tied to the blocking task. This prevents data races if the
+                    // async task is aborted while spawn_blocking is still running.
                     let exporter_obj = exporter.0.clone();
-                    let has_next = tokio::task::spawn_blocking(move || {
-                        jni_call!(
+                    let ffi_result = match tokio::task::spawn_blocking(move || {
+                        let mut ffi_arrow_array = FFI_ArrowArray::empty();
+                        let ffi_arrow_array_ptr =
+                            &mut ffi_arrow_array as *mut FFI_ArrowArray as i64;
+                        let has_next = jni_call!(
                             AuronArrowFFIExporter(exporter_obj.as_obj())
                                 .exportNextBatch(ffi_arrow_array_ptr) -> bool
-                        )
+                        )?;
+                        Ok::<_, DataFusionError>((has_next, ffi_arrow_array))
                     })
                     .await
-                    .expect("tokio spawn_blocking error")?;
+                    {
+                        Ok(Ok(result)) => result,
+                        Ok(Err(err)) => return Err(err),
+                        Err(err) => return df_execution_err!("spawn_blocking error: {err:?}"),
+                    };
 
+                    let (has_next, ffi_arrow_array) = ffi_result;
                     if !has_next {
+                        log::info!("FFIReader: no more batches, exiting read loop");
                         break;
                     }
                     let import_data_type = DataType::Struct(schema.fields().clone());
