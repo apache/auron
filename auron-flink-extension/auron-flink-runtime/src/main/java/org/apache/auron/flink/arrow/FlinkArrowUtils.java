@@ -114,8 +114,17 @@ public final class FlinkArrowUtils {
         } else if (logicalType instanceof DateType) {
             return new ArrowType.Date(DateUnit.DAY);
         } else if (logicalType instanceof TimeType) {
-            // Flink TimeType stores time as milliseconds (int), convert to Arrow Time64 (microseconds)
-            return new ArrowType.Time(TimeUnit.MICROSECOND, 64);
+            TimeType timeType = (TimeType) logicalType;
+            int precision = timeType.getPrecision();
+            if (precision == 0) {
+                return new ArrowType.Time(TimeUnit.SECOND, 32);
+            } else if (precision >= 1 && precision <= 3) {
+                return new ArrowType.Time(TimeUnit.MILLISECOND, 32);
+            } else if (precision >= 4 && precision <= 6) {
+                return new ArrowType.Time(TimeUnit.MICROSECOND, 64);
+            } else {
+                return new ArrowType.Time(TimeUnit.NANOSECOND, 64);
+            }
         } else if (logicalType instanceof TimestampType) {
             return new ArrowType.Timestamp(TimeUnit.MICROSECOND, null);
         } else if (logicalType instanceof LocalZonedTimestampType) {
@@ -131,15 +140,15 @@ public final class FlinkArrowUtils {
      *
      * @param name        The field name
      * @param logicalType The Flink logical type
-     * @param nullable    Whether the field is nullable
      * @return The corresponding Arrow Field
      */
-    public static Field toArrowField(String name, LogicalType logicalType, boolean nullable) {
+    public static Field toArrowField(String name, LogicalType logicalType) {
+        boolean nullable = logicalType.isNullable();
         if (logicalType instanceof ArrayType) {
             ArrayType arrayType = (ArrayType) logicalType;
             LogicalType elementType = arrayType.getElementType();
             FieldType fieldType = new FieldType(nullable, ArrowType.List.INSTANCE, null);
-            Field elementField = toArrowField("element", elementType, elementType.isNullable());
+            Field elementField = toArrowField("element", elementType);
             List<Field> children = new ArrayList<>();
             children.add(elementField);
             return new Field(name, fieldType, children);
@@ -148,8 +157,7 @@ public final class FlinkArrowUtils {
             FieldType fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null);
             List<Field> children = new ArrayList<>();
             for (RowType.RowField field : rowType.getFields()) {
-                children.add(toArrowField(
-                        field.getName(), field.getType(), field.getType().isNullable()));
+                children.add(toArrowField(field.getName(), field.getType()));
             }
             return new Field(name, fieldType, children);
         } else if (logicalType instanceof MapType) {
@@ -160,8 +168,8 @@ public final class FlinkArrowUtils {
             // Create entries field (struct<key, value>)
             FieldType entriesFieldType = new FieldType(false, ArrowType.Struct.INSTANCE, null);
             List<Field> entriesChildren = new ArrayList<>();
-            entriesChildren.add(toArrowField(MapVector.KEY_NAME, keyType, false));
-            entriesChildren.add(toArrowField(MapVector.VALUE_NAME, valueType, valueType.isNullable()));
+            entriesChildren.add(toArrowField(MapVector.KEY_NAME, keyType.copy(false)));
+            entriesChildren.add(toArrowField(MapVector.VALUE_NAME, valueType));
             Field entriesField = new Field(MapVector.DATA_VECTOR_NAME, entriesFieldType, entriesChildren);
 
             // Create map field
@@ -185,8 +193,7 @@ public final class FlinkArrowUtils {
     public static Schema toArrowSchema(RowType rowType) {
         List<Field> fields = new ArrayList<>();
         for (RowType.RowField field : rowType.getFields()) {
-            fields.add(toArrowField(
-                    field.getName(), field.getType(), field.getType().isNullable()));
+            fields.add(toArrowField(field.getName(), field.getType()));
         }
         return new Schema(fields);
     }

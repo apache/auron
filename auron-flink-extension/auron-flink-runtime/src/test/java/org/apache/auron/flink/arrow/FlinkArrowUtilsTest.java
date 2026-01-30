@@ -97,7 +97,7 @@ public class FlinkArrowUtilsTest {
     @Test
     public void testArrayTypeConversion() {
         ArrayType arrayType = new ArrayType(new IntType());
-        Field field = FlinkArrowUtils.toArrowField("test_array", arrayType, true);
+        Field field = FlinkArrowUtils.toArrowField("test_array", arrayType);
 
         assertEquals("test_array", field.getName());
         assertTrue(field.isNullable());
@@ -113,8 +113,10 @@ public class FlinkArrowUtilsTest {
     public void testRowTypeConversion() {
         RowType rowType =
                 RowType.of(new LogicalType[] {new IntType(), new VarCharType(100)}, new String[] {"id", "name"});
+        // Create a non-nullable version of the row type
+        RowType nonNullableRowType = (RowType) rowType.copy(false);
 
-        Field field = FlinkArrowUtils.toArrowField("test_row", rowType, false);
+        Field field = FlinkArrowUtils.toArrowField("test_row", nonNullableRowType);
 
         assertEquals("test_row", field.getName());
         assertFalse(field.isNullable());
@@ -133,7 +135,7 @@ public class FlinkArrowUtilsTest {
     @Test
     public void testMapTypeConversion() {
         MapType mapType = new MapType(new VarCharType(100), new IntType());
-        Field field = FlinkArrowUtils.toArrowField("test_map", mapType, true);
+        Field field = FlinkArrowUtils.toArrowField("test_map", mapType);
 
         assertEquals("test_map", field.getName());
         assertTrue(field.isNullable());
@@ -179,12 +181,29 @@ public class FlinkArrowUtilsTest {
 
     @Test
     public void testTimeTypeConversion() {
-        TimeType timeType = new TimeType(3);
-        ArrowType arrowType = FlinkArrowUtils.toArrowType(timeType);
-        assertTrue(arrowType instanceof ArrowType.Time);
-        ArrowType.Time timeArrowType = (ArrowType.Time) arrowType;
-        assertEquals(TimeUnit.MICROSECOND, timeArrowType.getUnit());
-        assertEquals(64, timeArrowType.getBitWidth());
+        // Precision 0 -> SECOND, 32-bit
+        TimeType timeType0 = new TimeType(0);
+        ArrowType.Time arrowTime0 = (ArrowType.Time) FlinkArrowUtils.toArrowType(timeType0);
+        assertEquals(TimeUnit.SECOND, arrowTime0.getUnit());
+        assertEquals(32, arrowTime0.getBitWidth());
+
+        // Precision 1-3 -> MILLISECOND, 32-bit
+        TimeType timeType3 = new TimeType(3);
+        ArrowType.Time arrowTime3 = (ArrowType.Time) FlinkArrowUtils.toArrowType(timeType3);
+        assertEquals(TimeUnit.MILLISECOND, arrowTime3.getUnit());
+        assertEquals(32, arrowTime3.getBitWidth());
+
+        // Precision 4-6 -> MICROSECOND, 64-bit
+        TimeType timeType6 = new TimeType(6);
+        ArrowType.Time arrowTime6 = (ArrowType.Time) FlinkArrowUtils.toArrowType(timeType6);
+        assertEquals(TimeUnit.MICROSECOND, arrowTime6.getUnit());
+        assertEquals(64, arrowTime6.getBitWidth());
+
+        // Precision 7+ -> NANOSECOND, 64-bit
+        TimeType timeType9 = new TimeType(9);
+        ArrowType.Time arrowTime9 = (ArrowType.Time) FlinkArrowUtils.toArrowType(timeType9);
+        assertEquals(TimeUnit.NANOSECOND, arrowTime9.getUnit());
+        assertEquals(64, arrowTime9.getBitWidth());
     }
 
     @Test
