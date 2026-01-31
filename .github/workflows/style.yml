@@ -55,7 +55,7 @@ jobs:
             echo "Code style issues found. Please run './dev/reformat' locally and commit the changes."
             echo ""
             echo "Files with formatting issues:"
-            git status --porcelain
+            git status
             echo ""
             echo "Diff of required changes:"
             git diff
