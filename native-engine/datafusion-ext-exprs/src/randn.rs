@@ -109,12 +109,9 @@ impl PhysicalExpr for RandnExpr {
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
         let num_rows = batch.num_rows();
         let mut rng = self.rng.lock();
-        let values: Float64Array = (0..num_rows)
-            .map(|_| {
-                let value: f64 = StandardNormal.sample(&mut *rng);
-                value
-            })
-            .collect();
+        let values = Float64Array::from_iter_values(
+            StandardNormal.sample_iter(&mut *rng).take(num_rows),
+        );
         Ok(ColumnarValue::Array(Arc::new(values)))
     }
 
