@@ -116,6 +116,9 @@ message PhysicalExprNode {
     // SparkPartitionID
     SparkPartitionIdExprNode spark_partition_id_expr = 20101;
 
+    // Randn
+    RandnExprNode randn_expr = 20102;
+
     // BloomFilterMightContain
     BloomFilterMightContainExprNode bloom_filter_might_contain_expr = 20200;
   }
@@ -363,6 +366,10 @@ message StringContainsExprNode {
 }
 
 message RowNumExprNode {
+}
+
+message RandnExprNode {
+  int64 seed = 1;
 }
 
 message BloomFilterMightContainExprNode {

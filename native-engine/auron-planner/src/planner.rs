@@ -52,8 +52,8 @@ use datafusion::{
 use datafusion_ext_exprs::{
     bloom_filter_might_contain::BloomFilterMightContainExpr, cast::TryCastExpr,
     get_indexed_field::GetIndexedFieldExpr, get_map_value::GetMapValueExpr,
-    named_struct::NamedStructExpr, row_num::RowNumExpr, spark_partition_id::SparkPartitionIdExpr,
-    spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
+    named_struct::NamedStructExpr, randn::RandnExpr, row_num::RowNumExpr,
+    spark_partition_id::SparkPartitionIdExpr, spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
     spark_udf_wrapper::SparkUDFWrapperExpr, string_contains::StringContainsExpr,
     string_ends_with::StringEndsWithExpr, string_starts_with::StringStartsWithExpr,
 };
@@ -973,6 +973,7 @@ impl PhysicalPlanner {
             ExprType::SparkPartitionIdExpr(_) => {
                 Arc::new(SparkPartitionIdExpr::new(self.partition_id))
             }
+            ExprType::RandnExpr(e) => Arc::new(RandnExpr::new(e.seed, self.partition_id)),
             ExprType::BloomFilterMightContainExpr(e) => Arc::new(BloomFilterMightContainExpr::new(
                 e.uuid.clone(),
                 self.try_parse_physical_expr_box_required(&e.bloom_filter_expr, input_schema)?,
