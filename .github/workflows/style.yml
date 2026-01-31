@@ -46,5 +46,18 @@ jobs:
           java-version: 8
           cache: 'maven'
           check-latest: false
-      - run: |
-          ./dev/reformat --check
+      - name: Run formatter
+        run: |
+          ./dev/reformat
+      - name: Check for formatting changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Code style issues found. Please run './dev/reformat' locally and commit the changes."
+            echo ""
+            echo "Files with formatting issues:"
+            git status --porcelain
+            echo ""
+            echo "Diff of required changes:"
+            git diff
+            exit 1
+          fi
