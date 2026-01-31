@@ -126,10 +126,29 @@ public final class FlinkArrowUtils {
                 return new ArrowType.Time(TimeUnit.NANOSECOND, 64);
             }
         } else if (logicalType instanceof TimestampType) {
-            return new ArrowType.Timestamp(TimeUnit.MICROSECOND, null);
+            TimestampType timestampType = (TimestampType) logicalType;
+            int precision = timestampType.getPrecision();
+            if (precision == 0) {
+                return new ArrowType.Timestamp(TimeUnit.SECOND, null);
+            } else if (precision >= 1 && precision <= 3) {
+                return new ArrowType.Timestamp(TimeUnit.MILLISECOND, null);
+            } else if (precision >= 4 && precision <= 6) {
+                return new ArrowType.Timestamp(TimeUnit.MICROSECOND, null);
+            } else {
+                return new ArrowType.Timestamp(TimeUnit.NANOSECOND, null);
+            }
         } else if (logicalType instanceof LocalZonedTimestampType) {
-            // LocalZonedTimestampType is similar to TimestampType but with UTC timezone
-            return new ArrowType.Timestamp(TimeUnit.MICROSECOND, "UTC");
+            LocalZonedTimestampType localZonedTimestampType = (LocalZonedTimestampType) logicalType;
+            int precision = localZonedTimestampType.getPrecision();
+            if (precision == 0) {
+                return new ArrowType.Timestamp(TimeUnit.SECOND, "UTC");
+            } else if (precision >= 1 && precision <= 3) {
+                return new ArrowType.Timestamp(TimeUnit.MILLISECOND, "UTC");
+            } else if (precision >= 4 && precision <= 6) {
+                return new ArrowType.Timestamp(TimeUnit.MICROSECOND, "UTC");
+            } else {
+                return new ArrowType.Timestamp(TimeUnit.NANOSECOND, "UTC");
+            }
         } else {
             throw new UnsupportedOperationException("Unsupported Flink type: " + logicalType.asSummaryString());
         }

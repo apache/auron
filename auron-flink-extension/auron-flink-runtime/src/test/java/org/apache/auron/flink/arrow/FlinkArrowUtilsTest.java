@@ -88,10 +88,8 @@ public class FlinkArrowUtilsTest {
         assertEquals(2, ((ArrowType.Decimal) arrowDecimal).getScale());
         assertEquals(128, ((ArrowType.Decimal) arrowDecimal).getBitWidth());
 
-        // Date and timestamp types
+        // Date type
         assertEquals(new ArrowType.Date(DateUnit.DAY), FlinkArrowUtils.toArrowType(new DateType()));
-        assertEquals(
-                new ArrowType.Timestamp(TimeUnit.MICROSECOND, null), FlinkArrowUtils.toArrowType(new TimestampType(3)));
     }
 
     @Test
@@ -207,13 +205,57 @@ public class FlinkArrowUtilsTest {
     }
 
     @Test
+    public void testTimestampTypeConversion() {
+        // Precision 0 -> SECOND
+        TimestampType ts0 = new TimestampType(0);
+        ArrowType.Timestamp arrowTs0 = (ArrowType.Timestamp) FlinkArrowUtils.toArrowType(ts0);
+        assertEquals(TimeUnit.SECOND, arrowTs0.getUnit());
+        assertNull(arrowTs0.getTimezone());
+
+        // Precision 1-3 -> MILLISECOND
+        TimestampType ts3 = new TimestampType(3);
+        ArrowType.Timestamp arrowTs3 = (ArrowType.Timestamp) FlinkArrowUtils.toArrowType(ts3);
+        assertEquals(TimeUnit.MILLISECOND, arrowTs3.getUnit());
+        assertNull(arrowTs3.getTimezone());
+
+        // Precision 4-6 -> MICROSECOND
+        TimestampType ts6 = new TimestampType(6);
+        ArrowType.Timestamp arrowTs6 = (ArrowType.Timestamp) FlinkArrowUtils.toArrowType(ts6);
+        assertEquals(TimeUnit.MICROSECOND, arrowTs6.getUnit());
+        assertNull(arrowTs6.getTimezone());
+
+        // Precision 7+ -> NANOSECOND
+        TimestampType ts9 = new TimestampType(9);
+        ArrowType.Timestamp arrowTs9 = (ArrowType.Timestamp) FlinkArrowUtils.toArrowType(ts9);
+        assertEquals(TimeUnit.NANOSECOND, arrowTs9.getUnit());
+        assertNull(arrowTs9.getTimezone());
+    }
+
+    @Test
     public void testLocalZonedTimestampTypeConversion() {
-        LocalZonedTimestampType lzType = new LocalZonedTimestampType(6);
-        ArrowType arrowType = FlinkArrowUtils.toArrowType(lzType);
-        assertTrue(arrowType instanceof ArrowType.Timestamp);
-        ArrowType.Timestamp tsType = (ArrowType.Timestamp) arrowType;
-        assertEquals(TimeUnit.MICROSECOND, tsType.getUnit());
-        assertEquals("UTC", tsType.getTimezone());
+        // Precision 0 -> SECOND
+        LocalZonedTimestampType lzType0 = new LocalZonedTimestampType(0);
+        ArrowType.Timestamp arrowLz0 = (ArrowType.Timestamp) FlinkArrowUtils.toArrowType(lzType0);
+        assertEquals(TimeUnit.SECOND, arrowLz0.getUnit());
+        assertEquals("UTC", arrowLz0.getTimezone());
+
+        // Precision 1-3 -> MILLISECOND
+        LocalZonedTimestampType lzType3 = new LocalZonedTimestampType(3);
+        ArrowType.Timestamp arrowLz3 = (ArrowType.Timestamp) FlinkArrowUtils.toArrowType(lzType3);
+        assertEquals(TimeUnit.MILLISECOND, arrowLz3.getUnit());
+        assertEquals("UTC", arrowLz3.getTimezone());
+
+        // Precision 4-6 -> MICROSECOND
+        LocalZonedTimestampType lzType6 = new LocalZonedTimestampType(6);
+        ArrowType.Timestamp arrowLz6 = (ArrowType.Timestamp) FlinkArrowUtils.toArrowType(lzType6);
+        assertEquals(TimeUnit.MICROSECOND, arrowLz6.getUnit());
+        assertEquals("UTC", arrowLz6.getTimezone());
+
+        // Precision 7+ -> NANOSECOND
+        LocalZonedTimestampType lzType9 = new LocalZonedTimestampType(9);
+        ArrowType.Timestamp arrowLz9 = (ArrowType.Timestamp) FlinkArrowUtils.toArrowType(lzType9);
+        assertEquals(TimeUnit.NANOSECOND, arrowLz9.getUnit());
+        assertEquals("UTC", arrowLz9.getTimezone());
     }
 
     @Test
