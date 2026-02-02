@@ -256,7 +256,6 @@ impl AccColumn for AccBloomFilterColumn {
             (idx in idx) => {
                 if let Some(bloom_filter) = &self.bloom_filters[idx] {
                     let mut w = vec![];
-                    w.write_u8(1)?;
                     bloom_filter.write_to(&mut w)?;
                     array.push(Some(w));
                 } else {
