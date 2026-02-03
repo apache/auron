@@ -61,7 +61,7 @@ fn handle_unwinded_scope<T: Default, E: Debug>(scope: impl FnOnce() -> Result<T,
             // Defensive handling: this path should not be reached in normal operation
             // after the SendError fixes (is_finalizing flag, FFI_ArrowArray lifetime).
             // If triggered, it indicates a new issue that needs investigation.
-            log::warn!("error in unwinded scope: {err:?}");
+            log::error!("error in unwinded scope: {err:?}");
             T::default()
         }
         Err(err) => {
