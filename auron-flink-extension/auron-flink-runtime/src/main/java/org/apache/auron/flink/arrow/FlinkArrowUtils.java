@@ -141,13 +141,13 @@ public final class FlinkArrowUtils {
             LocalZonedTimestampType localZonedTimestampType = (LocalZonedTimestampType) logicalType;
             int precision = localZonedTimestampType.getPrecision();
             if (precision == 0) {
-                return new ArrowType.Timestamp(TimeUnit.SECOND, "UTC");
+                return new ArrowType.Timestamp(TimeUnit.SECOND, null);
             } else if (precision >= 1 && precision <= 3) {
-                return new ArrowType.Timestamp(TimeUnit.MILLISECOND, "UTC");
+                return new ArrowType.Timestamp(TimeUnit.MILLISECOND, null);
             } else if (precision >= 4 && precision <= 6) {
-                return new ArrowType.Timestamp(TimeUnit.MICROSECOND, "UTC");
+                return new ArrowType.Timestamp(TimeUnit.MICROSECOND, null);
             } else {
-                return new ArrowType.Timestamp(TimeUnit.NANOSECOND, "UTC");
+                return new ArrowType.Timestamp(TimeUnit.NANOSECOND, null);
             }
         } else {
             throw new UnsupportedOperationException("Unsupported Flink type: " + logicalType.asSummaryString());
