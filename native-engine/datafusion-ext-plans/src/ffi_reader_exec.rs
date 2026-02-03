@@ -193,7 +193,7 @@ fn read_ffi(
             impl Drop for AutoCloseableExporter {
                 fn drop(&mut self) {
                     if let Err(e) = jni_call!(JavaAutoCloseable(self.0.as_obj()).close() -> ()) {
-                        log::error!("FFIReader: JNI close() failed: {:?}", e);
+                        log::error!("FFIReader: JNI close() failed: {e:?}");
                     }
                 }
             }
