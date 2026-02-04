@@ -60,6 +60,7 @@ trait BaseAuronSQLSuite extends SharedSparkSession {
       .set("spark.auron.enable", "true")
       .set("spark.ui.enabled", "false")
       .set("spark.sql.warehouse.dir", warehouseDir)
+      .set("spark.auron.udf.singleChildFallback.enabled", "false")
 
     if (SparkVersionUtil.isSparkV40OrGreater) {
       // Spark 4.0+: Disable session artifact isolation, align with Spark 3.x behavior

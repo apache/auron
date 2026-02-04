@@ -116,8 +116,11 @@ message PhysicalExprNode {
     // SparkPartitionID
     SparkPartitionIdExprNode spark_partition_id_expr = 20101;
 
+    // MonotonicIncreasingID
+    MonotonicIncreasingIdExprNode monotonic_increasing_id_expr = 20102;
+
     // Randn
-    RandnExprNode randn_expr = 20102;
+    RandnExprNode randn_expr = 20103;
 
     // BloomFilterMightContain
     BloomFilterMightContainExprNode bloom_filter_might_contain_expr = 20200;
@@ -366,6 +369,12 @@ message StringContainsExprNode {
 }
 
 message RowNumExprNode {
+}
+
+message SparkPartitionIdExprNode {
+}
+
+message MonotonicIncreasingIdExprNode {
 }
 
 message RandnExprNode {
@@ -926,5 +935,3 @@ message ArrowType {
 //   }
 //}
 message EmptyMessage{}
-
-message SparkPartitionIdExprNode {}

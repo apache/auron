@@ -24,6 +24,7 @@ pub mod get_map_value;
 pub mod named_struct;
 pub mod randn;
 pub mod row_num;
+pub mod spark_monotonically_increasing_id;
 pub mod spark_partition_id;
 pub mod spark_scalar_subquery_wrapper;
 pub mod spark_udf_wrapper;
