@@ -393,7 +393,8 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: >
-            rss-log${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
+            rss-log-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver
+            }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || ''
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: |
             /tmp/rss/logs/*
