@@ -173,8 +173,7 @@ mod tests {
             for j in (i + 1)..values.len() {
                 assert_ne!(
                     values[i], values[j],
-                    "Values at index {} and {} should be different",
-                    i, j
+                    "Values at index {i} and {j} should be different"
                 );
             }
         }
