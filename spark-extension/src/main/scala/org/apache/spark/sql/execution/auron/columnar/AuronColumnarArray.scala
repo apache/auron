@@ -166,7 +166,7 @@ class AuronColumnarArray(data: AuronColumnVector, offset: Int, length: Int) exte
     throw new UnsupportedOperationException
   }
 
-  @sparkver("4.1")
+  @sparkver("4.0 / 4.1")
   override def getVariant(i: Int): org.apache.spark.unsafe.types.VariantVal = {
     throw new UnsupportedOperationException
   }

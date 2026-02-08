@@ -77,7 +77,7 @@ abstract class AuronRssShuffleManagerBase(_conf: SparkConf) extends ShuffleManag
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V]
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def getReader[K, C](
       handle: ShuffleHandle,
       startMapIndex: Int,

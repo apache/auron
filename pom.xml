@@ -837,6 +837,48 @@
     </profile>
 
     <profile>
+      <id>spark-4.0</id>
+      <properties>
+        <shimName>spark-4.0</shimName>
+        <scalaTestVersion>3.2.9</scalaTestVersion>
+        <sparkVersion>4.0.2</sparkVersion>
+        <shortSparkVersion>4.0</shortSparkVersion>
+        <nettyVersion>4.1.111.Final</nettyVersion>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark40-enforce-java-scala-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <!-- Spark 4.0 requires JDK 17+ and Scala 2.13.x -->
+                    <requireJavaVersion>
+                      <version>[17,)</version>
+                      <message>Spark 4.0 requires JDK 17 or higher. Current: ${java.version}</message>
+                    </requireJavaVersion>
+                    <requireProperty>
+                      <property>scalaLongVersion</property>
+                      <regex>2\.13\.\d+</regex>
+                      <regexMessage>Spark 4.0 requires Scala 2.13.x. Current: ${scalaLongVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
       <id>spark-4.1</id>
       <properties>
         <shimName>spark-4.1</shimName>

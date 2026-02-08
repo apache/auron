@@ -53,7 +53,7 @@ class AuronShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def getInputRdd: RDD[_ <: Product2[K, V]] = null
 
   // For Spark 4+ compatibility: _rdd is required to create NativeRDD.ShuffleWrite in ShuffleWriteProcessor.write
-  @sparkver("4.1")
+  @sparkver("4.0 / 4.1")
   def getInputRdd: RDD[_ <: Product2[K, V]] = _rdd
 }
 

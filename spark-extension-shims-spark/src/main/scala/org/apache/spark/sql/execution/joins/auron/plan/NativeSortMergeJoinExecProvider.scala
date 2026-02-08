@@ -25,7 +25,7 @@ import org.apache.auron.sparkver
 
 case object NativeSortMergeJoinExecProvider {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   def provide(
       left: SparkPlan,
       right: SparkPlan,

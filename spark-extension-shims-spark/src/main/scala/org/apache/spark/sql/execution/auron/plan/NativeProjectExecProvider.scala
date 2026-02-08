@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.auron.sparkver
 
 case object NativeProjectExecProvider {
-  @sparkver("3.4 / 3.5 / 4.1")
+  @sparkver("3.4 / 3.5 / 4.0 / 4.1")
   def provide(projectList: Seq[NamedExpression], child: SparkPlan): NativeProjectBase = {
     import org.apache.spark.sql.execution.OrderPreservingUnaryExecNode
     import org.apache.spark.sql.execution.PartitioningPreservingUnaryExecNode
