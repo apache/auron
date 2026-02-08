@@ -22,6 +22,7 @@ import java.util
 
 import scala.annotation.nowarn
 import scala.collection.AbstractIterator
+import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.reflect.FieldUtils
 import org.apache.hadoop.conf.Configuration
@@ -164,7 +165,7 @@ class AuronUniffleShuffleReader[K, C](
         }
       }
       if (!emptyPartitionIds.isEmpty) {
-        logInfo(s"")
+        logInfo(s"Found ${emptyPartitionIds.size()} empty shuffle partitions: ${emptyPartitionIds.asScala.mkString(",")}")
       }
       iterators = shuffleDataIterList.iterator()
       if (iterators.hasNext) {
