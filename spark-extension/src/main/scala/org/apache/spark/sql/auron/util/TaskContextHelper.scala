@@ -47,7 +47,7 @@ object TaskContextHelper extends Logging {
     val thread = Thread.currentThread()
     val threadName = if (context != null) {
       s"auron native task ${context.partitionId()}.${context.attemptNumber()} in stage ${context
-        .stageId()}.${context.stageAttemptNumber()} (TID ${context.taskAttemptId()})"
+          .stageId()}.${context.stageAttemptNumber()} (TID ${context.taskAttemptId()})"
     } else {
       "auron native task " + thread.getName
     }

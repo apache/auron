@@ -172,7 +172,7 @@ class AuronUniffleShuffleReader[K, C](
       }
       if (!emptyPartitionIds.isEmpty) {
         logDebug(s"Found ${emptyPartitionIds
-          .size()} empty shuffle partitions: ${emptyPartitionIds.asScala.mkString(",")}")
+            .size()} empty shuffle partitions: ${emptyPartitionIds.asScala.mkString(",")}")
       }
       iterators = shuffleDataIterList.iterator()
       if (iterators.hasNext) {
