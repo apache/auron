@@ -58,7 +58,7 @@ We recommend using [rustup](https://rustup.rs/) for installation.
 
 2. Install JDK
 
-Auron has been well tested with JDK 8, 11, 17 and 21.
+Auron is regularly tested on JDK 8, 11, and 17, and is also tested on JDK 21.
 
 Make sure `JAVA_HOME` is properly set and points to your desired version.
 
