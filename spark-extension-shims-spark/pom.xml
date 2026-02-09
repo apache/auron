@@ -37,6 +37,15 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-hive_${scalaVersion}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-catalyst_${scalaVersion}</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.auron</groupId>
       <artifactId>auron-common_${scalaVersion}</artifactId>
       <version>${project.version}</version>
