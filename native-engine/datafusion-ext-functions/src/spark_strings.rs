@@ -216,10 +216,10 @@ pub fn string_concat_ws(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                     if let Ok(s) = as_string_array(&array).cloned() {
                         return Ok(Arg::Array(s));
                     }
-                    if let Ok(l) = as_list_array(&array).cloned() {
-                        if l.value_type() == DataType::Utf8 {
-                            return Ok(Arg::List(l));
-                        }
+                    if let Ok(l) = as_list_array(&array).cloned()
+                        && l.value_type() == DataType::Utf8
+                    {
+                        return Ok(Arg::List(l));
                     }
                 }
                 ColumnarValue::Scalar(scalar) => {
