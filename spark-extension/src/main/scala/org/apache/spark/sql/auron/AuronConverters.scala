@@ -16,55 +16,29 @@
  */
 package org.apache.spark.sql.auron
 
-import java.util.ServiceLoader
-
-import scala.annotation.tailrec
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-
+import org.apache.auron.configuration.AuronConfiguration
+import org.apache.auron.jni.AuronAdaptor
+import org.apache.auron.metric.SparkMetricNode
+import org.apache.auron.protobuf.{EmptyPartitionsExecNode, PhysicalPlanNode}
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
+import org.apache.auron.sparkver
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
-import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
+import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.sql.auron.AuronConvertStrategy._
+import org.apache.spark.sql.auron.NativeConverters.{StubExpr, existTimestampType, isTypeSupported, roundRobinTypeSupported}
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
-import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
-import org.apache.spark.sql.catalyst.expressions.Alias
-import org.apache.spark.sql.catalyst.expressions.Ascending
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.expressions.WindowExpression
-import org.apache.spark.sql.catalyst.expressions.WindowSpecDefinition
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
-import org.apache.spark.sql.catalyst.expressions.aggregate.Final
-import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
-import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
+import org.apache.spark.sql.catalyst.expressions.{AggregateWindowFunction, Alias, Ascending, Attribute, AttributeReference, Expression, Literal, NamedExpression, SortOrder, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Final, Partial}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
-import org.apache.spark.sql.execution.aggregate.SortAggregateExec
-import org.apache.spark.sql.execution.auron.plan.ConvertToNativeBase
-import org.apache.spark.sql.execution.auron.plan.NativeAggBase
-import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeBase
-import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
-import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
-import org.apache.spark.sql.execution.auron.plan.NativeSortBase
-import org.apache.spark.sql.execution.auron.plan.NativeUnionBase
-import org.apache.spark.sql.execution.auron.plan.Util
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.auron.plan._
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
@@ -72,13 +46,9 @@ import org.apache.spark.sql.hive.execution.auron.plan.NativeHiveTableScanBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
-import org.apache.auron.configuration.AuronConfiguration
-import org.apache.auron.jni.AuronAdaptor
-import org.apache.auron.metric.SparkMetricNode
-import org.apache.auron.protobuf.EmptyPartitionsExecNode
-import org.apache.auron.protobuf.PhysicalPlanNode
-import org.apache.auron.spark.configuration.SparkAuronConfiguration
-import org.apache.auron.sparkver
+import java.util.ServiceLoader
+import scala.annotation.tailrec
+import scala.jdk.CollectionConverters.iterableAsScalaIterableConverter
 
 object AuronConverters extends Logging {
   def enableScan: Boolean =
@@ -231,7 +201,6 @@ object AuronConverters extends Logging {
           }
         }
         convertedAgg
-
       case e: SortAggregateExec if enableAggr => // sort aggregate
         val convertedAgg = tryConvert(e, convertSortAggregateExec)
         if (!e.getTagValue(convertibleTag).contains(true)) {
@@ -242,7 +211,6 @@ object AuronConverters extends Logging {
           }
         }
         convertedAgg
-
       case e: ExpandExec if enableExpand => // expand
         tryConvert(e, convertExpandExec)
       case e: WindowExec if enableWindow => // window
@@ -256,7 +224,6 @@ object AuronConverters extends Logging {
         tryConvert(e, convertLocalTableScanExec)
       case e: DataWritingCommandExec if enableDataWriting => // data writing
         tryConvert(e, convertDataWritingCommandExec)
-
       case exec: ForceNativeExecutionWrapperBase => exec
       case exec =>
         extConvertProviders.find(h => h.isEnabled && h.isSupported(exec)) match {
@@ -793,8 +760,8 @@ object AuronConverters extends Logging {
               child = convertProjectExec(ProjectExec(projections, exec.child)))
           } catch {
             case _: NoSuchMethodError =>
-              import scala.reflect.runtime.universe._
               import scala.reflect.runtime.currentMirror
+              import scala.reflect.runtime.universe._
               val mirror = currentMirror.reflect(exec)
               val copyMethod = typeOf[HashAggregateExec].decl(TermName("copy")).asMethod
               val params = copyMethod.paramLists.flatten
@@ -1046,6 +1013,11 @@ object AuronConverters extends Logging {
       return createEmptyExec(exec.output, exec.outputPartitioning, exec.outputOrdering)
     }
     convertToNative(exec)
+  }
+
+  def convertHiveTableScanExec(exec: HiveTableScanExec): SparkPlan = {
+    logDebugPlanConversion(exec)
+
   }
 
   def convertDataWritingCommandExec(exec: DataWritingCommandExec): SparkPlan = {

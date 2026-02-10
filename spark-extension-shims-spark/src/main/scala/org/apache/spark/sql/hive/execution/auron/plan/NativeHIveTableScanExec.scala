@@ -16,14 +16,13 @@
  */
 package org.apache.spark.sql.hive.execution.auron.plan
 
-import scala.collection.JavaConverters._
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.{protobuf => pb}
 import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
-import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
@@ -34,18 +33,18 @@ import org.apache.hadoop.mapred.{FileSplit, InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => newInputClass}
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.HADOOP_RDD_IGNORE_EMPTY_SPLITS
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.auron.NativeRDD
+import org.apache.spark.sql.auron.{NativeRDD, Shims}
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, GenericInternalRow}
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
-import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.internal.config.HADOOP_RDD_IGNORE_EMPTY_SPLITS
-import org.apache.spark.paths.SparkPath
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.hive.{HadoopTableReader, HiveShim}
+import org.apache.spark.{Partition, TaskContext}
 
 import java.util.UUID
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 case class NativeHiveTableScanExec(basedHiveScan: HiveTableScanExec)
@@ -169,15 +168,15 @@ case class NativeHiveTableScanExec(basedHiveScan: HiveTableScanExec)
               .build()
         }
       },
-      friendlyName = "NativeRDD.HiveScan")
+      friendlyName = "NativeRDD.HiveTableScan")
   }
 
   override def getFilePartitions(): Array[FilePartition] = {
     val newJobConf = new JobConf(nativeHadoopConf)
-    var indexPartition = 0
     val arrayFilePartition = ArrayBuffer[FilePartition]()
-    if (relation.isPartitioned) {
+    val partitionedFiles = if (relation.isPartitioned) {
       val partitions = basedHiveScan.prunedPartitions
+      val arrayPartitionedFile = ArrayBuffer[PartitionedFile]()
       partitions.foreach { partition =>
         val partDesc = Utilities.getPartitionDescFromTableDesc(nativeTableDesc, partition, true)
         val partPath = partition.getDataLocation
@@ -191,25 +190,32 @@ case class NativeHiveTableScanExec(basedHiveScan: HiveTableScanExec)
 
         val inputFormatClass = partDesc.getInputFileFormatClass
           .asInstanceOf[Class[newInputClass[Writable, Writable]]]
-        val (midFilePartition, midIndexPartition) =
-          getArrayFilePartition(newJobConf, inputFormatClass, indexPartition, partitionInternalRow)
-        arrayFilePartition +=  midFilePartition
-        indexPartition = midIndexPartition
+        arrayPartitionedFile += getArrayPartitionedFile(newJobConf, inputFormatClass, partitionInternalRow)
       }
+      arrayPartitionedFile
+        .sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+        .toArray
     } else {
       val inputFormatClass = nativeTable.getInputFormatClass.asInstanceOf[Class[newInputClass[Writable, Writable]]]
-      val (midFilePartition, midIndexPartition) =
-        getArrayFilePartition(newJobConf, inputFormatClass, indexPartition, new GenericInternalRow(0))
-      arrayFilePartition += midFilePartition
-      indexPartition = midIndexPartition
+      getArrayPartitionedFile(newJobConf, inputFormatClass, new GenericInternalRow(0))
+        .sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+        .toArray
     }
+    arrayFilePartition += FilePartition.getFilePartitions(SparkSession.getActiveSession.get,
+      partitionedFiles,
+      getMaxSplitBytes(SparkSession.getActiveSession.get)).toArray
     arrayFilePartition.toArray
   }
 
-  private def getArrayFilePartition(newJobConf: JobConf,
+  private def getMaxSplitBytes(sparkSession: SparkSession): Long = {
+    val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
+    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    Math.min(defaultMaxSplitBytes, openCostInBytes)
+  }
+
+  private def getArrayPartitionedFile(newJobConf: JobConf,
                                inputFormatClass: Class[newInputClass[Writable, Writable]],
-                               indexPartition: Int,
-                               partitionInternalRow: GenericInternalRow): (ArrayBuffer[FilePartition], Int) = {
+                               partitionInternalRow: GenericInternalRow): ArrayBuffer[PartitionedFile] = {
     val allInputSplits = getInputFormat(newJobConf, inputFormatClass).getSplits(newJobConf, minPartitions)
     val inputSplits = if (ignoreEmptySplits) {
       allInputSplits.filter(_.getLength > 0)
@@ -221,19 +227,18 @@ case class NativeHiveTableScanExec(basedHiveScan: HiveTableScanExec)
       case MapredParquetInputFormat =>
       case _ =>
     }
-    val arrayFilePartition = ArrayBuffer[FilePartition]()
-    var initIndexPartition = indexPartition
+    val arrayFilePartition = ArrayBuffer[PartitionedFile]()
     for (i <- 0 until inputSplits.size) {
       val inputSplit = inputSplits(i)
       inputSplit match {
         case FileSplit =>
           val orcInputSplit = inputSplit.asInstanceOf[FileSplit]
-          arrayFilePartition += FilePartition(indexPartition, (PartitionedFile(partitionInternalRow,
-            SparkPath.fromPathString(orcInputSplit.getPath.toString), orcInputSplit.getStart, orcInputSplit.getLength) :: Nil).toArray)
-          initIndexPartition = initIndexPartition + 1
+          arrayFilePartition +=
+            Shims.get.getPartitionedFile(partitionInternalRow, orcInputSplit.getPath.toString,
+              orcInputSplit.getStart, orcInputSplit.getLength)
       }
     }
-    (arrayFilePartition, initIndexPartition)
+    arrayFilePartition
   }
 
   private def getInputFormat(conf: JobConf, inputFormatClass: Class[newInputClass[Writable, Writable]]):
@@ -250,10 +255,13 @@ case class NativeHiveTableScanExec(basedHiveScan: HiveTableScanExec)
 }
 
 object HiveTableUtil {
+  private val orcFormat = "OrcInputFormat"
+  private val parquetFormat = "MapredParquetInputFormat"
+
   def getFileFormat(inputFormatClass: Class[_ <: InputFormat[_, _]]): String = {
-    if (inputFormatClass.getSimpleName.equalsIgnoreCase("OrcInputFormat")) {
+    if (inputFormatClass.getSimpleName.equalsIgnoreCase(orcFormat)) {
       "orc"
-    } else if (inputFormatClass.getSimpleName.equalsIgnoreCase("MapredParquetInputFormat")) {
+    } else if (inputFormatClass.getSimpleName.equalsIgnoreCase(parquetFormat)) {
       "parquet"
     } else {
       "other"
