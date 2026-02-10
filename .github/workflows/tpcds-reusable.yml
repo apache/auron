@@ -388,6 +388,15 @@ jobs:
             --result-check \
             --plan-check
 
+      - name: Upload TPC-DS test log
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: >
+            tpcds-test-log${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' 
+            }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
+          path: "**/target/unit-tests.log"
+
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
         uses: actions/upload-artifact@v6
