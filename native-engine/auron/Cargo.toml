@@ -18,6 +18,7 @@
 [package]
 name = "auron"
 version = "0.1.0"
+license = "Apache-2.0"
 edition.workspace = true
 
 [lints]
@@ -67,7 +68,7 @@ optional = true
 features = ["disable_initial_exec_tls"]
 
 [dependencies.jemalloc_pprof]
-version = "0.8.0"
+version = "0.8.2"
 features = ["symbolize"]
 optional = true
 
