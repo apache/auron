@@ -1191,7 +1191,7 @@ dependencies = [
  "once_cell",
  "paste",
  "rand",
- "smallvec 2.0.0-alpha.11",
+ "smallvec 2.0.0-alpha.12",
  "tokio",
  "transpose",
  "unchecked-index",
@@ -1268,7 +1268,7 @@ dependencies = [
  "paste",
  "procfs",
  "rand",
- "smallvec 2.0.0-alpha.11",
+ "smallvec 2.0.0-alpha.12",
  "tokio",
  "unchecked-index",
 ]
@@ -3745,9 +3745,9 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "smallvec"
-version = "2.0.0-alpha.11"
+version = "2.0.0-alpha.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87b96efa4bd6bdd2ff0c6615cc36fc4970cbae63cfd46ddff5cee35a1b4df570"
+checksum = "ef784004ca8777809dcdad6ac37629f0a97caee4c685fcea805278d81dd8b857"
 
 [[package]]
 name = "snafu"
