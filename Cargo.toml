@@ -27,6 +27,11 @@ members = [
     "native-engine/auron-memmgr",
 ]
 
+[workspace.package]
+version = "0.1.0"
+license = "Apache-2.0"
+edition = "2024"
+
 [workspace.lints.rust]
 # Pending processing (temporarily allow)
 unused_variables = "allow"

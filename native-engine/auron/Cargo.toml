@@ -17,9 +17,9 @@
 
 [package]
 name = "auron"
-version = "0.1.0"
-license = "Apache-2.0"
-edition = "2024"
+version = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
 resolver = "1"
 [lints]
 workspace = true
