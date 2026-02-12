@@ -304,7 +304,7 @@ impl HiveGetJsonObjectEvaluator {
         &mut self,
         json_str: &str,
     ) -> std::result::Result<Option<String>, HiveGetJsonObjectError> {
-        // first try parsing with sonic-rs and fail-backing to serde-json
+        // first try parsing with sonic-rs and falling back to serde-json
         if let Ok(root_value) = sonic_rs::from_str::<sonic_rs::Value>(json_str)
             && let Ok(v) = self.evaluate_with_value_sonic(&root_value)
         {
