@@ -906,17 +906,12 @@ impl PhysicalPlanner {
                     let fun_name = &e.name;
                     let fun = datafusion_ext_functions::create_auron_ext_function(
                         fun_name,
-                        self.partition_id,
-                    )?;
-                    Arc::new(create_udf(
-                        &format!("spark_ext_function_{fun_name}"),
                         args.iter()
                             .map(|e| e.data_type(input_schema))
                             .collect::<Result<Vec<_>, _>>()?,
                         convert_required!(e.return_type)?,
-                        Volatility::Volatile,
-                        fun,
-                    ))
+                    )?;
+                    Arc::new(ScalarUDF::from(fun))
                 } else {
                     let scalar_udf: Arc<ScalarUDF> = scalar_function.into();
                     scalar_udf
