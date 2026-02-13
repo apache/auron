@@ -52,8 +52,7 @@ abstract class ConvertToNativeBase(override val child: SparkPlan)
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
-      .filterKeys(Set("stage_id", "output_rows", "elapsed_compute"))
+      .getDefaultNativeMetrics(sparkContext, Set("stage_id", "output_rows", "elapsed_compute"))
       .toSeq :+
       ("size", SQLMetrics.createSizeMetric(sparkContext, "Native.batch_bytes_size")): _*)
 

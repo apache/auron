@@ -85,7 +85,29 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
   def getRunId: UUID
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
+      .getDefaultNativeMetrics(
+        sparkContext,
+        Set(
+          "stage_id",
+          "output_rows",
+          "output_batches",
+          "elapsed_compute",
+          "build_hash_map_time",
+          "probed_side_hash_time",
+          "probed_side_search_time",
+          "probed_side_compare_time",
+          "build_output_time",
+          "fallback_sort_merge_join_time",
+          "mem_spill_count",
+          "mem_spill_size",
+          "mem_spill_iotime",
+          "disk_spill_size",
+          "disk_spill_iotime",
+          "shuffle_write_total_time",
+          "shuffle_read_total_time",
+          "input_batch_count",
+          "input_row_count",
+          "input_batch_mem_size"))
       .toSeq :+
       ("dataSize", SQLMetrics.createSizeMetric(sparkContext, "data size")) :+
       ("numOutputRows", SQLMetrics.createMetric(sparkContext, "number of output rows")) :+
