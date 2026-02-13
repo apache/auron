@@ -119,6 +119,9 @@ message PhysicalExprNode {
     // MonotonicIncreasingID
     MonotonicIncreasingIdExprNode monotonic_increasing_id_expr = 20102;
 
+    // Randn
+    RandnExprNode randn_expr = 20103;
+
     // BloomFilterMightContain
     BloomFilterMightContainExprNode bloom_filter_might_contain_expr = 20200;
   }
@@ -372,6 +375,10 @@ message SparkPartitionIdExprNode {
 }
 
 message MonotonicIncreasingIdExprNode {
+}
+
+message RandnExprNode {
+  int64 seed = 1;
 }
 
 message BloomFilterMightContainExprNode {
