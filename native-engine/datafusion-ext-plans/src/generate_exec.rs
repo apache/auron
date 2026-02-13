@@ -402,7 +402,7 @@ mod test {
             "|   |                 | {}             |",
             "+---+-----------------+----------------+",
         ];
-        assert_batches_eq!(input, &[input_batch.clone()]);
+        assert_batches_eq!(input, std::slice::from_ref(&input_batch));
 
         let input = Arc::new(TestMemoryExec::try_new(
             &[vec![input_batch.clone()]],

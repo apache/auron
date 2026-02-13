@@ -431,10 +431,10 @@ impl ExecutionContext {
                 match ready!(self.as_mut().input.poll_next_unpin(cx)) {
                     Some(r) => Poll::Ready(Some(r)),
                     None => {
-                        if let Some(on_completion) = self.as_mut().on_completion.take() {
-                            if let Err(e) = on_completion() {
-                                return Poll::Ready(Some(Err(e)));
-                            }
+                        if let Some(on_completion) = self.as_mut().on_completion.take()
+                            && let Err(e) = on_completion()
+                        {
+                            return Poll::Ready(Some(Err(e)));
                         }
                         Poll::Ready(None)
                     }

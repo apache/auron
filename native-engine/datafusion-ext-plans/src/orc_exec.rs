@@ -455,13 +455,13 @@ fn collect_and_predicates(
     }
 
     // Handle BinaryExpr with AND operator
-    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
-        if matches!(binary.op(), Operator::And) {
-            // Recursively collect AND sub-conditions from both sides
-            collect_and_predicates(binary.left(), schema, predicates);
-            collect_and_predicates(binary.right(), schema, predicates);
-            return;
-        }
+    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>()
+        && matches!(binary.op(), Operator::And)
+    {
+        // Recursively collect AND sub-conditions from both sides
+        collect_and_predicates(binary.left(), schema, predicates);
+        collect_and_predicates(binary.right(), schema, predicates);
+        return;
     }
 
     // Not an AND expression, convert the whole expression
@@ -487,13 +487,13 @@ fn collect_or_predicates(
     }
 
     // Handle BinaryExpr with OR operator
-    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
-        if matches!(binary.op(), Operator::Or) {
-            // Recursively collect OR sub-conditions from both sides
-            collect_or_predicates(binary.left(), schema, predicates);
-            collect_or_predicates(binary.right(), schema, predicates);
-            return;
-        }
+    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>()
+        && matches!(binary.op(), Operator::Or)
+    {
+        // Recursively collect OR sub-conditions from both sides
+        collect_or_predicates(binary.left(), schema, predicates);
+        collect_or_predicates(binary.right(), schema, predicates);
+        return;
     }
 
     // Not an OR expression, convert the whole expression
@@ -667,10 +667,10 @@ fn convert_expr_to_orc_internal(
             // Convert IN to multiple OR conditions: col = val1 OR col = val2 OR ...
             let mut predicates = Vec::new();
             for list_expr in in_list.list() {
-                if let Some(lit) = list_expr.as_any().downcast_ref::<Literal>() {
-                    if let Some(pred_value) = convert_scalar_value(lit.value()) {
-                        predicates.push(Predicate::eq(col_name, pred_value));
-                    }
+                if let Some(lit) = list_expr.as_any().downcast_ref::<Literal>()
+                    && let Some(pred_value) = convert_scalar_value(lit.value())
+                {
+                    predicates.push(Predicate::eq(col_name, pred_value));
                 }
             }
 
@@ -699,20 +699,20 @@ fn convert_expr_to_orc_internal(
             return None;
         }
 
-        if let Some(col) = left.as_any().downcast_ref::<Column>() {
-            if let Some(lit) = right.as_any().downcast_ref::<Literal>() {
-                let col_name = col.name();
-                let value = lit.value();
-                return build_comparison_predicate(col_name, op, value);
-            }
+        if let Some(col) = left.as_any().downcast_ref::<Column>()
+            && let Some(lit) = right.as_any().downcast_ref::<Literal>()
+        {
+            let col_name = col.name();
+            let value = lit.value();
+            return build_comparison_predicate(col_name, op, value);
         }
 
-        if let Some(lit) = left.as_any().downcast_ref::<Literal>() {
-            if let Some(col) = right.as_any().downcast_ref::<Column>() {
-                let col_name = col.name();
-                let value = lit.value();
-                return build_comparison_predicate_reversed(col_name, op, value);
-            }
+        if let Some(lit) = left.as_any().downcast_ref::<Literal>()
+            && let Some(col) = right.as_any().downcast_ref::<Column>()
+        {
+            let col_name = col.name();
+            let value = lit.value();
+            return build_comparison_predicate_reversed(col_name, op, value);
         }
     }
 

@@ -354,7 +354,7 @@ fn execute_agg_sorted(
                     staging_keys.clear();
                     staging_acc_table.resize(0);
                     exec_ctx.baseline_metrics().record_output(num_rows);
-                    sender.send((batch)).await;
+                    sender.send(batch).await;
                 }};
             }
 
@@ -730,7 +730,7 @@ mod fuzztest {
                 // will trigger spill
                 let key = (rand::random::<u32>() % 1_000_000) as i64;
                 let val = (rand::random::<u32>() % 1_000_000) as f64;
-                let test_null = rand::random::<u32>() % 1000 == 0;
+                let test_null = rand::random::<u32>().is_multiple_of(1000);
 
                 key_builder.append_value(key);
                 if !test_null {

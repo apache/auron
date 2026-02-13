@@ -109,7 +109,7 @@ impl ExecutionPlan for DebugExec {
         Ok(
             exec_ctx.output_with_sender("Debug", move |sender| async move {
                 while let Some(batch) = input.next().await.transpose()? {
-                    let table_str = pretty_format_batches(&[batch.clone()])?
+                    let table_str = pretty_format_batches(std::slice::from_ref(&batch))?
                         .to_string()
                         .replace('\n', &format!("\n{debug_id} - "));
                     log::info!("DebugExec(partition={partition}):\n{table_str}");
