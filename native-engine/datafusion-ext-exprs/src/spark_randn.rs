@@ -41,13 +41,13 @@ use crate::down_cast_any_ref;
 /// Matches Spark's behavior:
 /// - RNG is seeded with `seed + partition_id`
 /// - RNG state advances for each row (stateful across batches)
-pub struct RandnExpr {
+pub struct SparkRandnExpr {
     seed: i64,
     partition_id: usize,
     rng: Mutex<StdRng>,
 }
 
-impl RandnExpr {
+impl SparkRandnExpr {
     pub fn new(seed: i64, partition_id: usize) -> Self {
         let effective_seed = (seed as u64).wrapping_add(partition_id as u64);
         Self {
@@ -58,7 +58,7 @@ impl RandnExpr {
     }
 }
 
-impl Display for RandnExpr {
+impl Display for SparkRandnExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -68,7 +68,7 @@ impl Display for RandnExpr {
     }
 }
 
-impl Debug for RandnExpr {
+impl Debug for SparkRandnExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -78,22 +78,22 @@ impl Debug for RandnExpr {
     }
 }
 
-impl PartialEq for RandnExpr {
+impl PartialEq for SparkRandnExpr {
     fn eq(&self, other: &Self) -> bool {
         self.seed == other.seed && self.partition_id == other.partition_id
     }
 }
 
-impl Eq for RandnExpr {}
+impl Eq for SparkRandnExpr {}
 
-impl Hash for RandnExpr {
+impl Hash for SparkRandnExpr {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.seed.hash(state);
         self.partition_id.hash(state);
     }
 }
 
-impl PhysicalExpr for RandnExpr {
+impl PhysicalExpr for SparkRandnExpr {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -130,7 +130,7 @@ impl PhysicalExpr for RandnExpr {
     }
 }
 
-impl PartialEq<dyn Any> for RandnExpr {
+impl PartialEq<dyn Any> for SparkRandnExpr {
     fn eq(&self, other: &dyn Any) -> bool {
         down_cast_any_ref(other)
             .downcast_ref::<Self>()
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_randn_generates_different_values_per_row() -> Result<()> {
-        let expr = RandnExpr::new(42, 0);
+        let expr = SparkRandnExpr::new(42, 0);
         let batch = create_empty_batch(5);
 
         let result = expr.evaluate(&batch)?;
@@ -183,8 +183,8 @@ mod tests {
 
     #[test]
     fn test_randn_reproducible_with_same_seed() -> Result<()> {
-        let expr1 = RandnExpr::new(42, 0);
-        let expr2 = RandnExpr::new(42, 0);
+        let expr1 = SparkRandnExpr::new(42, 0);
+        let expr2 = SparkRandnExpr::new(42, 0);
         let batch = create_empty_batch(5);
 
         let result1 = expr1.evaluate(&batch)?;
@@ -208,8 +208,8 @@ mod tests {
 
     #[test]
     fn test_randn_different_seeds_produce_different_values() -> Result<()> {
-        let expr1 = RandnExpr::new(42, 0);
-        let expr2 = RandnExpr::new(123, 0);
+        let expr1 = SparkRandnExpr::new(42, 0);
+        let expr2 = SparkRandnExpr::new(123, 0);
         let batch = create_empty_batch(5);
 
         let result1 = expr1.evaluate(&batch)?;
@@ -232,8 +232,8 @@ mod tests {
 
     #[test]
     fn test_randn_different_partitions_produce_different_values() -> Result<()> {
-        let expr1 = RandnExpr::new(42, 0);
-        let expr2 = RandnExpr::new(42, 1);
+        let expr1 = SparkRandnExpr::new(42, 0);
+        let expr2 = SparkRandnExpr::new(42, 1);
         let batch = create_empty_batch(5);
 
         let result1 = expr1.evaluate(&batch)?;
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn test_randn_stateful_across_batches() -> Result<()> {
-        let expr = RandnExpr::new(42, 0);
+        let expr = SparkRandnExpr::new(42, 0);
         let batch1 = create_empty_batch(3);
         let batch2 = create_empty_batch(3);
 
@@ -278,7 +278,7 @@ mod tests {
         assert_ne!(values1, values2, "Batches should have different values");
 
         // Compare with fresh expr that evaluates both batches together
-        let expr_fresh = RandnExpr::new(42, 0);
+        let expr_fresh = SparkRandnExpr::new(42, 0);
         let batch_combined = create_empty_batch(6);
         let result_combined = expr_fresh.evaluate(&batch_combined)?;
         let arr_combined_binding = result_combined.into_array(6)?;
