@@ -856,7 +856,7 @@ object NativeConverters extends Logging {
           case _ => 0L
         }
         buildExprNode {
-          _.setRandnExpr(pb.RandnExprNode.newBuilder().setSeed(seed))
+          _.setSparkRandnExpr(pb.SparkRandnExprNode.newBuilder().setSeed(seed))
         }
       case e: Round =>
         e.scale match {

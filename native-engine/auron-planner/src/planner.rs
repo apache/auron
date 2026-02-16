@@ -978,7 +978,7 @@ impl PhysicalPlanner {
             ExprType::MonotonicIncreasingIdExpr(_) => {
                 Arc::new(SparkMonotonicallyIncreasingIdExpr::new(self.partition_id))
             }
-            ExprType::RandnExpr(e) => Arc::new(SparkRandnExpr::new(e.seed, self.partition_id)),
+            ExprType::SparkRandnExpr(e) => Arc::new(SparkRandnExpr::new(e.seed, self.partition_id)),
             ExprType::BloomFilterMightContainExpr(e) => Arc::new(BloomFilterMightContainExpr::new(
                 e.uuid.clone(),
                 self.try_parse_physical_expr_box_required(&e.bloom_filter_expr, input_schema)?,
