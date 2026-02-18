@@ -55,6 +55,7 @@ print_help() {
     echo "  --skiptests <true|false> Skip unit tests (default: true)"
     echo "  --sparktests <true|false> Run spark tests (default: false)"
     echo "  --docker <true|false>    Build in Docker environment (default: false)"
+    echo "  --threads <N|NC>         Maven build threads (e.g. 1, 4, 1C). Default: local unset, docker 8"
     IFS=','; echo "  --image <NAME>           Docker image to use (e.g. ${SUPPORTED_OS_IMAGES[*]}, default: ${SUPPORTED_OS_IMAGES[*]:0:1})"; unset IFS
     IFS=','; echo "  --sparkver <VERSION>     Specify Spark version (e.g. ${SUPPORTED_SPARK_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --flinkver <VERSION>     Specify Flink version (e.g. ${SUPPORTED_FLINK_VERSIONS[*]})"; unset IFS
@@ -126,6 +127,7 @@ RELEASE_PROFILE=false
 CLEAN=true
 SKIP_TESTS=true
 SPARK_TESTS=false
+THREADS=""
 SPARK_VER=""
 FLINK_VER=""
 SCALA_VER=""
@@ -155,6 +157,15 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "ERROR: --docker requires true/false" >&2
+                exit 1
+            fi
+            ;;
+        --threads)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                THREADS="$2"
+                shift 2
+            else
+                echo "ERROR: --threads requires a value (e.g. 1, 4, 1C)" >&2
                 exit 1
             fi
             ;;
@@ -396,6 +407,15 @@ if [[ -n "$ICEBERG_VER" ]]; then
     BUILD_ARGS+=("-Piceberg-$ICEBERG_VER")
 fi
 
+# Configure Maven build threads:
+# - local builds default to Maven's single-threaded behavior
+# - docker builds default to -T8 unless overridden
+if [[ -n "$THREADS" ]]; then
+    BUILD_ARGS+=("-T$THREADS")
+elif [[ "$USE_DOCKER" == true ]]; then
+    BUILD_ARGS+=("-T8")
+fi
+
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
 
 # -----------------------------------------------------------------------------
@@ -470,8 +490,6 @@ fi
 # -----------------------------------------------------------------------------
 if [[ "$USE_DOCKER" == true ]]; then
     echo "[INFO] Compiling inside Docker container using image: $IMAGE_NAME"
-    # In Docker mode, use multi-threaded Maven build with -T8 for faster compilation
-    BUILD_ARGS+=("-T8")
     if [[ "$CLEAN" == true ]]; then
         # Clean the host-side directory that is mounted into the Docker container.
         # This avoids "device or resource busy" errors when running `mvn clean` inside the container.
