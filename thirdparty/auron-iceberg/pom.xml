@@ -32,6 +32,11 @@
 
   <dependencies>
     <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>spark-extension_${scalaVersion}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-spark-runtime-${shortSparkVersion}_${scalaVersion}</artifactId>
       <version>${icebergVersion}</version>
@@ -70,6 +75,49 @@
       <artifactId>spark-sql_${scalaVersion}</artifactId>
       <type>test-jar</type>
     </dependency>
+    <dependency>
+      <groupId>org.apache.auron</groupId>
+      <artifactId>spark-extension-shims-spark_${scalaVersion}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>${maven-enforcer-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>iceberg-spark-version-compat</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireProperty>
+                  <property>icebergEnabled</property>
+                  <regex>true</regex>
+                  <regexMessage>Iceberg module requires icebergEnabled=true.</regexMessage>
+                </requireProperty>
+                <requireProperty>
+                  <property>shortSparkVersion</property>
+                  <regex>3\.4|3\.5|4\.0</regex>
+                  <regexMessage>Iceberg integration supports Spark 3.4-4.0 only. Current: ${shortSparkVersion}</regexMessage>
+                </requireProperty>
+                <requireProperty>
+                  <property>icebergVersion</property>
+                  <regex>1\.10\.1</regex>
+                  <regexMessage>Iceberg integration supports only Iceberg 1.10.1. Current: ${icebergVersion}</regexMessage>
+                </requireProperty>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 
 </project>

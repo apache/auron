@@ -146,7 +146,7 @@ sparkver=spark-3.5
 prepare_for_spark "${sparkver}"
 for celebornver in celeborn-0.5 celeborn-0.6
 do
-  run_maven_format -P"${sparkver}" -Pceleborn,"${celebornver}" -Puniffle,uniffle-0.10 -Ppaimon,paimon-1.2 -Pflink-1.18 -Piceberg,iceberg-1.9
+  run_maven_format -P"${sparkver}" -Pceleborn,"${celebornver}" -Puniffle,uniffle-0.10 -Ppaimon,paimon-1.2 -Pflink-1.18 -Piceberg-1.10.1
 
 done
 

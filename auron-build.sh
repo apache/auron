@@ -37,7 +37,7 @@ SUPPORTED_CELEBORN_VERSIONS=("0.5" "0.6")
 SUPPORTED_UNIFFLE_VERSIONS=("0.10")
 SUPPORTED_PAIMON_VERSIONS=("1.2")
 SUPPORTED_FLINK_VERSIONS=("1.18")
-SUPPORTED_ICEBERG_VERSIONS=("1.9")
+SUPPORTED_ICEBERG_VERSIONS=("1.10.1")
 
 # -----------------------------------------------------------------------------
 # Function: print_help
@@ -270,11 +270,11 @@ while [[ $# -gt 0 ]]; do
                   print_invalid_option_error Iceberg "$ICEBERG_VER" "${SUPPORTED_ICEBERG_VERSIONS[@]}"
                 fi
                 if [ -z "$SPARK_VER" ]; then
-                  echo "ERROR: Building iceberg requires spark at the same time, and only Spark versions 3.4 or 3.5 are supported."
+                  echo "ERROR: Building iceberg requires spark at the same time, and only Spark versions 3.4 to 4.0 are supported."
                   exit 1
                 fi
-                if [ "$SPARK_VER" != "3.4" ] && [ "$SPARK_VER" != "3.5" ]; then
-                  echo "ERROR: Building iceberg requires spark versions are 3.4 or 3.5."
+                if [ "$SPARK_VER" != "3.4" ] && [ "$SPARK_VER" != "3.5" ] && [ "$SPARK_VER" != "4.0" ]; then
+                  echo "ERROR: Building iceberg requires spark versions are 3.4, 3.5 or 4.0."
                   exit 1
                 fi
                 shift 2
