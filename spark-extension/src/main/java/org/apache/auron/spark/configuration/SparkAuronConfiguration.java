@@ -346,6 +346,12 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable PaimonScanExec operation conversion to native Auron implementations.")
             .withDefaultValue(true);
 
+    public static final ConfigOption<Boolean> ENABLE_ICEBERG_SCAN = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.iceberg.scan")
+            .withCategory("Operator Supports")
+            .withDescription("Enable Iceberg scan operation conversion to native Auron implementations.")
+            .withDefaultValue(true);
+
     public static final ConfigOption<Boolean> ENABLE_PROJECT = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.project")
             .withCategory("Operator Supports")

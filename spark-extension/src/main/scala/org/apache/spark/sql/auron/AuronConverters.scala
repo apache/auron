@@ -126,7 +126,9 @@ object AuronConverters extends Logging {
     Seq("AuronShuffleManager", "AuronUniffleShuffleManager", "AuronCelebornShuffleManager")
 
   def supportedShuffleManager: Boolean = {
-    val name = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
+    val name = SQLConf.get.getConfString(
+      config.SHUFFLE_MANAGER.key,
+      config.SHUFFLE_MANAGER.defaultValueString)
     supportedShuffleManagers.exists(name.contains)
   }
 
