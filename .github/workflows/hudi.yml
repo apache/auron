@@ -81,6 +81,7 @@ jobs:
           -Pscala-${{ matrix.scalaver }}
           -Pspark-${{ matrix.sparkver }}
           -Phudi-0.15
+          -Prelease
           -DhudiEnabled=true
           -DskipTests
 
@@ -91,6 +92,7 @@ jobs:
           -Pscala-${{ matrix.scalaver }}
           -Pspark-${{ matrix.sparkver }}
           -Phudi-0.15
+          -Prelease
           -DhudiEnabled=true
 
       - name: Upload reports
