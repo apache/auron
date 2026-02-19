@@ -352,6 +352,12 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable Iceberg scan operation conversion to native Auron implementations.")
             .withDefaultValue(true);
 
+    public static final ConfigOption<Boolean> ENABLE_HUDI_SCAN = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.hudi.scan")
+            .withCategory("Operator Supports")
+            .withDescription("Enable Hudi scan operation conversion to native Auron implementations.")
+            .withDefaultValue(true);
+
     public static final ConfigOption<Boolean> ENABLE_PROJECT = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.project")
             .withCategory("Operator Supports")
