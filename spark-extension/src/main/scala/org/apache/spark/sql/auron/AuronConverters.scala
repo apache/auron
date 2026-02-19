@@ -159,7 +159,10 @@ object AuronConverters extends Logging {
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
-        tryConvert(e, convertFileSourceScanExec)
+        extConvertProviders.find(p => p.isEnabled && p.isSupported(e)) match {
+          case Some(provider) => tryConvert(e, provider.convert)
+          case None => tryConvert(e, convertFileSourceScanExec)
+        }
       case e: ProjectExec if enableProject => // project
         tryConvert(e, convertProjectExec)
       case e: FilterExec if enableFilter => // filter
