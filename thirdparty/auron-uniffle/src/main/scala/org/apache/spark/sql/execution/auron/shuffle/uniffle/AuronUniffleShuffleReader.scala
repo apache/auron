@@ -22,7 +22,7 @@ import java.util
 
 import scala.annotation.nowarn
 import scala.collection.AbstractIterator
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.FieldUtils
 import org.apache.hadoop.conf.Configuration

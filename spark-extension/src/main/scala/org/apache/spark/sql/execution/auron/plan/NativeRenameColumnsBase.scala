@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.sql.auron.NativeHelper

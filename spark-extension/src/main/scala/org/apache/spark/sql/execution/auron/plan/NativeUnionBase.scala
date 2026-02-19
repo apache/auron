@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import scala.collection.JavaConverters.asJavaIterableConverter
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.rdd.PartitionerAwareUnionRDD
 import org.apache.spark.rdd.PartitionerAwareUnionRDDPartition

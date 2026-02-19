@@ -22,7 +22,7 @@ import java.util
 import java.util.UUID
 
 import scala.annotation.nowarn
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem

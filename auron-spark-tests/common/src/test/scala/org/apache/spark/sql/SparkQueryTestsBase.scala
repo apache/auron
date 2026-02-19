@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.util.TimeZone
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.math3.util.Precision
