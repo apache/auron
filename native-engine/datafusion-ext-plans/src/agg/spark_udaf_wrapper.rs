@@ -16,15 +16,11 @@
 use std::{
     any::Any,
     fmt::{Debug, Display, Formatter},
-    io::{Cursor, Read, Write},
     sync::Arc,
 };
 
 use arrow::{
-    array::{
-        Array, ArrayAccessor, ArrayRef, BinaryArray, BinaryBuilder, StructArray, as_struct_array,
-        make_array,
-    },
+    array::{Array, ArrayRef, StructArray, as_struct_array, make_array},
     datatypes::{DataType, Field, Schema, SchemaRef},
     ffi::{FFI_ArrowArray, FFI_ArrowSchema, from_ffi, from_ffi_and_data_type},
     record_batch::{RecordBatch, RecordBatchOptions},
@@ -39,7 +35,7 @@ use datafusion::{
     physical_expr::PhysicalExprRef,
 };
 use datafusion_ext_commons::{
-    UninitializedInit, downcast_any,
+    downcast_any,
     io::{read_len, write_len},
 };
 use jni::objects::{GlobalRef, JObject};

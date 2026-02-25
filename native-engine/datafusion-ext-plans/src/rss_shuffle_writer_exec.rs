@@ -179,7 +179,7 @@ impl ExecutionPlan for RssShuffleWriterExec {
     }
 
     fn statistics(&self) -> Result<Statistics> {
-        self.input.statistics()
+        self.input.partition_statistics(None)
     }
 }
 

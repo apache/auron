@@ -31,6 +31,7 @@ pub mod string_contains;
 pub mod string_ends_with;
 pub mod string_starts_with;
 
+#[allow(dead_code)]
 fn down_cast_any_ref(any: &dyn Any) -> &dyn Any {
     if any.is::<PhysicalExprRef>() {
         any.downcast_ref::<PhysicalExprRef>()

@@ -27,14 +27,6 @@ members = [
     "native-engine/auron-memmgr",
 ]
 
-[workspace.lints.rust]
-# Pending processing (temporarily allow)
-unused_variables = "allow"
-dead_code = "allow"
-unused_imports = "allow"
-unused_must_use = "allow"
-deprecated = "allow"
-
 [workspace.lints.clippy]
 unwrap_used = "deny"
 panic = "deny"

@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#![allow(deprecated)] // Deprecated method: set_max_statistics_size
 use std::{any::Any, fmt::Formatter, io::Write, sync::Arc};
 
 use arrow::{
