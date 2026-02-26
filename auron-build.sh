@@ -163,6 +163,12 @@ while [[ $# -gt 0 ]]; do
         --threads)
             if [[ -n "$2" && "$2" != -* ]]; then
                 THREADS="$2"
+                # Validate THREADS to prevent command injection when passed through Docker
+                # Maven -T accepts an integer, optionally followed by 'C' (e.g., 4, 8, 2C)
+                if [[ ! "$THREADS" =~ ^[0-9]+C?$ ]]; then
+                    echo "ERROR: Invalid --threads value '$THREADS'. Expected digits with optional 'C' (e.g., 4, 8, 2C)." >&2
+                    exit 1
+                fi
                 shift 2
             else
                 echo "ERROR: --threads requires a value (e.g. 1, 4, 1C)" >&2
@@ -326,6 +332,31 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Detect conflict between --threads and raw Maven -T arguments.
+if [[ -n "$THREADS" ]]; then
+    HAS_MVN_THREADS=false
+    PREV_MVN_ARG=""
+    for arg in "$@"; do
+        if [[ "$PREV_MVN_ARG" == "-T" ]]; then
+            HAS_MVN_THREADS=true
+            break
+        fi
+        if [[ "$arg" == "-T" ]]; then
+            PREV_MVN_ARG="-T"
+            continue
+        fi
+        if [[ "$arg" =~ ^-T.+ ]]; then
+            HAS_MVN_THREADS=true
+            break
+        fi
+        PREV_MVN_ARG=""
+    done
+    if [[ "$HAS_MVN_THREADS" == true ]]; then
+        echo "ERROR: Do not combine --threads with Maven -T options. Use only one." >&2
+        exit 1
+    fi
+fi
 
 # -----------------------------------------------------------------------------
 # Section: Argument Validation
