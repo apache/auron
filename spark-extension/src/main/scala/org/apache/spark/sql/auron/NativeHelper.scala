@@ -208,7 +208,7 @@ object NativeHelper extends Logging {
         keys -- Set("input_batch_count", "input_row_count", "input_batch_mem_size")
       }
 
-    TreeMap[String, SQLMetric]() ++ enabledKeys.flatMap { key =>
+    TreeMap[String, SQLMetric]() ++ enabledKeys.iterator.flatMap { key =>
       defaultNativeMetricCreators.get(key).map(f => key -> f(sc))
     }
   }
