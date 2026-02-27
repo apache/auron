@@ -26,6 +26,7 @@ mod spark_dates;
 pub mod spark_get_json_object;
 mod spark_hash;
 mod spark_initcap;
+mod spark_instr;
 mod spark_isnan;
 mod spark_make_array;
 mod spark_make_decimal;
@@ -71,6 +72,7 @@ pub fn create_auron_ext_function(
         "Spark_StringLower" => Arc::new(spark_strings::string_lower),
         "Spark_StringUpper" => Arc::new(spark_strings::string_upper),
         "Spark_InitCap" => Arc::new(spark_initcap::string_initcap),
+        "Spark_Instr" => Arc::new(spark_instr::string_instr),
         "Spark_Year" => Arc::new(spark_dates::spark_year),
         "Spark_Month" => Arc::new(spark_dates::spark_month),
         "Spark_Day" => Arc::new(spark_dates::spark_day),

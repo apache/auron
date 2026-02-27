@@ -670,4 +670,239 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       }.isDefined)
     }
   }
+
+  test("instr function - basic queries") {
+    withTable("employees") {
+      sql("""
+        |CREATE TABLE employees(id INT, name STRING, email STRING) USING parquet
+        |""".stripMargin)
+      sql("""
+        |INSERT INTO employees VALUES
+        | (1, 'Alice Smith', 'alice@example.com'),
+        | (2, 'Bob Johnson', 'bob.johnson@company.org'),
+        | (3, 'Charlie Brown', 'charlie.b@test.co'),
+        | (4, 'David Wilson', 'david.w@example.com')
+        |""".stripMargin)
+
+      // Test basic instr usage
+      checkSparkAnswerAndOperator("""
+        |SELECT id, name, instr(email, '@') as at_pos FROM employees
+        |""".stripMargin)
+
+      // Test finding domain part using instr
+      checkSparkAnswerAndOperator("""
+        |SELECT
+        |  id,
+        |  name,
+        |  substring(email, instr(email, '@') + 1) as domain
+        |FROM employees
+        |""".stripMargin)
+    }
+  }
+
+  test("instr function - filter with substring") {
+    withTable("products") {
+      sql("""
+        |CREATE TABLE products(id INT, description STRING, category STRING) USING parquet
+        |""".stripMargin)
+      sql("""
+        |INSERT INTO products VALUES
+        | (1, 'Premium wireless headphones', 'Electronics'),
+        | (2, 'Organic green tea', 'Beverages'),
+        | (3, 'Cotton t-shirt', 'Clothing'),
+        | (4, 'Stainless steel water bottle', 'Kitchen'),
+        | (5, 'Leather wallet', 'Accessories')
+        |""".stripMargin)
+
+      // Find products where description contains 'wireless'
+      checkSparkAnswerAndOperator("""
+        |SELECT id, description
+        |FROM products
+        |WHERE instr(description, 'wireless') > 0
+        |""".stripMargin)
+
+      // Find products where description contains 'organic'
+      checkSparkAnswerAndOperator("""
+        |SELECT id, description
+        |FROM products
+        |WHERE instr(description, 'organic') > 0
+        |""".stripMargin)
+    }
+  }
+
+  test("instr function - complex expressions") {
+    withTable("logs") {
+      sql("""
+        |CREATE TABLE logs(id INT, log_message STRING) USING parquet
+        |""".stripMargin)
+      sql("""
+        |INSERT INTO logs VALUES
+        | (1, 'ERROR: Connection timeout'),
+        | (2, 'WARNING: Memory usage high'),
+        | (3, 'INFO: Task completed'),
+        | (4, 'ERROR: Disk full'),
+        | (5, 'INFO: Starting service')
+        |""".stripMargin)
+
+      // Extract error codes after 'ERROR: '
+      checkSparkAnswerAndOperator("""
+        |SELECT
+        |  id,
+        |  log_message,
+        |  instr(log_message, 'ERROR:') as error_pos,
+        |  CASE
+        |    WHEN instr(log_message, 'ERROR:') > 0 THEN substring(log_message, instr(log_message, 'ERROR:') + 7)
+        |    ELSE NULL
+        |  END as error_detail
+        |FROM logs
+        |""".stripMargin)
+
+      // Count errors and warnings
+      checkSparkAnswerAndOperator("""
+        |SELECT
+        |  CASE
+        |    WHEN instr(log_message, 'ERROR:') > 0 THEN 'ERROR'
+        |    WHEN instr(log_message, 'WARNING:') > 0 THEN 'WARNING'
+        |    ELSE 'INFO'
+        |  END as log_level,
+        |  COUNT(*) as count
+        |FROM logs
+        |GROUP BY
+        |  CASE
+        |    WHEN instr(log_message, 'ERROR:') > 0 THEN 'ERROR'
+        |    WHEN instr(log_message, 'WARNING:') > 0 THEN 'WARNING'
+        |    ELSE 'INFO'
+        |  END
+        |ORDER BY log_level
+        |""".stripMargin)
+    }
+  }
+
+  test("instr function - join conditions") {
+    withTable("orders", "customers") {
+      sql("""
+        |CREATE TABLE orders(id INT, customer_id INT, product_code STRING) USING parquet
+        |""".stripMargin)
+      sql("""
+        |CREATE TABLE customers(id INT, email STRING, notes STRING) USING parquet
+        |""".stripMargin)
+
+      sql("""
+        |INSERT INTO orders VALUES
+        | (1, 101, 'PROD-A'),
+        | (2, 102, 'PROD-B'),
+        | (3, 101, 'PROD-C'),
+        | (4, 103, 'PROD-A')
+        |""".stripMargin)
+
+      sql("""
+        |INSERT INTO customers VALUES
+        | (101, 'user101@example.com', 'VIP customer'),
+        | (102, 'user102@test.org', 'Regular'),
+        | (103, 'user103@demo.com', 'New customer')
+        |""".stripMargin)
+
+      // Join and filter using instr
+      checkSparkAnswerAndOperator("""
+        |SELECT o.id as order_id, c.id as customer_id, c.email
+        |FROM orders o
+        |JOIN customers c ON o.customer_id = c.id
+        |WHERE instr(c.notes, 'VIP') > 0
+        |""".stripMargin)
+    }
+  }
+
+  test("instr function - array and scalar combinations") {
+    withTable("texts") {
+      sql("""
+        |CREATE TABLE texts(id INT, content STRING) USING parquet
+        |""".stripMargin)
+      sql("""
+        |INSERT INTO texts VALUES
+        | (1, 'apple banana apple cherry'),
+        | (2, 'apple orange grape'),
+        | (3, 'banana apple pear')
+        |""".stripMargin)
+
+      // Count occurrences using combination of instr
+      checkSparkAnswerAndOperator("""
+        |SELECT
+        |  id,
+        |  content,
+        |  instr(content, 'apple') as first_apple_pos,
+        |  CASE
+        |    WHEN instr(substring(content, instr(content, 'apple') + 1), 'apple') > 0 THEN 'multiple'
+        |    ELSE 'single or none'
+        |  END as occurrence_count
+        |FROM texts
+        |""".stripMargin)
+    }
+  }
+
+  test("instr function - with unicode and chinese in real queries") {
+    withTable("chinese_products") {
+      sql("""
+        |CREATE TABLE chinese_products(id INT, name STRING, description STRING) USING parquet
+        |""".stripMargin)
+      sql("""
+        |INSERT INTO chinese_products VALUES
+        | (1, '智能手机', '高端智能手机'),
+        | (2, '笔记本电脑', '轻薄笔记本电脑'),
+        | (3, '无线耳机', '蓝牙无线耳机'),
+        | (4, '平板电脑', '超薄平板电脑')
+        |""".stripMargin)
+
+      // Search for keywords in Chinese
+      checkSparkAnswerAndOperator("""
+        |SELECT id, name
+        |FROM chinese_products
+        |WHERE instr(name, '智能') > 0
+        |""".stripMargin)
+
+      checkSparkAnswerAndOperator("""
+        |SELECT id, name, description
+        |FROM chinese_products
+        |WHERE instr(description, '无线') > 0
+        |""".stripMargin)
+    }
+  }
+
+  test("instr function - aggregation and window functions") {
+    withTable("search_logs") {
+      sql("""
+        |CREATE TABLE search_logs(id INT, user_id INT, query STRING) USING parquet
+        |""".stripMargin)
+      sql("""
+        |INSERT INTO search_logs VALUES
+        | (1, 1, 'spark tutorial'),
+        | (2, 1, 'spark sql'),
+        | (3, 2, 'hadoop guide'),
+        | (4, 1, 'spark dataframe'),
+        | (5, 2, 'hadoop mapreduce'),
+        | (6, 3, 'spark streaming'),
+        | (7, 3, 'hadoop hdfs')
+        |""".stripMargin)
+
+      // Count searches containing 'spark' per user
+      checkSparkAnswerAndOperator("""
+        |SELECT
+        |  user_id,
+        |  SUM(CASE WHEN instr(query, 'spark') > 0 THEN 1 ELSE 0 END) as spark_searches
+        |FROM search_logs
+        |GROUP BY user_id
+        |ORDER BY user_id
+        |""".stripMargin)
+
+      // Find position of first spark search per user
+      checkSparkAnswerAndOperator("""
+        |SELECT
+        |  user_id,
+        |  MIN(CASE WHEN instr(query, 'spark') > 0 THEN id ELSE NULL END) as first_spark_search_id
+        |FROM search_logs
+        |GROUP BY user_id
+        |HAVING MIN(CASE WHEN instr(query, 'spark') > 0 THEN id ELSE NULL END) IS NOT NULL
+        |ORDER BY user_id
+        |""".stripMargin)
+    }
+  }
 }
