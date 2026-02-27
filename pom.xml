@@ -50,7 +50,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <arrowVersion>16.0.0</arrowVersion>
     <bytebuddyVersion>1.14.11</bytebuddyVersion>
-    <hadoopVersion>3.4.2</hadoopVersion>
+    <hadoopVersion>3.4.3</hadoopVersion>
     <protobufVersion>3.25.5</protobufVersion>
     <nettyVersion>4.2.7.Final</nettyVersion>
     <javaVersion>8</javaVersion>
