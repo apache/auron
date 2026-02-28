@@ -1100,6 +1100,17 @@
     </profile>
 
     <profile>
+      <id>hudi-0.15</id>
+      <modules>
+        <module>thirdparty/auron-hudi</module>
+      </modules>
+      <properties>
+        <hudiVersion>0.15.0</hudiVersion>
+        <hudiEnabled>true</hudiEnabled>
+      </properties>
+    </profile>
+
+    <profile>
       <id>flink-1.18</id>
       <modules>
         <module>auron-flink-extension</module>

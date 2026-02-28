@@ -38,6 +38,7 @@ SUPPORTED_UNIFFLE_VERSIONS=("0.10")
 SUPPORTED_PAIMON_VERSIONS=("1.2")
 SUPPORTED_FLINK_VERSIONS=("1.18")
 SUPPORTED_ICEBERG_VERSIONS=("1.9")
+SUPPORTED_HUDI_VERSIONS=("0.15")
 
 # -----------------------------------------------------------------------------
 # Function: print_help
@@ -63,6 +64,7 @@ print_help() {
     IFS=','; echo "  --uniffle <VERSION>      Specify Uniffle version (e.g. ${SUPPORTED_UNIFFLE_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --paimon <VERSION>       Specify Paimon version (e.g. ${SUPPORTED_PAIMON_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --iceberg <VERSION>      Specify Iceberg version (e.g. ${SUPPORTED_ICEBERG_VERSIONS[*]})"; unset IFS
+    IFS=','; echo "  --hudi <VERSION>         Specify Hudi version (e.g. ${SUPPORTED_HUDI_VERSIONS[*]})"; unset IFS
 
     echo "  -h, --help               Show this help message"
     echo
@@ -77,7 +79,8 @@ print_help() {
          "--celeborn ${SUPPORTED_CELEBORN_VERSIONS[*]: -1}" \
          "--uniffle ${SUPPORTED_UNIFFLE_VERSIONS[*]: -1}" \
          "--paimon ${SUPPORTED_PAIMON_VERSIONS[*]: -1}" \
-         "--iceberg ${SUPPORTED_ICEBERG_VERSIONS[*]: -1}"
+         "--iceberg ${SUPPORTED_ICEBERG_VERSIONS[*]: -1}" \
+         "--hudi ${SUPPORTED_HUDI_VERSIONS[*]: -1}"
     exit 0
 }
 
@@ -133,6 +136,7 @@ CELEBORN_VER=""
 UNIFFLE_VER=""
 PAIMON_VER=""
 ICEBERG_VER=""
+HUDI_VER=""
 
 # -----------------------------------------------------------------------------
 # Section: Argument Parsing
@@ -284,6 +288,27 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --hudi)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                HUDI_VER="$2"
+                if ! check_supported_version "$HUDI_VER" "${SUPPORTED_HUDI_VERSIONS[@]}"; then
+                  print_invalid_option_error Hudi "$HUDI_VER" "${SUPPORTED_HUDI_VERSIONS[@]}"
+                fi
+                if [ -z "$SPARK_VER" ]; then
+                  echo "ERROR: Building hudi requires spark at the same time, and only Spark versions 3.0 to 3.5 are supported."
+                  exit 1
+                fi
+                if [ "$SPARK_VER" != "3.0" ] && [ "$SPARK_VER" != "3.1" ] && [ "$SPARK_VER" != "3.2" ] && [ "$SPARK_VER" != "3.3" ] && [ "$SPARK_VER" != "3.4" ] && [ "$SPARK_VER" != "3.5" ]; then
+                  echo "ERROR: Building hudi requires spark versions are 3.0 to 3.5."
+                  exit 1
+                fi
+                shift 2
+            else
+                IFS=','; echo "ERROR: Missing argument for --hudi," \
+                "specify one of: ${SUPPORTED_HUDI_VERSIONS[*]}" >&2; unset IFS
+                exit 1
+            fi
+            ;;
         --flinkver)
             if [[ -n "$2" && "$2" != -* ]]; then
                 FLINK_VER="$2"
@@ -395,6 +420,10 @@ fi
 if [[ -n "$ICEBERG_VER" ]]; then
     BUILD_ARGS+=("-Piceberg-$ICEBERG_VER")
 fi
+if [[ -n "$HUDI_VER" ]]; then
+    BUILD_ARGS+=("-Phudi-$HUDI_VER")
+    BUILD_ARGS+=("-DhudiEnabled=true")
+fi
 
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
 
@@ -422,6 +451,7 @@ get_build_info() {
     "paimon.version") echo "${PAIMON_VER}" ;;
     "flink.version") echo "${FLINK_VER}" ;;
     "iceberg.version") echo "${ICEBERG_VER}" ;;
+    "hudi.version") echo "${HUDI_VER}" ;;
     "build.timestamp") echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" ;;
     *) echo "" ;;
   esac
@@ -439,6 +469,7 @@ for key in \
   "paimon.version" \
   "flink.version" \
   "iceberg.version" \
+  "hudi.version" \
   "build.timestamp"; do
   value="$(get_build_info "$key")"
   if [[ -n "$value" ]]; then
