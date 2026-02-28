@@ -544,6 +544,14 @@ object NativeConverters extends Logging {
               .setExpr(convertExprWithFallback(child, isPruningExpr, fallback))
               .build())
         }
+      case unaryMinus: UnaryMinus =>
+        buildExprNode {
+          _.setNegative(
+            pb.PhysicalNegativeNode
+              .newBuilder()
+              .setExpr(convertExprWithFallback(unaryMinus.child, isPruningExpr, fallback))
+              .build())
+        }
 
       // binary ops
       case EqualTo(lhs, rhs) => buildBinaryExprNode(lhs, rhs, "Eq")
