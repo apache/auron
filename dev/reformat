@@ -150,7 +150,7 @@ do
 
 done
 
-sparkvers=(spark-4.0 spark-4.1)
+sparkvers=(spark-3.0 spark-3.1 spark-3.2 spark-3.3 spark-3.4 spark-4.0 spark-4.1)
 for sparkver in "${sparkvers[@]}"
 do
   prepare_for_spark "${sparkver}"
