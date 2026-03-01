@@ -35,7 +35,8 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   test("UnaryMinus") {
     withTable("t1") {
       sql("create table t1(col1 int) using parquet")
-      sql("insert into t1 values(1), (2), (3), (3), (-1), (0), (null), (2147483647), (-2147483648)")
+      sql(
+        "insert into t1 values(1), (2), (3), (3), (-1), (0), (null), (2147483647), (-2147483648)")
       checkSparkAnswerAndOperator("SELECT negative(col1), -(col1) FROM t1")
     }
   }
