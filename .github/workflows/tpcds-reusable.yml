@@ -152,18 +152,18 @@ jobs:
 
       - name: Upload unit test reports
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: unit-tests-reports-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: "**/target/surefire-reports/*.xml"
       - name: Upload unit tests log
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: unit-tests-logs-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: "**/target/unit-tests.log"
       - name: Upload auron (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: >
             auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
@@ -177,7 +177,7 @@ jobs:
           cd dev/auron-it
           ${{ github.workspace }}/build/mvn package -P${{ inputs.sparkver }} -Pscala-${{ inputs.scalaver }}
       - name: Upload auron it (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
           path: dev/auron-it/target/auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}*-jar-with-dependencies.jar
@@ -390,7 +390,7 @@ jobs:
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: >
             rss-log-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver
