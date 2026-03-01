@@ -40,7 +40,7 @@ jobs:
         sparkver: [spark-3.0, spark-3.1, spark-3.2, spark-3.3, spark-3.4, spark-3.5]
         scalaver: [ 2.12, 2.13 ]
         javaver: [ 8, 21 ]
-        auronver: [7.0.0-incubating]
+        auronver: [8.0.0-SNAPSHOT]
         runner: [ ubuntu-24.04 ]
         exclude:
           # Only build on scala-2.13 for spark-3.5

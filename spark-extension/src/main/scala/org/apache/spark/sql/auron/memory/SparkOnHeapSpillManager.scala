@@ -158,7 +158,7 @@ class SparkOnHeapSpillManager(taskContext: TaskContext)
       return 0L
     }
 
-    logInfo(s"starts spilling to disk, size=${Utils.bytesToString(size)}}")
+    logInfo(s"starts spilling to disk, size=${Utils.bytesToString(size)}")
     dumpStatus()
     var totalFreed = 0L
 

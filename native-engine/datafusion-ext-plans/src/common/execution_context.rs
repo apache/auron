@@ -47,6 +47,7 @@ use datafusion_ext_commons::{
 };
 use futures::{Stream, StreamExt};
 use futures_util::{FutureExt, stream::BoxStream};
+use log::debug;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use tokio::{
@@ -717,10 +718,16 @@ impl<T: RecordBatchWithPayload> WrappedSender<T> {
         }
         let exclude_time = self.exclude_time.get().cloned();
         let send_time = exclude_time.as_ref().map(|_| Instant::now());
-        self.sender
-            .send(Ok(batch))
-            .await
-            .unwrap_or_else(|err| panic!("output_with_sender: send error: {err}"));
+        if self.sender.send(Ok(batch)).await.is_err() {
+            let task_ctx = self.exec_ctx.task_ctx();
+            debug!(
+                "output_with_sender: channel closed, skipping batch send; partition_id={}, task_id={:?}, session_id={}",
+                self.exec_ctx.partition_id(),
+                task_ctx.task_id(),
+                task_ctx.session_id()
+            );
+            return;
+        }
 
         send_time.inspect(|send_time| {
             exclude_time

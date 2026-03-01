@@ -226,7 +226,7 @@ jobs:
         if: steps.cache-spark-bin.outputs.cache-hit != 'true'
         run: |
           SPARK_PATH="spark/spark-${{ steps.get-dependency-version.outputs.sparkversion }}"
-          if [ ${{ inputs.scalaver }} = "2.13" && "${{ inputs.sparkver }}" != "spark-4.0" && "${{ inputs.sparkver }}" != "spark-4.1" ]; then
+          if [[ ${{ inputs.scalaver }} = "2.13" && "${{ inputs.sparkver }}" != "spark-4.0" && "${{ inputs.sparkver }}" != "spark-4.1" ]]; then
             SPARK_FILE="spark-${{ steps.get-dependency-version.outputs.sparkversion }}-bin-${{ inputs.hadoop-profile }}-scala${{ inputs.scalaver }}.tgz"
           else
             SPARK_FILE="spark-${{ steps.get-dependency-version.outputs.sparkversion }}-bin-${{ inputs.hadoop-profile }}.tgz"
