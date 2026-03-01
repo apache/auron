@@ -238,7 +238,7 @@ jobs:
           cd spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }} && tar -xf ../spark-*.tgz --strip-component=1
 
       - name: Download Auron JAR
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: >
             auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver 
@@ -246,7 +246,7 @@ jobs:
             }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Download auron-it JAR
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
 
