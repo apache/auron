@@ -304,16 +304,16 @@ impl HiveGetJsonObjectEvaluator {
         &mut self,
         json_str: &str,
     ) -> std::result::Result<Option<String>, HiveGetJsonObjectError> {
-        // first try parsing with sonic-rs and fail-backing to serde-json
-        if let Ok(root_value) = sonic_rs::from_str::<sonic_rs::Value>(json_str) {
-            if let Ok(v) = self.evaluate_with_value_sonic(&root_value) {
-                return Ok(v);
-            }
+        // first try parsing with sonic-rs and falling back to serde-json
+        if let Ok(root_value) = sonic_rs::from_str::<sonic_rs::Value>(json_str)
+            && let Ok(v) = self.evaluate_with_value_sonic(&root_value)
+        {
+            return Ok(v);
         }
-        if let Ok(root_value) = serde_json::from_str::<serde_json::Value>(json_str) {
-            if let Ok(v) = self.evaluate_with_value_serde_json(&root_value) {
-                return Ok(v);
-            }
+        if let Ok(root_value) = serde_json::from_str::<serde_json::Value>(json_str)
+            && let Ok(v) = self.evaluate_with_value_serde_json(&root_value)
+        {
+            return Ok(v);
         }
         Err(HiveGetJsonObjectError::InvalidInput)
     }

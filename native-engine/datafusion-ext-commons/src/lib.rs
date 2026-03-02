@@ -16,7 +16,6 @@
 #![allow(internal_features)]
 #![feature(core_intrinsics)]
 #![feature(slice_swap_unchecked)]
-#![feature(vec_into_raw_parts)]
 
 use auron_jni_bridge::conf::{
     BATCH_SIZE, IntConf, SUGGESTED_BATCH_MEM_SIZE, SUGGESTED_BATCH_MEM_SIZE_KWAY_MERGE,
@@ -141,10 +140,10 @@ macro_rules! assume {
 macro_rules! prefetch_read_data {
     ($e:expr) => {{
         // safety: use prefetch
-        let locality = 3;
+        const LOCALITY: i32 = 3;
         #[allow(unused_unsafe)]
         unsafe {
-            std::intrinsics::prefetch_read_data($e, locality)
+            std::intrinsics::prefetch_read_data::<_, { LOCALITY }>($e)
         }
     }};
 }
@@ -152,10 +151,10 @@ macro_rules! prefetch_read_data {
 macro_rules! prefetch_write_data {
     ($e:expr) => {{
         // safety: use prefetch
-        let locality = 3;
+        const LOCALITY: i32 = 3;
         #[allow(unused_unsafe)]
         unsafe {
-            std::intrinsics::prefetch_write_data($e, locality)
+            std::intrinsics::prefetch_write_data::<_, { LOCALITY }>($e)
         }
     }};
 }

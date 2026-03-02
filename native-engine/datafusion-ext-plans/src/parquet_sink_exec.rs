@@ -222,7 +222,7 @@ fn execute_parquet_sink(
                     let parquet_sink_context_cloned = parquet_sink_context.clone();
                     *part_writer.lock() = Some({
                         // send identity batch, after that we can achieve a new output file
-                        sender.send(($batch.slice(0, 1))).await;
+                        sender.send($batch.slice(0, 1)).await;
                         tokio::task::spawn_blocking(move || {
                             PartWriter::try_new(parquet_sink_context_cloned, $part_values)
                         })
