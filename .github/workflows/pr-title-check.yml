@@ -11,9 +11,6 @@ jobs:
     runs-on: ubuntu-24.04
     if: github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Validate PR title
         run: |
           # Check PR title format - will fail the job if format is invalid
