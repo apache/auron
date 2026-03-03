@@ -65,11 +65,11 @@ public final class ArrowTimestampColumnVector implements TimestampColumnVector {
     @Override
     public TimestampData getTimestamp(int i, int precision) {
         long micros = vector.get(i);
-        long millis = micros / 1000;
-        // micros % 1000 yields the sub-millisecond remainder in microseconds; * 1000 converts to nanos.
-        // For negative micros (pre-epoch), Java's truncation-toward-zero produces a negative
-        // remainder, which is consistent with the writer's inverse conversion.
-        int nanoOfMillisecond = ((int) (micros % 1000)) * 1000;
+        // Use floor-based division so that for negative micros (pre-epoch), the remainder is
+        // non-negative and nanoOfMillisecond stays within [0, 999_999], as required by
+        // TimestampData.fromEpochMillis.
+        long millis = Math.floorDiv(micros, 1000);
+        int nanoOfMillisecond = ((int) Math.floorMod(micros, 1000)) * 1000;
         return TimestampData.fromEpochMillis(millis, nanoOfMillisecond);
     }
 

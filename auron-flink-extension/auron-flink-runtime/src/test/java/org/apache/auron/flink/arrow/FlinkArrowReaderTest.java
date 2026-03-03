@@ -437,6 +437,29 @@ public class FlinkArrowReaderTest {
     }
 
     @Test
+    public void testNegativeTimestamp() {
+        try (BufferAllocator allocator =
+                FlinkArrowUtils.ROOT_ALLOCATOR.newChildAllocator("testNegTs", 0, Long.MAX_VALUE)) {
+            TimeStampMicroVector vec = new TimeStampMicroVector("col", allocator);
+            vec.allocateNew(1);
+            vec.setSafe(0, -1500L); // 1.5 millis before epoch
+            vec.setValueCount(1);
+
+            VectorSchemaRoot root = new VectorSchemaRoot(Collections.singletonList(vec));
+            RowType rowType = RowType.of(new TimestampType(6));
+            FlinkArrowReader reader = FlinkArrowReader.create(root, rowType);
+
+            TimestampData ts = reader.read(0).getTimestamp(0, 6);
+            // floorDiv(-1500, 1000) = -2, floorMod(-1500, 1000) = 500
+            assertEquals(-2L, ts.getMillisecond());
+            assertEquals(500_000, ts.getNanoOfMillisecond());
+
+            reader.close();
+            root.close();
+        }
+    }
+
+    @Test
     public void testArrayVector() {
         try (BufferAllocator allocator =
                 FlinkArrowUtils.ROOT_ALLOCATOR.newChildAllocator("testArray", 0, Long.MAX_VALUE)) {
