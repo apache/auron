@@ -7,7 +7,7 @@ on:
     types: [opened, synchronize, reopened, edited]
 
 jobs:
-  commitlint:
+  pr-title-check:
     runs-on: ubuntu-latest
     if: github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
