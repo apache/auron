@@ -14,19 +14,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: npm
-
       - name: Validate PR title
         run: |
           # Check PR title format - will fail the job if format is invalid
           echo "Checking PR title: ${{ github.event.pull_request.title }}"
 
+          # Define regex pattern: [AURON #<number>] <description>
+          # Pattern breakdown:
+          # ^\[AURON #        - starts with [AURON #
+          # [0-9]+            - one or more digits (issue number)
+          # \]                - closing bracket
+          # [ ]+              - one or more spaces
+          # .{3,100}          - description: 3-100 characters
+          # $                 - end of string
+          PATTERN='^\[AURON #[0-9]+\] .{3,100}$'
+
           # Use commitlint to validate PR title format
-          echo "${{ github.event.pull_request.title }}" | npx commitlint --verbose || {
+          if ! echo "${{ github.event.pull_request.title }}" | grep -qE "$PATTERN"; then 
             echo ""
             echo "❌ PR title format validation failed!"
             echo ""
@@ -34,4 +38,6 @@ jobs:
             echo ""
             echo "🌰 e.g. '[AURON #XXXX] Short summary...'"
             exit 1
-          }
+          else
+            echo "✅ PR title format is valid."
+          fi
