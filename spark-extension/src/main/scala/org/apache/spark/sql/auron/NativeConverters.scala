@@ -965,11 +965,8 @@ object NativeConverters extends Logging {
               .setExpr(convertExprWithFallback(expr, isPruningExpr, fallback))
               .setInfix(infix.toString)))
 
-      case StringInstr(str, substr) =>
-        if substr.dataType == StringType =>
-          buildExtScalarFunction("Spark_Instr", str :: substr :: Nil, IntegerType)
-        else
-          fallback(expr)
+      case StringInstr(str, substr) if substr.dataType == StringType =>
+        buildExtScalarFunction("Spark_Instr", str :: substr :: Nil, IntegerType)
 
       case Substring(str, Literal(pos, IntegerType), Literal(len, IntegerType))
           if pos.asInstanceOf[Int] > 0 && len.asInstanceOf[Int] >= 0 =>
