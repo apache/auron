@@ -1,0 +1,36 @@
+name: Pull Request Title Check
+
+on:
+  pull_request:
+    branches:
+      - '**'
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Validate PR title
+        run: |
+          # Check PR title format - will fail the job if format is invalid
+          echo "Checking PR title: ${{ github.event.pull_request.title }}"
+
+          # Use commitlint to validate PR title format
+          echo "${{ github.event.pull_request.title }}" | npx commitlint --verbose || {
+            echo ""
+            echo "❌ PR title format validation failed!"
+            echo ""
+            echo "📝 Expected format: [AURON #<issueNumber>] <description>"
+            echo ""
+            echo "🌰 e.g. '[AURON #XXXX] Short summary...'"
+            exit 1
+          }
