@@ -674,10 +674,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   test("instr function - basic queries") {
     withTable("employees") {
       sql("""
-        |CREATE TABLE employees(id INT, name STRING, email STRING) USING parquet
+        |create table employees(id int, name string, email string) using parquet
         |""".stripMargin)
       sql("""
-        |INSERT INTO employees VALUES
+        |insert into employees values
         | (1, 'Alice Smith', 'alice@example.com'),
         | (2, 'Bob Johnson', 'bob.johnson@company.org'),
         | (3, 'Charlie Brown', 'charlie.b@test.co'),
@@ -686,16 +686,16 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
       // Test basic instr usage
       checkSparkAnswerAndOperator("""
-        |SELECT id, name, instr(email, '@') as at_pos FROM employees
+        |select id, name, instr(email, '@') as at_pos from employees
         |""".stripMargin)
 
       // Test finding domain part using instr
       checkSparkAnswerAndOperator("""
-        |SELECT
+        |select
         |  id,
         |  name,
         |  substring(email, instr(email, '@') + 1) as domain
-        |FROM employees
+        |from employees
         |""".stripMargin)
     }
   }
@@ -703,10 +703,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   test("instr function - filter with substring") {
     withTable("products") {
       sql("""
-        |CREATE TABLE products(id INT, description STRING, category STRING) USING parquet
+        |create table products(id int, description string, category string) using parquet
         |""".stripMargin)
       sql("""
-        |INSERT INTO products VALUES
+        |insert into products values
         | (1, 'Premium wireless headphones', 'Electronics'),
         | (2, 'Organic green tea', 'Beverages'),
         | (3, 'Cotton t-shirt', 'Clothing'),
@@ -716,16 +716,16 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
       // Find products where description contains 'wireless'
       checkSparkAnswerAndOperator("""
-        |SELECT id, description
-        |FROM products
-        |WHERE instr(description, 'wireless') > 0
+        |select id, description
+        |from products
+        |where instr(description, 'wireless') > 0
         |""".stripMargin)
 
       // Find products where description contains 'organic'
       checkSparkAnswerAndOperator("""
-        |SELECT id, description
-        |FROM products
-        |WHERE instr(description, 'organic') > 0
+        |select id, description
+        |from products
+        |where instr(description, 'organic') > 0
         |""".stripMargin)
     }
   }
@@ -733,10 +733,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   test("instr function - complex expressions") {
     withTable("logs") {
       sql("""
-        |CREATE TABLE logs(id INT, log_message STRING) USING parquet
+        |create table logs(id int, log_message string) using parquet
         |""".stripMargin)
       sql("""
-        |INSERT INTO logs VALUES
+        |insert into logs values
         | (1, 'ERROR: Connection timeout'),
         | (2, 'WARNING: Memory usage high'),
         | (3, 'INFO: Task completed'),
@@ -746,34 +746,34 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
       // Extract error codes after 'ERROR: '
       checkSparkAnswerAndOperator("""
-        |SELECT
+        |select
         |  id,
         |  log_message,
         |  instr(log_message, 'ERROR:') as error_pos,
-        |  CASE
-        |    WHEN instr(log_message, 'ERROR:') > 0 THEN substring(log_message, instr(log_message, 'ERROR:') + 7)
-        |    ELSE NULL
-        |  END as error_detail
-        |FROM logs
+        |  case
+        |    when instr(log_message, 'ERROR:') > 0 then substring(log_message, instr(log_message, 'ERROR:') + 7)
+        |    else null
+        |  end as error_detail
+        |from logs
         |""".stripMargin)
 
       // Count errors and warnings
       checkSparkAnswerAndOperator("""
-        |SELECT
-        |  CASE
-        |    WHEN instr(log_message, 'ERROR:') > 0 THEN 'ERROR'
-        |    WHEN instr(log_message, 'WARNING:') > 0 THEN 'WARNING'
-        |    ELSE 'INFO'
-        |  END as log_level,
-        |  COUNT(*) as count
-        |FROM logs
-        |GROUP BY
-        |  CASE
-        |    WHEN instr(log_message, 'ERROR:') > 0 THEN 'ERROR'
-        |    WHEN instr(log_message, 'WARNING:') > 0 THEN 'WARNING'
-        |    ELSE 'INFO'
-        |  END
-        |ORDER BY log_level
+        |select
+        |  case
+        |    when instr(log_message, 'ERROR:') > 0 then 'ERROR'
+        |    when instr(log_message, 'WARNING:') > 0 then 'WARNING'
+        |    else 'INFO'
+        |  end as log_level,
+        |  count(*) as count
+        |from logs
+        |group by
+        |  case
+        |    when instr(log_message, 'ERROR:') > 0 then 'ERROR'
+        |    when instr(log_message, 'WARNING:') > 0 then 'WARNING'
+        |    else 'INFO'
+        |  end
+        |order by log_level
         |""".stripMargin)
     }
   }
@@ -781,14 +781,14 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   test("instr function - join conditions") {
     withTable("orders", "customers") {
       sql("""
-        |CREATE TABLE orders(id INT, customer_id INT, product_code STRING) USING parquet
+        |create table orders(id int, customer_id int, product_code string) using parquet
         |""".stripMargin)
       sql("""
-        |CREATE TABLE customers(id INT, email STRING, notes STRING) USING parquet
+        |create table customers(id int, email string, notes string) using parquet
         |""".stripMargin)
 
       sql("""
-        |INSERT INTO orders VALUES
+        |insert into orders values
         | (1, 101, 'PROD-A'),
         | (2, 102, 'PROD-B'),
         | (3, 101, 'PROD-C'),
@@ -796,7 +796,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         |""".stripMargin)
 
       sql("""
-        |INSERT INTO customers VALUES
+        |insert into customers values
         | (101, 'user101@example.com', 'VIP customer'),
         | (102, 'user102@test.org', 'Regular'),
         | (103, 'user103@demo.com', 'New customer')
@@ -804,10 +804,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
       // Join and filter using instr
       checkSparkAnswerAndOperator("""
-        |SELECT o.id as order_id, c.id as customer_id, c.email
-        |FROM orders o
-        |JOIN customers c ON o.customer_id = c.id
-        |WHERE instr(c.notes, 'VIP') > 0
+        |select o.id as order_id, c.id as customer_id, c.email
+        |from orders o
+        |join customers c on o.customer_id = c.id
+        |where instr(c.notes, 'VIP') > 0
         |""".stripMargin)
     }
   }
@@ -815,10 +815,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   test("instr function - array and scalar combinations") {
     withTable("texts") {
       sql("""
-        |CREATE TABLE texts(id INT, content STRING) USING parquet
+        |create table texts(id int, content string) using parquet
         |""".stripMargin)
       sql("""
-        |INSERT INTO texts VALUES
+        |insert into texts values
         | (1, 'apple banana apple cherry'),
         | (2, 'apple orange grape'),
         | (3, 'banana apple pear')
@@ -826,15 +826,15 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
       // Count occurrences using combination of instr
       checkSparkAnswerAndOperator("""
-        |SELECT
+        |select
         |  id,
         |  content,
         |  instr(content, 'apple') as first_apple_pos,
-        |  CASE
-        |    WHEN instr(substring(content, instr(content, 'apple') + 1), 'apple') > 0 THEN 'multiple'
-        |    ELSE 'single or none'
-        |  END as occurrence_count
-        |FROM texts
+        |  case
+        |    when instr(substring(content, instr(content, 'apple') + 1), 'apple') > 0 then 'multiple'
+        |    else 'single or none'
+        |  end as occurrence_count
+        |from texts
         |""".stripMargin)
     }
   }
@@ -842,10 +842,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   test("instr function - with unicode and chinese in real queries") {
     withTable("chinese_products") {
       sql("""
-        |CREATE TABLE chinese_products(id INT, name STRING, description STRING) USING parquet
+        |create table chinese_products(id int, name string, description string) using parquet
         |""".stripMargin)
       sql("""
-        |INSERT INTO chinese_products VALUES
+        |insert into chinese_products values
         | (1, '智能手机', '高端智能手机'),
         | (2, '笔记本电脑', '轻薄笔记本电脑'),
         | (3, '无线耳机', '蓝牙无线耳机'),
@@ -854,15 +854,15 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
       // Search for keywords in Chinese
       checkSparkAnswerAndOperator("""
-        |SELECT id, name
-        |FROM chinese_products
-        |WHERE instr(name, '智能') > 0
+        |select id, name
+        |from chinese_products
+        |where instr(name, '智能') > 0
         |""".stripMargin)
 
       checkSparkAnswerAndOperator("""
-        |SELECT id, name, description
-        |FROM chinese_products
-        |WHERE instr(description, '无线') > 0
+        |select id, name, description
+        |from chinese_products
+        |where instr(description, '无线') > 0
         |""".stripMargin)
     }
   }
@@ -870,10 +870,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   test("instr function - aggregation and window functions") {
     withTable("search_logs") {
       sql("""
-        |CREATE TABLE search_logs(id INT, user_id INT, query STRING) USING parquet
+        |create table search_logs(id int, user_id int, query string) using parquet
         |""".stripMargin)
       sql("""
-        |INSERT INTO search_logs VALUES
+        |insert into search_logs values
         | (1, 1, 'spark tutorial'),
         | (2, 1, 'spark sql'),
         | (3, 2, 'hadoop guide'),
@@ -885,23 +885,23 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
       // Count searches containing 'spark' per user
       checkSparkAnswerAndOperator("""
-        |SELECT
+        |select
         |  user_id,
-        |  SUM(CASE WHEN instr(query, 'spark') > 0 THEN 1 ELSE 0 END) as spark_searches
-        |FROM search_logs
-        |GROUP BY user_id
-        |ORDER BY user_id
+        |  sum(case when instr(query, 'spark') > 0 then 1 else 0 end) as spark_searches
+        |from search_logs
+        |group by user_id
+        |order by user_id
         |""".stripMargin)
 
       // Find position of first spark search per user
       checkSparkAnswerAndOperator("""
-        |SELECT
+        |select
         |  user_id,
-        |  MIN(CASE WHEN instr(query, 'spark') > 0 THEN id ELSE NULL END) as first_spark_search_id
-        |FROM search_logs
-        |GROUP BY user_id
-        |HAVING MIN(CASE WHEN instr(query, 'spark') > 0 THEN id ELSE NULL END) IS NOT NULL
-        |ORDER BY user_id
+        |  min(case when instr(query, 'spark') > 0 then id else null end) as first_spark_search_id
+        |from search_logs
+        |group by user_id
+        |having min(case when instr(query, 'spark') > 0 then id else null end) is not null
+        |order by user_id
         |""".stripMargin)
     }
   }

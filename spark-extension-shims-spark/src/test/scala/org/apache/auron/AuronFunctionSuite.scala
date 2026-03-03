@@ -653,104 +653,104 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   test("instr function - basic functionality") {
     withTable("t1") {
-      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("create table t1(str string, substr string) using parquet")
       sql("""
-        |INSERT INTO t1 VALUES
+        |insert into t1 values
         | ('hello world', 'world'),
         | ('hello world', 'hello'),
         | ('hello world', 'l'),
         | ('hello world', 'z')
         |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+      checkSparkAnswerAndOperator("select instr(str, substr) from t1")
     }
   }
 
   test("instr function - empty substring") {
     withTable("t1") {
-      sql("CREATE TABLE t1(str STRING) USING parquet")
-      sql("INSERT INTO t1 VALUES ('hello'), (''), (NULL)")
-      checkSparkAnswerAndOperator("SELECT instr(str, '') FROM t1")
+      sql("create table t1(str string) using parquet")
+      sql("insert into t1 values ('hello'), (''), (null)")
+      checkSparkAnswerAndOperator("select instr(str, '') from t1")
     }
   }
 
   test("instr function - null handling") {
     withTable("t1") {
-      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("create table t1(str string, substr string) using parquet")
       sql("""
-        |INSERT INTO t1 VALUES
+        |insert into t1 values
         | ('hello', 'world'),
-        | (NULL, 'world'),
-        | ('hello', NULL),
-        | (NULL, NULL)
+        | (null, 'world'),
+        | ('hello', null),
+        | (null, null)
         |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+      checkSparkAnswerAndOperator("select instr(str, substr) from t1")
     }
   }
 
   test("instr function - case sensitivity") {
     withTable("t1") {
-      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("create table t1(str string, substr string) using parquet")
       sql("""
-        |INSERT INTO t1 VALUES
+        |insert into t1 values
         | ('Hello World', 'hello'),
         | ('Hello World', 'Hello'),
         | ('HELLO WORLD', 'hello')
         |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+      checkSparkAnswerAndOperator("select instr(str, substr) from t1")
     }
   }
 
   test("instr function - multiple occurrences") {
     withTable("t1") {
-      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("create table t1(str string, substr string) using parquet")
       sql("""
-        |INSERT INTO t1 VALUES
+        |insert into t1 values
         | ('abracadabra', 'a'),
         | ('abracadabra', 'abra'),
         | ('banana', 'ana')
         |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+      checkSparkAnswerAndOperator("select instr(str, substr) from t1")
     }
   }
 
   test("instr function - special characters") {
     withTable("t1") {
-      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("create table t1(str string, substr string) using parquet")
       sql("""
-        |INSERT INTO t1 VALUES
+        |insert into t1 values
         | ('a-b-c', '-'),
         | ('test@example.com', '@'),
         | ('100%', '%')
         |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+      checkSparkAnswerAndOperator("select instr(str, substr) from t1")
     }
   }
 
   test("instr function - unicode and chinese") {
     withTable("t1") {
-      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("create table t1(str string, substr string) using parquet")
       sql("""
-        |INSERT INTO t1 VALUES
+        |insert into t1 values
         | ('hello世界', '世界'),
         | ('世界你好', '你好'),
         | ('Über', 'Ü'),
         | ('café', 'é')
         |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+      checkSparkAnswerAndOperator("select instr(str, substr) from t1")
     }
   }
 
   test("instr function - edge cases") {
     withTable("t1") {
-      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("create table t1(str string, substr string) using parquet")
       sql("""
-        |INSERT INTO t1 VALUES
+        |insert into t1 values
         | ('abc', 'abc'),
         | ('abc', 'abcd'),
         | ('a', 'a'),
         | ('', '')
         |""".stripMargin)
-      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+      checkSparkAnswerAndOperator("select instr(str, substr) from t1")
     }
   }
 }
