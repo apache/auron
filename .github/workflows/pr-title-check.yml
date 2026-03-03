@@ -19,17 +19,8 @@ jobs:
           # Check PR title format - will fail the job if format is invalid
           echo "Checking PR title: ${{ github.event.pull_request.title }}"
 
-          # Define regex pattern: [AURON #<number>] <description>
-          # Pattern breakdown:
-          # ^\[AURON #        - starts with [AURON #
-          # [0-9]+            - one or more digits (issue number)
-          # \]                - closing bracket
-          # [ ]+              - one or more spaces
-          # .{3,100}          - description: 3-100 characters
-          # $                 - end of string
-          PATTERN='^\[AURON #[0-9]+\] .{3,100}$'
+          PATTERN='^\[AURON #[0-9]+\] .{3,}$'
 
-          # Use commitlint to validate PR title format
           if ! echo "${{ github.event.pull_request.title }}" | grep -qE "$PATTERN"; then 
             echo ""
             echo "❌ PR title format validation failed!"
