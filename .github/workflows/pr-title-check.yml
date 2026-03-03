@@ -12,13 +12,15 @@ jobs:
     if: github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
       - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           # Check PR title format - will fail the job if format is invalid
-          echo "Checking PR title: ${{ github.event.pull_request.title }}"
+          echo "Checking PR title: $PR_TITLE"
 
           PATTERN='^\[AURON #[0-9]+\] .{3,}$'
 
-          if ! echo "${{ github.event.pull_request.title }}" | grep -qE "$PATTERN"; then 
+          if ! printf '%s\n' "$PR_TITLE" | grep -qE "$PATTERN"; then 
             echo ""
             echo "❌ PR title format validation failed!"
             echo ""
