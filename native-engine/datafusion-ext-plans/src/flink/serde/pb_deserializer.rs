@@ -2000,9 +2000,9 @@ mod tests {
             .as_any()
             .downcast_ref::<BooleanArray>()
             .expect("Failed to downcast active array to BooleanArray");
-        assert_eq!(active_array.value(0), true);
-        assert_eq!(active_array.value(1), false);
-        assert_eq!(active_array.value(2), true);
+        assert!(active_array.value(0));
+        assert!(!active_array.value(1));
+        assert!(active_array.value(2));
     }
 
     #[test]

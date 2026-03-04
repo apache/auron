@@ -91,7 +91,7 @@ impl SharedMapArrayBuilder {
     }
 
     /// Creates a new `MapBuilder` with specified capacity
-    pub fn with_capacity(
+    pub(crate) fn with_capacity(
         field_names: Option<MapFieldNames>,
         key_builder: SharedArrayBuilder,
         value_builder: SharedArrayBuilder,
@@ -113,12 +113,12 @@ impl SharedMapArrayBuilder {
     }
 
     /// Returns the key array builder of the map
-    pub fn keys(&mut self) -> &mut SharedArrayBuilder {
+    pub(crate) fn keys(&mut self) -> &mut SharedArrayBuilder {
         &mut self.key_builder
     }
 
     /// Returns the value array builder of the map
-    pub fn values(&mut self) -> &mut SharedArrayBuilder {
+    pub(crate) fn values(&mut self) -> &mut SharedArrayBuilder {
         &mut self.value_builder
     }
 

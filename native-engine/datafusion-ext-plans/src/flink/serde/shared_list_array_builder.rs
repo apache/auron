@@ -70,7 +70,7 @@ impl SharedListArrayBuilder {
     }
 
     /// Creates a new [`SharedArrayListBuilder`] with specified capacity
-    fn with_capacity(
+    pub(crate) fn with_capacity(
         values_builder: SharedArrayBuilder,
         capacity: usize,
         adaptive_append_children: Option<Box<dyn FnMut(usize) + Send + Sync>>,
