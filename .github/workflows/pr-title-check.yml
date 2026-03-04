@@ -20,11 +20,13 @@ name: Pull Request Title Check
 on:
   pull_request:
     branches:
-      - '**'
+      - master
+      - branch-*
     types: [opened, synchronize, reopened, edited]
 
 jobs:
   pr-title-check:
+    permissions: {}
     runs-on: ubuntu-24.04
     if: github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
