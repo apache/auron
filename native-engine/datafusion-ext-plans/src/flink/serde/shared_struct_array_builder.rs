@@ -85,7 +85,7 @@ impl ArrayBuilder for SharedStructArrayBuilder {
 
 impl SharedStructArrayBuilder {
     /// Creates a new `SharedStructArrayBuilder`
-    pub fn new(fields: impl Into<Fields>, field_builders: Vec<SharedArrayBuilder>) -> Self {
+    pub(crate) fn new(fields: impl Into<Fields>, field_builders: Vec<SharedArrayBuilder>) -> Self {
         let fields: Fields = fields.into();
         Self {
             field_builders,
@@ -94,7 +94,7 @@ impl SharedStructArrayBuilder {
         }
     }
 
-    pub fn get_field_builders(&self) -> Vec<SharedArrayBuilder> {
+    pub(crate) fn get_field_builders(&self) -> Vec<SharedArrayBuilder> {
         self.field_builders.clone()
     }
 

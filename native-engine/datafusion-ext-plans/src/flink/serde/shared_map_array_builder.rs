@@ -74,12 +74,18 @@ impl SharedMapArrayBuilder {
         appenders.extend(adaptive_append_children(&value_builder));
         let appender = match appenders.len() {
             1 => {
-                let mut appender = appenders.pop().unwrap();
+                let mut appender = appenders
+                    .pop()
+                    .expect("appenders length is 1, pop should succeed");
                 Some(Box::new(move |size| appender(size)) as Box<dyn FnMut(usize) + Send + Sync>)
             }
             2 => {
-                let mut appender2 = appenders.pop().unwrap();
-                let mut appender1 = appenders.pop().unwrap();
+                let mut appender2 = appenders
+                    .pop()
+                    .expect("appenders length is 2, first pop should succeed");
+                let mut appender1 = appenders
+                    .pop()
+                    .expect("appenders length is 2, second pop should succeed");
                 Some(Box::new(move |size| {
                     appender1(size);
                     appender2(size);

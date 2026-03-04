@@ -46,17 +46,17 @@ use crate::flink::serde::{
     shared_struct_array_builder::SharedStructArrayBuilder,
 };
 
+type ValueHandler =
+    Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> datafusion::error::Result<()> + Send>;
+type ValueHandlerMap = hashbrown::HashMap<u32, ValueHandler, foldhash::fast::RandomState>;
+
 pub struct PbDeserializer {
     output_schema: SchemaRef,
     output_schema_without_meta: SchemaRef,
     pb_schema: SchemaRef,
     output_array_builders: Vec<SharedArrayBuilder>,
     ensure_size: Box<dyn FnMut(usize) + Send>,
-    value_handlers: hashbrown::HashMap<
-        u32,
-        Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> datafusion::error::Result<()> + Send>,
-        foldhash::fast::RandomState,
-    >,
+    value_handlers: ValueHandlerMap,
     msg_mapping: Vec<Vec<usize>>,
 }
 
@@ -229,12 +229,10 @@ impl PbDeserializer {
                     } else {
                         return df_execution_err!("field not found in pb schema");
                     }
+                } else if let Ok(idx) = pb_schema.index_of(field.name()) {
+                    mapped_field_indices.push(idx);
                 } else {
-                    if let Ok(idx) = pb_schema.index_of(field.name()) {
-                        mapped_field_indices.push(idx);
-                    } else {
-                        return df_execution_err!("field not found in pb schema");
-                    }
+                    return df_execution_err!("field not found in pb schema");
                 }
                 Ok(mapped_field_indices)
             })
@@ -290,8 +288,7 @@ fn transfer_output_schema_to_pb_schema(
                     message_descriptor
                         .get_field_by_name(msg_field_name)
                         .expect(&format!(
-                            "nested field {} not exits in message_descriptor",
-                            msg_field_name
+                            "nested field {msg_field_name} not exits in message_descriptor"
                         ));
                 if let Kind::Message(sub_message_desc) = msg_field_desc.kind() {
                     if !msg_set.contains(msg_field_name) {
@@ -299,8 +296,7 @@ fn transfer_output_schema_to_pb_schema(
                             .get(msg_field_name)
                             .ok_or_else(|| {
                                 DataFusionError::Execution(format!(
-                                    "Field {} not found in sub_pb_schema_mapping",
-                                    msg_field_name
+                                    "Field {msg_field_name} not found in sub_pb_schema_mapping"
                                 ))
                             })?
                             .clone();
@@ -326,8 +322,7 @@ fn transfer_output_schema_to_pb_schema(
                     message_descriptor
                         .get_field_by_name(field_name)
                         .expect(&format!(
-                            "nested innermost field {} not exits in message_descriptor",
-                            field_name
+                            "nested innermost field {field_name} not exits in message_descriptor"
                         ));
                 pb_schema_fields.push(create_arrow_field(msg_field_desc.clone(), skip_fields));
             }
@@ -555,8 +550,7 @@ fn create_output_array_builders(
         let field_desc = message_descriptor
             .get_field_by_name(field_name)
             .expect(&format!(
-                "Field {} not exits in message_descriptor",
-                field_name
+                "Field {field_name} not exits in message_descriptor",
             ));
         match field.data_type() {
             DataType::Boolean => {
@@ -602,12 +596,10 @@ fn create_output_array_builders(
                     struct_builder,
                 )));
             }
-            DataType::Map(fieldRef, boolean) => {
-                // eprintln!("TODO: map type {:?} = {}", fieldRef, boo);
+            DataType::Map(field_ref, boolean) => {
                 let field_kind = field_desc.kind();
                 let sub_msg_desc = field_kind.as_message().expect("map as_message failed");
-                // eprintln!("TODO: map type sub_msg_desc = {:?}", sub_msg_desc);
-                if let DataType::Struct(fields) = fieldRef.data_type() {
+                if let DataType::Struct(fields) = field_ref.data_type() {
                     array_builders.push(SharedArrayBuilder::new(SharedMapArrayBuilder::new(
                         None,
                         create_shared_array_builder_by_data_type(
@@ -623,14 +615,14 @@ fn create_output_array_builders(
                     )));
                 } else {
                     return Err(DataFusionError::NotImplemented(format!(
-                        "Unsupported Map data type for Arrow conversion: {fieldRef:?}"
+                        "Unsupported Map data type for Arrow conversion: {field_ref:?}"
                     )));
                 }
             }
-            DataType::List(fieldRef) => {
+            DataType::List(field_ref) => {
                 array_builders.push(SharedArrayBuilder::new(SharedListArrayBuilder::new(
                     create_shared_array_builder_by_data_type(
-                        fieldRef.data_type().clone(),
+                        field_ref.data_type().clone(),
                         field_desc,
                     )
                     .expect("List create_shared_array_builder_by_data_type failed"),
@@ -694,10 +686,10 @@ fn create_shared_array_builder_by_data_type(
                 struct_builder,
             )));
         }
-        DataType::Map(fieldRef, boolean) => {
+        DataType::Map(field_ref, boolean) => {
             let field_kind = field_desc.kind();
             let sub_msg_desc = field_kind.as_message().expect("map as_message failed");
-            if let DataType::Struct(fields) = fieldRef.data_type() {
+            if let DataType::Struct(fields) = field_ref.data_type() {
                 return Ok(SharedArrayBuilder::new(SharedMapArrayBuilder::new(
                     None,
                     create_shared_array_builder_by_data_type(
@@ -914,9 +906,7 @@ fn create_value_handler(
     tag_to_output_index: &HashMap<u32, usize>,
     pb_schema: &SchemaRef,
     output_array_builders: &[SharedArrayBuilder],
-) -> datafusion::error::Result<
-    Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> datafusion::error::Result<()> + Send>,
-> {
+) -> datafusion::error::Result<ValueHandler> {
     let output_index = tag_to_output_index.get(&tag_id);
     let field = message_descriptor.get_field(tag_id);
 
@@ -1269,18 +1259,7 @@ fn create_value_handler(
                         .expect("SharedStructArrayBuilder is null")
                         .get_mut()
                         .get_field_builders();
-                    let mut sub_value_handlers: hashbrown::HashMap<
-                        u32,
-                        Box<
-                            dyn Fn(
-                                    &mut Cursor<&[u8]>,
-                                    u32,
-                                    WireType,
-                                ) -> datafusion::error::Result<()>
-                                + Send,
-                        >,
-                        foldhash::fast::RandomState,
-                    > = Default::default();
+                    let mut sub_value_handlers: ValueHandlerMap = Default::default();
                     for field in sub_message_descriptor.fields() {
                         if let Ok(handler) = create_value_handler(
                             &sub_message_descriptor,
@@ -1344,18 +1323,7 @@ fn create_value_handler(
                             .expect("SharedStructArrayBuilder is null")
                             .get_mut()
                             .get_field_builders();
-                        let mut sub_value_handlers: HashMap<
-                            u32,
-                            Box<
-                                dyn Fn(
-                                        &mut Cursor<&[u8]>,
-                                        u32,
-                                        WireType,
-                                    )
-                                        -> datafusion::error::Result<()>
-                                    + Send,
-                            >,
-                        > = HashMap::new();
+                        let mut sub_value_handlers: ValueHandlerMap = Default::default();
                         for field in sub_message_descriptor.fields() {
                             if let Ok(handler) = create_value_handler(
                                 &sub_message_descriptor,
@@ -1419,18 +1387,7 @@ fn create_value_handler(
                             sub_message_descriptor.clone(),
                             &sub_pb_schema,
                         );
-                        let mut sub_value_handlers: HashMap<
-                            u32,
-                            Box<
-                                dyn Fn(
-                                        &mut Cursor<&[u8]>,
-                                        u32,
-                                        WireType,
-                                    )
-                                        -> datafusion::error::Result<()>
-                                    + Send,
-                            >,
-                        > = HashMap::new();
+                        let mut sub_value_handlers: ValueHandlerMap = Default::default();
                         let map_builder = output_array_builder
                             .get_mut::<SharedMapArrayBuilder>()
                             .expect("SharedMapArrayBuilder is null");
@@ -1609,67 +1566,64 @@ mod tests {
     use super::*;
 
     fn create_test_descriptor() -> Vec<u8> {
-        let mut field_descriptors = vec![];
-
-        // int32 id = 1;
-        field_descriptors.push(FieldDescriptorProto {
-            name: Some("id".to_string()),
-            number: Some(1),
-            label: Some(Label::Optional as i32),
-            r#type: Some(Type::Int32 as i32),
-            type_name: None,
-            extendee: None,
-            default_value: None,
-            oneof_index: None,
-            json_name: Some("id".to_string()),
-            options: None,
-            proto3_optional: None,
-        });
-
-        // string name = 2;
-        field_descriptors.push(FieldDescriptorProto {
-            name: Some("name".to_string()),
-            number: Some(2),
-            label: Some(Label::Optional as i32),
-            r#type: Some(Type::String as i32),
-            type_name: None,
-            extendee: None,
-            default_value: None,
-            oneof_index: None,
-            json_name: Some("name".to_string()),
-            options: None,
-            proto3_optional: None,
-        });
-
-        // double score = 3;
-        field_descriptors.push(FieldDescriptorProto {
-            name: Some("score".to_string()),
-            number: Some(3),
-            label: Some(Label::Optional as i32),
-            r#type: Some(Type::Double as i32),
-            type_name: None,
-            extendee: None,
-            default_value: None,
-            oneof_index: None,
-            json_name: Some("score".to_string()),
-            options: None,
-            proto3_optional: None,
-        });
-
-        // bool active = 4;
-        field_descriptors.push(FieldDescriptorProto {
-            name: Some("active".to_string()),
-            number: Some(4),
-            label: Some(Label::Optional as i32),
-            r#type: Some(Type::Bool as i32),
-            type_name: None,
-            extendee: None,
-            default_value: None,
-            oneof_index: None,
-            json_name: Some("active".to_string()),
-            options: None,
-            proto3_optional: None,
-        });
+        let field_descriptors = vec![
+            // int32 id = 1;
+            FieldDescriptorProto {
+                name: Some("id".to_string()),
+                number: Some(1),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::Int32 as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("id".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+            // string name = 2;
+            FieldDescriptorProto {
+                name: Some("name".to_string()),
+                number: Some(2),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::String as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("name".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+            // double score = 3;
+            FieldDescriptorProto {
+                name: Some("score".to_string()),
+                number: Some(3),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::Double as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("score".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+            // bool active = 4;
+            FieldDescriptorProto {
+                name: Some("active".to_string()),
+                number: Some(4),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::Bool as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("active".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+        ];
 
         let message_descriptor = DescriptorProto {
             name: Some("TestMessage".to_string()),
@@ -1711,38 +1665,36 @@ mod tests {
     }
 
     fn create_nested_test_descriptor() -> Vec<u8> {
-        // 创建 Address 嵌套消息
-        let mut address_fields = vec![];
-
-        // string street = 1;
-        address_fields.push(FieldDescriptorProto {
-            name: Some("street".to_string()),
-            number: Some(1),
-            label: Some(Label::Optional as i32),
-            r#type: Some(Type::String as i32),
-            type_name: None,
-            extendee: None,
-            default_value: None,
-            oneof_index: None,
-            json_name: Some("street".to_string()),
-            options: None,
-            proto3_optional: None,
-        });
-
-        // string city = 2;
-        address_fields.push(FieldDescriptorProto {
-            name: Some("city".to_string()),
-            number: Some(2),
-            label: Some(Label::Optional as i32),
-            r#type: Some(Type::String as i32),
-            type_name: None,
-            extendee: None,
-            default_value: None,
-            oneof_index: None,
-            json_name: Some("city".to_string()),
-            options: None,
-            proto3_optional: None,
-        });
+        let address_fields = vec![
+            // string street = 1;
+            FieldDescriptorProto {
+                name: Some("street".to_string()),
+                number: Some(1),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::String as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("street".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+            // string city = 2;
+            FieldDescriptorProto {
+                name: Some("city".to_string()),
+                number: Some(2),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::String as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("city".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+        ];
 
         let address_descriptor = DescriptorProto {
             name: Some("Address".to_string()),
@@ -1757,37 +1709,36 @@ mod tests {
             reserved_name: vec![],
         };
 
-        let mut person_fields = vec![];
-
-        // string name = 1;
-        person_fields.push(FieldDescriptorProto {
-            name: Some("name".to_string()),
-            number: Some(1),
-            label: Some(Label::Optional as i32),
-            r#type: Some(Type::String as i32),
-            type_name: None,
-            extendee: None,
-            default_value: None,
-            oneof_index: None,
-            json_name: Some("name".to_string()),
-            options: None,
-            proto3_optional: None,
-        });
-
-        // Address address = 2;
-        person_fields.push(FieldDescriptorProto {
-            name: Some("address".to_string()),
-            number: Some(2),
-            label: Some(Label::Optional as i32),
-            r#type: Some(Type::Message as i32),
-            type_name: Some(".test.Address".to_string()),
-            extendee: None,
-            default_value: None,
-            oneof_index: None,
-            json_name: Some("address".to_string()),
-            options: None,
-            proto3_optional: None,
-        });
+        let person_fields = vec![
+            // string name = 1;
+            FieldDescriptorProto {
+                name: Some("name".to_string()),
+                number: Some(1),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::String as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("name".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+            // Address address = 2;
+            FieldDescriptorProto {
+                name: Some("address".to_string()),
+                number: Some(2),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::Message as i32),
+                type_name: Some(".test.Address".to_string()),
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("address".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+        ];
 
         let person_descriptor = DescriptorProto {
             name: Some("Person".to_string()),

@@ -33,6 +33,7 @@ impl SharedArrayBuilder {
         }
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub(crate) fn get_dyn_mut(&self) -> &mut dyn ArrayBuilder {
         // safety: get value from UnsafeCell
         unsafe { &mut *self.inner.get() }
@@ -63,8 +64,7 @@ impl<T: ArrayBuilder> SharedArrayBuilderHolder<T> {
         // println!("The generic type parameter is: {}", type_name::<T>());
         let holder = borrowed.as_any_mut().downcast_mut::<T>().ok_or_else(|| {
             DataFusionError::Execution(format!(
-                "failed to downcast array builder {:?}",
-                shared_cloned
+                "failed to downcast array builder {shared_cloned:?}",
             ))
         })?;
         Ok(Self {
@@ -77,6 +77,7 @@ impl<T: ArrayBuilder> SharedArrayBuilderHolder<T> {
         })
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub(crate) fn get_mut(&self) -> &mut T {
         // safety: bypass mutability checking
         unsafe { *self.holder.get() }
