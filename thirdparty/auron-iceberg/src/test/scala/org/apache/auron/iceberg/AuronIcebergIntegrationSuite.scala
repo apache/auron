@@ -49,6 +49,22 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native scan is applied for empty COW table") {
+    withTable("local.db.t_empty") {
+      sql("""
+            |create table local.db.t_empty (id int, v string)
+            |using iceberg
+            |tblproperties (
+            |  'format-version' = '2'
+            |)
+            |""".stripMargin)
+      val df = sql("select * from local.db.t_empty")
+      checkAnswer(df, Seq.empty)
+      val plan = df.queryExecution.executedPlan.toString()
+      assert(plan.contains("NativeIcebergTableScan"))
+    }
+  }
+
   test("iceberg native scan is applied for projection on COW table") {
     withTable("local.db.t3") {
       sql("create table local.db.t3 using iceberg as select 1 as id, 'a' as v")

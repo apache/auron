@@ -108,7 +108,12 @@ object IcebergScanSupport extends Logging {
           Seq.empty
         }
       } catch {
-        case _: Throwable => Seq.empty
+        case t: Throwable =>
+          logWarning(
+            s"Failed to plan input partitions via DataSource V2 batch API for " +
+              s"${exec.getClass.getName}; falling back to reflective methods.",
+            t)
+          Seq.empty
       }
     if (fromBatch.nonEmpty) {
       return fromBatch
