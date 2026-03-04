@@ -63,6 +63,9 @@ paste = { workspace = true }
 smallvec = { workspace = true }
 tokio = { workspace = true }
 unchecked-index = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+prost-reflect = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }
