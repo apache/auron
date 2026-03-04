@@ -39,7 +39,7 @@ jobs:
 
           PATTERN='^\[AURON #[0-9]+\] .{3,}$'
 
-          if ! printf '%s\n' "$PR_TITLE" | grep -qE "$PATTERN"; then 
+          if ! printf '%s\n' "$PR_TITLE" | grep -qE "$PATTERN"; then
             echo ""
             echo "❌ PR title format validation failed!"
             echo ""
