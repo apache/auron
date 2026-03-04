@@ -62,7 +62,7 @@ impl Default for MapFieldNames {
 
 impl SharedMapArrayBuilder {
     /// Creates a new `MapBuilder`
-    pub fn new(
+    pub(crate) fn new(
         field_names: Option<MapFieldNames>,
         key_builder: SharedArrayBuilder,
         value_builder: SharedArrayBuilder,
@@ -123,7 +123,7 @@ impl SharedMapArrayBuilder {
     }
 
     /// Returns both the key and value array builders of the map
-    pub fn entries(&mut self) -> (&mut SharedArrayBuilder, &mut SharedArrayBuilder) {
+    pub(crate) fn entries(&mut self) -> (&mut SharedArrayBuilder, &mut SharedArrayBuilder) {
         (&mut self.key_builder, &mut self.value_builder)
     }
 

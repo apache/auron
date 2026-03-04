@@ -208,7 +208,6 @@ impl PbDeserializer {
             .map(|field| {
                 let mut mapped_field_indices = vec![];
                 let mut cur_fields = pb_schema.fields();
-
                 if let Some(nested) = nested_msg_mapping.get(field.name()) {
                     let nested_fields = nested.split(".").collect::<Vec<_>>();
                     for nested_field in &nested_fields[..nested_fields.len() - 1] {
@@ -218,28 +217,28 @@ impl PbDeserializer {
                                     mapped_field_indices.push(idx);
                                     cur_fields = fields;
                                 } else {
-                                    panic!("nested field must be struct");
+                                    return df_execution_err!("nested field must be struct");
                                 }
                             }
-                            _ => panic!("nested field not found in pb schema"),
+                            _ => return df_execution_err!("nested field not found in pb schema"),
                         };
                     }
                     if let Some((idx, _)) = cur_fields.find(nested_fields[nested_fields.len() - 1])
                     {
                         mapped_field_indices.push(idx);
                     } else {
-                        panic!("field not found in pb schema");
+                        return df_execution_err!("field not found in pb schema");
                     }
                 } else {
                     if let Ok(idx) = pb_schema.index_of(field.name()) {
                         mapped_field_indices.push(idx);
                     } else {
-                        panic!("field not found in pb schema");
+                        return df_execution_err!("field not found in pb schema");
                     }
                 }
-                mapped_field_indices
+                Ok(mapped_field_indices)
             })
-            .collect::<Vec<_>>();
+            .collect::<datafusion::error::Result<Vec<_>>>()?;
 
         Ok(Self {
             output_schema,
@@ -320,7 +319,7 @@ fn transfer_output_schema_to_pb_schema(
                         msg_set.insert(msg_field_name.to_string());
                     }
                 } else {
-                    panic!("not message field");
+                    return df_execution_err!("not message field");
                 }
             } else {
                 let msg_field_desc =
@@ -614,11 +613,13 @@ fn create_output_array_builders(
                         create_shared_array_builder_by_data_type(
                             fields.get(0).expect("get 0 failed").data_type().clone(),
                             sub_msg_desc.get_field(1).expect("get map key failed"),
-                        ),
+                        )
+                        .expect("map create_shared_array_builder_by_data_type failed"),
                         create_shared_array_builder_by_data_type(
                             fields.get(1).expect("get 1 failed").data_type().clone(),
                             sub_msg_desc.get_field(2).expect("get map key failed"),
-                        ),
+                        )
+                        .expect("map create_shared_array_builder_by_data_type failed"),
                     )));
                 } else {
                     return Err(DataFusionError::NotImplemented(format!(
@@ -631,7 +632,8 @@ fn create_output_array_builders(
                     create_shared_array_builder_by_data_type(
                         fieldRef.data_type().clone(),
                         field_desc,
-                    ),
+                    )
+                    .expect("List create_shared_array_builder_by_data_type failed"),
                 )));
             }
             other => {
@@ -647,37 +649,37 @@ fn create_output_array_builders(
 fn create_shared_array_builder_by_data_type(
     data_type: DataType,
     field_desc: FieldDescriptor,
-) -> SharedArrayBuilder {
+) -> datafusion::error::Result<SharedArrayBuilder> {
     match data_type {
         DataType::Boolean => {
-            return SharedArrayBuilder::new(BooleanBuilder::new());
+            return Ok(SharedArrayBuilder::new(BooleanBuilder::new()));
         }
         DataType::Int32 => {
-            return SharedArrayBuilder::new(Int32Builder::new());
+            return Ok(SharedArrayBuilder::new(Int32Builder::new()));
         }
         DataType::Int64 => {
-            return SharedArrayBuilder::new(Int64Builder::new());
+            return Ok(SharedArrayBuilder::new(Int64Builder::new()));
         }
         DataType::Utf8 => {
-            return SharedArrayBuilder::new(StringBuilder::new());
+            return Ok(SharedArrayBuilder::new(StringBuilder::new()));
         }
         DataType::Float32 => {
-            return SharedArrayBuilder::new(Float32Builder::new());
+            return Ok(SharedArrayBuilder::new(Float32Builder::new()));
         }
         DataType::Float64 => {
-            return SharedArrayBuilder::new(Float64Builder::new());
+            return Ok(SharedArrayBuilder::new(Float64Builder::new()));
         }
         DataType::UInt32 => {
-            return SharedArrayBuilder::new(UInt32Builder::new());
+            return Ok(SharedArrayBuilder::new(UInt32Builder::new()));
         }
         DataType::UInt64 => {
-            return SharedArrayBuilder::new(UInt64Builder::new());
+            return Ok(SharedArrayBuilder::new(UInt64Builder::new()));
         }
         DataType::Timestamp(TimeUnit::Millisecond, _) => {
-            return SharedArrayBuilder::new(TimestampMillisecondBuilder::new());
+            return Ok(SharedArrayBuilder::new(TimestampMillisecondBuilder::new()));
         }
         DataType::Binary => {
-            return SharedArrayBuilder::new(BinaryBuilder::new());
+            return Ok(SharedArrayBuilder::new(BinaryBuilder::new()));
         }
         DataType::Struct(fields) => {
             let field_kind = field_desc.kind();
@@ -687,42 +689,45 @@ fn create_shared_array_builder_by_data_type(
                 sub_msg_desc.clone(),
             )
             .expect("struct create_output_array_builders failed");
-            return SharedArrayBuilder::new(SharedStructArrayBuilder::new(
+            return Ok(SharedArrayBuilder::new(SharedStructArrayBuilder::new(
                 fields.clone(),
                 struct_builder,
-            ));
+            )));
         }
         DataType::Map(fieldRef, boolean) => {
             let field_kind = field_desc.kind();
             let sub_msg_desc = field_kind.as_message().expect("map as_message failed");
             if let DataType::Struct(fields) = fieldRef.data_type() {
-                return SharedArrayBuilder::new(SharedMapArrayBuilder::new(
+                return Ok(SharedArrayBuilder::new(SharedMapArrayBuilder::new(
                     None,
                     create_shared_array_builder_by_data_type(
                         fields.get(0).expect("get 0 failed").data_type().clone(),
                         sub_msg_desc.get_field(1).expect("get map key failed"),
-                    ),
+                    )
+                    .expect("map create_shared_array_builder_by_data_type failed"),
                     create_shared_array_builder_by_data_type(
                         fields.get(1).expect("get 1 failed").data_type().clone(),
                         sub_msg_desc.get_field(2).expect("get map key failed"),
-                    ),
-                ));
+                    )
+                    .expect("map create_shared_array_builder_by_data_type failed"),
+                )));
             } else {
-                panic!("Map DataType Unsupported non-struct data type for Arrow conversion")
+                return df_execution_err!(
+                    "Map DataType Unsupported non-struct data type for Arrow conversion"
+                );
             }
         }
         DataType::List(field_ref) => {
-            return SharedArrayBuilder::new(SharedListArrayBuilder::new(
-                create_shared_array_builder_by_data_type(field_ref.data_type().clone(), field_desc),
-            ));
+            return Ok(SharedArrayBuilder::new(SharedListArrayBuilder::new(
+                create_shared_array_builder_by_data_type(field_ref.data_type().clone(), field_desc)
+                    .expect("List create_shared_array_builder_by_data_type failed"),
+            )));
         }
-        other => {
-            panic!("Unsupported data type for Arrow conversion: {other:?}")
-        }
+        other => return df_execution_err!("Unsupported data type for Arrow conversion: {other:?}"),
     }
 }
 
-pub fn ensure_output_array_builders_size(
+pub(crate) fn ensure_output_array_builders_size(
     builders: &[SharedArrayBuilder],
 ) -> datafusion::error::Result<Box<dyn FnMut(usize) + Send + Sync>> {
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1286,7 +1291,7 @@ fn create_value_handler(
                         ) {
                             sub_value_handlers.insert(field.number(), handler);
                         } else {
-                            panic!(
+                            return df_execution_err!(
                                 "Failed to create value handler for sub field: {:?}, {}",
                                 field.kind(),
                                 output_field.data_type()
@@ -1296,7 +1301,7 @@ fn create_value_handler(
 
                     let struct_builder = output_array_builder
                         .get_mut::<SharedStructArrayBuilder>()
-                        .unwrap();
+                        .expect("SharedStructArrayBuilder is null");
 
                     return Ok(impl_for_message_builder!(|buf: &[u8]| {
                         if buf.is_empty() {
@@ -1361,7 +1366,7 @@ fn create_value_handler(
                             ) {
                                 sub_value_handlers.insert(field.number(), handler);
                             } else {
-                                panic!(
+                                return df_execution_err!(
                                     "For List Struct Failed to create value handler for sub field: {:?}, {}",
                                     field.kind(),
                                     output_field.data_type()
@@ -1444,7 +1449,7 @@ fn create_value_handler(
                             ) {
                                 sub_value_handlers.insert(field.number(), handler);
                             } else {
-                                panic!(
+                                return df_execution_err!(
                                     "Failed to create value handler for sub field: {:?}, {}",
                                     field.kind(),
                                     output_field.data_type()
@@ -1565,7 +1570,7 @@ fn get_content_after_last_dot(s: &str) -> &str {
     }
 }
 
-pub fn adaptive_append_children(
+pub(crate) fn adaptive_append_children(
     builder: &SharedArrayBuilder,
 ) -> Option<Box<dyn FnMut(usize) + Send + Sync>> {
     let mut appender = None;
@@ -1699,7 +1704,9 @@ mod tests {
         };
 
         let mut buf = Vec::new();
-        descriptor_set.encode(&mut buf).unwrap();
+        descriptor_set
+            .encode(&mut buf)
+            .expect("Failed to encode FileDescriptorSet");
         buf
     }
 
@@ -1815,7 +1822,9 @@ mod tests {
         };
 
         let mut buf = Vec::new();
-        descriptor_set.encode(&mut buf).unwrap();
+        descriptor_set
+            .encode(&mut buf)
+            .expect("Failed to encode FileDescriptorSet");
         buf
     }
 
@@ -1936,7 +1945,7 @@ mod tests {
             .column(0)
             .as_any()
             .downcast_ref::<Int32Array>()
-            .unwrap();
+            .expect("Failed to downcast partition array to Int32Array");
         assert_eq!(partition_array.value(0), 0);
         assert_eq!(partition_array.value(1), 0);
         assert_eq!(partition_array.value(2), 1);
@@ -1945,7 +1954,7 @@ mod tests {
             .column(1)
             .as_any()
             .downcast_ref::<Int64Array>()
-            .unwrap();
+            .expect("Failed to downcast offset array to Int64Array");
         assert_eq!(offset_array.value(0), 100);
         assert_eq!(offset_array.value(1), 101);
         assert_eq!(offset_array.value(2), 50);
@@ -1954,7 +1963,7 @@ mod tests {
             .column(2)
             .as_any()
             .downcast_ref::<Int64Array>()
-            .unwrap();
+            .expect("Failed to downcast timestamp array to Int64Array");
         assert_eq!(timestamp_array.value(0), 1234567890000);
         assert_eq!(timestamp_array.value(1), 1234567891000);
         assert_eq!(timestamp_array.value(2), 1234567892000);
@@ -1963,7 +1972,7 @@ mod tests {
             .column(3)
             .as_any()
             .downcast_ref::<Int32Array>()
-            .unwrap();
+            .expect("Failed to downcast id array to Int32Array");
         assert_eq!(id_array.value(0), 1);
         assert_eq!(id_array.value(1), 2);
         assert_eq!(id_array.value(2), 3);
@@ -1972,7 +1981,7 @@ mod tests {
             .column(4)
             .as_any()
             .downcast_ref::<StringArray>()
-            .unwrap();
+            .expect("Failed to downcast name array to StringArray");
         assert_eq!(name_array.value(0), "Alice");
         assert_eq!(name_array.value(1), "Bob");
         assert_eq!(name_array.value(2), "Charlie");
@@ -1981,7 +1990,7 @@ mod tests {
             .column(5)
             .as_any()
             .downcast_ref::<Float64Array>()
-            .unwrap();
+            .expect("Failed to downcast score array to Float64Array");
         assert_eq!(score_array.value(0), 95.5);
         assert_eq!(score_array.value(1), 87.3);
         assert_eq!(score_array.value(2), 92.1);
@@ -1990,7 +1999,7 @@ mod tests {
             .column(6)
             .as_any()
             .downcast_ref::<BooleanArray>()
-            .unwrap();
+            .expect("Failed to downcast active array to BooleanArray");
         assert_eq!(active_array.value(0), true);
         assert_eq!(active_array.value(1), false);
         assert_eq!(active_array.value(2), true);
@@ -2042,7 +2051,7 @@ mod tests {
             .column(0)
             .as_any()
             .downcast_ref::<Int32Array>()
-            .unwrap();
+            .expect("Failed to downcast partition array to Int32Array");
         assert_eq!(partition_array.value(0), 0);
         assert_eq!(partition_array.value(1), 1);
 
@@ -2050,7 +2059,7 @@ mod tests {
             .column(3)
             .as_any()
             .downcast_ref::<StringArray>()
-            .unwrap();
+            .expect("Failed to downcast name array to StringArray");
         assert_eq!(name_array.value(0), "Alice");
         assert_eq!(name_array.value(1), "Bob");
 
@@ -2058,7 +2067,7 @@ mod tests {
             .column(4)
             .as_any()
             .downcast_ref::<StringArray>()
-            .unwrap();
+            .expect("Failed to downcast street array to StringArray");
         assert_eq!(street_array.value(0), "123 Main St");
         assert_eq!(street_array.value(1), "456 Oak Ave");
 
@@ -2066,7 +2075,7 @@ mod tests {
             .column(5)
             .as_any()
             .downcast_ref::<StringArray>()
-            .unwrap();
+            .expect("Failed to downcast city array to StringArray");
         assert_eq!(city_array.value(0), "New York");
         assert_eq!(city_array.value(1), "Los Angeles");
     }
@@ -2149,7 +2158,7 @@ mod tests {
             .column(0)
             .as_any()
             .downcast_ref::<Int32Array>()
-            .unwrap();
+            .expect("Failed to downcast partition array to Int32Array");
         assert_eq!(partition_array.value(0), 0);
         assert_eq!(partition_array.value(1), 1);
         assert_eq!(partition_array.value(2), 0);
@@ -2160,7 +2169,7 @@ mod tests {
             .column(1)
             .as_any()
             .downcast_ref::<Int64Array>()
-            .unwrap();
+            .expect("Failed to downcast offset array to Int64Array");
         assert_eq!(offset_array.value(0), 100);
         assert_eq!(offset_array.value(1), 50);
         assert_eq!(offset_array.value(2), 200);
@@ -2171,7 +2180,7 @@ mod tests {
             .column(2)
             .as_any()
             .downcast_ref::<Int64Array>()
-            .unwrap();
+            .expect("Failed to downcast timestamp array to Int64Array");
         assert_eq!(timestamp_array.value(0), 1000);
         assert_eq!(timestamp_array.value(1), 2000);
         assert_eq!(timestamp_array.value(2), 3000);
@@ -2182,7 +2191,7 @@ mod tests {
             .column(3)
             .as_any()
             .downcast_ref::<Int32Array>()
-            .unwrap();
+            .expect("Failed to downcast id array to Int32Array");
         assert_eq!(id_array.value(0), 1);
         assert_eq!(id_array.value(1), 2);
         assert_eq!(id_array.value(2), 3);

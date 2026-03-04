@@ -63,7 +63,7 @@ impl ArrayBuilder for SharedListArrayBuilder {
 impl SharedListArrayBuilder {
     /// Creates a new [`SharedArrayListBuilder`] from a given values array
     /// builder
-    pub fn new(values_builder: SharedArrayBuilder) -> Self {
+    pub(crate) fn new(values_builder: SharedArrayBuilder) -> Self {
         let capacity = values_builder.len();
         let appender = adaptive_append_children(&values_builder);
         Self::with_capacity(values_builder, capacity, appender)
@@ -88,7 +88,7 @@ impl SharedListArrayBuilder {
     }
 
     /// Returns the child array builder as a reference
-    pub fn values(&mut self) -> &SharedArrayBuilder {
+    pub(crate) fn values(&mut self) -> &SharedArrayBuilder {
         &self.values_builder
     }
 
