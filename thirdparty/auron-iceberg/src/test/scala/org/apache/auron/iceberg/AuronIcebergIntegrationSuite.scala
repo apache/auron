@@ -218,21 +218,24 @@ class AuronIcebergIntegrationSuite
       return
     }
 
-    val task = taskIter.next().asInstanceOf[FileScanTask]
-    val deletePath =
-      table.locationProvider().newDataLocation(s"delete-${UUID.randomUUID().toString}.parquet")
-    val outputFile = table.io().newOutputFile(deletePath)
-    val encryptedOutput = table.encryption().encrypt(outputFile)
-    val appenderFactory = new GenericAppenderFactory(table.schema(), table.spec())
-    val writer =
-      appenderFactory.newPosDeleteWriter(encryptedOutput, FileFormat.PARQUET, task.partition())
+    try {
+      val task = taskIter.next().asInstanceOf[FileScanTask]
+      val deletePath =
+        table.locationProvider().newDataLocation(s"delete-${UUID.randomUUID().toString}.parquet")
+      val outputFile = table.io().newOutputFile(deletePath)
+      val encryptedOutput = table.encryption().encrypt(outputFile)
+      val appenderFactory = new GenericAppenderFactory(table.schema(), table.spec())
+      val writer =
+        appenderFactory.newPosDeleteWriter(encryptedOutput, FileFormat.PARQUET, task.partition())
 
-    val delete = PositionDelete.create[Record]().set(task.file().location(), 0L, null)
-    writer.write(delete)
-    writer.close()
+      val delete = PositionDelete.create[Record]().set(task.file().location(), 0L, null)
+      writer.write(delete)
+      writer.close()
 
-    val deleteFile = writer.toDeleteFile()
-    table.newRowDelta().addDeletes(deleteFile).commit()
-    taskIterable.close()
+      val deleteFile = writer.toDeleteFile()
+      table.newRowDelta().addDeletes(deleteFile).commit()
+    } finally {
+      taskIterable.close()
+    }
   }
 }
