@@ -20,6 +20,19 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.BigIntVector;
+import org.apache.arrow.vector.BitVector;
+import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.DecimalVector;
+import org.apache.arrow.vector.Float4Vector;
+import org.apache.arrow.vector.Float8Vector;
+import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.NullVector;
+import org.apache.arrow.vector.SmallIntVector;
+import org.apache.arrow.vector.TinyIntVector;
+import org.apache.arrow.vector.ValueVector;
+import org.apache.arrow.vector.VarBinaryVector;
+import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.complex.MapVector;
 import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
@@ -28,6 +41,21 @@ import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.types.pojo.Schema;
+import org.apache.auron.flink.arrow.writers.ArrowFieldWriter;
+import org.apache.auron.flink.arrow.writers.BigIntWriter;
+import org.apache.auron.flink.arrow.writers.BooleanWriter;
+import org.apache.auron.flink.arrow.writers.DateWriter;
+import org.apache.auron.flink.arrow.writers.DecimalWriter;
+import org.apache.auron.flink.arrow.writers.DoubleWriter;
+import org.apache.auron.flink.arrow.writers.FloatWriter;
+import org.apache.auron.flink.arrow.writers.IntWriter;
+import org.apache.auron.flink.arrow.writers.NullWriter;
+import org.apache.auron.flink.arrow.writers.SmallIntWriter;
+import org.apache.auron.flink.arrow.writers.TinyIntWriter;
+import org.apache.auron.flink.arrow.writers.VarBinaryWriter;
+import org.apache.auron.flink.arrow.writers.VarCharWriter;
+import org.apache.flink.table.data.ArrayData;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.BinaryType;
@@ -215,6 +243,86 @@ public final class FlinkArrowUtils {
             fields.add(toArrowField(field.getName(), field.getType()));
         }
         return new Schema(fields);
+    }
+
+    /**
+     * Creates an {@link ArrowFieldWriter} for top-level {@link RowData} fields.
+     *
+     * @param vector the Arrow vector to write into
+     * @param fieldType the Flink logical type of the field
+     * @return a writer that reads from RowData at a given ordinal
+     * @throws UnsupportedOperationException if the vector type is not supported
+     */
+    static ArrowFieldWriter<RowData> createArrowFieldWriterForRow(ValueVector vector, LogicalType fieldType) {
+        if (vector instanceof NullVector) {
+            return NullWriter.forRow((NullVector) vector);
+        } else if (vector instanceof BitVector) {
+            return BooleanWriter.forRow((BitVector) vector);
+        } else if (vector instanceof TinyIntVector) {
+            return TinyIntWriter.forRow((TinyIntVector) vector);
+        } else if (vector instanceof SmallIntVector) {
+            return SmallIntWriter.forRow((SmallIntVector) vector);
+        } else if (vector instanceof IntVector) {
+            return IntWriter.forRow((IntVector) vector);
+        } else if (vector instanceof BigIntVector) {
+            return BigIntWriter.forRow((BigIntVector) vector);
+        } else if (vector instanceof Float4Vector) {
+            return FloatWriter.forRow((Float4Vector) vector);
+        } else if (vector instanceof Float8Vector) {
+            return DoubleWriter.forRow((Float8Vector) vector);
+        } else if (vector instanceof VarCharVector) {
+            return VarCharWriter.forRow((VarCharVector) vector);
+        } else if (vector instanceof VarBinaryVector) {
+            return VarBinaryWriter.forRow((VarBinaryVector) vector);
+        } else if (vector instanceof DecimalVector) {
+            DecimalType decimalType = (DecimalType) fieldType;
+            return DecimalWriter.forRow((DecimalVector) vector, decimalType.getPrecision(), decimalType.getScale());
+        } else if (vector instanceof DateDayVector) {
+            return DateWriter.forRow((DateDayVector) vector);
+        } else {
+            throw new UnsupportedOperationException(
+                    "Unsupported vector type: " + vector.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Creates an {@link ArrowFieldWriter} for nested {@link ArrayData} elements.
+     *
+     * @param vector the Arrow vector to write into
+     * @param fieldType the Flink logical type of the element
+     * @return a writer that reads from ArrayData at a given ordinal
+     * @throws UnsupportedOperationException if the vector type is not supported
+     */
+    static ArrowFieldWriter<ArrayData> createArrowFieldWriterForArray(ValueVector vector, LogicalType fieldType) {
+        if (vector instanceof NullVector) {
+            return NullWriter.forArray((NullVector) vector);
+        } else if (vector instanceof BitVector) {
+            return BooleanWriter.forArray((BitVector) vector);
+        } else if (vector instanceof TinyIntVector) {
+            return TinyIntWriter.forArray((TinyIntVector) vector);
+        } else if (vector instanceof SmallIntVector) {
+            return SmallIntWriter.forArray((SmallIntVector) vector);
+        } else if (vector instanceof IntVector) {
+            return IntWriter.forArray((IntVector) vector);
+        } else if (vector instanceof BigIntVector) {
+            return BigIntWriter.forArray((BigIntVector) vector);
+        } else if (vector instanceof Float4Vector) {
+            return FloatWriter.forArray((Float4Vector) vector);
+        } else if (vector instanceof Float8Vector) {
+            return DoubleWriter.forArray((Float8Vector) vector);
+        } else if (vector instanceof VarCharVector) {
+            return VarCharWriter.forArray((VarCharVector) vector);
+        } else if (vector instanceof VarBinaryVector) {
+            return VarBinaryWriter.forArray((VarBinaryVector) vector);
+        } else if (vector instanceof DecimalVector) {
+            DecimalType decimalType = (DecimalType) fieldType;
+            return DecimalWriter.forArray((DecimalVector) vector, decimalType.getPrecision(), decimalType.getScale());
+        } else if (vector instanceof DateDayVector) {
+            return DateWriter.forArray((DateDayVector) vector);
+        } else {
+            throw new UnsupportedOperationException(
+                    "Unsupported vector type: " + vector.getClass().getSimpleName());
+        }
     }
 
     private FlinkArrowUtils() {
