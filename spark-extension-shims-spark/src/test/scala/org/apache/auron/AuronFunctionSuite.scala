@@ -650,4 +650,23 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       }
     }
   }
+
+  test("randn function with seed") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(id INT) USING parquet")
+      sql("INSERT INTO t1 VALUES(1), (2), (3)")
+
+      // Test randn with different seeds - should produce reproducible results
+      val query =
+        """
+          |SELECT
+          |  id,
+          |  randn(42) AS randn_seed_42,
+          |  randn(100) AS randn_seed_100
+          |FROM t1
+          |""".stripMargin
+
+      checkSparkAnswerAndOperator(query)
+    }
+  }
 }
