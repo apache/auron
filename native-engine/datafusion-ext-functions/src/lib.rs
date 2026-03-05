@@ -13,9 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
+use std::{any::Any, fmt, sync::Arc};
 
-use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
+use datafusion::{
+    arrow::datatypes::DataType,
+    logical_expr::{
+        ColumnarValue, ScalarFunctionArgs, ScalarFunctionImplementation, ScalarUDFImpl, Signature,
+        Volatility,
+    },
+};
 use datafusion_ext_commons::df_unimplemented_err;
 
 mod brickhouse;
@@ -38,12 +44,13 @@ mod spark_unscaled_value;
 #[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 pub fn create_auron_ext_function(
     name: &str,
-    spark_partition_id: usize,
-) -> Result<ScalarFunctionImplementation> {
+    input_types: Vec<DataType>,
+    return_type: DataType,
+) -> datafusion::common::Result<AuronExtFunction> {
     // auron ext functions, if used for spark should be start with 'Spark_',
     // if used for flink should be start with 'Flink_',
     // same to other engines.
-    Ok(match name {
+    let fun: ScalarFunctionImplementation = match name {
         "Placeholder" => Arc::new(|_| panic!("placeholder() should never be called")),
         "Spark_NullIf" => Arc::new(spark_null_if::spark_null_if),
         "Spark_NullIfZero" => Arc::new(spark_null_if::spark_null_if_zero),
@@ -86,5 +93,55 @@ pub fn create_auron_ext_function(
         }
         "Spark_IsNaN" => Arc::new(spark_isnan::spark_isnan),
         _ => df_unimplemented_err!("spark ext function not implemented: {name}")?,
+    };
+
+    Ok(AuronExtFunction {
+        name: name.to_string(),
+        signature: Signature::exact(input_types, Volatility::Volatile),
+        return_type,
+        fun,
     })
+}
+
+pub struct AuronExtFunction {
+    name: String,
+    signature: Signature,
+    return_type: DataType,
+    fun: ScalarFunctionImplementation,
+}
+
+impl fmt::Debug for AuronExtFunction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("AuronExtFunction")
+            .field("name", &self.name)
+            .field("signature", &self.signature)
+            .field("return_type", &self.return_type)
+            .field("fun", &"<FUNC>")
+            .finish()
+    }
+}
+
+impl ScalarUDFImpl for AuronExtFunction {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> datafusion::common::Result<DataType> {
+        Ok(self.return_type.clone())
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion::common::Result<ColumnarValue> {
+        (self.fun)(&args.args)
+    }
 }
