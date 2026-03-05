@@ -57,9 +57,12 @@ object IcebergScanSupport extends Logging {
     }
 
     val partitions = inputPartitions(exec)
-    // Empty scan (e.g. empty table) should still build a plan to return no rows.
+    // If no partitions are available, do not attempt a native empty scan. This can indicate
+    // either a truly empty table or a failure to obtain partitions; in both cases, fall back
+    // to Spark's scan path to avoid silently dropping data on planning failures.
     if (partitions.isEmpty) {
-      return Some(IcebergScanPlan(Seq.empty, FileFormat.PARQUET, readSchema))
+      logWarning(s"Falling back to Spark scan for $scanClassName: no input partitions available.")
+      return None
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
