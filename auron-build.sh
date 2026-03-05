@@ -393,7 +393,7 @@ if [[ -n "$FLINK_VER" ]]; then
     BUILD_ARGS+=("-Pflink-$FLINK_VER")
 fi
 if [[ -n "$ICEBERG_VER" ]]; then
-    BUILD_ARGS+=("-Piceberg-1.10.1")
+    BUILD_ARGS+=("-Piceberg-$ICEBERG_VER")
 fi
 
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
