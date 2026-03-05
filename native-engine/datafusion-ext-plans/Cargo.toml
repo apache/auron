@@ -66,6 +66,8 @@ unchecked-index = { workspace = true }
 prost = { workspace = true }
 prost-types = { workspace = true }
 prost-reflect = { workspace = true }
+rdkafka = { workspace = true }
+sonic-rs = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }

@@ -17,7 +17,7 @@ use arrow::array::{BinaryArray, Int32Array, Int64Array, RecordBatch};
 
 /// FlinkDeserializer is used to deserialize messages from kafka.
 /// Supports Protobuf, JSON, etc.
-pub trait FlinkDeserializer {
+pub trait FlinkDeserializer: Send {
     /// Parse messages from kafka, including kafka metadata such as partitions,
     /// offsets, and timestamps.
     fn parse_messages_with_kafka_meta(

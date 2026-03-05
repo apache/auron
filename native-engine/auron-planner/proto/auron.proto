@@ -51,6 +51,7 @@ message PhysicalPlanNode {
     GenerateExecNode generate = 23;
     ParquetSinkExecNode parquet_sink = 24;
     OrcScanExecNode orc_scan = 25;
+    KafkaScanExecNode kafka_scan = 26;
   }
 }
 
@@ -743,6 +744,29 @@ message ExpandExecNode {
 message ExpandProjection {
   repeated PhysicalExprNode expr = 1;
 
+}
+
+message KafkaScanExecNode {
+  string kafka_topic = 1;
+  string kafka_properties_json = 2;
+  Schema schema = 3;
+  int32 batch_size = 4;
+  KafkaStartupMode startup_mode = 5;
+  string auron_operator_id = 6;
+  KafkaFormat data_format = 7;
+  string format_config_json = 8;
+}
+
+enum KafkaFormat {
+  JSON = 0;
+  PROTOBUF = 1;
+}
+
+enum KafkaStartupMode {
+  GROUP_OFFSET = 0;
+  EARLIEST = 1;
+  LATEST = 2;
+  TIMESTAMP = 3;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Task related
