@@ -16,7 +16,11 @@
 use std::{
     error::Error,
     panic::AssertUnwindSafe,
-    sync::{Arc, mpsc::Receiver},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
+    },
 };
 
 use arrow::{
@@ -63,6 +67,8 @@ pub struct NativeExecutionRuntime {
     batch_receiver: Receiver<Result<Option<RecordBatch>>>,
     tokio_runtime: Runtime,
     join_handle: JoinHandle<()>,
+    // Flag to indicate runtime is being finalized - used to gracefully handle SendError
+    is_finalizing: Arc<AtomicBool>,
 }
 
 impl NativeExecutionRuntime {
@@ -134,6 +140,8 @@ impl NativeExecutionRuntime {
         // spawn batch producer
         let (batch_sender, batch_receiver) = std::sync::mpsc::sync_channel(1);
         let err_sender = batch_sender.clone();
+        let is_finalizing = Arc::new(AtomicBool::new(false));
+        let is_finalizing_clone = is_finalizing.clone();
         let execution_plan_cloned = execution_plan.clone();
         let exec_ctx_cloned = exec_ctx.clone();
         let native_wrapper_cloned = native_wrapper.clone();
@@ -173,14 +181,24 @@ impl NativeExecutionRuntime {
                 .transpose()
                 .or_else(|err| df_execution_err!("{err}"))?
             {
-                batch_sender
-                    .send(Ok(Some(batch)))
-                    .or_else(|err| df_execution_err!("send batch error: {err}"))?;
+                if let Err(err) = batch_sender.send(Ok(Some(batch))) {
+                    if is_finalizing_clone.load(Ordering::Acquire) {
+                        log::debug!("send skipped: runtime is finalizing");
+                        return Ok(());
+                    } else {
+                        return df_execution_err!("unexpected send error: {err}");
+                    }
+                }
             }
-            batch_sender
-                .send(Ok(None))
-                .or_else(|err| df_execution_err!("send batch error: {err}"))?;
-            log::info!("task finished");
+            log::info!("stream exhausted, sending Ok(None) to signal completion");
+            if let Err(err) = batch_sender.send(Ok(None)) {
+                if is_finalizing_clone.load(Ordering::Acquire) {
+                    log::debug!("send skipped: runtime is finalizing");
+                    return Ok(());
+                } else {
+                    return df_execution_err!("unexpected send error: {err}");
+                }
+            }
             Ok::<_, DataFusionError>(())
         };
 
@@ -224,6 +242,7 @@ impl NativeExecutionRuntime {
             tokio_runtime,
             batch_receiver,
             join_handle,
+            is_finalizing,
         };
         Ok(native_execution_runtime)
     }
@@ -266,6 +285,10 @@ impl NativeExecutionRuntime {
         log::info!("(partition={partition}) native execution finalizing");
         self.update_metrics().unwrap_or_default();
         drop(self.plan);
+
+        // Set finalizing flag before dropping receiver to allow graceful SendError
+        // handling
+        self.is_finalizing.store(true, Ordering::Release);
         drop(self.batch_receiver);
 
         cancel_all_tasks(&self.exec_ctx.task_ctx()); // cancel all pending streams

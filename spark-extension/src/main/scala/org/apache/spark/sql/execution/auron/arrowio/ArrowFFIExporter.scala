@@ -27,6 +27,7 @@ import org.apache.arrow.c.Data
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.dictionary.DictionaryProvider.MapDictionaryProvider
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.util.Using
 import org.apache.spark.sql.catalyst.InternalRow
@@ -42,7 +43,8 @@ import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
-    extends AuronArrowFFIExporter {
+    extends AuronArrowFFIExporter
+    with Logging {
   private val sparkAuronConfig: AuronConfiguration =
     AuronAdaptor.getInstance.getAuronConfiguration
   private val maxBatchNumRows = sparkAuronConfig.getInteger(AuronConfiguration.BATCH_SIZE)
@@ -58,6 +60,13 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
   private case class Finished(t: Option[Throwable]) extends QueueState
 
   private val tc = TaskContext.get()
+  // Build a meaningful identifier from TaskContext info
+  private val exporterId = if (tc != null) {
+    s"stage-${tc.stageId()}-part-${tc.partitionId()}-tid-${tc.taskAttemptId()}-${System.identityHashCode(this)}"
+  } else {
+    s"no-context-${System.identityHashCode(this)}"
+  }
+  private val closed = new java.util.concurrent.atomic.AtomicBoolean(false)
   private val outputQueue: BlockingQueue[QueueState] = new ArrayBlockingQueue[QueueState](16)
   private val processingQueue: BlockingQueue[Unit] = new ArrayBlockingQueue[Unit](16)
   private var currentRoot: VectorSchemaRoot = _
@@ -108,32 +117,40 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
 
         nativeCurrentUser.doAs(new PrivilegedExceptionAction[Unit] {
           override def run(): Unit = {
-            while (tc == null || (!tc.isCompleted() && !tc.isInterrupted())) {
-              if (!rowIter.hasNext) {
-                outputQueue.put(Finished(None))
-                return
-              }
+            try {
+              while (tc == null || (!tc.isCompleted() && !tc.isInterrupted())) {
+                if (!rowIter.hasNext) {
+                  outputQueue.put(Finished(None))
+                  return
+                }
 
-              Using.resource(CHILD_ALLOCATOR("ArrowFFIExporter")) { allocator =>
-                Using.resource(VectorSchemaRoot.create(arrowSchema, allocator)) { root =>
-                  val arrowWriter = ArrowWriter.create(root)
-                  while (rowIter.hasNext
-                    && allocator.getAllocatedMemory < maxBatchMemorySize
-                    && arrowWriter.currentCount < maxBatchNumRows) {
-                    arrowWriter.write(rowIter.next())
+                Using.resource(CHILD_ALLOCATOR("ArrowFFIExporter")) { allocator =>
+                  Using.resource(VectorSchemaRoot.create(arrowSchema, allocator)) { root =>
+                    val arrowWriter = ArrowWriter.create(root)
+                    while (rowIter.hasNext
+                      && allocator.getAllocatedMemory < maxBatchMemorySize
+                      && arrowWriter.currentCount < maxBatchNumRows) {
+                      arrowWriter.write(rowIter.next())
+                    }
+                    arrowWriter.finish()
+
+                    // export root
+                    currentRoot = root
+                    outputQueue.put(NextBatch)
+
+                    // wait for processing next batch
+                    processingQueue.take()
                   }
-                  arrowWriter.finish()
-
-                  // export root
-                  currentRoot = root
-                  outputQueue.put(NextBatch)
-
-                  // wait for processing next batch
-                  processingQueue.take()
                 }
               }
+              outputQueue.put(Finished(None))
+            } catch {
+              case _: InterruptedException =>
+                // Thread was interrupted during close(), this is expected - just exit gracefully
+                logDebug(s"ArrowFFIExporter-$exporterId: outputThread interrupted, exiting")
+                outputQueue.clear()
+                outputQueue.put(Finished(None))
             }
-            outputQueue.put(Finished(None))
           }
         })
       }
@@ -156,6 +173,28 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
   }
 
   override def close(): Unit = {
-    outputThread.interrupt()
+    // Ensure close() is idempotent - only execute once
+    if (!closed.compareAndSet(false, true)) {
+      logDebug(s"ArrowFFIExporter-$exporterId: close() already called, skipping")
+      return
+    }
+
+    if (outputThread.isAlive) {
+      logDebug(s"ArrowFFIExporter-$exporterId: interrupting outputThread")
+      outputThread.interrupt()
+      // Wait for the thread to terminate to ensure resources are properly released
+      try {
+        outputThread.join(5000) // Wait up to 5 seconds
+        if (outputThread.isAlive) {
+          logWarning(
+            s"ArrowFFIExporter-$exporterId: outputThread did not terminate within 5 seconds")
+        }
+      } catch {
+        case _: InterruptedException =>
+          // Ignore - we don't need to propagate this to caller
+          logDebug(s"ArrowFFIExporter-$exporterId: interrupted while waiting for outputThread")
+      }
+      logDebug(s"ArrowFFIExporter-$exporterId: close() completed")
+    }
   }
 }
