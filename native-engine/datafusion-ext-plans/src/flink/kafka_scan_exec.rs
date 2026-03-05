@@ -55,15 +55,15 @@ impl ClientContext for CustomContext {}
 
 impl ConsumerContext for CustomContext {
     fn pre_rebalance(&self, rebalance: &Rebalance) {
-        log::info!("Kafka Pre re-balance {:?}", rebalance);
+        log::info!("Kafka Pre re-balance {rebalance:?}");
     }
 
     fn post_rebalance(&self, rebalance: &Rebalance) {
-        log::info!("Kafka Post re-balance {:?}", rebalance);
+        log::info!("Kafka Post re-balance {rebalance:?}");
     }
 
     fn commit_callback(&self, result: KafkaResult<()>, _offsets: &TopicPartitionList) {
-        log::info!("Kafka Committing offsets: {:?}", result);
+        log::info!("Kafka Committing offsets: {result:?}");
     }
 }
 
@@ -245,7 +245,7 @@ fn read_serialized_records_from_kafka(
         .get("subtask_index")
         .as_i64()
         .expect("subtask_index is not valid json") as i32;
-    let kafka_properties = sonic_rs::from_str::<sonic_rs::Value>(&*kafka_properties_json)
+    let kafka_properties = sonic_rs::from_str::<sonic_rs::Value>(&kafka_properties_json)
         .expect("kafka_properties_json is not valid json");
     let mut config = ClientConfig::new();
     config.set_log_level(RDKafkaLogLevel::Info);
@@ -292,8 +292,7 @@ fn read_serialized_records_from_kafka(
 
     if partitions.is_empty() {
         return Err(DataFusionError::Execution(format!(
-            "No partitions found for topic: {}",
-            kafka_topic
+            "No partitions found for topic: {kafka_topic}"
         )));
     }
 
@@ -307,20 +306,15 @@ fn read_serialized_records_from_kafka(
         2 => Offset::End,
         _ => {
             return Err(DataFusionError::Execution(format!(
-                "Invalid startup mode: {}",
-                startup_mode
+                "Invalid startup mode: {startup_mode}"
             )));
         }
     };
 
-    log::info!(
-        "Subtask {} consumed partitions {:?}",
-        subtask_index,
-        partitions
-    );
+    log::info!("Subtask {subtask_index} consumed partitions {partitions:?}");
     let mut partition_list = TopicPartitionList::with_capacity(partitions.len());
     for partition in partitions.iter() {
-        partition_list.add_partition_offset(&*kafka_topic, *partition, offset);
+        partition_list.add_partition_offset(&kafka_topic, *partition, offset);
     }
     consumer
         .assign(&partition_list)
@@ -343,7 +337,7 @@ fn read_serialized_records_from_kafka(
             loop {
                 while serialized_pb_records_builder.len() < batch_size {
                     match consumer.recv().await {
-                        Err(e) => log::warn!("Kafka error: {}", e),
+                        Err(e) => log::warn!("Kafka error: {e}"),
                         Ok(msg) => {
                             if let Some(payload) = msg.payload() {
                                 serialized_kafka_records_partition_builder
@@ -405,8 +399,8 @@ fn parse_records(
         }
     }
 
-    let local_pb_desc_file = env::var("PWD").unwrap() + "/" + &pb_desc_file;
-    log::info!("load desc from {}", local_pb_desc_file);
+    let local_pb_desc_file = env::var("PWD").expect("PWD env var is not set") + "/" + &pb_desc_file;
+    log::info!("load desc from {local_pb_desc_file}");
     let file_descriptor_bytes = fs::read(local_pb_desc_file).expect("Failed to read file");
     let skip_fields_vec: Vec<String> = skip_fields
         .split(",")
