@@ -29,7 +29,6 @@ extern crate datafusion_ext_commons;
 extern crate prost;
 extern crate prost_reflect;
 extern crate rdkafka;
-extern crate auron_jni_bridge;
 extern crate sonic_rs;
 
 // execution plan implementations

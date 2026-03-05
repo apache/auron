@@ -258,7 +258,7 @@ fn read_serialized_records_from_kafka(
                 key,
                 value
                     .as_str()
-                    .expect("kafka property key or value is not valid json string"),
+                    .expect("kafka property value is not valid json string"),
             );
         });
 
@@ -398,7 +398,6 @@ fn parse_records(
         .expect("nested_col_mapping is not valid json");
     let mut nested_msg_mapping: HashMap<String, String> = HashMap::new();
     if let Some(obj) = nested_col_mapping_json.as_object() {
-        // 使用不可变的 as_object()
         for (key, value) in obj {
             if let Some(val_str) = value.as_str() {
                 nested_msg_mapping.insert(key.to_string(), val_str.to_string());
