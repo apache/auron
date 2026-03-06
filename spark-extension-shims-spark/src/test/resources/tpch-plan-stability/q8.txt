@@ -1,0 +1,1022 @@
+== Physical Plan ==
+AdaptiveSparkPlan (189)
++- == Final Plan ==
+   NativeSort (123)
+   +- InputAdapter (122)
+      +- AQEShuffleRead (121)
+         +- ShuffleQueryStage (120), Statistics(sizeInBytes=488.0 B, rowCount=2)
+            +- NativeShuffleExchange (119)
+               +- NativeProject (118)
+                  +- NativeHashAggregate (117)
+                     +- InputAdapter (116)
+                        +- AQEShuffleRead (115)
+                           +- ShuffleQueryStage (114), Statistics(sizeInBytes=704.0 B, rowCount=2)
+                              +- NativeShuffleExchange (113)
+                                 +- NativeHashAggregate (112)
+                                    +- NativeProject (111)
+                                       +- NativeProject (110)
+                                          +- NativeSortMergeJoin Inner (109)
+                                             :- NativeSort (99)
+                                             :  +- InputAdapter (98)
+                                             :     +- AQEShuffleRead (97)
+                                             :        +- ShuffleQueryStage (96), Statistics(sizeInBytes=7.3 KiB, rowCount=116)
+                                             :           +- NativeShuffleExchange (95)
+                                             :              +- NativeProject (94)
+                                             :                 +- NativeSortMergeJoin Inner (93)
+                                             :                    :- NativeSort (84)
+                                             :                    :  +- InputAdapter (83)
+                                             :                    :     +- AQEShuffleRead (82)
+                                             :                    :        +- ShuffleQueryStage (81), Statistics(sizeInBytes=6.8 KiB, rowCount=116)
+                                             :                    :           +- NativeShuffleExchange (80)
+                                             :                    :              +- NativeProject (79)
+                                             :                    :                 +- NativeSortMergeJoin Inner (78)
+                                             :                    :                    :- NativeSort (69)
+                                             :                    :                    :  +- InputAdapter (68)
+                                             :                    :                    :     +- AQEShuffleRead (67)
+                                             :                    :                    :        +- ShuffleQueryStage (66), Statistics(sizeInBytes=6.8 KiB, rowCount=116)
+                                             :                    :                    :           +- NativeShuffleExchange (65)
+                                             :                    :                    :              +- NativeProject (64)
+                                             :                    :                    :                 +- NativeSortMergeJoin Inner (63)
+                                             :                    :                    :                    :- NativeSort (54)
+                                             :                    :                    :                    :  +- InputAdapter (53)
+                                             :                    :                    :                    :     +- AQEShuffleRead (52)
+                                             :                    :                    :                    :        +- ShuffleQueryStage (51), Statistics(sizeInBytes=6.8 KiB, rowCount=116)
+                                             :                    :                    :                    :           +- NativeShuffleExchange (50)
+                                             :                    :                    :                    :              +- NativeProject (49)
+                                             :                    :                    :                    :                 +- NativeSortMergeJoin Inner (48)
+                                             :                    :                    :                    :                    :- NativeSort (39)
+                                             :                    :                    :                    :                    :  +- InputAdapter (38)
+                                             :                    :                    :                    :                    :     +- AQEShuffleRead (37)
+                                             :                    :                    :                    :                    :        +- ShuffleQueryStage (36), Statistics(sizeInBytes=17.9 KiB, rowCount=366)
+                                             :                    :                    :                    :                    :           +- NativeShuffleExchange (35)
+                                             :                    :                    :                    :                    :              +- NativeProject (34)
+                                             :                    :                    :                    :                    :                 +- NativeSortMergeJoin Inner (33)
+                                             :                    :                    :                    :                    :                    :- NativeSort (24)
+                                             :                    :                    :                    :                    :                    :  +- InputAdapter (23)
+                                             :                    :                    :                    :                    :                    :     +- AQEShuffleRead (22)
+                                             :                    :                    :                    :                    :                    :        +- ShuffleQueryStage (21), Statistics(sizeInBytes=18.0 KiB, rowCount=366)
+                                             :                    :                    :                    :                    :                    :           +- NativeShuffleExchange (20)
+                                             :                    :                    :                    :                    :                    :              +- NativeProject (19)
+                                             :                    :                    :                    :                    :                    :                 +- NativeSortMergeJoin Inner (18)
+                                             :                    :                    :                    :                    :                    :                    :- NativeSort (9)
+                                             :                    :                    :                    :                    :                    :                    :  +- InputAdapter (8)
+                                             :                    :                    :                    :                    :                    :                    :     +- AQEShuffleRead (7)
+                                             :                    :                    :                    :                    :                    :                    :        +- ShuffleQueryStage (6), Statistics(sizeInBytes=304.0 B, rowCount=12)
+                                             :                    :                    :                    :                    :                    :                    :           +- NativeShuffleExchange (5)
+                                             :                    :                    :                    :                    :                    :                    :              +- NativeProject (4)
+                                             :                    :                    :                    :                    :                    :                    :                 +- NativeFilter (3)
+                                             :                    :                    :                    :                    :                    :                    :                    +- InputAdapter (2)
+                                             :                    :                    :                    :                    :                    :                    :                       +- NativeParquetScan  (1)
+                                             :                    :                    :                    :                    :                    :                    +- NativeSort (17)
+                                             :                    :                    :                    :                    :                    :                       +- InputAdapter (16)
+                                             :                    :                    :                    :                    :                    :                          +- AQEShuffleRead (15)
+                                             :                    :                    :                    :                    :                    :                             +- ShuffleQueryStage (14), Statistics(sizeInBytes=3.2 MiB, rowCount=6.02E+4)
+                                             :                    :                    :                    :                    :                    :                                +- NativeShuffleExchange (13)
+                                             :                    :                    :                    :                    :                    :                                   +- NativeFilter (12)
+                                             :                    :                    :                    :                    :                    :                                      +- InputAdapter (11)
+                                             :                    :                    :                    :                    :                    :                                         +- NativeParquetScan  (10)
+                                             :                    :                    :                    :                    :                    +- NativeSort (32)
+                                             :                    :                    :                    :                    :                       +- InputAdapter (31)
+                                             :                    :                    :                    :                    :                          +- AQEShuffleRead (30)
+                                             :                    :                    :                    :                    :                             +- ShuffleQueryStage (29), Statistics(sizeInBytes=1992.0 B, rowCount=100)
+                                             :                    :                    :                    :                    :                                +- NativeShuffleExchange (28)
+                                             :                    :                    :                    :                    :                                   +- NativeFilter (27)
+                                             :                    :                    :                    :                    :                                      +- InputAdapter (26)
+                                             :                    :                    :                    :                    :                                         +- NativeParquetScan  (25)
+                                             :                    :                    :                    :                    +- NativeSort (47)
+                                             :                    :                    :                    :                       +- InputAdapter (46)
+                                             :                    :                    :                    :                          +- AQEShuffleRead (45)
+                                             :                    :                    :                    :                             +- ShuffleQueryStage (44), Statistics(sizeInBytes=89.0 KiB, rowCount=4.50E+3)
+                                             :                    :                    :                    :                                +- NativeShuffleExchange (43)
+                                             :                    :                    :                    :                                   +- NativeFilter (42)
+                                             :                    :                    :                    :                                      +- InputAdapter (41)
+                                             :                    :                    :                    :                                         +- NativeParquetScan  (40)
+                                             :                    :                    :                    +- NativeSort (62)
+                                             :                    :                    :                       +- InputAdapter (61)
+                                             :                    :                    :                          +- AQEShuffleRead (60)
+                                             :                    :                    :                             +- ShuffleQueryStage (59), Statistics(sizeInBytes=23.8 KiB, rowCount=1.50E+3)
+                                             :                    :                    :                                +- NativeShuffleExchange (58)
+                                             :                    :                    :                                   +- NativeFilter (57)
+                                             :                    :                    :                                      +- InputAdapter (56)
+                                             :                    :                    :                                         +- NativeParquetScan  (55)
+                                             :                    :                    +- NativeSort (77)
+                                             :                    :                       +- InputAdapter (76)
+                                             :                    :                          +- AQEShuffleRead (75)
+                                             :                    :                             +- ShuffleQueryStage (74), Statistics(sizeInBytes=792.0 B, rowCount=25)
+                                             :                    :                                +- NativeShuffleExchange (73)
+                                             :                    :                                   +- NativeFilter (72)
+                                             :                    :                                      +- InputAdapter (71)
+                                             :                    :                                         +- NativeParquetScan  (70)
+                                             :                    +- NativeSort (92)
+                                             :                       +- InputAdapter (91)
+                                             :                          +- AQEShuffleRead (90)
+                                             :                             +- ShuffleQueryStage (89), Statistics(sizeInBytes=997.0 B, rowCount=25)
+                                             :                                +- NativeShuffleExchange (88)
+                                             :                                   +- NativeFilter (87)
+                                             :                                      +- InputAdapter (86)
+                                             :                                         +- NativeParquetScan  (85)
+                                             +- NativeSort (108)
+                                                +- InputAdapter (107)
+                                                   +- AQEShuffleRead (106)
+                                                      +- ShuffleQueryStage (105), Statistics(sizeInBytes=216.0 B, rowCount=1)
+                                                         +- NativeShuffleExchange (104)
+                                                            +- NativeProject (103)
+                                                               +- NativeFilter (102)
+                                                                  +- InputAdapter (101)
+                                                                     +- NativeParquetScan  (100)
++- == Initial Plan ==
+   Sort (188)
+   +- Exchange (187)
+      +- HashAggregate (186)
+         +- Exchange (185)
+            +- HashAggregate (184)
+               +- Project (183)
+                  +- SortMergeJoin Inner (182)
+                     :- Sort (176)
+                     :  +- Exchange (175)
+                     :     +- Project (174)
+                     :        +- SortMergeJoin Inner (173)
+                     :           :- Sort (168)
+                     :           :  +- Exchange (167)
+                     :           :     +- Project (166)
+                     :           :        +- SortMergeJoin Inner (165)
+                     :           :           :- Sort (160)
+                     :           :           :  +- Exchange (159)
+                     :           :           :     +- Project (158)
+                     :           :           :        +- SortMergeJoin Inner (157)
+                     :           :           :           :- Sort (152)
+                     :           :           :           :  +- Exchange (151)
+                     :           :           :           :     +- Project (150)
+                     :           :           :           :        +- SortMergeJoin Inner (149)
+                     :           :           :           :           :- Sort (144)
+                     :           :           :           :           :  +- Exchange (143)
+                     :           :           :           :           :     +- Project (142)
+                     :           :           :           :           :        +- SortMergeJoin Inner (141)
+                     :           :           :           :           :           :- Sort (136)
+                     :           :           :           :           :           :  +- Exchange (135)
+                     :           :           :           :           :           :     +- Project (134)
+                     :           :           :           :           :           :        +- SortMergeJoin Inner (133)
+                     :           :           :           :           :           :           :- Sort (128)
+                     :           :           :           :           :           :           :  +- Exchange (127)
+                     :           :           :           :           :           :           :     +- Project (126)
+                     :           :           :           :           :           :           :        +- Filter (125)
+                     :           :           :           :           :           :           :           +- Scan parquet  (124)
+                     :           :           :           :           :           :           +- Sort (132)
+                     :           :           :           :           :           :              +- Exchange (131)
+                     :           :           :           :           :           :                 +- Filter (130)
+                     :           :           :           :           :           :                    +- Scan parquet  (129)
+                     :           :           :           :           :           +- Sort (140)
+                     :           :           :           :           :              +- Exchange (139)
+                     :           :           :           :           :                 +- Filter (138)
+                     :           :           :           :           :                    +- Scan parquet  (137)
+                     :           :           :           :           +- Sort (148)
+                     :           :           :           :              +- Exchange (147)
+                     :           :           :           :                 +- Filter (146)
+                     :           :           :           :                    +- Scan parquet  (145)
+                     :           :           :           +- Sort (156)
+                     :           :           :              +- Exchange (155)
+                     :           :           :                 +- Filter (154)
+                     :           :           :                    +- Scan parquet  (153)
+                     :           :           +- Sort (164)
+                     :           :              +- Exchange (163)
+                     :           :                 +- Filter (162)
+                     :           :                    +- Scan parquet  (161)
+                     :           +- Sort (172)
+                     :              +- Exchange (171)
+                     :                 +- Filter (170)
+                     :                    +- Scan parquet  (169)
+                     +- Sort (181)
+                        +- Exchange (180)
+                           +- Project (179)
+                              +- Filter (178)
+                                 +- Scan parquet  (177)
+
+
+(124) Scan parquet 
+Output [2]: [p_partkey#1, p_type#2]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(p_type), EqualTo(p_type,ECONOMY ANODIZED STEEL), IsNotNull(p_partkey)]
+ReadSchema: struct<p_partkey:bigint,p_type:string>
+
+(2) InputAdapter
+Input [2]: [p_partkey#1, p_type#2]
+Arguments: [#3, #2]
+
+(3) NativeFilter
+Input [2]: [#3#1, #2#2]
+Condition : ((isnotnull(p_type#2) AND (p_type#2 = ECONOMY ANODIZED STEEL)) AND isnotnull(p_partkey#1))
+
+(4) NativeProject
+Output [1]: [p_partkey#1]
+Input [2]: [#3#1, #2#2]
+
+(5) NativeShuffleExchange
+Input [1]: [p_partkey#1]
+Arguments: hashpartitioning(p_partkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(6) ShuffleQueryStage
+Output [1]: [p_partkey#1]
+Arguments: X
+
+(7) AQEShuffleRead
+Input [1]: [p_partkey#1]
+Arguments: coalesced
+
+(8) InputAdapter
+Input [1]: [p_partkey#1]
+
+(9) NativeSort
+Input [1]: [p_partkey#1]
+Arguments: [p_partkey#1 ASC NULLS FIRST], false
+
+(129) Scan parquet 
+Output [5]: [l_orderkey#4, l_partkey#5, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(l_partkey), IsNotNull(l_suppkey), IsNotNull(l_orderkey)]
+ReadSchema: struct<l_orderkey:bigint,l_partkey:bigint,l_suppkey:bigint,l_extendedprice:decimal(12,2),l_discount:decimal(12,2)>
+
+(11) InputAdapter
+Input [5]: [l_orderkey#4, l_partkey#5, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: [#9, #10, #11, #7, #8]
+
+(12) NativeFilter
+Input [5]: [#9#4, #10#5, #11#6, #7#7, #8#8]
+Condition : ((isnotnull(l_partkey#5) AND isnotnull(l_suppkey#6)) AND isnotnull(l_orderkey#4))
+
+(13) NativeShuffleExchange
+Input [5]: [#9#4, #10#5, #11#6, #7#7, #8#8]
+Arguments: hashpartitioning(l_partkey#5, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(14) ShuffleQueryStage
+Output [5]: [#9#4, #10#5, #11#6, #7#7, #8#8]
+Arguments: X
+
+(15) AQEShuffleRead
+Input [5]: [#9#4, #10#5, #11#6, #7#7, #8#8]
+Arguments: coalesced
+
+(16) InputAdapter
+Input [5]: [#9#4, #10#5, #11#6, #7#7, #8#8]
+
+(17) NativeSort
+Input [5]: [#9#4, #10#5, #11#6, #7#7, #8#8]
+Arguments: [l_partkey#5 ASC NULLS FIRST], false
+
+(18) NativeSortMergeJoin
+Left keys [1]: [p_partkey#1]
+Right keys [1]: [l_partkey#5]
+Join type: Inner
+Join condition: None
+
+(19) NativeProject
+Output [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Input [6]: [p_partkey#1, #9#4, #10#5, #11#6, #7#7, #8#8]
+
+(20) NativeShuffleExchange
+Input [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: hashpartitioning(l_suppkey#6, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(21) ShuffleQueryStage
+Output [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: X
+
+(22) AQEShuffleRead
+Input [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: coalesced
+
+(23) InputAdapter
+Input [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+
+(24) NativeSort
+Input [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: [l_suppkey#6 ASC NULLS FIRST], false
+
+(137) Scan parquet 
+Output [2]: [s_suppkey#12, s_nationkey#13]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(s_suppkey), IsNotNull(s_nationkey)]
+ReadSchema: struct<s_suppkey:bigint,s_nationkey:bigint>
+
+(26) InputAdapter
+Input [2]: [s_suppkey#12, s_nationkey#13]
+Arguments: [#14, #15]
+
+(27) NativeFilter
+Input [2]: [#14#12, #15#13]
+Condition : (isnotnull(s_suppkey#12) AND isnotnull(s_nationkey#13))
+
+(28) NativeShuffleExchange
+Input [2]: [#14#12, #15#13]
+Arguments: hashpartitioning(s_suppkey#12, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(29) ShuffleQueryStage
+Output [2]: [#14#12, #15#13]
+Arguments: X
+
+(30) AQEShuffleRead
+Input [2]: [#14#12, #15#13]
+Arguments: coalesced
+
+(31) InputAdapter
+Input [2]: [#14#12, #15#13]
+
+(32) NativeSort
+Input [2]: [#14#12, #15#13]
+Arguments: [s_suppkey#12 ASC NULLS FIRST], false
+
+(33) NativeSortMergeJoin
+Left keys [1]: [l_suppkey#6]
+Right keys [1]: [s_suppkey#12]
+Join type: Inner
+Join condition: None
+
+(34) NativeProject
+Output [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+Input [6]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8, #14#12, #15#13]
+
+(35) NativeShuffleExchange
+Input [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+Arguments: hashpartitioning(l_orderkey#4, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(36) ShuffleQueryStage
+Output [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+Arguments: X
+
+(37) AQEShuffleRead
+Input [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+Arguments: coalesced
+
+(38) InputAdapter
+Input [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+
+(39) NativeSort
+Input [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+Arguments: [l_orderkey#4 ASC NULLS FIRST], false
+
+(145) Scan parquet 
+Output [3]: [o_orderkey#16, o_custkey#17, o_orderdate#18]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(o_orderdate), GreaterThanOrEqual(o_orderdate,1995-01-01), LessThanOrEqual(o_orderdate,1996-12-31), IsNotNull(o_orderkey), IsNotNull(o_custkey)]
+ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_orderdate:date>
+
+(41) InputAdapter
+Input [3]: [o_orderkey#16, o_custkey#17, o_orderdate#18]
+Arguments: [#19, #20, #18]
+
+(42) NativeFilter
+Input [3]: [#19#16, #20#17, #18#18]
+Condition : ((((isnotnull(o_orderdate#18) AND (o_orderdate#18 >= 1995-01-01)) AND (o_orderdate#18 <= 1996-12-31)) AND isnotnull(o_orderkey#16)) AND isnotnull(o_custkey#17))
+
+(43) NativeShuffleExchange
+Input [3]: [#19#16, #20#17, #18#18]
+Arguments: hashpartitioning(o_orderkey#16, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(44) ShuffleQueryStage
+Output [3]: [#19#16, #20#17, #18#18]
+Arguments: X
+
+(45) AQEShuffleRead
+Input [3]: [#19#16, #20#17, #18#18]
+Arguments: coalesced
+
+(46) InputAdapter
+Input [3]: [#19#16, #20#17, #18#18]
+
+(47) NativeSort
+Input [3]: [#19#16, #20#17, #18#18]
+Arguments: [o_orderkey#16 ASC NULLS FIRST], false
+
+(48) NativeSortMergeJoin
+Left keys [1]: [l_orderkey#4]
+Right keys [1]: [o_orderkey#16]
+Join type: Inner
+Join condition: None
+
+(49) NativeProject
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+Input [7]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13, #19#16, #20#17, #18#18]
+
+(50) NativeShuffleExchange
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+Arguments: hashpartitioning(o_custkey#17, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(51) ShuffleQueryStage
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+Arguments: X
+
+(52) AQEShuffleRead
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+Arguments: coalesced
+
+(53) InputAdapter
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+
+(54) NativeSort
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+Arguments: [o_custkey#17 ASC NULLS FIRST], false
+
+(153) Scan parquet 
+Output [2]: [c_custkey#21, c_nationkey#22]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(c_custkey), IsNotNull(c_nationkey)]
+ReadSchema: struct<c_custkey:bigint,c_nationkey:bigint>
+
+(56) InputAdapter
+Input [2]: [c_custkey#21, c_nationkey#22]
+Arguments: [#23, #24]
+
+(57) NativeFilter
+Input [2]: [#23#21, #24#22]
+Condition : (isnotnull(c_custkey#21) AND isnotnull(c_nationkey#22))
+
+(58) NativeShuffleExchange
+Input [2]: [#23#21, #24#22]
+Arguments: hashpartitioning(c_custkey#21, 5), ENSURE_REQUIREMENTS, [plan_id=8]
+
+(59) ShuffleQueryStage
+Output [2]: [#23#21, #24#22]
+Arguments: X
+
+(60) AQEShuffleRead
+Input [2]: [#23#21, #24#22]
+Arguments: coalesced
+
+(61) InputAdapter
+Input [2]: [#23#21, #24#22]
+
+(62) NativeSort
+Input [2]: [#23#21, #24#22]
+Arguments: [c_custkey#21 ASC NULLS FIRST], false
+
+(63) NativeSortMergeJoin
+Left keys [1]: [o_custkey#17]
+Right keys [1]: [c_custkey#21]
+Join type: Inner
+Join condition: None
+
+(64) NativeProject
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+Input [7]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18, #23#21, #24#22]
+
+(65) NativeShuffleExchange
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+Arguments: hashpartitioning(c_nationkey#22, 5), ENSURE_REQUIREMENTS, [plan_id=9]
+
+(66) ShuffleQueryStage
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+Arguments: X
+
+(67) AQEShuffleRead
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+Arguments: coalesced
+
+(68) InputAdapter
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+
+(69) NativeSort
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+Arguments: [c_nationkey#22 ASC NULLS FIRST], false
+
+(161) Scan parquet 
+Output [2]: [n_nationkey#25, n_regionkey#26]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(n_nationkey), IsNotNull(n_regionkey)]
+ReadSchema: struct<n_nationkey:bigint,n_regionkey:bigint>
+
+(71) InputAdapter
+Input [2]: [n_nationkey#25, n_regionkey#26]
+Arguments: [#27, #28]
+
+(72) NativeFilter
+Input [2]: [#27#25, #28#26]
+Condition : (isnotnull(n_nationkey#25) AND isnotnull(n_regionkey#26))
+
+(73) NativeShuffleExchange
+Input [2]: [#27#25, #28#26]
+Arguments: hashpartitioning(n_nationkey#25, 5), ENSURE_REQUIREMENTS, [plan_id=10]
+
+(74) ShuffleQueryStage
+Output [2]: [#27#25, #28#26]
+Arguments: X
+
+(75) AQEShuffleRead
+Input [2]: [#27#25, #28#26]
+Arguments: coalesced
+
+(76) InputAdapter
+Input [2]: [#27#25, #28#26]
+
+(77) NativeSort
+Input [2]: [#27#25, #28#26]
+Arguments: [n_nationkey#25 ASC NULLS FIRST], false
+
+(78) NativeSortMergeJoin
+Left keys [1]: [c_nationkey#22]
+Right keys [1]: [n_nationkey#25]
+Join type: Inner
+Join condition: None
+
+(79) NativeProject
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+Input [7]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22, #27#25, #28#26]
+
+(80) NativeShuffleExchange
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+Arguments: hashpartitioning(s_nationkey#13, 5), ENSURE_REQUIREMENTS, [plan_id=11]
+
+(81) ShuffleQueryStage
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+Arguments: X
+
+(82) AQEShuffleRead
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+Arguments: coalesced
+
+(83) InputAdapter
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+
+(84) NativeSort
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+Arguments: [s_nationkey#13 ASC NULLS FIRST], false
+
+(169) Scan parquet 
+Output [2]: [n_nationkey#29, n_name#30]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(n_nationkey)]
+ReadSchema: struct<n_nationkey:bigint,n_name:string>
+
+(86) InputAdapter
+Input [2]: [n_nationkey#29, n_name#30]
+Arguments: [#31, #30]
+
+(87) NativeFilter
+Input [2]: [#31#29, #30#30]
+Condition : isnotnull(n_nationkey#29)
+
+(88) NativeShuffleExchange
+Input [2]: [#31#29, #30#30]
+Arguments: hashpartitioning(n_nationkey#29, 5), ENSURE_REQUIREMENTS, [plan_id=12]
+
+(89) ShuffleQueryStage
+Output [2]: [#31#29, #30#30]
+Arguments: X
+
+(90) AQEShuffleRead
+Input [2]: [#31#29, #30#30]
+Arguments: coalesced
+
+(91) InputAdapter
+Input [2]: [#31#29, #30#30]
+
+(92) NativeSort
+Input [2]: [#31#29, #30#30]
+Arguments: [n_nationkey#29 ASC NULLS FIRST], false
+
+(93) NativeSortMergeJoin
+Left keys [1]: [s_nationkey#13]
+Right keys [1]: [n_nationkey#29]
+Join type: Inner
+Join condition: None
+
+(94) NativeProject
+Output [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+Input [7]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26, #31#29, #30#30]
+
+(95) NativeShuffleExchange
+Input [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+Arguments: hashpartitioning(n_regionkey#26, 5), ENSURE_REQUIREMENTS, [plan_id=13]
+
+(96) ShuffleQueryStage
+Output [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+Arguments: X
+
+(97) AQEShuffleRead
+Input [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+Arguments: coalesced
+
+(98) InputAdapter
+Input [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+
+(99) NativeSort
+Input [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+Arguments: [n_regionkey#26 ASC NULLS FIRST], false
+
+(177) Scan parquet 
+Output [2]: [r_regionkey#32, r_name#33]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(r_name), EqualTo(r_name,AMERICA), IsNotNull(r_regionkey)]
+ReadSchema: struct<r_regionkey:bigint,r_name:string>
+
+(101) InputAdapter
+Input [2]: [r_regionkey#32, r_name#33]
+Arguments: [#34, #33]
+
+(102) NativeFilter
+Input [2]: [#34#32, #33#33]
+Condition : ((isnotnull(r_name#33) AND (r_name#33 = AMERICA)) AND isnotnull(r_regionkey#32))
+
+(103) NativeProject
+Output [1]: [r_regionkey#32]
+Input [2]: [#34#32, #33#33]
+
+(104) NativeShuffleExchange
+Input [1]: [r_regionkey#32]
+Arguments: hashpartitioning(r_regionkey#32, 5), ENSURE_REQUIREMENTS, [plan_id=14]
+
+(105) ShuffleQueryStage
+Output [1]: [r_regionkey#32]
+Arguments: X
+
+(106) AQEShuffleRead
+Input [1]: [r_regionkey#32]
+Arguments: coalesced
+
+(107) InputAdapter
+Input [1]: [r_regionkey#32]
+
+(108) NativeSort
+Input [1]: [r_regionkey#32]
+Arguments: [r_regionkey#32 ASC NULLS FIRST], false
+
+(109) NativeSortMergeJoin
+Left keys [1]: [n_regionkey#26]
+Right keys [1]: [r_regionkey#32]
+Join type: Inner
+Join condition: None
+
+(110) NativeProject
+Output [3]: [year(o_orderdate#18) AS o_year#35, (l_extendedprice#7 * (1 - l_discount#8)) AS volume#36, n_name#30 AS nation#37]
+Input [6]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30, r_regionkey#32]
+
+(111) NativeProject
+Output [3]: [o_year#35 AS o_year#35, CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END AS _c1#38, volume#36 AS _c2#39]
+Input [3]: [o_year#35, volume#36, nation#37]
+
+(112) NativeHashAggregate
+Input [3]: [o_year#35, _c1#38, _c2#39]
+Keys [1]: [o_year#35]
+Functions [2]: [partial_sum(_c1#38), partial_sum(_c2#39)]
+Aggregate Attributes [4]: [sum#40, isEmpty#41, sum#42, isEmpty#43]
+Results [3]: [o_year#35, #23, #23]
+
+(113) NativeShuffleExchange
+Input [3]: [o_year#35, #23, #23]
+Arguments: hashpartitioning(o_year#35, 5), ENSURE_REQUIREMENTS, [plan_id=15]
+
+(114) ShuffleQueryStage
+Output [3]: [o_year#35, #23, #23]
+Arguments: X
+
+(115) AQEShuffleRead
+Input [3]: [o_year#35, #23, #23]
+Arguments: coalesced
+
+(116) InputAdapter
+Input [3]: [o_year#35, #23, #23]
+
+(117) NativeHashAggregate
+Input [3]: [o_year#35, #23, #23]
+Keys [1]: [o_year#35]
+Functions [2]: [sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END), sum(volume#36)]
+Aggregate Attributes [2]: [sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END)#44, sum(volume#36)#45]
+Results [3]: [o_year#35, sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END)#44, sum(volume#36)#45]
+
+(118) NativeProject
+Output [2]: [o_year#35, (sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END)#44 / sum(volume#36)#45) AS mkt_share#46]
+Input [3]: [o_year#35, sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END)#44, sum(volume#36)#45]
+
+(119) NativeShuffleExchange
+Input [2]: [o_year#35, mkt_share#46]
+Arguments: rangepartitioning(o_year#35 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=16]
+
+(120) ShuffleQueryStage
+Output [2]: [o_year#35, mkt_share#46]
+Arguments: X
+
+(121) AQEShuffleRead
+Input [2]: [o_year#35, mkt_share#46]
+Arguments: coalesced
+
+(122) InputAdapter
+Input [2]: [o_year#35, mkt_share#46]
+
+(123) NativeSort
+Input [2]: [o_year#35, mkt_share#46]
+Arguments: [o_year#35 ASC NULLS FIRST], true
+
+(124) Scan parquet 
+Output [2]: [p_partkey#1, p_type#2]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(p_type), EqualTo(p_type,ECONOMY ANODIZED STEEL), IsNotNull(p_partkey)]
+ReadSchema: struct<p_partkey:bigint,p_type:string>
+
+(125) Filter
+Input [2]: [p_partkey#1, p_type#2]
+Condition : ((isnotnull(p_type#2) AND (p_type#2 = ECONOMY ANODIZED STEEL)) AND isnotnull(p_partkey#1))
+
+(126) Project
+Output [1]: [p_partkey#1]
+Input [2]: [p_partkey#1, p_type#2]
+
+(127) Exchange
+Input [1]: [p_partkey#1]
+Arguments: hashpartitioning(p_partkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=17]
+
+(128) Sort
+Input [1]: [p_partkey#1]
+Arguments: [p_partkey#1 ASC NULLS FIRST], false, 0
+
+(129) Scan parquet 
+Output [5]: [l_orderkey#4, l_partkey#5, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(l_partkey), IsNotNull(l_suppkey), IsNotNull(l_orderkey)]
+ReadSchema: struct<l_orderkey:bigint,l_partkey:bigint,l_suppkey:bigint,l_extendedprice:decimal(12,2),l_discount:decimal(12,2)>
+
+(130) Filter
+Input [5]: [l_orderkey#4, l_partkey#5, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Condition : ((isnotnull(l_partkey#5) AND isnotnull(l_suppkey#6)) AND isnotnull(l_orderkey#4))
+
+(131) Exchange
+Input [5]: [l_orderkey#4, l_partkey#5, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: hashpartitioning(l_partkey#5, 5), ENSURE_REQUIREMENTS, [plan_id=18]
+
+(132) Sort
+Input [5]: [l_orderkey#4, l_partkey#5, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: [l_partkey#5 ASC NULLS FIRST], false, 0
+
+(133) SortMergeJoin
+Left keys [1]: [p_partkey#1]
+Right keys [1]: [l_partkey#5]
+Join type: Inner
+Join condition: None
+
+(134) Project
+Output [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Input [6]: [p_partkey#1, l_orderkey#4, l_partkey#5, l_suppkey#6, l_extendedprice#7, l_discount#8]
+
+(135) Exchange
+Input [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: hashpartitioning(l_suppkey#6, 5), ENSURE_REQUIREMENTS, [plan_id=19]
+
+(136) Sort
+Input [4]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8]
+Arguments: [l_suppkey#6 ASC NULLS FIRST], false, 0
+
+(137) Scan parquet 
+Output [2]: [s_suppkey#12, s_nationkey#13]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(s_suppkey), IsNotNull(s_nationkey)]
+ReadSchema: struct<s_suppkey:bigint,s_nationkey:bigint>
+
+(138) Filter
+Input [2]: [s_suppkey#12, s_nationkey#13]
+Condition : (isnotnull(s_suppkey#12) AND isnotnull(s_nationkey#13))
+
+(139) Exchange
+Input [2]: [s_suppkey#12, s_nationkey#13]
+Arguments: hashpartitioning(s_suppkey#12, 5), ENSURE_REQUIREMENTS, [plan_id=20]
+
+(140) Sort
+Input [2]: [s_suppkey#12, s_nationkey#13]
+Arguments: [s_suppkey#12 ASC NULLS FIRST], false, 0
+
+(141) SortMergeJoin
+Left keys [1]: [l_suppkey#6]
+Right keys [1]: [s_suppkey#12]
+Join type: Inner
+Join condition: None
+
+(142) Project
+Output [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+Input [6]: [l_orderkey#4, l_suppkey#6, l_extendedprice#7, l_discount#8, s_suppkey#12, s_nationkey#13]
+
+(143) Exchange
+Input [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+Arguments: hashpartitioning(l_orderkey#4, 5), ENSURE_REQUIREMENTS, [plan_id=21]
+
+(144) Sort
+Input [4]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13]
+Arguments: [l_orderkey#4 ASC NULLS FIRST], false, 0
+
+(145) Scan parquet 
+Output [3]: [o_orderkey#16, o_custkey#17, o_orderdate#18]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(o_orderdate), GreaterThanOrEqual(o_orderdate,1995-01-01), LessThanOrEqual(o_orderdate,1996-12-31), IsNotNull(o_orderkey), IsNotNull(o_custkey)]
+ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_orderdate:date>
+
+(146) Filter
+Input [3]: [o_orderkey#16, o_custkey#17, o_orderdate#18]
+Condition : ((((isnotnull(o_orderdate#18) AND (o_orderdate#18 >= 1995-01-01)) AND (o_orderdate#18 <= 1996-12-31)) AND isnotnull(o_orderkey#16)) AND isnotnull(o_custkey#17))
+
+(147) Exchange
+Input [3]: [o_orderkey#16, o_custkey#17, o_orderdate#18]
+Arguments: hashpartitioning(o_orderkey#16, 5), ENSURE_REQUIREMENTS, [plan_id=22]
+
+(148) Sort
+Input [3]: [o_orderkey#16, o_custkey#17, o_orderdate#18]
+Arguments: [o_orderkey#16 ASC NULLS FIRST], false, 0
+
+(149) SortMergeJoin
+Left keys [1]: [l_orderkey#4]
+Right keys [1]: [o_orderkey#16]
+Join type: Inner
+Join condition: None
+
+(150) Project
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+Input [7]: [l_orderkey#4, l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderkey#16, o_custkey#17, o_orderdate#18]
+
+(151) Exchange
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+Arguments: hashpartitioning(o_custkey#17, 5), ENSURE_REQUIREMENTS, [plan_id=23]
+
+(152) Sort
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18]
+Arguments: [o_custkey#17 ASC NULLS FIRST], false, 0
+
+(153) Scan parquet 
+Output [2]: [c_custkey#21, c_nationkey#22]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(c_custkey), IsNotNull(c_nationkey)]
+ReadSchema: struct<c_custkey:bigint,c_nationkey:bigint>
+
+(154) Filter
+Input [2]: [c_custkey#21, c_nationkey#22]
+Condition : (isnotnull(c_custkey#21) AND isnotnull(c_nationkey#22))
+
+(155) Exchange
+Input [2]: [c_custkey#21, c_nationkey#22]
+Arguments: hashpartitioning(c_custkey#21, 5), ENSURE_REQUIREMENTS, [plan_id=24]
+
+(156) Sort
+Input [2]: [c_custkey#21, c_nationkey#22]
+Arguments: [c_custkey#21 ASC NULLS FIRST], false, 0
+
+(157) SortMergeJoin
+Left keys [1]: [o_custkey#17]
+Right keys [1]: [c_custkey#21]
+Join type: Inner
+Join condition: None
+
+(158) Project
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+Input [7]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_custkey#17, o_orderdate#18, c_custkey#21, c_nationkey#22]
+
+(159) Exchange
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+Arguments: hashpartitioning(c_nationkey#22, 5), ENSURE_REQUIREMENTS, [plan_id=25]
+
+(160) Sort
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22]
+Arguments: [c_nationkey#22 ASC NULLS FIRST], false, 0
+
+(161) Scan parquet 
+Output [2]: [n_nationkey#25, n_regionkey#26]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(n_nationkey), IsNotNull(n_regionkey)]
+ReadSchema: struct<n_nationkey:bigint,n_regionkey:bigint>
+
+(162) Filter
+Input [2]: [n_nationkey#25, n_regionkey#26]
+Condition : (isnotnull(n_nationkey#25) AND isnotnull(n_regionkey#26))
+
+(163) Exchange
+Input [2]: [n_nationkey#25, n_regionkey#26]
+Arguments: hashpartitioning(n_nationkey#25, 5), ENSURE_REQUIREMENTS, [plan_id=26]
+
+(164) Sort
+Input [2]: [n_nationkey#25, n_regionkey#26]
+Arguments: [n_nationkey#25 ASC NULLS FIRST], false, 0
+
+(165) SortMergeJoin
+Left keys [1]: [c_nationkey#22]
+Right keys [1]: [n_nationkey#25]
+Join type: Inner
+Join condition: None
+
+(166) Project
+Output [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+Input [7]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, c_nationkey#22, n_nationkey#25, n_regionkey#26]
+
+(167) Exchange
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+Arguments: hashpartitioning(s_nationkey#13, 5), ENSURE_REQUIREMENTS, [plan_id=27]
+
+(168) Sort
+Input [5]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26]
+Arguments: [s_nationkey#13 ASC NULLS FIRST], false, 0
+
+(169) Scan parquet 
+Output [2]: [n_nationkey#29, n_name#30]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(n_nationkey)]
+ReadSchema: struct<n_nationkey:bigint,n_name:string>
+
+(170) Filter
+Input [2]: [n_nationkey#29, n_name#30]
+Condition : isnotnull(n_nationkey#29)
+
+(171) Exchange
+Input [2]: [n_nationkey#29, n_name#30]
+Arguments: hashpartitioning(n_nationkey#29, 5), ENSURE_REQUIREMENTS, [plan_id=28]
+
+(172) Sort
+Input [2]: [n_nationkey#29, n_name#30]
+Arguments: [n_nationkey#29 ASC NULLS FIRST], false, 0
+
+(173) SortMergeJoin
+Left keys [1]: [s_nationkey#13]
+Right keys [1]: [n_nationkey#29]
+Join type: Inner
+Join condition: None
+
+(174) Project
+Output [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+Input [7]: [l_extendedprice#7, l_discount#8, s_nationkey#13, o_orderdate#18, n_regionkey#26, n_nationkey#29, n_name#30]
+
+(175) Exchange
+Input [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+Arguments: hashpartitioning(n_regionkey#26, 5), ENSURE_REQUIREMENTS, [plan_id=29]
+
+(176) Sort
+Input [5]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30]
+Arguments: [n_regionkey#26 ASC NULLS FIRST], false, 0
+
+(177) Scan parquet 
+Output [2]: [r_regionkey#32, r_name#33]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(r_name), EqualTo(r_name,AMERICA), IsNotNull(r_regionkey)]
+ReadSchema: struct<r_regionkey:bigint,r_name:string>
+
+(178) Filter
+Input [2]: [r_regionkey#32, r_name#33]
+Condition : ((isnotnull(r_name#33) AND (r_name#33 = AMERICA)) AND isnotnull(r_regionkey#32))
+
+(179) Project
+Output [1]: [r_regionkey#32]
+Input [2]: [r_regionkey#32, r_name#33]
+
+(180) Exchange
+Input [1]: [r_regionkey#32]
+Arguments: hashpartitioning(r_regionkey#32, 5), ENSURE_REQUIREMENTS, [plan_id=30]
+
+(181) Sort
+Input [1]: [r_regionkey#32]
+Arguments: [r_regionkey#32 ASC NULLS FIRST], false, 0
+
+(182) SortMergeJoin
+Left keys [1]: [n_regionkey#26]
+Right keys [1]: [r_regionkey#32]
+Join type: Inner
+Join condition: None
+
+(183) Project
+Output [3]: [year(o_orderdate#18) AS o_year#35, (l_extendedprice#7 * (1 - l_discount#8)) AS volume#36, n_name#30 AS nation#37]
+Input [6]: [l_extendedprice#7, l_discount#8, o_orderdate#18, n_regionkey#26, n_name#30, r_regionkey#32]
+
+(184) HashAggregate
+Input [3]: [o_year#35, volume#36, nation#37]
+Keys [1]: [o_year#35]
+Functions [2]: [partial_sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END), partial_sum(volume#36)]
+Aggregate Attributes [4]: [sum#40, isEmpty#41, sum#42, isEmpty#43]
+Results [5]: [o_year#35, sum#47, isEmpty#48, sum#49, isEmpty#50]
+
+(185) Exchange
+Input [5]: [o_year#35, sum#47, isEmpty#48, sum#49, isEmpty#50]
+Arguments: hashpartitioning(o_year#35, 5), ENSURE_REQUIREMENTS, [plan_id=31]
+
+(186) HashAggregate
+Input [5]: [o_year#35, sum#47, isEmpty#48, sum#49, isEmpty#50]
+Keys [1]: [o_year#35]
+Functions [2]: [sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END), sum(volume#36)]
+Aggregate Attributes [2]: [sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END)#44, sum(volume#36)#45]
+Results [2]: [o_year#35, (sum(CASE WHEN (nation#37 = BRAZIL) THEN volume#36 ELSE 0.0000 END)#44 / sum(volume#36)#45) AS mkt_share#46]
+
+(187) Exchange
+Input [2]: [o_year#35, mkt_share#46]
+Arguments: rangepartitioning(o_year#35 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=32]
+
+(188) Sort
+Input [2]: [o_year#35, mkt_share#46]
+Arguments: [o_year#35 ASC NULLS FIRST], true, 0
+
+(189) AdaptiveSparkPlan
+Output [2]: [o_year#35, mkt_share#46]
+Arguments: isFinalPlan=true
+
