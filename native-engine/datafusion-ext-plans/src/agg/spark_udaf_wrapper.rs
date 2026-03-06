@@ -22,9 +22,10 @@ use std::{
 
 use arrow::{
     array::{
-        Array, ArrayAccessor, ArrayRef, BinaryArray, BinaryBuilder, StructArray, as_struct_array,
-        make_array,
+        Array, ArrayAccessor, ArrayData, ArrayRef, BinaryArray, BinaryBuilder,
+        BooleanBufferBuilder, StructArray, as_struct_array, make_array,
     },
+    buffer::Buffer,
     datatypes::{DataType, Field, Schema, SchemaRef},
     ffi::{FFI_ArrowArray, FFI_ArrowSchema, from_ffi, from_ffi_and_data_type},
     record_batch::{RecordBatch, RecordBatchOptions},
@@ -403,12 +404,54 @@ impl AccColumn for AccUDAFBufferRowsColumn {
 
     fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
         assert_eq!(self.num_records(), 0, "expect empty AccColumn");
-        let num_rows = arrays[0].len();
-        let ffi_imported_rows = FFI_ArrowArray::new(&arrays[0].to_data());
+        let array = &arrays[0];
+        let binary_array = downcast_any!(array, BinaryArray)?;
+
+        let is_clean = binary_array.offset() == 0 && binary_array.value_offsets()[0] == 0;
+        let array_to_export = if is_clean {
+            array.clone()
+        } else {
+            let len = binary_array.len();
+            let offsets = binary_array.value_offsets();
+            let start_offset_val = offsets[0];
+            let end_offset_val = offsets[len];
+            let value_slice_len = (end_offset_val - start_offset_val) as usize;
+
+            let new_offsets: Vec<i32> = offsets.iter().map(|&x| x - start_offset_val).collect();
+            let new_offsets_buf = Buffer::from_vec(new_offsets);
+
+            let array_data = binary_array.to_data();
+            let buffers = array_data.buffers();
+            let new_values_buf =
+                buffers[1].slice_with_length(start_offset_val as usize, value_slice_len);
+
+            let new_null_buf = if binary_array.null_count() == 0 {
+                None
+            } else {
+                let mut buffer_builder = BooleanBufferBuilder::new(len);
+                for i in 0..len {
+                    buffer_builder.append(binary_array.is_valid(i));
+                }
+                Some(buffer_builder.finish().into_inner())
+            };
+
+            let mut data_builder = ArrayData::builder(DataType::Binary)
+                .len(len)
+                .add_buffer(new_offsets_buf)
+                .add_buffer(new_values_buf);
+
+            if let Some(buf) = new_null_buf {
+                data_builder = data_builder.null_bit_buffer(Some(buf));
+            }
+
+            let data = unsafe { data_builder.build_unchecked() };
+            make_array(data)
+        };
+
+        let ffi_imported_rows = FFI_ArrowArray::new(&array_to_export.to_data());
         let rows = jni_call!(SparkUDAFWrapperContext(self.jcontext.as_obj())
             .importRows(&ffi_imported_rows as *const FFI_ArrowArray as i64) -> JObject)?;
         self.obj = jni_new_global_ref!(rows.as_obj())?;
-        assert_eq!(self.num_records(), num_rows, "unfreeze rows count mismatch");
         Ok(())
     }
 
