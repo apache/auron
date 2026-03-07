@@ -437,6 +437,8 @@ object NativeConverters extends Logging {
       case cast: Cast
           if !Seq(cast.dataType, cast.child.dataType).exists(t =>
             t.isInstanceOf[TimestampType] || t.isInstanceOf[DateType]) =>
+        assert(cast.child.dataType != StringType || !cast.dataType.isInstanceOf[DecimalType],
+          s"Cast from String to Decimal is not supported in native execution. Expression: ${cast}")
         buildExprNode {
           _.setTryCast(
             pb.PhysicalTryCastNode

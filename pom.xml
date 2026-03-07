@@ -323,7 +323,7 @@
       <id>spark-241kwaiae</id>
       <properties>
         <shimName>spark-241kwaiae</shimName>
-        <pkgSuffix />
+        <pkgSuffix>-kwai-hotfix-decimal-cast</pkgSuffix>
         <shimPkg>spark-extension-shims-spark241kwaiae</shimPkg>
         <javaVersion>1.8</javaVersion>
         <scalaVersion>2.11</scalaVersion>
@@ -416,7 +416,7 @@
       <id>spark-3.5</id>
       <properties>
         <shimName>spark-3.5</shimName>
-        <pkgSuffix>-kwai-hotfix-rule-engine</pkgSuffix>
+        <pkgSuffix>-kwai-hotfix-decimal-cast</pkgSuffix>
         <shimPkg>spark-extension-shims-spark3</shimPkg>
         <javaVersion>1.8</javaVersion>
         <scalaVersion>2.12</scalaVersion>
