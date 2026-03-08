@@ -794,7 +794,31 @@
         <sparkVersion>3.0.3</sparkVersion>
         <shortSparkVersion>3.0</shortSparkVersion>
         <nettyVersion>4.1.47.Final</nettyVersion>
+        <scalaVersion>2.12</scalaVersion>
+        <scalaLongVersion>2.12.18</scalaLongVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <compilerPlugins combine.self="override">
+                <compilerPlugin>
+                  <groupId>org.scalameta</groupId>
+                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
+                  <version>${semanticdb.version}</version>
+                </compilerPlugin>
+                <compilerPlugin>
+                  <groupId>org.scalamacros</groupId>
+                  <artifactId>paradise_${scalaLongVersion}</artifactId>
+                  <version>${scalamacros.paradise.version}</version>
+                </compilerPlugin>
+              </compilerPlugins>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -805,7 +829,31 @@
         <sparkVersion>3.1.3</sparkVersion>
         <shortSparkVersion>3.1</shortSparkVersion>
         <nettyVersion>4.1.51.Final</nettyVersion>
+        <scalaVersion>2.12</scalaVersion>
+        <scalaLongVersion>2.12.18</scalaLongVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <compilerPlugins combine.self="override">
+                <compilerPlugin>
+                  <groupId>org.scalameta</groupId>
+                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
+                  <version>${semanticdb.version}</version>
+                </compilerPlugin>
+                <compilerPlugin>
+                  <groupId>org.scalamacros</groupId>
+                  <artifactId>paradise_${scalaLongVersion}</artifactId>
+                  <version>${scalamacros.paradise.version}</version>
+                </compilerPlugin>
+              </compilerPlugins>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -816,7 +864,31 @@
         <sparkVersion>3.2.4</sparkVersion>
         <shortSparkVersion>3.2</shortSparkVersion>
         <nettyVersion>4.1.68.Final</nettyVersion>
+        <scalaVersion>2.12</scalaVersion>
+        <scalaLongVersion>2.12.18</scalaLongVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <compilerPlugins combine.self="override">
+                <compilerPlugin>
+                  <groupId>org.scalameta</groupId>
+                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
+                  <version>${semanticdb.version}</version>
+                </compilerPlugin>
+                <compilerPlugin>
+                  <groupId>org.scalamacros</groupId>
+                  <artifactId>paradise_${scalaLongVersion}</artifactId>
+                  <version>${scalamacros.paradise.version}</version>
+                </compilerPlugin>
+              </compilerPlugins>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -827,7 +899,31 @@
         <sparkVersion>3.3.4</sparkVersion>
         <shortSparkVersion>3.3</shortSparkVersion>
         <nettyVersion>4.1.74.Final</nettyVersion>
+        <scalaVersion>2.12</scalaVersion>
+        <scalaLongVersion>2.12.18</scalaLongVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <compilerPlugins combine.self="override">
+                <compilerPlugin>
+                  <groupId>org.scalameta</groupId>
+                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
+                  <version>${semanticdb.version}</version>
+                </compilerPlugin>
+                <compilerPlugin>
+                  <groupId>org.scalamacros</groupId>
+                  <artifactId>paradise_${scalaLongVersion}</artifactId>
+                  <version>${scalamacros.paradise.version}</version>
+                </compilerPlugin>
+              </compilerPlugins>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -838,7 +934,31 @@
         <sparkVersion>3.4.4</sparkVersion>
         <shortSparkVersion>3.4</shortSparkVersion>
         <nettyVersion>4.1.87.Final</nettyVersion>
+        <scalaVersion>2.12</scalaVersion>
+        <scalaLongVersion>2.12.18</scalaLongVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <compilerPlugins combine.self="override">
+                <compilerPlugin>
+                  <groupId>org.scalameta</groupId>
+                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
+                  <version>${semanticdb.version}</version>
+                </compilerPlugin>
+                <compilerPlugin>
+                  <groupId>org.scalamacros</groupId>
+                  <artifactId>paradise_${scalaLongVersion}</artifactId>
+                  <version>${scalamacros.paradise.version}</version>
+                </compilerPlugin>
+              </compilerPlugins>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -849,7 +969,31 @@
         <sparkVersion>3.5.8</sparkVersion>
         <shortSparkVersion>3.5</shortSparkVersion>
         <nettyVersion>4.1.96.Final</nettyVersion>
+        <scalaVersion>2.12</scalaVersion>
+        <scalaLongVersion>2.12.18</scalaLongVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <compilerPlugins combine.self="override">
+                <compilerPlugin>
+                  <groupId>org.scalameta</groupId>
+                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
+                  <version>${semanticdb.version}</version>
+                </compilerPlugin>
+                <compilerPlugin>
+                  <groupId>org.scalamacros</groupId>
+                  <artifactId>paradise_${scalaLongVersion}</artifactId>
+                  <version>${scalamacros.paradise.version}</version>
+                </compilerPlugin>
+              </compilerPlugins>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -860,6 +1004,8 @@
         <sparkVersion>4.0.2</sparkVersion>
         <shortSparkVersion>4.0</shortSparkVersion>
         <nettyVersion>4.1.111.Final</nettyVersion>
+        <scalaVersion>2.13</scalaVersion>
+        <scalaLongVersion>2.13.17</scalaLongVersion>
       </properties>
       <build>
         <plugins>
@@ -890,6 +1036,33 @@
               </execution>
             </executions>
           </plugin>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <args combine.self="override">
+                <arg>-Ymacro-annotations</arg>
+                <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+                <arg>-Wconf:cat=other-nullary-override:s</arg>
+                <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
+                <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
+                <arg>-Wconf:msg=object JavaConverters in package collection is deprecated:s</arg>
+                <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
+                <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
+                <arg>-Wconf:cat=unused-nowarn:s</arg>
+                <arg>-Wconf:msg=early initializers are deprecated:s</arg>
+                <arg>-Wconf:cat=other-match-analysis:s</arg>
+                <arg>-Wconf:cat=feature-existentials:s</arg>
+              </args>
+              <compilerPlugins combine.self="override">
+                <compilerPlugin>
+                  <groupId>org.scalameta</groupId>
+                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
+                  <version>${semanticdb.version}</version>
+                </compilerPlugin>
+              </compilerPlugins>
+            </configuration>
+          </plugin>
         </plugins>
       </build>
     </profile>
@@ -902,6 +1075,8 @@
         <sparkVersion>4.1.1</sparkVersion>
         <shortSparkVersion>4.1</shortSparkVersion>
         <nettyVersion>4.1.118.Final</nettyVersion>
+        <scalaVersion>2.13</scalaVersion>
+        <scalaLongVersion>2.13.17</scalaLongVersion>
       </properties>
       <build>
         <plugins>
@@ -931,6 +1106,33 @@
                 </configuration>
               </execution>
             </executions>
+          </plugin>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <args combine.self="override">
+                <arg>-Ymacro-annotations</arg>
+                <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+                <arg>-Wconf:cat=other-nullary-override:s</arg>
+                <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
+                <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
+                <arg>-Wconf:msg=object JavaConverters in package collection is deprecated:s</arg>
+                <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
+                <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
+                <arg>-Wconf:cat=unused-nowarn:s</arg>
+                <arg>-Wconf:msg=early initializers are deprecated:s</arg>
+                <arg>-Wconf:cat=other-match-analysis:s</arg>
+                <arg>-Wconf:cat=feature-existentials:s</arg>
+              </args>
+              <compilerPlugins combine.self="override">
+                <compilerPlugin>
+                  <groupId>org.scalameta</groupId>
+                  <artifactId>semanticdb-scalac_${scalaLongVersion}</artifactId>
+                  <version>${semanticdb.version}</version>
+                </compilerPlugin>
+              </compilerPlugins>
+            </configuration>
           </plugin>
         </plugins>
       </build>
