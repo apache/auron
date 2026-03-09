@@ -29,7 +29,7 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowDateColumnVector implements IntColumnVector {
 
-    private DateDayVector vector;
+    private final DateDayVector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link DateDayVector}.
@@ -50,15 +50,5 @@ public final class ArrowDateColumnVector implements IntColumnVector {
     @Override
     public int getInt(int i) {
         return vector.get(i);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(DateDayVector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 }

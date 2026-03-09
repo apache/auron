@@ -26,12 +26,12 @@ import org.apache.flink.util.Preconditions;
  * <p>This wrapper delegates all reads to the underlying Arrow vector, providing zero-copy access
  * to Arrow data from Flink's columnar batch execution engine. {@link TimeMicroVector} stores time
  * values as microseconds since midnight ({@code long}), which are converted to milliseconds
- * ({@code int}) to match Flink's internal TIME representation. This reverses the writer's
- * conversion from milliseconds to microseconds.
+ * ({@code int}) to match Flink's internal TIME representation. The native engine (DataFusion)
+ * uses microsecond precision for all temporal types.
  */
 public final class ArrowTimeColumnVector implements IntColumnVector {
 
-    private TimeMicroVector vector;
+    private final TimeMicroVector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link TimeMicroVector}.
@@ -60,15 +60,5 @@ public final class ArrowTimeColumnVector implements IntColumnVector {
     @Override
     public int getInt(int i) {
         return (int) (vector.get(i) / 1000);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(TimeMicroVector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 }

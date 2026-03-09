@@ -28,7 +28,7 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowTinyIntColumnVector implements ByteColumnVector {
 
-    private TinyIntVector vector;
+    private final TinyIntVector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link TinyIntVector}.
@@ -49,15 +49,5 @@ public final class ArrowTinyIntColumnVector implements ByteColumnVector {
     @Override
     public byte getByte(int i) {
         return vector.get(i);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(TinyIntVector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 }

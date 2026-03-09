@@ -39,7 +39,7 @@ public final class ArrowDecimalColumnVector implements DecimalColumnVector {
      */
     private static final int MAX_COMPACT_PRECISION = 18;
 
-    private DecimalVector vector;
+    private final DecimalVector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link DecimalVector}.
@@ -67,16 +67,6 @@ public final class ArrowDecimalColumnVector implements DecimalColumnVector {
             return DecimalData.fromUnscaledLong(unscaledLong, precision, scale);
         }
         return DecimalData.fromBigDecimal(vector.getObject(i), precision, scale);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(DecimalVector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 
     /**

@@ -28,7 +28,7 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowSmallIntColumnVector implements ShortColumnVector {
 
-    private SmallIntVector vector;
+    private final SmallIntVector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link SmallIntVector}.
@@ -49,15 +49,5 @@ public final class ArrowSmallIntColumnVector implements ShortColumnVector {
     @Override
     public short getShort(int i) {
         return vector.get(i);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(SmallIntVector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 }

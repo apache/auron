@@ -28,7 +28,7 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowFloatColumnVector implements FloatColumnVector {
 
-    private Float4Vector vector;
+    private final Float4Vector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link Float4Vector}.
@@ -49,15 +49,5 @@ public final class ArrowFloatColumnVector implements FloatColumnVector {
     @Override
     public float getFloat(int i) {
         return vector.get(i);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(Float4Vector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 }

@@ -28,7 +28,7 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowBooleanColumnVector implements BooleanColumnVector {
 
-    private BitVector vector;
+    private final BitVector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link BitVector}.
@@ -49,15 +49,5 @@ public final class ArrowBooleanColumnVector implements BooleanColumnVector {
     @Override
     public boolean getBoolean(int i) {
         return vector.get(i) != 0;
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(BitVector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 }

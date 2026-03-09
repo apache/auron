@@ -28,7 +28,7 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowVarCharColumnVector implements BytesColumnVector {
 
-    private VarCharVector vector;
+    private final VarCharVector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link VarCharVector}.
@@ -50,15 +50,5 @@ public final class ArrowVarCharColumnVector implements BytesColumnVector {
     public Bytes getBytes(int i) {
         byte[] bytes = vector.get(i);
         return new Bytes(bytes, 0, bytes.length);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(VarCharVector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 }

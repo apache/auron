@@ -33,8 +33,8 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowArrayColumnVector implements ArrayColumnVector {
 
-    private ListVector vector;
-    private ColumnVector elementColumnVector;
+    private final ListVector vector;
+    private final ColumnVector elementColumnVector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link ListVector}.
@@ -60,17 +60,5 @@ public final class ArrowArrayColumnVector implements ArrayColumnVector {
         int offset = vector.getOffsetBuffer().getInt((long) i * ListVector.OFFSET_WIDTH);
         int length = vector.getOffsetBuffer().getInt((long) (i + 1) * ListVector.OFFSET_WIDTH) - offset;
         return new ColumnarArrayData(elementColumnVector, offset, length);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector and child element vector. Used during reader reset to
-     * point at a new batch without allocating a new wrapper.
-     *
-     * @param vector the new Arrow list vector, must not be null
-     * @param elementColumnVector the new Flink column vector for child elements, must not be null
-     */
-    void setVector(ListVector vector, ColumnVector elementColumnVector) {
-        this.vector = Preconditions.checkNotNull(vector);
-        this.elementColumnVector = Preconditions.checkNotNull(elementColumnVector);
     }
 }

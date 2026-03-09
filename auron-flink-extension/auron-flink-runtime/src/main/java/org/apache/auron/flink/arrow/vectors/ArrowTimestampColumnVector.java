@@ -27,12 +27,13 @@ import org.apache.flink.util.Preconditions;
  * <p>This wrapper delegates all reads to the underlying Arrow vector, providing zero-copy access
  * to Arrow data from Flink's columnar batch execution engine. It handles both {@code
  * TimeStampMicroVector} (TIMESTAMP) and {@code TimeStampMicroTZVector} (TIMESTAMP_LTZ) by
- * accepting their common parent type {@link TimeStampVector}. Microsecond values are converted to
- * Flink's {@link TimestampData} representation (epoch millis + sub-millisecond nanos).
+ * accepting their common parent type {@link TimeStampVector}. The native engine (DataFusion)
+ * uses microsecond precision for all temporal types. Microsecond values are converted to Flink's
+ * {@link TimestampData} representation (epoch millis + sub-millisecond nanos).
  */
 public final class ArrowTimestampColumnVector implements TimestampColumnVector {
 
-    private TimeStampVector vector;
+    private final TimeStampVector vector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link TimeStampVector}.
@@ -71,15 +72,5 @@ public final class ArrowTimestampColumnVector implements TimestampColumnVector {
         long millis = Math.floorDiv(micros, 1000);
         int nanoOfMillisecond = ((int) Math.floorMod(micros, 1000)) * 1000;
         return TimestampData.fromEpochMillis(millis, nanoOfMillisecond);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector. Used during reader reset to point at a new batch
-     * without allocating a new wrapper.
-     *
-     * @param vector the new Arrow vector, must not be null
-     */
-    void setVector(TimeStampVector vector) {
-        this.vector = Preconditions.checkNotNull(vector);
     }
 }

@@ -210,13 +210,14 @@ public class FlinkArrowReader implements AutoCloseable {
             case DATE:
                 return new ArrowDateColumnVector((DateDayVector) vector);
             case TIME_WITHOUT_TIME_ZONE:
-                // The writer (FlinkArrowFieldWriter) normalizes all TIME values to microseconds
-                // in a TimeMicroVector, regardless of the declared Flink TIME precision.
+                // The native engine (DataFusion) uses microsecond precision for all temporal
+                // types, producing TimeMicroVector regardless of declared Flink TIME precision.
                 return new ArrowTimeColumnVector((TimeMicroVector) vector);
             case TIMESTAMP_WITHOUT_TIME_ZONE:
             case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-                // The writer normalizes all timestamps to microseconds. TimeStampVector is the
-                // common parent of TimeStampMicroVector and TimeStampMicroTZVector.
+                // The native engine (DataFusion) uses microsecond precision for all temporal
+                // types. TimeStampVector is the common parent of TimeStampMicroVector and
+                // TimeStampMicroTZVector.
                 return new ArrowTimestampColumnVector((TimeStampVector) vector);
             case ARRAY:
                 return createArrayColumnVector((ListVector) vector, (ArrayType) type);

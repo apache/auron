@@ -34,9 +34,9 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowMapColumnVector implements MapColumnVector {
 
-    private MapVector vector;
-    private ColumnVector keyColumnVector;
-    private ColumnVector valueColumnVector;
+    private final MapVector vector;
+    private final ColumnVector keyColumnVector;
+    private final ColumnVector valueColumnVector;
 
     /**
      * Creates a new wrapper around the given Arrow {@link MapVector}.
@@ -65,19 +65,5 @@ public final class ArrowMapColumnVector implements MapColumnVector {
         int offset = vector.getOffsetBuffer().getInt((long) i * MapVector.OFFSET_WIDTH);
         int length = vector.getOffsetBuffer().getInt((long) (i + 1) * MapVector.OFFSET_WIDTH) - offset;
         return new ColumnarMapData(keyColumnVector, valueColumnVector, offset, length);
-    }
-
-    /**
-     * Replaces the underlying Arrow vector and child key/value vectors. Used during reader reset
-     * to point at a new batch without allocating a new wrapper.
-     *
-     * @param vector the new Arrow map vector, must not be null
-     * @param keyColumnVector the new Flink column vector for keys, must not be null
-     * @param valueColumnVector the new Flink column vector for values, must not be null
-     */
-    void setVector(MapVector vector, ColumnVector keyColumnVector, ColumnVector valueColumnVector) {
-        this.vector = Preconditions.checkNotNull(vector);
-        this.keyColumnVector = Preconditions.checkNotNull(keyColumnVector);
-        this.valueColumnVector = Preconditions.checkNotNull(valueColumnVector);
     }
 }

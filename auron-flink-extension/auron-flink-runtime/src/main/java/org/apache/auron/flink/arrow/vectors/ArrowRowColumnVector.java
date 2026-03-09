@@ -34,9 +34,9 @@ import org.apache.flink.util.Preconditions;
  */
 public final class ArrowRowColumnVector implements RowColumnVector {
 
-    private StructVector vector;
-    private VectorizedColumnBatch childBatch;
-    private ColumnarRowData reusableRow;
+    private final StructVector vector;
+    private final VectorizedColumnBatch childBatch;
+    private final ColumnarRowData reusableRow;
 
     /**
      * Creates a new wrapper around the given Arrow {@link StructVector}.
@@ -62,18 +62,5 @@ public final class ArrowRowColumnVector implements RowColumnVector {
     public ColumnarRowData getRow(int i) {
         reusableRow.setRowId(i);
         return reusableRow;
-    }
-
-    /**
-     * Replaces the underlying Arrow vector and child field vectors. Used during reader reset to
-     * point at a new batch without allocating a new wrapper.
-     *
-     * @param vector the new Arrow struct vector, must not be null
-     * @param childColumnVectors the new Flink column vectors for child fields, must not be null
-     */
-    void setVector(StructVector vector, ColumnVector[] childColumnVectors) {
-        this.vector = Preconditions.checkNotNull(vector);
-        this.childBatch = new VectorizedColumnBatch(Preconditions.checkNotNull(childColumnVectors));
-        this.reusableRow = new ColumnarRowData(childBatch);
     }
 }
