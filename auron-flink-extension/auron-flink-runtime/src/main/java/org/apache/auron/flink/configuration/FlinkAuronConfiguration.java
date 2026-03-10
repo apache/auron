@@ -34,6 +34,12 @@ public class FlinkAuronConfiguration extends AuronConfiguration {
     // When using getOptional, the prefix will be automatically completed. If you only need to print the Option key,
     // please manually add the prefix.
     public static final String FLINK_PREFIX = "flink.";
+
+    public static final ConfigOption<Long> NATIVE_MEMORY_SIZE = new ConfigOption<>(Long.class)
+            .withKey("auron.native.memory.size")
+            .withDescription("The auron native memory size to use.")
+            .withDefaultValue(256 * 1024  * 1024L); // 256 MB
+
     private final Configuration flinkConfig;
 
     public FlinkAuronConfiguration() {

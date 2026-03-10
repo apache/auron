@@ -51,6 +51,7 @@ import org.apache.auron.flink.arrow.vectors.ArrowTimestampColumnVector;
 import org.apache.auron.flink.arrow.vectors.ArrowTinyIntColumnVector;
 import org.apache.auron.flink.arrow.vectors.ArrowVarBinaryColumnVector;
 import org.apache.auron.flink.arrow.vectors.ArrowVarCharColumnVector;
+import org.apache.auron.flink.table.data.AuronColumnarRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.columnar.ColumnarRowData;
 import org.apache.flink.table.data.columnar.vector.ColumnVector;
@@ -82,13 +83,20 @@ public class FlinkArrowReader implements AutoCloseable {
     private final RowType rowType;
     private ColumnVector[] columnVectors;
     private VectorizedColumnBatch batch;
-    private ColumnarRowData reusableRow;
+    private AuronColumnarRowData reusableRow;
     private VectorSchemaRoot root;
 
     private FlinkArrowReader(ColumnVector[] columnVectors, VectorSchemaRoot root, RowType rowType) {
+        this(columnVectors, root, rowType, 0);
+    }
+
+    private FlinkArrowReader(ColumnVector[] columnVectors, VectorSchemaRoot root, RowType rowType, int dataColStartIndex) {
         this.columnVectors = columnVectors;
         this.batch = new VectorizedColumnBatch(columnVectors);
-        this.reusableRow = new ColumnarRowData(batch);
+        this.reusableRow = new AuronColumnarRowData(batch);
+        if (dataColStartIndex > 0) {
+            this.reusableRow.setDataColStartIndex(dataColStartIndex);
+        }
         this.root = root;
         this.rowType = rowType;
     }
@@ -107,6 +115,24 @@ public class FlinkArrowReader implements AutoCloseable {
      * @throws UnsupportedOperationException if a LogicalType is not supported
      */
     public static FlinkArrowReader create(VectorSchemaRoot root, RowType rowType) {
+        return create(root, rowType, 0);
+    }
+
+    /**
+     * Creates a {@link FlinkArrowReader} from a {@link VectorSchemaRoot} and {@link RowType}.
+     *
+     * <p>The RowType must match the schema of the VectorSchemaRoot (same number of fields, matching
+     * types). Each Arrow field vector is wrapped in the appropriate Flink {@link ColumnVector}
+     * implementation based on the corresponding Flink {@link LogicalType}.
+     *
+     * @param root the Arrow VectorSchemaRoot containing the data
+     * @param rowType the Flink RowType describing the schema
+     * @param dataColStartIndex the index of the first user data column
+     * @return a new FlinkArrowReader
+     * @throws IllegalArgumentException if field counts do not match
+     * @throws UnsupportedOperationException if a LogicalType is not supported
+     */
+    public static FlinkArrowReader create(VectorSchemaRoot root, RowType rowType, int dataColStartIndex) {
         Preconditions.checkNotNull(root, "root must not be null");
         Preconditions.checkNotNull(rowType, "rowType must not be null");
         List<FieldVector> fieldVectors = root.getFieldVectors();
@@ -119,7 +145,7 @@ public class FlinkArrowReader implements AutoCloseable {
         for (int i = 0; i < fieldVectors.size(); i++) {
             columns[i] = createColumnVector(fieldVectors.get(i), fields.get(i).getType());
         }
-        return new FlinkArrowReader(columns, root, rowType);
+        return new FlinkArrowReader(columns, root, rowType, dataColStartIndex);
     }
 
     /**
@@ -152,6 +178,19 @@ public class FlinkArrowReader implements AutoCloseable {
      * @param newRoot the new VectorSchemaRoot, must not be null
      */
     public void reset(VectorSchemaRoot newRoot) {
+        reset(newRoot, 0);
+    }
+
+    /**
+     * Resets the reader to use a new {@link VectorSchemaRoot} with the same schema. Recreates
+     * column vector wrappers for the new root's field vectors.
+     *
+     * <p>The new root must have the same schema (same number and types of fields) as the original.
+     *
+     * @param newRoot the new VectorSchemaRoot, must not be null
+     * @param dataColStartIndex the index of the first user data column
+     */
+    public void reset(VectorSchemaRoot newRoot, int dataColStartIndex) {
         Preconditions.checkNotNull(newRoot, "newRoot must not be null");
         this.root = newRoot;
         List<FieldVector> newVectors = newRoot.getFieldVectors();
@@ -166,7 +205,10 @@ public class FlinkArrowReader implements AutoCloseable {
                     createColumnVector(newVectors.get(i), fields.get(i).getType());
         }
         this.batch = new VectorizedColumnBatch(columnVectors);
-        this.reusableRow = new ColumnarRowData(batch);
+        this.reusableRow = new AuronColumnarRowData(batch);
+        if (dataColStartIndex > 0) {
+            this.reusableRow.setDataColStartIndex(dataColStartIndex);
+        }
     }
 
     /**

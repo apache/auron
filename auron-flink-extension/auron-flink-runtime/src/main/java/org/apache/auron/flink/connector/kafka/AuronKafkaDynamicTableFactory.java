@@ -102,16 +102,14 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
                 formatConfig.put(KAFKA_PB_FORMAT_ROOT_MESSAGE_NAME_FIELD, tableOptions.get(PB_ROOT_MESSAGE_NAME));
                 formatConfig.put(KAFKA_PB_FORMAT_SKIP_FIELDS_FIELD, tableOptions.get(PB_SKIP_FIELDS));
             }
-            String formatConfigJson = mapper.writeValueAsString(formatConfig);
             return new AuronKafkaDynamicTableSource(
                     context.getCatalogTable().getSchema().toPhysicalRowDataType(),
                     tableOptions.get(TOPIC),
                     kafkaPropertiesJson,
                     format,
-                    formatConfigJson,
+                    formatConfig,
                     tableOptions.get(BUFFER_SIZE),
-                    tableOptions.get(START_UP_MODE),
-                    tableOptions.get(NESTED_COLS_FIELD_MAPPING));
+                    tableOptions.get(START_UP_MODE));
         } catch (Exception e) {
             throw new FlinkRuntimeException("Could not create Auron Kafka dynamic table source", e);
         }

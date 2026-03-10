@@ -64,6 +64,10 @@ public final class FlinkArrowUtils {
         Runtime.getRuntime().addShutdownHook(new Thread(ROOT_ALLOCATOR::close));
     }
 
+    public static RootAllocator getRootAllocator() {
+        return ROOT_ALLOCATOR;
+    }
+
     /**
      * Creates a child allocator from the root allocator.
      *

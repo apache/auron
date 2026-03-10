@@ -16,13 +16,21 @@
  */
 package org.apache.auron.flink.connector.kafka;
 
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.connector.ChangelogMode;
+import org.apache.flink.table.connector.ProviderContext;
+import org.apache.flink.table.connector.source.DataStreamScanProvider;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.connector.source.ScanTableSource;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.util.Preconditions;
+
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * A {@link DynamicTableSource} for Auron Kafka.
@@ -33,30 +41,27 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource {
     private final String kafkaTopic;
     private final String kafkaPropertiesJson;
     private final String format;
-    private final String formatConfigJson;
+    private final Map<String, String> formatConfig;
     private final int bufferSize;
     private final String startupMode;
-    private final String nestedColsMappingJson;
 
     public AuronKafkaDynamicTableSource(
             DataType physicalDataType,
             String kafkaTopic,
             String kafkaPropertiesJson,
             String format,
-            String formatConfigJson,
+            Map<String, String> formatConfig,
             int bufferSize,
-            String startupMode,
-            String nestedColsMappingJson) {
+            String startupMode) {
         final LogicalType physicalType = physicalDataType.getLogicalType();
         Preconditions.checkArgument(physicalType.is(LogicalTypeRoot.ROW), "Row data type expected.");
         this.physicalDataType = physicalDataType;
         this.kafkaTopic = kafkaTopic;
         this.kafkaPropertiesJson = kafkaPropertiesJson;
         this.format = format;
-        this.formatConfigJson = formatConfigJson;
+        this.formatConfig = formatConfig;
         this.bufferSize = bufferSize;
         this.startupMode = startupMode;
-        this.nestedColsMappingJson = nestedColsMappingJson;
     }
 
     @Override
@@ -66,12 +71,42 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource {
 
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
-        return null;
+        String auronOperatorId = "AuronKafkaSource-" + UUID.randomUUID().toString();
+        AuronKafkaSourceFunction sourceFunction = new AuronKafkaSourceFunction(
+                physicalDataType.getLogicalType(),
+                auronOperatorId,
+                kafkaTopic,
+                kafkaPropertiesJson,
+                format,
+                formatConfig,
+                bufferSize,
+                startupMode);
+        return new DataStreamScanProvider() {
+
+            @Override
+            public DataStream<RowData> produceDataStream(
+                    ProviderContext providerContext, StreamExecutionEnvironment execEnv) {
+                return execEnv.addSource(sourceFunction);
+            }
+
+            @Override
+            public boolean isBounded() {
+                return false;
+            }
+        };
     }
 
     @Override
     public DynamicTableSource copy() {
-        return null;
+        return new AuronKafkaDynamicTableSource(
+                physicalDataType,
+                kafkaTopic,
+                kafkaPropertiesJson,
+                format,
+                formatConfig,
+                bufferSize,
+                startupMode
+        );
     }
 
     @Override

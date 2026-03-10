@@ -232,4 +232,10 @@ public class KafkaConstants {
     public static final String KAFKA_PB_FORMAT_ROOT_MESSAGE_NAME_FIELD = "root_message_name";
     public static final String KAFKA_PB_FORMAT_SKIP_FIELDS_FIELD = "skip_fields";
     public static final String KAFKA_PB_FORMAT_NESTED_COL_MAPPING_FIELD = "nested_col_mapping";
+
+    public static final String KAFKA_AURON_META_PARTITION_ID = "serialized_kafka_records_partition";
+    public static final String KAFKA_AURON_META_OFFSET = "serialized_kafka_records_offset";
+    public static final String KAFKA_AURON_META_TIMESTAMP = "serialized_kafka_records_timestamp";
+
+    public static final String FLINK_SQL_PROC_TIME_KEY_WORD = "proctime";
 }
