@@ -16,6 +16,11 @@
  */
 package org.apache.auron.flink.connector.kafka;
 
+import static org.apache.auron.flink.connector.kafka.KafkaConstants.*;
+
+import java.io.File;
+import java.io.InputStream;
+import java.util.*;
 import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
@@ -40,12 +45,6 @@ import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.InputStream;
-import java.util.*;
-
-import static org.apache.auron.flink.connector.kafka.KafkaConstants.*;
-
 /**
  * Auron Kafka source function.
  */
@@ -64,6 +63,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private volatile boolean isRunning;
     private transient String auronOperatorIdWithSubtaskIndex;
     private transient MetricNode nativeMetric;
+
     public AuronKafkaSourceFunction(
             LogicalType outputType,
             String auronOperatorId,
@@ -72,8 +72,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             String format,
             Map<String, String> formatConfig,
             int bufferSize,
-            String startupMode
-    ) {
+            String startupMode) {
         this.outputType = outputType;
         this.auronOperatorId = auronOperatorId;
         this.topic = topic;
@@ -115,7 +114,8 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         }
         // add kafka meta fields
         scanExecNode.setSchema(SchemaConverters.convertToAuronSchema((RowType) outputType, true));
-        auronOperatorIdWithSubtaskIndex = this.auronOperatorId + "-" + getRuntimeContext().getIndexOfThisSubtask();
+        auronOperatorIdWithSubtaskIndex =
+                this.auronOperatorId + "-" + getRuntimeContext().getIndexOfThisSubtask();
         scanExecNode.setAuronOperatorId(auronOperatorIdWithSubtaskIndex);
         scanExecNode.setStartupMode(KafkaStartupMode.valueOf(startupMode));
         sourcePlan.setKafkaScan(scanExecNode.build());
@@ -140,14 +140,22 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         RowType auronOutputRowType = new RowType(fieldList);
         while (this.isRunning) {
             AuronCallNativeWrapper wrapper = new AuronCallNativeWrapper(
-                    FlinkArrowUtils.getRootAllocator(), physicalPlanNode, nativeMetric, 0, 0, 0,
-                    AuronAdaptor.getInstance().getAuronConfiguration().getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE));
+                    FlinkArrowUtils.getRootAllocator(),
+                    physicalPlanNode,
+                    nativeMetric,
+                    0,
+                    0,
+                    0,
+                    AuronAdaptor.getInstance()
+                            .getAuronConfiguration()
+                            .getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE));
             while (wrapper.loadNextBatch(batch -> {
                 FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
                 for (int i = 0; i < batch.getRowCount(); i++) {
                     sourceContext.collect(arrowReader.read(i));
                 }
-            }));
+            })) {}
+            ;
         }
         LOG.info("Auron kafka source run end");
     }
@@ -176,6 +184,4 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     public MetricNode getMetricNode() {
         return nativeMetric;
     }
-
-
 }

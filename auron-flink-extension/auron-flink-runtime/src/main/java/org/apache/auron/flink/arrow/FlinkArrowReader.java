@@ -90,7 +90,8 @@ public class FlinkArrowReader implements AutoCloseable {
         this(columnVectors, root, rowType, 0);
     }
 
-    private FlinkArrowReader(ColumnVector[] columnVectors, VectorSchemaRoot root, RowType rowType, int dataColStartIndex) {
+    private FlinkArrowReader(
+            ColumnVector[] columnVectors, VectorSchemaRoot root, RowType rowType, int dataColStartIndex) {
         this.columnVectors = columnVectors;
         this.batch = new VectorizedColumnBatch(columnVectors);
         this.reusableRow = new AuronColumnarRowData(batch);

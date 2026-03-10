@@ -16,13 +16,11 @@
  */
 package org.apache.auron.flink.utils;
 
-import org.apache.auron.protobuf.*;
-import org.apache.flink.table.types.logical.*;
-import scala.NotImplementedError;
+import static org.apache.auron.flink.connector.kafka.KafkaConstants.*;
 
 import java.util.stream.Collectors;
-
-import static org.apache.auron.flink.connector.kafka.KafkaConstants.*;
+import org.apache.auron.protobuf.*;
+import org.apache.flink.table.types.logical.*;
 
 /**
  * Converts Flink's {@link RowType} to Auron's {@link Schema}.
@@ -38,34 +36,35 @@ public class SchemaConverters {
             schemaBuilder.addColumns(Field.newBuilder()
                     .setName(KAFKA_AURON_META_PARTITION_ID)
                     .setNullable(false)
-                    .setArrowType(ArrowType.newBuilder().setINT32(EmptyMessage.getDefaultInstance())
+                    .setArrowType(ArrowType.newBuilder()
+                            .setINT32(EmptyMessage.getDefaultInstance())
                             .build()));
             schemaBuilder.addColumns(Field.newBuilder()
                     .setName(KAFKA_AURON_META_OFFSET)
                     .setNullable(false)
-                    .setArrowType(ArrowType.newBuilder().setINT64(EmptyMessage.getDefaultInstance())
+                    .setArrowType(ArrowType.newBuilder()
+                            .setINT64(EmptyMessage.getDefaultInstance())
                             .build()));
             schemaBuilder.addColumns(Field.newBuilder()
                     .setName(KAFKA_AURON_META_TIMESTAMP)
                     .setNullable(false)
-                    .setArrowType(ArrowType.newBuilder().setINT64(EmptyMessage.getDefaultInstance())
+                    .setArrowType(ArrowType.newBuilder()
+                            .setINT64(EmptyMessage.getDefaultInstance())
                             .build()));
         }
         for (int i = 0; i < rowType.getFields().size(); i++) {
             RowType.RowField rowField = rowType.getFields().get(i);
             if (rowField.getName().equalsIgnoreCase(FLINK_SQL_PROC_TIME_KEY_WORD)) {
                 // proc time is nullable
-                schemaBuilder.addColumns(convertField(rowField,true));
+                schemaBuilder.addColumns(convertField(rowField, true));
             } else {
-                schemaBuilder.addColumns(convertField(rowField,false));
+                schemaBuilder.addColumns(convertField(rowField, false));
             }
         }
         return schemaBuilder.build();
     }
 
-    public static Field convertField(
-            RowType.RowField rowField,
-            boolean isProctime) {
+    public static Field convertField(RowType.RowField rowField, boolean isProctime) {
         return Field.newBuilder()
                 .setName(rowField.getName())
                 .setNullable(isProctime ? true : rowField.getType().isNullable())
@@ -113,13 +112,11 @@ public class SchemaConverters {
                 break;
             case TIMESTAMP_WITHOUT_TIME_ZONE:
                 // timezone is never used in native side
-                arrowTypeBuilder.setTIMESTAMP(
-                        Timestamp.newBuilder().setTimeUnit(TimeUnit.Millisecond));
+                arrowTypeBuilder.setTIMESTAMP(Timestamp.newBuilder().setTimeUnit(TimeUnit.Millisecond));
                 break;
             case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                 // timezone is never used in native side
-                arrowTypeBuilder.setTIMESTAMP(
-                        Timestamp.newBuilder().setTimeUnit(TimeUnit.Millisecond));
+                arrowTypeBuilder.setTIMESTAMP(Timestamp.newBuilder().setTimeUnit(TimeUnit.Millisecond));
                 break;
             case DECIMAL:
                 // decimal
@@ -166,7 +163,7 @@ public class SchemaConverters {
                         .build());
                 break;
             default:
-                throw new NotImplementedError(
+                throw new UnsupportedOperationException(
                         "Data type conversion not implemented " + flinkLogicalType.asSummaryString());
         }
         return arrowTypeBuilder.build();

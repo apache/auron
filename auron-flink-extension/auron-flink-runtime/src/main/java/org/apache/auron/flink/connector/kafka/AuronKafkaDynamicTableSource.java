@@ -16,6 +16,8 @@
  */
 package org.apache.auron.flink.connector.kafka;
 
+import java.util.Map;
+import java.util.UUID;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.connector.ChangelogMode;
@@ -28,9 +30,6 @@ import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.util.Preconditions;
-
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * A {@link DynamicTableSource} for Auron Kafka.
@@ -99,14 +98,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource {
     @Override
     public DynamicTableSource copy() {
         return new AuronKafkaDynamicTableSource(
-                physicalDataType,
-                kafkaTopic,
-                kafkaPropertiesJson,
-                format,
-                formatConfig,
-                bufferSize,
-                startupMode
-        );
+                physicalDataType, kafkaTopic, kafkaPropertiesJson, format, formatConfig, bufferSize, startupMode);
     }
 
     @Override

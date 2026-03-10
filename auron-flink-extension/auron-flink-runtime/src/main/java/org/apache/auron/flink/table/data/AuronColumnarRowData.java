@@ -16,14 +16,14 @@
  */
 package org.apache.auron.flink.table.data;
 
+import static org.apache.flink.util.Preconditions.checkArgument;
+
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.table.data.*;
 import org.apache.flink.table.data.binary.TypedSetters;
 import org.apache.flink.table.data.columnar.vector.BytesColumnVector;
 import org.apache.flink.table.data.columnar.vector.VectorizedColumnBatch;
 import org.apache.flink.types.RowKind;
-
-import static org.apache.flink.util.Preconditions.checkArgument;
 
 /**
  * A Columnar {@link RowData} implementation that supports Auron System Columns.
@@ -81,7 +81,7 @@ public class AuronColumnarRowData implements RowData, TypedSetters {
     }
 
     public boolean isNullAt(int pos) {
-        return this.vectorizedColumnBatch.isNullAt(this.rowId, pos+ dataColStartIndex);
+        return this.vectorizedColumnBatch.isNullAt(this.rowId, pos + dataColStartIndex);
     }
 
     public boolean getBoolean(int pos) {
@@ -113,7 +113,8 @@ public class AuronColumnarRowData implements RowData, TypedSetters {
     }
 
     public StringData getString(int pos) {
-        BytesColumnVector.Bytes byteArray = this.vectorizedColumnBatch.getByteArray(this.rowId, pos + dataColStartIndex);
+        BytesColumnVector.Bytes byteArray =
+                this.vectorizedColumnBatch.getByteArray(this.rowId, pos + dataColStartIndex);
         return StringData.fromBytes(byteArray.data, byteArray.offset, byteArray.len);
     }
 
@@ -130,7 +131,8 @@ public class AuronColumnarRowData implements RowData, TypedSetters {
     }
 
     public byte[] getBinary(int pos) {
-        BytesColumnVector.Bytes byteArray = this.vectorizedColumnBatch.getByteArray(this.rowId, pos + dataColStartIndex);
+        BytesColumnVector.Bytes byteArray =
+                this.vectorizedColumnBatch.getByteArray(this.rowId, pos + dataColStartIndex);
         if (byteArray.len == byteArray.data.length) {
             return byteArray.data;
         } else {
@@ -193,10 +195,12 @@ public class AuronColumnarRowData implements RowData, TypedSetters {
     }
 
     public boolean equals(Object o) {
-        throw new UnsupportedOperationException("AuronColumnarRowData do not support equals, please compare fields one by one!");
+        throw new UnsupportedOperationException(
+                "AuronColumnarRowData do not support equals, please compare fields one by one!");
     }
 
     public int hashCode() {
-        throw new UnsupportedOperationException("AuronColumnarRowData do not support hashCode, please hash fields one by one!");
+        throw new UnsupportedOperationException(
+                "AuronColumnarRowData do not support hashCode, please hash fields one by one!");
     }
 }
