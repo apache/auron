@@ -25,6 +25,7 @@ import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronFunction;
+import org.apache.auron.flink.table.data.AuronColumnarRowData;
 import org.apache.auron.flink.utils.SchemaConverters;
 import org.apache.auron.jni.AuronAdaptor;
 import org.apache.auron.jni.AuronCallNativeWrapper;
@@ -197,9 +198,16 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                             .getAuronConfiguration()
                             .getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE));
             while (wrapper.loadNextBatch(batch -> {
+                Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
                 FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
                 for (int i = 0; i < batch.getRowCount(); i++) {
+                    AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
+                    // update kafka partition and offsets
+                    tmpOffsets.put(tmpRowData.getInt(-3), tmpRowData.getLong(-2));
                     sourceContext.collect(arrowReader.read(i));
+                }
+                synchronized (lock) {
+                    currentOffsets = tmpOffsets;
                 }
             })) {}
             ;
