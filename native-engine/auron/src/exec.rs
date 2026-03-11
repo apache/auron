@@ -141,9 +141,16 @@ pub extern "system" fn Java_org_apache_auron_jni_JniBridge_finalizeNative(
 
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_apache_auron_jni_JniBridge_onExit(_: JNIEnv, _: JClass) {
+pub extern "system" fn Java_org_apache_auron_jni_JniBridge_onExit(env: JNIEnv, _: JClass) {
     log::info!("exiting native environment");
     if MemManager::initialized() {
         MemManager::get().dump_status();
     }
+    // Clear Java-side resources to prevent memory leaks
+    let _ = env.call_static_method(
+        jni_bridge::JavaClasses::get().cJniBridge.class,
+        "clearResources",
+        "()V",
+        &[]
+    );
 }

@@ -26,6 +26,7 @@ mod spark_dates;
 pub mod spark_get_json_object;
 mod spark_hash;
 mod spark_initcap;
+mod spark_instr;
 mod spark_isnan;
 mod spark_make_array;
 mod spark_make_decimal;
@@ -91,6 +92,7 @@ pub fn create_auron_ext_function(
             Arc::new(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
         "Spark_IsNaN" => Arc::new(spark_isnan::spark_isnan),
+        "Spark_Instr" => Arc::new(spark_instr::spark_instr),
         _ => df_unimplemented_err!("spark ext function not implemented: {name}")?,
     })
 }
