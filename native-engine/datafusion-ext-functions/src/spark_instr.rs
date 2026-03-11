@@ -17,7 +17,10 @@ use std::sync::Arc;
 
 use arrow::array::{Array, ArrayRef, Int32Array, StringArray};
 use datafusion::{
-    common::{Result, ScalarValue, cast::as_string_array},
+    common::{
+        Result, ScalarValue,
+        cast::{as_int32_array, as_string_array},
+    },
     physical_plan::ColumnarValue,
 };
 use datafusion_ext_commons::df_execution_err;
@@ -25,37 +28,58 @@ use datafusion_ext_commons::df_execution_err;
 /// instr(str, substr) - Returns the (1-based) index of the first occurrence of
 /// substr in str. Compatible with Spark's instr function.
 /// Returns 0 if substr is not found or if substr is empty.
-/// Returns null if str is null.
+/// Returns null if str is null or substr is null.
 pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 2 {
         df_execution_err!("instr requires exactly 2 arguments")?;
     }
 
-    let string_array = args[0].clone().into_array(1)?;
-    let substr = match &args[1] {
-        ColumnarValue::Scalar(ScalarValue::Utf8(Some(substr))) => substr,
-        ColumnarValue::Scalar(ScalarValue::Utf8(None)) => {
-            return Ok(ColumnarValue::Scalar(ScalarValue::Int32(None)));
-        }
-        _ => df_execution_err!("instr substring only supports literal string")?,
+    // Ensure both arguments are arrays for element-wise comparison
+    let left: ArrayRef = match &args[0] {
+        ColumnarValue::Scalar(scalar) => scalar.to_array_of_size(1)?,
+        ColumnarValue::Array(array) => array.clone(),
     };
 
-    // If substr is empty, return 0 for all non-null strings
-    let result_array: ArrayRef = if substr.is_empty() {
-        Arc::new(Int32Array::from_iter(
-            as_string_array(&string_array)?
-                .into_iter()
-                .map(|s| s.map(|_| 0)),
-        ))
+    let right: ArrayRef = match &args[1] {
+        ColumnarValue::Scalar(scalar) => scalar.to_array_of_size(left.len())?,
+        ColumnarValue::Array(array) => array.clone(),
+    };
+
+    let str_array = as_string_array(&left)?;
+    let substr_array = as_string_array(&right)?;
+
+    // Perform element-wise instr operation
+    let result_array: ArrayRef = Arc::new(Int32Array::from_iter(
+        str_array
+            .into_iter()
+            .zip(substr_array.into_iter())
+            .map(|(s, substr)| {
+                match (s, substr) {
+                    (Some(_), None) => None, // substr is null
+                    (None, _) => None,       // str is null
+                    (Some(s), Some(substr)) => {
+                        // Empty substr returns 0
+                        if substr.is_empty() {
+                            Some(0)
+                        } else {
+                            Some(s.find(&substr).map(|pos| (pos + 1) as i32).unwrap_or(0))
+                        }
+                    }
+                }
+            }),
+    ));
+
+    // If both inputs were scalars, return a scalar
+    if matches!(args[0], ColumnarValue::Scalar(_)) && matches!(args[1], ColumnarValue::Scalar(_)) {
+        let scalar = as_int32_array(&result_array)?.value(0);
+        Ok(ColumnarValue::Scalar(if result_array.is_null(0) {
+            ScalarValue::Int32(None)
+        } else {
+            ScalarValue::Int32(Some(scalar))
+        }))
     } else {
-        Arc::new(Int32Array::from_iter(
-            as_string_array(&string_array)?
-                .into_iter()
-                .map(|s| s.map(|s| s.find(substr).map(|pos| (pos + 1) as i32).unwrap_or(0))),
-        ))
-    };
-
-    Ok(ColumnarValue::Array(result_array))
+        Ok(ColumnarValue::Array(result_array))
+    }
 }
 
 #[cfg(test)]
@@ -72,7 +96,7 @@ mod test {
 
     #[test]
     fn test_spark_instr() -> Result<()> {
-        // Test basic functionality
+        // Test basic functionality with scalar substring
         let r = spark_instr(&vec![
             ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
                 Some("hello world".to_string()),
@@ -110,9 +134,41 @@ mod test {
             )]))),
             ColumnarValue::Scalar(ScalarValue::Utf8(None)),
         ])?;
-        if !matches!(r, ColumnarValue::Scalar(ScalarValue::Int32(None))) {
-            return datafusion::common::internal_err!("Expected null Int32 scalar");
-        }
+        let s = r.into_array(1)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![None,]
+        );
+
+        // Test with array substring (element-wise)
+        let r = spark_instr(&vec![
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("hello world".to_string()),
+                Some("hello".to_string()),
+                Some("test".to_string()),
+            ]))),
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("world".to_string()),
+                Some("test".to_string()),
+                Some("test".to_string()),
+            ]))),
+        ])?;
+        let s = r.into_array(3)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![Some(7), Some(0), Some(1),]
+        );
+
+        // Test with both scalars
+        let r = spark_instr(&vec![
+            ColumnarValue::Scalar(ScalarValue::from("hello world")),
+            ColumnarValue::Scalar(ScalarValue::from("world")),
+        ])?;
+        assert!(matches!(
+            r,
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(7)))
+        ));
+
         Ok(())
     }
 
