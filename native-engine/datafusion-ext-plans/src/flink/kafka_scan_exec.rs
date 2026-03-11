@@ -38,7 +38,7 @@ use once_cell::sync::OnceCell;
 use rdkafka::{
     ClientConfig, ClientContext, Offset, TopicPartitionList,
     config::RDKafkaLogLevel,
-    consumer::{Consumer, ConsumerContext, Rebalance, StreamConsumer},
+    consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer},
     error::KafkaResult,
 };
 use sonic_rs::{JsonContainerTrait, JsonValueTrait};
@@ -245,6 +245,13 @@ fn read_serialized_records_from_kafka(
         .get("subtask_index")
         .as_i64()
         .expect("subtask_index is not valid json") as i32;
+    let enable_checkpoint = task_json
+        .get("enable_checkpoint")
+        .as_bool()
+        .expect("enable_checkpoint is not valid json");
+    let restored_offsets = task_json
+        .get("restored_offsets")
+        .expect("restored_offsets is not valid json");
     let kafka_properties = sonic_rs::from_str::<sonic_rs::Value>(&kafka_properties_json)
         .expect("kafka_properties_json is not valid json");
     let mut config = ClientConfig::new();
@@ -261,7 +268,12 @@ fn read_serialized_records_from_kafka(
                     .expect("kafka property value is not valid json string"),
             );
         });
-
+    if enable_checkpoint {
+        config.set("enable.auto.commit", "false");
+    } else {
+        config.set("enable.auto.commit", "true");
+    }
+    log::info!("Subtask {subtask_index} consumed kafka config is {config:?}");
     let consumer: Arc<LoggingConsumer> = Arc::new(
         config
             .create_with_context(context)
@@ -314,7 +326,16 @@ fn read_serialized_records_from_kafka(
     log::info!("Subtask {subtask_index} consumed partitions {partitions:?}");
     let mut partition_list = TopicPartitionList::with_capacity(partitions.len());
     for partition in partitions.iter() {
-        partition_list.add_partition_offset(&kafka_topic, *partition, offset);
+        let partition_key = partition.to_string();
+        let partition_offset = if let Some(val) = restored_offsets.get(&partition_key) {
+            Offset::Offset(
+                val.as_i64()
+                    .expect("restored_offsets value is not valid json"),
+            )
+        } else {
+            offset
+        };
+        partition_list.add_partition_offset(&kafka_topic, *partition, partition_offset);
     }
     consumer
         .assign(&partition_list)
@@ -360,6 +381,43 @@ fn read_serialized_records_from_kafka(
                     ],
                 )?;
                 sender.send(batch).await;
+                if enable_checkpoint {
+                    // if checkpoint is enabled, commit offsets to kafka
+                    let offset_to_commit = auron_operator_id.clone() + "-offsets2commit";
+                    let resource_id = jni_new_string!(&offset_to_commit)?;
+                    let java_json_str =
+                        jni_call_static!(JniBridge.getResource(resource_id.as_obj()) -> JObject)?;
+                    if !java_json_str.0.is_null() {
+                        let offset_json_str = jni_get_string!(java_json_str.as_obj().into())
+                            .expect("java_json_str is not valid java string");
+                        let offsets_to_commit =
+                            sonic_rs::from_str::<sonic_rs::Value>(&offset_json_str)
+                                .expect("offset_json_str is not valid json");
+                        let mut partition_list = TopicPartitionList::with_capacity(
+                            offsets_to_commit
+                                .as_object()
+                                .expect("offsets_to_commit is not valid json")
+                                .len(),
+                        );
+                        if let Some(obj) = offsets_to_commit.as_object() {
+                            if !obj.is_empty() {
+                                for (partition, offset) in obj {
+                                    partition_list.add_partition_offset(
+                                        &kafka_topic,
+                                        partition
+                                            .parse::<i32>()
+                                            .expect("partition is not valid json"),
+                                        Offset::Offset(
+                                            offset.as_i64().expect("offset is not valid json"),
+                                        ),
+                                    );
+                                }
+                                log::info!("auron consumer to commit offset: {partition_list:?}");
+                                consumer.commit(&partition_list, CommitMode::Async);
+                            }
+                        }
+                    }
+                }
             }
         }))
 }
