@@ -187,7 +187,7 @@ tonic-build = "0.13.1"
 transpose = "0.2.3"
 unchecked-index = "0.2.2"
 zstd = "0.13.3"
-rdkafka = { version = "0.36.0", features = ["tokio"] }
+rdkafka = { version = "0.39.0", features = ["tokio"] }
 
 [patch.crates-io]
 # datafusion: branch=v49.0.0-blaze
