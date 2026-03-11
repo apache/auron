@@ -23,8 +23,9 @@ use datafusion::{
 use datafusion_ext_commons::df_execution_err;
 
 /// instr(str, substr) - Returns the (1-based) index of the first occurrence of
-/// substr in str Compatible with Spark's instr function
-/// Returns 0 if substr is not found or if either argument is null
+/// substr in str. Compatible with Spark's instr function.
+/// Returns 0 if substr is not found or if substr is empty.
+/// Returns null if str is null.
 pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 2 {
         df_execution_err!("instr requires exactly 2 arguments")?;
@@ -32,18 +33,27 @@ pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
     let string_array = args[0].clone().into_array(1)?;
     let substr = match &args[1] {
-        ColumnarValue::Scalar(ScalarValue::Utf8(Some(substr))) if !substr.is_empty() => substr,
+        ColumnarValue::Scalar(ScalarValue::Utf8(Some(substr))) => substr,
         ColumnarValue::Scalar(ScalarValue::Utf8(None)) => {
             return Ok(ColumnarValue::Scalar(ScalarValue::Int32(None)));
         }
-        _ => df_execution_err!("instr substring only supports non-empty literal string")?,
+        _ => df_execution_err!("instr substring only supports literal string")?,
     };
 
-    let result_array: ArrayRef = Arc::new(Int32Array::from_iter(
-        as_string_array(&string_array)?
-            .into_iter()
-            .map(|s| s.map(|s| s.find(substr).map(|pos| (pos + 1) as i32).unwrap_or(0))),
-    ));
+    // If substr is empty, return 0 for all non-null strings
+    let result_array: ArrayRef = if substr.is_empty() {
+        Arc::new(Int32Array::from_iter(
+            as_string_array(&string_array)?
+                .into_iter()
+                .map(|s| s.map(|_| 0)),
+        ))
+    } else {
+        Arc::new(Int32Array::from_iter(
+            as_string_array(&string_array)?
+                .into_iter()
+                .map(|s| s.map(|s| s.find(substr).map(|pos| (pos + 1) as i32).unwrap_or(0))),
+        ))
+    };
 
     Ok(ColumnarValue::Array(result_array))
 }
@@ -80,12 +90,18 @@ mod test {
 
         // Test with empty substring should return 0
         let r = spark_instr(&vec![
-            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![Some(
-                "hello".to_string(),
-            )]))),
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("hello".to_string()),
+                Some("world".to_string()),
+                None,
+            ]))),
             ColumnarValue::Scalar(ScalarValue::from("")),
-        ]);
-        assert!(r.is_err());
+        ])?;
+        let s = r.into_array(3)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![Some(0), Some(0), None,]
+        );
 
         // Test with null substring
         let r = spark_instr(&vec![
