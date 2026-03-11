@@ -61,8 +61,8 @@ pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
     let result_array: ArrayRef = Arc::new(Int32Array::from_iter(
         str_array
-            .into_iter()
-            .zip(substr_array.into_iter())
+            .iter()
+            .zip(substr_array.iter())
             .map(|(s, substr)| match (s, substr) {
                 (Some(_), None) => None, // substr is null
                 (None, _) => None,       // str is null
@@ -70,7 +70,7 @@ pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                     if substr.is_empty() {
                         Some(0)
                     } else {
-                        Some(s.find(&substr).map(|pos| (pos + 1) as i32).unwrap_or(0))
+                        Some(s.find(substr).map(|pos| (pos + 1) as i32).unwrap_or(0))
                     }
                 }
             }),
