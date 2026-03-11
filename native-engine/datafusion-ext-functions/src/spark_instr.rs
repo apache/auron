@@ -34,43 +34,49 @@ pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         df_execution_err!("instr requires exactly 2 arguments")?;
     }
 
-    // Ensure both arguments are arrays for element-wise comparison
-    let left: ArrayRef = match &args[0] {
-        ColumnarValue::Scalar(scalar) => scalar.to_array_of_size(1)?,
-        ColumnarValue::Array(array) => array.clone(),
-    };
+    let is_scalar = args
+        .iter()
+        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
+    let len = args
+        .iter()
+        .map(|arg| match arg {
+            ColumnarValue::Array(array) => array.len(),
+            ColumnarValue::Scalar(_) => 1,
+        })
+        .max()
+        .unwrap_or(0);
 
-    let right: ArrayRef = match &args[1] {
-        ColumnarValue::Scalar(scalar) => scalar.to_array_of_size(left.len())?,
-        ColumnarValue::Array(array) => array.clone(),
-    };
+    let arrays = args
+        .iter()
+        .map(|arg| {
+            Ok(match arg {
+                ColumnarValue::Array(array) => array.clone(),
+                ColumnarValue::Scalar(scalar) => scalar.to_array_of_size(len)?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
-    let str_array = as_string_array(&left)?;
-    let substr_array = as_string_array(&right)?;
+    let str_array = as_string_array(&arrays[0])?;
+    let substr_array = as_string_array(&arrays[1])?;
 
-    // Perform element-wise instr operation
     let result_array: ArrayRef = Arc::new(Int32Array::from_iter(
         str_array
             .into_iter()
             .zip(substr_array.into_iter())
-            .map(|(s, substr)| {
-                match (s, substr) {
-                    (Some(_), None) => None, // substr is null
-                    (None, _) => None,       // str is null
-                    (Some(s), Some(substr)) => {
-                        // Empty substr returns 0
-                        if substr.is_empty() {
-                            Some(0)
-                        } else {
-                            Some(s.find(&substr).map(|pos| (pos + 1) as i32).unwrap_or(0))
-                        }
+            .map(|(s, substr)| match (s, substr) {
+                (Some(_), None) => None, // substr is null
+                (None, _) => None,       // str is null
+                (Some(s), Some(substr)) => {
+                    if substr.is_empty() {
+                        Some(0)
+                    } else {
+                        Some(s.find(&substr).map(|pos| (pos + 1) as i32).unwrap_or(0))
                     }
                 }
             }),
     ));
 
-    // If both inputs were scalars, return a scalar
-    if matches!(args[0], ColumnarValue::Scalar(_)) && matches!(args[1], ColumnarValue::Scalar(_)) {
+    if is_scalar {
         let scalar = as_int32_array(&result_array)?.value(0);
         Ok(ColumnarValue::Scalar(if result_array.is_null(0) {
             ScalarValue::Int32(None)
@@ -86,7 +92,7 @@ pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 mod test {
     use std::sync::Arc;
 
-    use arrow::array::StringArray;
+    use arrow::array::{ArrayRef, Int32Array, StringArray};
     use datafusion::{
         common::{Result, ScalarValue, cast::as_int32_array},
         physical_plan::ColumnarValue,
