@@ -35,7 +35,7 @@ use rand_distr::{Distribution, StandardNormal};
 
 use crate::down_cast_any_ref;
 
-/// Returns random values with independent and identically distributed (i.e.d.)
+/// Returns random values with independent and identically distributed (i.i.d.)
 /// samples drawn from the standard normal distribution.
 ///
 /// Matches Spark's behavior:
