@@ -17,7 +17,10 @@
 package org.apache.auron.flink.connector.kafka;
 
 import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
+import javax.annotation.Nullable;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.connector.ChangelogMode;
@@ -25,6 +28,7 @@ import org.apache.flink.table.connector.ProviderContext;
 import org.apache.flink.table.connector.source.DataStreamScanProvider;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.connector.source.ScanTableSource;
+import org.apache.flink.table.connector.source.abilities.SupportsWatermarkPushDown;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -34,20 +38,22 @@ import org.apache.flink.util.Preconditions;
 /**
  * A {@link DynamicTableSource} for Auron Kafka.
  */
-public class AuronKafkaDynamicTableSource implements ScanTableSource {
+public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWatermarkPushDown {
 
     private final DataType physicalDataType;
     private final String kafkaTopic;
-    private final String kafkaPropertiesJson;
+    private final Properties kafkaProperties;
     private final String format;
     private final Map<String, String> formatConfig;
     private final int bufferSize;
     private final String startupMode;
+    /** Watermark strategy that is used to generate per-partition watermark. */
+    protected @Nullable WatermarkStrategy<RowData> watermarkStrategy;
 
     public AuronKafkaDynamicTableSource(
             DataType physicalDataType,
             String kafkaTopic,
-            String kafkaPropertiesJson,
+            Properties kafkaProperties,
             String format,
             Map<String, String> formatConfig,
             int bufferSize,
@@ -56,7 +62,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource {
         Preconditions.checkArgument(physicalType.is(LogicalTypeRoot.ROW), "Row data type expected.");
         this.physicalDataType = physicalDataType;
         this.kafkaTopic = kafkaTopic;
-        this.kafkaPropertiesJson = kafkaPropertiesJson;
+        this.kafkaProperties = kafkaProperties;
         this.format = format;
         this.formatConfig = formatConfig;
         this.bufferSize = bufferSize;
@@ -75,11 +81,16 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource {
                 physicalDataType.getLogicalType(),
                 auronOperatorId,
                 kafkaTopic,
-                kafkaPropertiesJson,
+                kafkaProperties,
                 format,
                 formatConfig,
                 bufferSize,
                 startupMode);
+
+        if (watermarkStrategy != null) {
+            sourceFunction.assignTimestampsAndWatermarks(watermarkStrategy);
+        }
+
         return new DataStreamScanProvider() {
 
             @Override
@@ -98,11 +109,16 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource {
     @Override
     public DynamicTableSource copy() {
         return new AuronKafkaDynamicTableSource(
-                physicalDataType, kafkaTopic, kafkaPropertiesJson, format, formatConfig, bufferSize, startupMode);
+                physicalDataType, kafkaTopic, kafkaProperties, format, formatConfig, bufferSize, startupMode);
     }
 
     @Override
     public String asSummaryString() {
         return "Auron Kafka Dynamic Table Source";
+    }
+
+    @Override
+    public void applyWatermark(WatermarkStrategy<RowData> watermarkStrategy) {
+        this.watermarkStrategy = watermarkStrategy;
     }
 }

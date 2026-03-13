@@ -17,6 +17,7 @@
 package org.apache.auron.flink.connector.kafka;
 
 import static org.apache.auron.flink.connector.kafka.KafkaConstants.*;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import java.io.File;
 import java.io.InputStream;
@@ -37,14 +38,22 @@ import org.apache.auron.protobuf.KafkaStartupMode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.commons.collections.map.LinkedMap;
 import org.apache.commons.io.FileUtils;
+import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.api.common.eventtime.TimestampAssigner;
+import org.apache.flink.api.common.eventtime.WatermarkGenerator;
+import org.apache.flink.api.common.eventtime.WatermarkOutput;
+import org.apache.flink.api.common.eventtime.WatermarkOutputMultiplexer;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.CheckpointListener;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.OperatorStateStore;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.ClosureCleaner;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,12 +61,18 @@ import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartition;
+import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartitionAssigner;
+import org.apache.flink.streaming.connectors.kafka.internals.SourceContextWatermarkOutputAdapter;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.SerializableObject;
+import org.apache.flink.util.SerializedValue;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.PartitionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +81,10 @@ import org.slf4j.LoggerFactory;
  * Only support AT-LEAST ONCE semantics.
  * If checkpoints are enabled, Kafka offsets are committed via Auron after a successful checkpoint.
  * If checkpoints are disabled, Kafka offsets are committed periodically via Auron.
+ *
+ * <p>Watermark support is implemented via {@link WatermarkOutputMultiplexer} with per-partition
+ * watermark generation. Partition expansion is detected periodically using a lightweight
+ * {@link KafkaConsumer} (metadata queries only, no data consumption).
  */
 public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData>
         implements FlinkAuronFunction, CheckpointListener, CheckpointedFunction {
@@ -73,12 +92,13 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private final LogicalType outputType;
     private final String auronOperatorId;
     private final String topic;
-    private final String kafkaPropertiesJson;
+    private final Properties kafkaProperties;
     private final String format;
     private final Map<String, String> formatConfig;
     private final int bufferSize;
     private final String startupMode;
     private transient PhysicalPlanNode physicalPlanNode;
+
     // Flink Checkpoint-related, compatible with Flink Kafka Legacy source
     /** State name of the consumer's partition offset states. */
     private static final String OFFSETS_STATE_NAME = "topic-partition-offset-states";
@@ -90,17 +110,30 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private transient Map<Integer, Long> restoredOffsets;
     private transient Map<Integer, Long> currentOffsets;
     private final SerializableObject lock = new SerializableObject();
-
+    private SerializedValue<WatermarkStrategy<RowData>> watermarkStrategy;
     private volatile boolean isRunning;
     private transient String auronOperatorIdWithSubtaskIndex;
     private transient MetricNode nativeMetric;
     private transient ObjectMapper mapper;
 
+    // Kafka Consumer for partition metadata discovery only (does NOT consume data)
+    private transient KafkaConsumer<byte[], byte[]> kafkaConsumer;
+    private transient List<Integer> assignedPartitions;
+
+    // Watermark related
+    private transient WatermarkOutputMultiplexer watermarkOutputMultiplexer;
+    private transient Map<Integer, String> partitionIdToOutputIdMap;
+    private transient WatermarkGenerator<RowData> watermarkGenerator;
+    private transient TimestampAssigner<RowData> timestampAssigner;
+    // Periodic watermark control: autoWatermarkInterval > 0 means enabled
+    private transient long autoWatermarkInterval;
+    private transient long lastPeriodicWatermarkTime;
+
     public AuronKafkaSourceFunction(
             LogicalType outputType,
             String auronOperatorId,
             String topic,
-            String kafkaPropertiesJson,
+            Properties kafkaProperties,
             String format,
             Map<String, String> formatConfig,
             int bufferSize,
@@ -108,7 +141,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         this.outputType = outputType;
         this.auronOperatorId = auronOperatorId;
         this.topic = topic;
-        this.kafkaPropertiesJson = kafkaPropertiesJson;
+        this.kafkaProperties = kafkaProperties;
         this.format = format;
         this.formatConfig = formatConfig;
         this.bufferSize = bufferSize;
@@ -118,12 +151,12 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     @Override
     public void open(Configuration config) throws Exception {
         // init auron plan
+        mapper = new ObjectMapper();
         PhysicalPlanNode.Builder sourcePlan = PhysicalPlanNode.newBuilder();
         KafkaScanExecNode.Builder scanExecNode = KafkaScanExecNode.newBuilder();
         scanExecNode.setKafkaTopic(this.topic);
-        scanExecNode.setKafkaPropertiesJson(this.kafkaPropertiesJson);
+        scanExecNode.setKafkaPropertiesJson(mapper.writeValueAsString(kafkaProperties));
         scanExecNode.setDataFormat(KafkaFormat.valueOf(this.format.toUpperCase(Locale.ROOT)));
-        mapper = new ObjectMapper();
         scanExecNode.setFormatConfigJson(mapper.writeValueAsString(formatConfig));
         scanExecNode.setBatchSize(this.bufferSize);
         if (this.format.equalsIgnoreCase(KafkaConstants.KAFKA_FORMAT_PROTOBUF)) {
@@ -153,21 +186,68 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         sourcePlan.setKafkaScan(scanExecNode.build());
         this.physicalPlanNode = sourcePlan.build();
 
+        // 1. Initialize Kafka Consumer for partition metadata discovery only (not for data consumption)
+        Properties kafkaProps = new Properties();
+        kafkaProps.putAll(kafkaProperties);
+        // Override to ensure this consumer does not interfere with actual data consumption
+        kafkaProps.put(ConsumerConfig.GROUP_ID_CONFIG, "flink-auron-fetch-meta");
+        kafkaProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        kafkaProps.put(
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+        kafkaProps.put(
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+        this.kafkaConsumer = new KafkaConsumer<>(kafkaProps);
+
         StreamingRuntimeContext runtimeContext = (StreamingRuntimeContext) getRuntimeContext();
+        // 2. Discover and assign partitions for this subtask
+        List<PartitionInfo> partitionInfos = kafkaConsumer.partitionsFor(topic);
+        int subtaskIndex = runtimeContext.getIndexOfThisSubtask();
+        int numSubtasks = runtimeContext.getNumberOfParallelSubtasks();
+
+        this.assignedPartitions = new ArrayList<>();
+        for (PartitionInfo partitionInfo : partitionInfos) {
+            int partitionId = partitionInfo.partition();
+            if (KafkaTopicPartitionAssigner.assign(topic, partitionId, numSubtasks) == subtaskIndex) {
+                assignedPartitions.add(partitionId);
+            }
+        }
         boolean enableCheckpoint = runtimeContext.isCheckpointingEnabled();
         Map<String, Object> auronRuntimeInfo = new HashMap<>();
-        auronRuntimeInfo.put("subtask_index", runtimeContext.getIndexOfThisSubtask());
-        auronRuntimeInfo.put("num_readers", runtimeContext.getNumberOfParallelSubtasks());
+        auronRuntimeInfo.put("subtask_index", subtaskIndex);
+        auronRuntimeInfo.put("num_readers", numSubtasks);
         auronRuntimeInfo.put("enable_checkpoint", enableCheckpoint);
         auronRuntimeInfo.put("restored_offsets", restoredOffsets);
+        auronRuntimeInfo.put("assigned_partitions", assignedPartitions);
         JniBridge.putResource(auronOperatorIdWithSubtaskIndex, mapper.writeValueAsString(auronRuntimeInfo));
-        this.isRunning = true;
-        LOG.info(
-                "Auron kafka source init successful, Auron operator id: {}, enableCheckpoint is {}",
-                auronOperatorIdWithSubtaskIndex,
-                enableCheckpoint);
         currentOffsets = new HashMap<>();
         pendingOffsetsToCommit = new LinkedMap();
+        LOG.info(
+                "Auron kafka source init successful, Auron operator id: {}, enableCheckpoint is {}, "
+                        + "subtask {} assigned partitions: {}",
+                auronOperatorIdWithSubtaskIndex,
+                enableCheckpoint,
+                subtaskIndex,
+                assignedPartitions);
+
+        // 3. Initialize Watermark components if watermarkStrategy is set
+        if (watermarkStrategy != null) {
+            ClassLoader userCodeClassLoader = runtimeContext.getUserCodeClassLoader();
+            WatermarkStrategy<RowData> deserializedWatermarkStrategy =
+                    watermarkStrategy.deserializeValue(userCodeClassLoader);
+
+            MetricGroup metricGroup = runtimeContext.getMetricGroup();
+
+            this.timestampAssigner = deserializedWatermarkStrategy.createTimestampAssigner(() -> metricGroup);
+
+            this.watermarkGenerator = deserializedWatermarkStrategy.createWatermarkGenerator(() -> metricGroup);
+
+            // 4. Determine periodic watermark interval
+            // autoWatermarkInterval > 0 means periodic watermark is enabled
+            this.autoWatermarkInterval = runtimeContext.getExecutionConfig().getAutoWatermarkInterval();
+            this.lastPeriodicWatermarkTime = 0L; // Initialize to 0 so first emit triggers immediately
+        }
         this.isRunning = true;
     }
 
@@ -186,6 +266,22 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         fieldList.add(new RowType.RowField(KAFKA_AURON_META_TIMESTAMP, new BigIntType(false)));
         fieldList.addAll(((RowType) outputType).getFields());
         RowType auronOutputRowType = new RowType(fieldList);
+
+        // Initialize WatermarkOutputMultiplexer here because sourceContext is available
+        if (watermarkGenerator != null) {
+            this.watermarkOutputMultiplexer =
+                    new WatermarkOutputMultiplexer(new SourceContextWatermarkOutputAdapter<>(sourceContext));
+            this.partitionIdToOutputIdMap = new HashMap<>();
+            for (Integer partition : assignedPartitions) {
+                String outputId = createOutputId(partition);
+                partitionIdToOutputIdMap.put(partition, outputId);
+                watermarkOutputMultiplexer.registerNewOutput(outputId, watermark -> {});
+            }
+        }
+
+        // Pre-check watermark flag to avoid per-record null checks in the hot path
+        final boolean enableWatermark = watermarkGenerator != null;
+
         while (this.isRunning) {
             AuronCallNativeWrapper wrapper = new AuronCallNativeWrapper(
                     FlinkArrowUtils.getRootAllocator(),
@@ -197,20 +293,71 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                     AuronAdaptor.getInstance()
                             .getAuronConfiguration()
                             .getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE));
-            while (wrapper.loadNextBatch(batch -> {
-                Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
-                FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
-                for (int i = 0; i < batch.getRowCount(); i++) {
-                    AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
-                    // update kafka partition and offsets
-                    tmpOffsets.put(tmpRowData.getInt(-3), tmpRowData.getLong(-2));
-                    sourceContext.collect(arrowReader.read(i));
-                }
-                synchronized (lock) {
-                    currentOffsets = tmpOffsets;
-                }
-            })) {}
-            ;
+
+            if (enableWatermark) {
+                // Watermark-enabled path
+                while (wrapper.loadNextBatch(batch -> {
+                    Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
+                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
+
+                    for (int i = 0; i < batch.getRowCount(); i++) {
+                        AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
+                        // Extract kafka meta fields
+                        int partitionId = tmpRowData.getInt(-3);
+                        long offset = tmpRowData.getLong(-2);
+                        long kafkaTimestamp = tmpRowData.getLong(-1);
+                        tmpOffsets.put(partitionId, offset);
+
+                        // Extract event timestamp via user-defined TimestampAssigner
+                        long timestamp = timestampAssigner.extractTimestamp(tmpRowData, kafkaTimestamp);
+
+                        // Route to the per-partition WatermarkOutput and trigger onEvent
+                        // outputId must not null, else is a bug
+                        String outputId = partitionIdToOutputIdMap.get(partitionId);
+                        WatermarkOutput partitionOutput = watermarkOutputMultiplexer.getImmediateOutput(outputId);
+                        watermarkGenerator.onEvent(tmpRowData, timestamp, partitionOutput);
+                        // Emit record with event timestamp
+                        sourceContext.collectWithTimestamp(arrowReader.read(i), timestamp);
+                    }
+
+                    // Periodic watermark: only emit if enough time has elapsed since last emit
+                    // Controlled by ExecutionConfig.getAutoWatermarkInterval()
+                    long currentTime = System.currentTimeMillis();
+                    if (autoWatermarkInterval > 0
+                            && (currentTime - lastPeriodicWatermarkTime) >= autoWatermarkInterval) {
+                        for (Map.Entry<Integer, String> entry : partitionIdToOutputIdMap.entrySet()) {
+                            // Use getDeferredOutput for periodic emit: all partitions update first,
+                            // then multiplexer merges and emits once via onPeriodicEmit()
+                            WatermarkOutput output = watermarkOutputMultiplexer.getDeferredOutput(entry.getValue());
+                            watermarkGenerator.onPeriodicEmit(output);
+                        }
+                        // Merge all deferred updates and emit the combined watermark downstream
+                        watermarkOutputMultiplexer.onPeriodicEmit();
+                        lastPeriodicWatermarkTime = currentTime;
+                    }
+
+                    synchronized (lock) {
+                        currentOffsets = tmpOffsets;
+                    }
+                })) {}
+            } else {
+                // No-watermark path: still use collectWithTimestamp with kafka timestamp
+                while (wrapper.loadNextBatch(batch -> {
+                    Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
+                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
+                    for (int i = 0; i < batch.getRowCount(); i++) {
+                        AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
+                        int partitionId = tmpRowData.getInt(-3);
+                        long offset = tmpRowData.getLong(-2);
+                        long kafkaTimestamp = tmpRowData.getLong(-1);
+                        tmpOffsets.put(partitionId, offset);
+                        sourceContext.collectWithTimestamp(arrowReader.read(i), kafkaTimestamp);
+                    }
+                    synchronized (lock) {
+                        currentOffsets = tmpOffsets;
+                    }
+                })) {}
+            }
         }
         LOG.info("Auron kafka source run end");
     }
@@ -218,6 +365,18 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     @Override
     public void cancel() {
         this.isRunning = false;
+    }
+
+    @Override
+    public void close() throws Exception {
+        this.isRunning = false;
+
+        // Close the metadata-only Kafka Consumer
+        if (kafkaConsumer != null) {
+            kafkaConsumer.close();
+        }
+
+        super.close();
     }
 
     @Override
@@ -317,5 +476,24 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         } else {
             LOG.info("Not restore from state.");
         }
+    }
+
+    public AuronKafkaSourceFunction assignTimestampsAndWatermarks(WatermarkStrategy<RowData> watermarkStrategy) {
+        checkNotNull(watermarkStrategy);
+        try {
+            ClosureCleaner.clean(watermarkStrategy, ExecutionConfig.ClosureCleanerLevel.RECURSIVE, true);
+            this.watermarkStrategy = new SerializedValue<>(watermarkStrategy);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("The given WatermarkStrategy is not serializable", e);
+        }
+        return this;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Internal helpers
+    // -------------------------------------------------------------------------
+
+    private String createOutputId(int partitionId) {
+        return topic + "-" + partitionId;
     }
 }

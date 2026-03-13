@@ -92,8 +92,6 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
         final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         final ReadableConfig tableOptions = helper.getOptions();
         try {
-            String kafkaPropertiesJson = mapper.writeValueAsString(
-                    getKafkaProperties(context.getCatalogTable().getOptions()));
             Map<String, String> formatConfig = new HashMap<>();
             String format = tableOptions.getOptional(FactoryUtil.FORMAT).get();
             formatConfig.put(KAFKA_PB_FORMAT_NESTED_COL_MAPPING_FIELD, tableOptions.get(NESTED_COLS_FIELD_MAPPING));
@@ -105,7 +103,7 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
             return new AuronKafkaDynamicTableSource(
                     context.getCatalogTable().getSchema().toPhysicalRowDataType(),
                     tableOptions.get(TOPIC),
-                    kafkaPropertiesJson,
+                    getKafkaProperties(context.getCatalogTable().getOptions()),
                     format,
                     formatConfig,
                     tableOptions.get(BUFFER_SIZE),

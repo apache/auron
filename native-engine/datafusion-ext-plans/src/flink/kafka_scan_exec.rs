@@ -252,6 +252,21 @@ fn read_serialized_records_from_kafka(
     let restored_offsets = task_json
         .get("restored_offsets")
         .expect("restored_offsets is not valid json");
+    let mut partitions: Vec<i32> = vec![];
+    if let Some(assigned_partitions) = task_json.get("assigned_partitions") {
+        if let Some(array) = assigned_partitions.as_array() {
+            array.iter().for_each(|v| {
+                if let Some(num) = v.as_i64() {
+                    partitions.push(num as i32);
+                }
+            });
+        }
+    }
+    if partitions.is_empty() {
+        return Err(DataFusionError::Execution(format!(
+            "No partitions found for topic: {kafka_topic}"
+        )));
+    }
     let kafka_properties = sonic_rs::from_str::<sonic_rs::Value>(&kafka_properties_json)
         .expect("kafka_properties_json is not valid json");
     let mut config = ClientConfig::new();
@@ -279,34 +294,6 @@ fn read_serialized_records_from_kafka(
             .create_with_context(context)
             .expect("Kafka Consumer creation failed"),
     );
-    let metadata = consumer
-        .fetch_metadata(Some(&kafka_topic), Some(std::time::Duration::from_secs(5)))
-        .expect("Failed to fetch kafka metadata");
-
-    // get topic metadata
-    let topic_metadata = metadata
-        .topics()
-        .iter()
-        .find(|t| t.name() == kafka_topic)
-        .expect("Topic not found");
-
-    // get partition metadata
-    let partitions: Vec<i32> = topic_metadata
-        .partitions()
-        .iter()
-        .filter(|p| {
-            flink_kafka_partition_assign(kafka_topic.clone(), p.id(), num_readers)
-                .expect("flink_kafka_partition_assign failed")
-                == subtask_index
-        })
-        .map(|p| p.id())
-        .collect();
-
-    if partitions.is_empty() {
-        return Err(DataFusionError::Execution(format!(
-            "No partitions found for topic: {kafka_topic}"
-        )));
-    }
 
     // GROUP_OFFSET = 0;
     // EARLIEST = 1;
