@@ -24,6 +24,7 @@ import org.apache.arrow.vector.TimeSecVector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.util.Preconditions;
 
 /**
  * {@link ArrowFieldWriter} for time values stored in Arrow time vectors.
@@ -51,6 +52,13 @@ public abstract class TimeWriter<T> extends ArrowFieldWriter<T> {
 
     private TimeWriter(ValueVector valueVector) {
         super(valueVector);
+        Preconditions.checkState(
+                valueVector instanceof TimeSecVector
+                        || valueVector instanceof TimeMilliVector
+                        || valueVector instanceof TimeMicroVector
+                        || valueVector instanceof TimeNanoVector,
+                "Expected a time vector (TimeSecVector/TimeMilliVector/TimeMicroVector/TimeNanoVector), got: %s",
+                valueVector.getClass().getSimpleName());
     }
 
     abstract boolean isNullAt(T in, int ordinal);
