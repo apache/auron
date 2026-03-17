@@ -88,7 +88,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
                 startupMode);
 
         if (watermarkStrategy != null) {
-            sourceFunction.assignTimestampsAndWatermarks(watermarkStrategy);
+            sourceFunction.setWatermarkStrategy(watermarkStrategy);
         }
 
         return new DataStreamScanProvider() {
