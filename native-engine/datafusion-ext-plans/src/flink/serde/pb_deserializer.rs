@@ -256,7 +256,7 @@ fn transfer_output_schema_to_pb_schema(
     let mut sub_pb_schema_mapping: HashMap<String, Vec<Field>> = HashMap::new();
     // To ensure sequential processing, the output schema is used to traverse the
     // data.
-    for (_output_index, field) in output_schema.fields().iter().enumerate() {
+    for field in output_schema.fields().iter() {
         if let Some(pb_nested_msg_name) = nested_msg_mapping.get(field.name()) {
             let index_start = pb_nested_msg_name.find(".");
             if let Some(index) = index_start {
@@ -274,7 +274,7 @@ fn transfer_output_schema_to_pb_schema(
         }
     }
     let mut msg_set: HashSet<String> = HashSet::new();
-    for (_index, field) in output_schema.fields().iter().enumerate() {
+    for field in output_schema.fields().iter() {
         if let Some(field_name) = nested_msg_mapping.get(field.name()) {
             let index_start = field_name.find(".");
             if let Some(index) = index_start {
@@ -1482,29 +1482,37 @@ fn create_value_handler(
         let mut skip_value = move || {
             match wire_type {
                 WireType::Varint => {
-                    prost::encoding::decode_varint(cursor)?;
+                    prost::encoding::decode_varint(cursor)
+                        .map_err(|e| DataFusionError::Execution(e.to_string()))?;
                 }
                 WireType::ThirtyTwoBit => {
                     if cursor.remaining() < 4 {
-                        return Err(prost::DecodeError::new("buffer underflow"));
+                        return df_execution_err!("buffer underflow");
                     }
                     cursor.advance(4);
                 }
                 WireType::SixtyFourBit => {
                     if cursor.remaining() < 8 {
-                        return Err(prost::DecodeError::new("buffer underflow"));
+                        return df_execution_err!("buffer underflow");
                     }
                     cursor.advance(8);
                 }
                 WireType::LengthDelimited => {
-                    let len = prost::encoding::decode_varint(cursor)? as usize;
+                    let len = prost::encoding::decode_varint(cursor)
+                        .map_err(|e| DataFusionError::Execution(e.to_string()))?
+                        as usize;
                     if cursor.remaining() < len {
-                        return Err(prost::DecodeError::new("buffer underflow"));
+                        return df_execution_err!("buffer underflow");
                     }
                     cursor.advance(len);
                 }
                 _ => {
-                    UnknownField::decode_value(tag, wire_type, cursor, DecodeContext::default())?;
+                    UnknownField::decode_value(tag, wire_type, cursor, DecodeContext::default())
+                        .map_err(|e| {
+                            DataFusionError::Execution(format!(
+                                "Failed to decode unknown value: {e}"
+                            ))
+                        })?;
                 }
             }
             Ok(())
