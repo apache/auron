@@ -489,8 +489,9 @@ impl JavaClasses<'static> {
                     &[],
                 )?
                 .l()?;
-            let engine_name =
-                jni_get_string!(engine_name_java.into()).expect("engine_name is not valid");
+            let engine_name = env.get_string(engine_name_java.into())
+                .map(|s| String::from(s))
+                .expect("engine_name is not valid");
             log::info!("Runtime engine is {engine_name}");
 
             let (
