@@ -494,17 +494,17 @@ impl JavaClasses<'static> {
             log::info!("Runtime engine is {engine_name}");
 
             let (
-                cSparkFileSegment,
-                cSparkSQLMetric,
-                cSparkAuronUDFWrapperContext,
-                cSparkUDAFWrapperContext,
-                cSparkUDTFWrapperContext,
-                cSparkUDAFMemTracker,
-                cAuronRssPartitionWriterBase,
-                cAuronOnHeapSpillManager,
-                cAuronNativeParquetSinkUtils,
-                cAuronBlockObject,
-                cAuronJsonFallbackWrapper,
+                c_spark_file_segment,
+                c_spark_sql_metric,
+                c_spark_auron_udf_wrapper_context,
+                c_spark_udaf_wrapper_context,
+                c_spark_udtf_wrapper_context,
+                c_spark_udaf_mem_tracker,
+                c_auron_rss_partition_writer_base,
+                c_auron_on_heap_spill_manager,
+                c_auron_native_parquet_sink_utils,
+                c_auron_block_object,
+                c_auron_json_fallback_wrapper,
             ) = match engine_name.as_str() {
                 "Spark" => (
                     SparkFileSegment::new(env)?,
@@ -519,21 +519,19 @@ impl JavaClasses<'static> {
                     AuronBlockObject::new(env)?,
                     AuronJsonFallbackWrapper::new(env)?,
                 ),
-                _ => unsafe {
-                    (
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                        std::mem::uninitialized(),
-                    )
-                },
+                _ => (
+                    SparkFileSegment::default(),
+                    SparkSQLMetric::default(),
+                    SparkAuronUDFWrapperContext::default(),
+                    SparkUDAFWrapperContext::default(),
+                    SparkUDTFWrapperContext::default(),
+                    SparkUDAFMemTracker::default(),
+                    AuronRssPartitionWriterBase::default(),
+                    AuronOnHeapSpillManager::default(),
+                    AuronNativeParquetSinkUtils::default(),
+                    AuronBlockObject::default(),
+                    AuronJsonFallbackWrapper::default(),
+                ),
             };
 
             let java_classes = JavaClasses {
@@ -560,17 +558,17 @@ impl JavaClasses<'static> {
                 cHadoopFileSystem: HadoopFileSystem::new(env)?,
                 cHadoopPath: HadoopPath::new(env)?,
 
-                cSparkFileSegment,
-                cSparkSQLMetric,
-                cSparkAuronUDFWrapperContext,
-                cSparkUDAFWrapperContext,
-                cSparkUDTFWrapperContext,
-                cSparkUDAFMemTracker,
-                cAuronRssPartitionWriterBase,
-                cAuronOnHeapSpillManager,
-                cAuronNativeParquetSinkUtils,
-                cAuronBlockObject,
-                cAuronJsonFallbackWrapper,
+                cSparkFileSegment: c_spark_file_segment,
+                cSparkSQLMetric: c_spark_sql_metric,
+                cSparkAuronUDFWrapperContext: c_spark_auron_udf_wrapper_context,
+                cSparkUDAFWrapperContext: c_spark_udaf_wrapper_context,
+                cSparkUDTFWrapperContext: c_spark_udtf_wrapper_context,
+                cSparkUDAFMemTracker: c_spark_udaf_mem_tracker,
+                cAuronRssPartitionWriterBase: c_auron_rss_partition_writer_base,
+                cAuronOnHeapSpillManager: c_auron_on_heap_spill_manager,
+                cAuronNativeParquetSinkUtils: c_auron_native_parquet_sink_utils,
+                cAuronBlockObject: c_auron_block_object,
+                cAuronJsonFallbackWrapper: c_auron_json_fallback_wrapper,
 
                 cAuronArrowFFIExporter: AuronArrowFFIExporter::new(env)?,
                 cAuronCallNativeWrapper: AuronCallNativeWrapper::new(env)?,
@@ -1173,6 +1171,10 @@ impl<'a> SparkFileSegment<'a> {
             method_length_ret: ReturnType::Primitive(Primitive::Long),
         })
     }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1191,6 +1193,10 @@ impl<'a> SparkSQLMetric<'a> {
             method_add: env.get_method_id(class, "add", "(J)V")?,
             method_add_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1244,6 +1250,10 @@ impl<'a> AuronRssPartitionWriterBase<'_> {
             method_flush_ret: ReturnType::Primitive(Primitive::Void),
         })
     }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1264,6 +1274,10 @@ impl<'a> SparkAuronUDFWrapperContext<'a> {
             method_eval: env.get_method_id(class, "eval", "(JJ)V")?,
             method_eval_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1381,6 +1395,10 @@ impl<'a> SparkUDAFWrapperContext<'a> {
             method_unspill_ret: ReturnType::Object,
         })
     }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1409,6 +1427,10 @@ impl<'a> SparkUDTFWrapperContext<'a> {
             method_terminateLoop: env.get_method_id(class, "terminateLoop", "(J)V")?,
             method_terminateLoop_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1442,6 +1464,10 @@ impl<'a> SparkUDAFMemTracker<'a> {
             method_updateUsed: env.get_method_id(class, "updateUsed", "()Z")?,
             method_updateUsed_ret: ReturnType::Primitive(Primitive::Boolean),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1533,6 +1559,10 @@ impl<'a> AuronOnHeapSpillManager<'a> {
             method_releaseSpill_ret: ReturnType::Primitive(Primitive::Void),
         })
     }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1564,6 +1594,10 @@ impl<'a> AuronNativeParquetSinkUtils<'a> {
             )?,
             method_completeOutput_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1624,6 +1658,10 @@ impl<'a> AuronBlockObject<'a> {
             )?,
             method_throwFetchFailed_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1710,6 +1748,10 @@ impl<'a> AuronJsonFallbackWrapper<'a> {
             method_parseJsons: env.get_method_id(class, "parseJsons", "(JJ)V")?,
             method_parseJsons_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
