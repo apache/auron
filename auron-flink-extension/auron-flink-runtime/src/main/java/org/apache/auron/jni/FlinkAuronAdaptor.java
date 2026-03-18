@@ -72,4 +72,9 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
     public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer byteBuffer) {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public String getEngineName() {
+        return "Flink";
+    }
 }

@@ -57,7 +57,7 @@ use tokio::{runtime::Runtime, task::JoinHandle};
 use crate::{
     handle_unwinded_scope,
     logging::{THREAD_PARTITION_ID, THREAD_STAGE_ID, THREAD_TID},
-    metrics::update_spark_metric_node,
+    metrics::update_metric_node,
 };
 
 pub struct NativeExecutionRuntime {
@@ -301,7 +301,7 @@ impl NativeExecutionRuntime {
         let metrics = jni_call!(
             AuronCallNativeWrapper(self.native_wrapper.as_obj()).getMetrics() -> JObject
         )?;
-        update_spark_metric_node(metrics.as_obj(), self.plan.clone())?;
+        update_metric_node(metrics.as_obj(), self.plan.clone())?;
         Ok(())
     }
 }

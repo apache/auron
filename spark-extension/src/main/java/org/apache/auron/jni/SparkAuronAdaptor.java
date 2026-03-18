@@ -94,4 +94,9 @@ public class SparkAuronAdaptor extends AuronAdaptor {
     public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
         return new SparkAuronUDFWrapperContext(udfSerialized);
     }
+
+    @Override
+    public String getEngineName() {
+        return "Spark";
+    }
 }
