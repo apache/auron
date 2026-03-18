@@ -119,11 +119,13 @@ impl SharedMapArrayBuilder {
     }
 
     /// Returns the key array builder of the map
+    #[allow(dead_code)]
     pub(crate) fn keys(&mut self) -> &mut SharedArrayBuilder {
         &mut self.key_builder
     }
 
     /// Returns the value array builder of the map
+    #[allow(dead_code)]
     pub(crate) fn values(&mut self) -> &mut SharedArrayBuilder {
         &mut self.value_builder
     }

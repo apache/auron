@@ -29,14 +29,9 @@ use arrow::array::{
 };
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit};
 use bytes::Buf;
-use datafusion::{
-    common::ExprSchema, error::DataFusionError, logical_expr::UserDefinedLogicalNode,
-};
+use datafusion::error::DataFusionError;
 use datafusion_ext_commons::{df_execution_err, downcast_any};
-use prost::{
-    DecodeError,
-    encoding::{DecodeContext, WireType},
-};
+use prost::encoding::{DecodeContext, WireType};
 use prost_reflect::{DescriptorPool, FieldDescriptor, Kind, MessageDescriptor, UnknownField};
 
 use crate::flink::serde::{
@@ -261,7 +256,7 @@ fn transfer_output_schema_to_pb_schema(
     let mut sub_pb_schema_mapping: HashMap<String, Vec<Field>> = HashMap::new();
     // To ensure sequential processing, the output schema is used to traverse the
     // data.
-    for (output_index, field) in output_schema.fields().iter().enumerate() {
+    for (_output_index, field) in output_schema.fields().iter().enumerate() {
         if let Some(pb_nested_msg_name) = nested_msg_mapping.get(field.name()) {
             let index_start = pb_nested_msg_name.find(".");
             if let Some(index) = index_start {
@@ -279,7 +274,7 @@ fn transfer_output_schema_to_pb_schema(
         }
     }
     let mut msg_set: HashSet<String> = HashSet::new();
-    for (index, field) in output_schema.fields().iter().enumerate() {
+    for (_index, field) in output_schema.fields().iter().enumerate() {
         if let Some(field_name) = nested_msg_mapping.get(field.name()) {
             let index_start = field_name.find(".");
             if let Some(index) = index_start {
@@ -458,7 +453,7 @@ fn convert_pb_type_to_arrow(
                 Ok(DataType::UInt64)
             }
         }
-        Kind::Enum(enum_descriptor) => {
+        Kind::Enum(_enum_descriptor) => {
             // Enum to get the Name, so use String.
             if is_list {
                 Ok(DataType::List(create_arrow_field_ref(
@@ -596,7 +591,7 @@ fn create_output_array_builders(
                     struct_builder,
                 )));
             }
-            DataType::Map(field_ref, boolean) => {
+            DataType::Map(field_ref, _boolean) => {
                 let field_kind = field_desc.kind();
                 let sub_msg_desc = field_kind.as_message().expect("map as_message failed");
                 if let DataType::Struct(fields) = field_ref.data_type() {
@@ -686,7 +681,7 @@ fn create_shared_array_builder_by_data_type(
                 struct_builder,
             )));
         }
-        DataType::Map(field_ref, boolean) => {
+        DataType::Map(field_ref, _boolean) => {
             let field_kind = field_desc.kind();
             let sub_msg_desc = field_kind.as_message().expect("map as_message failed");
             if let DataType::Struct(fields) = field_ref.data_type() {
@@ -983,7 +978,7 @@ fn create_value_handler(
 
         macro_rules! impl_for_message_builder {
             ($handle_fn:expr) => {{
-                Box::new(move |cursor: &mut Cursor<&[u8]>, tag, wire_type| {
+                Box::new(move |cursor: &mut Cursor<&[u8]>, _tag, wire_type| {
                     prost::encoding::check_wire_type(WireType::LengthDelimited, wire_type)
                         .or_else(|err| df_execution_err!("{err}"))?;
                     let len = prost::encoding::decode_varint(cursor)
@@ -1380,7 +1375,7 @@ fn create_value_handler(
                             output_field.data_type()
                         )));
                     }
-                } else if let DataType::Map(struct_fields, boolean) = output_field.data_type() {
+                } else if let DataType::Map(struct_fields, _boolean) = output_field.data_type() {
                     if let DataType::Struct(sub_fields) = struct_fields.data_type() {
                         let sub_pb_schema = Arc::new(Schema::new(sub_fields.clone()));
                         let sub_tag_to_output_mapping = create_tag_to_output_mapping(
@@ -1473,7 +1468,7 @@ fn create_value_handler(
                     }));
                 }
             }
-            other => {
+            _other => {
                 return Err(DataFusionError::Execution(format!(
                     "Failed to create value handler field: {:?}, {}",
                     field.kind(),
@@ -1491,20 +1486,20 @@ fn create_value_handler(
                 }
                 WireType::ThirtyTwoBit => {
                     if cursor.remaining() < 4 {
-                        return Err(DecodeError::new("buffer underflow"));
+                        return Err(prost::DecodeError::new("buffer underflow"));
                     }
                     cursor.advance(4);
                 }
                 WireType::SixtyFourBit => {
                     if cursor.remaining() < 8 {
-                        return Err(DecodeError::new("buffer underflow"));
+                        return Err(prost::DecodeError::new("buffer underflow"));
                     }
                     cursor.advance(8);
                 }
                 WireType::LengthDelimited => {
                     let len = prost::encoding::decode_varint(cursor)? as usize;
                     if cursor.remaining() < len {
-                        return Err(DecodeError::new("buffer underflow"));
+                        return Err(prost::DecodeError::new("buffer underflow"));
                     }
                     cursor.advance(len);
                 }

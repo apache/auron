@@ -25,7 +25,6 @@ use datafusion::{
     common::{DataFusionError, Statistics},
     error::Result,
     execution::TaskContext,
-    logical_expr::UserDefinedLogicalNode,
     physical_expr::{EquivalenceProperties, Partitioning::UnknownPartitioning},
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties, SendableRecordBatchStream,
@@ -225,8 +224,8 @@ fn read_serialized_records_from_kafka(
     batch_size: usize,
     startup_mode: i32,
     auron_operator_id: String,
-    data_format: i32,
-    format_config_json: String,
+    _data_format: i32,
+    _format_config_json: String,
 ) -> Result<SendableRecordBatchStream> {
     let context = CustomContext;
     // get source json string from jni bridge resource
@@ -237,10 +236,6 @@ fn read_serialized_records_from_kafka(
         .expect("kafka_task_json_java is not valid java string");
     let task_json = sonic_rs::from_str::<sonic_rs::Value>(&kafka_task_json)
         .expect("source_json_str is not valid json");
-    let num_readers = task_json
-        .get("num_readers")
-        .as_i64()
-        .expect("num_readers is not valid json") as i32;
     let subtask_index = task_json
         .get("subtask_index")
         .as_i64()
@@ -322,7 +317,7 @@ fn read_serialized_records_from_kafka(
         } else {
             offset
         };
-        partition_list.add_partition_offset(&kafka_topic, *partition, partition_offset);
+        let _ = partition_list.add_partition_offset(&kafka_topic, *partition, partition_offset);
     }
     consumer
         .assign(&partition_list)
@@ -389,7 +384,7 @@ fn read_serialized_records_from_kafka(
                         if let Some(obj) = offsets_to_commit.as_object() {
                             if !obj.is_empty() {
                                 for (partition, offset) in obj {
-                                    partition_list.add_partition_offset(
+                                    let _ = partition_list.add_partition_offset(
                                         &kafka_topic,
                                         partition
                                             .parse::<i32>()
@@ -400,7 +395,7 @@ fn read_serialized_records_from_kafka(
                                     );
                                 }
                                 log::info!("auron consumer to commit offset: {partition_list:?}");
-                                consumer.commit(&partition_list, CommitMode::Async);
+                                let _ = consumer.commit(&partition_list, CommitMode::Async);
                             }
                         }
                     }
@@ -495,38 +490,4 @@ fn parse_records(
             Ok(())
         },
     ))
-}
-
-fn java_string_hashcode(s: &str) -> i32 {
-    let mut hash: i32 = 0;
-    for c in s.chars() {
-        let mut buf = [0; 2];
-        let encoded = c.encode_utf16(&mut buf);
-        for code_unit in encoded.iter().cloned() {
-            hash = hash.wrapping_mul(31).wrapping_add(code_unit as i32);
-        }
-    }
-    hash
-}
-
-fn flink_kafka_partition_assign(topic: String, partition_id: i32, num_readers: i32) -> Result<i32> {
-    if num_readers <= 0 {
-        return Err(DataFusionError::Execution(format!(
-            "num_readers must be positive: {num_readers}"
-        )));
-    }
-    // Java hashcode
-    let hash_code = java_string_hashcode(&topic);
-    let start_index = (hash_code.wrapping_mul(31) & i32::MAX) % num_readers;
-    Ok((start_index + partition_id).rem_euclid(num_readers))
-}
-
-#[test]
-fn test_flink_kafka_partition_assign() {
-    let topic = "flink_test_topic".to_string();
-    let partition_id = 0;
-    let num_readers = 1000;
-    // the result same with flink
-    let result = flink_kafka_partition_assign(topic, partition_id, num_readers);
-    assert_eq!(result.expect("Error assigning partition"), 471);
 }
