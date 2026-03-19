@@ -244,6 +244,19 @@
     </dependency>
 
     <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-api</artifactId>
+      <version>${hadoopVersion}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-runtime</artifactId>
+      <version>${hadoopVersion}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
       <!-- For using the filesystem connector in tests -->
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-connector-files</artifactId>

@@ -87,6 +87,12 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
             .withDescription(
                     "offset mode for kafka source, support GROUP_OFFSET, LATEST, EARLIEST, TIMESTAMP will be supported.");
 
+    public static final ConfigOption<String> KAFKA_MOCK_DATA = ConfigOptions.key("kafka.mock.data")
+            .stringType()
+            .noDefaultValue()
+            .withDescription(
+                    "When mock data generated, remember that the first three columns of each row are serialized_kafka_records_partition, serialized_kafka_records_offset, and serialized_kafka_records_timestamp.");
+
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
         final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
@@ -107,7 +113,8 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
                     format,
                     formatConfig,
                     tableOptions.get(BUFFER_SIZE),
-                    tableOptions.get(START_UP_MODE));
+                    tableOptions.get(START_UP_MODE),
+                    tableOptions.get(KAFKA_MOCK_DATA));
         } catch (Exception e) {
             throw new FlinkRuntimeException("Could not create Auron Kafka dynamic table source", e);
         }

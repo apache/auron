@@ -47,6 +47,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
     private final Map<String, String> formatConfig;
     private final int bufferSize;
     private final String startupMode;
+    private final String mockData;
     /** Watermark strategy that is used to generate per-partition watermark. */
     protected @Nullable WatermarkStrategy<RowData> watermarkStrategy;
 
@@ -57,7 +58,8 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
             String format,
             Map<String, String> formatConfig,
             int bufferSize,
-            String startupMode) {
+            String startupMode,
+            String mockData) {
         final LogicalType physicalType = physicalDataType.getLogicalType();
         Preconditions.checkArgument(physicalType.is(LogicalTypeRoot.ROW), "Row data type expected.");
         this.physicalDataType = physicalDataType;
@@ -67,6 +69,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
         this.formatConfig = formatConfig;
         this.bufferSize = bufferSize;
         this.startupMode = startupMode;
+        this.mockData = mockData;
     }
 
     @Override
@@ -91,6 +94,10 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
             sourceFunction.setWatermarkStrategy(watermarkStrategy);
         }
 
+        if (mockData != null) {
+            sourceFunction.setMockData(mockData);
+        }
+
         return new DataStreamScanProvider() {
 
             @Override
@@ -109,7 +116,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
     @Override
     public DynamicTableSource copy() {
         return new AuronKafkaDynamicTableSource(
-                physicalDataType, kafkaTopic, kafkaProperties, format, formatConfig, bufferSize, startupMode);
+                physicalDataType, kafkaTopic, kafkaProperties, format, formatConfig, bufferSize, startupMode, mockData);
     }
 
     @Override

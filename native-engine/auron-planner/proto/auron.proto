@@ -755,6 +755,7 @@ message KafkaScanExecNode {
   string auron_operator_id = 6;
   KafkaFormat data_format = 7;
   string format_config_json = 8;
+  string mock_data_json_array = 9;
 }
 
 enum KafkaFormat {

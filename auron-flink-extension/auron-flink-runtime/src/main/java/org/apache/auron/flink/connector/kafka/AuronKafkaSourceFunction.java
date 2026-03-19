@@ -50,6 +50,8 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.shaded.curator5.com.google.common.base.Preconditions;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
@@ -92,6 +94,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private final Map<String, String> formatConfig;
     private final int bufferSize;
     private final String startupMode;
+    private String mockData;
     private transient PhysicalPlanNode physicalPlanNode;
 
     // Flink Checkpoint-related, compatible with Flink Kafka Legacy source
@@ -174,53 +177,63 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                 this.auronOperatorId + "-" + getRuntimeContext().getIndexOfThisSubtask();
         scanExecNode.setAuronOperatorId(auronOperatorIdWithSubtaskIndex);
         scanExecNode.setStartupMode(KafkaStartupMode.valueOf(startupMode));
-        sourcePlan.setKafkaScan(scanExecNode.build());
-        this.physicalPlanNode = sourcePlan.build();
-
-        // 1. Initialize Kafka Consumer for partition metadata discovery only (not for data consumption)
-        Properties kafkaProps = new Properties();
-        kafkaProps.putAll(kafkaProperties);
-        // Override to ensure this consumer does not interfere with actual data consumption
-        kafkaProps.put(ConsumerConfig.GROUP_ID_CONFIG, "flink-auron-fetch-meta");
-        kafkaProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-        kafkaProps.put(
-                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
-                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
-        kafkaProps.put(
-                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
-        this.kafkaConsumer = new KafkaConsumer<>(kafkaProps);
-
         StreamingRuntimeContext runtimeContext = (StreamingRuntimeContext) getRuntimeContext();
-        // 2. Discover and assign partitions for this subtask
-        List<PartitionInfo> partitionInfos = kafkaConsumer.partitionsFor(topic);
-        int subtaskIndex = runtimeContext.getIndexOfThisSubtask();
-        int numSubtasks = runtimeContext.getNumberOfParallelSubtasks();
-
         this.assignedPartitions = new ArrayList<>();
-        for (PartitionInfo partitionInfo : partitionInfos) {
-            int partitionId = partitionInfo.partition();
-            if (KafkaTopicPartitionAssigner.assign(topic, partitionId, numSubtasks) == subtaskIndex) {
-                assignedPartitions.add(partitionId);
-            }
-        }
-        boolean enableCheckpoint = runtimeContext.isCheckpointingEnabled();
-        Map<String, Object> auronRuntimeInfo = new HashMap<>();
-        auronRuntimeInfo.put("subtask_index", subtaskIndex);
-        auronRuntimeInfo.put("num_readers", numSubtasks);
-        auronRuntimeInfo.put("enable_checkpoint", enableCheckpoint);
-        auronRuntimeInfo.put("restored_offsets", restoredOffsets);
-        auronRuntimeInfo.put("assigned_partitions", assignedPartitions);
-        JniBridge.putResource(auronOperatorIdWithSubtaskIndex, mapper.writeValueAsString(auronRuntimeInfo));
         currentOffsets = new HashMap<>();
         pendingOffsetsToCommit = new LinkedMap();
-        LOG.info(
-                "Auron kafka source init successful, Auron operator id: {}, enableCheckpoint is {}, "
-                        + "subtask {} assigned partitions: {}",
-                auronOperatorIdWithSubtaskIndex,
-                enableCheckpoint,
-                subtaskIndex,
-                assignedPartitions);
+        if (mockData != null) {
+            scanExecNode.setMockDataJsonArray(mockData);
+            JsonNode mockDataJson = mapper.readTree(mockData);
+            for (JsonNode data : mockDataJson) {
+                int partition = data.get("serialized_kafka_records_partition").asInt();
+                if (!assignedPartitions.contains(partition)) {
+                    assignedPartitions.add(partition);
+                }
+            }
+            LOG.info("Use mock data for auron kafka source, partition size = {}", assignedPartitions);
+        } else {
+            // 1. Initialize Kafka Consumer for partition metadata discovery only (not for data consumption)
+            Properties kafkaProps = new Properties();
+            kafkaProps.putAll(kafkaProperties);
+            // Override to ensure this consumer does not interfere with actual data consumption
+            kafkaProps.put(ConsumerConfig.GROUP_ID_CONFIG, "flink-auron-fetch-meta");
+            kafkaProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+            kafkaProps.put(
+                    ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                    "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+            kafkaProps.put(
+                    ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                    "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+            this.kafkaConsumer = new KafkaConsumer<>(kafkaProps);
+
+            // 2. Discover and assign partitions for this subtask
+            List<PartitionInfo> partitionInfos = kafkaConsumer.partitionsFor(topic);
+            int subtaskIndex = runtimeContext.getIndexOfThisSubtask();
+            int numSubtasks = runtimeContext.getNumberOfParallelSubtasks();
+            for (PartitionInfo partitionInfo : partitionInfos) {
+                int partitionId = partitionInfo.partition();
+                if (KafkaTopicPartitionAssigner.assign(topic, partitionId, numSubtasks) == subtaskIndex) {
+                    assignedPartitions.add(partitionId);
+                }
+            }
+            boolean enableCheckpoint = runtimeContext.isCheckpointingEnabled();
+            Map<String, Object> auronRuntimeInfo = new HashMap<>();
+            auronRuntimeInfo.put("subtask_index", subtaskIndex);
+            auronRuntimeInfo.put("num_readers", numSubtasks);
+            auronRuntimeInfo.put("enable_checkpoint", enableCheckpoint);
+            auronRuntimeInfo.put("restored_offsets", restoredOffsets);
+            auronRuntimeInfo.put("assigned_partitions", assignedPartitions);
+            JniBridge.putResource(auronOperatorIdWithSubtaskIndex, mapper.writeValueAsString(auronRuntimeInfo));
+            LOG.info(
+                    "Auron kafka source init successful, Auron operator id: {}, enableCheckpoint is {}, "
+                            + "subtask {} assigned partitions: {}",
+                    auronOperatorIdWithSubtaskIndex,
+                    enableCheckpoint,
+                    subtaskIndex,
+                    assignedPartitions);
+        }
+        sourcePlan.setKafkaScan(scanExecNode.build());
+        this.physicalPlanNode = sourcePlan.build();
 
         // 3. Initialize table-runtime WatermarkGenerator if watermarkStrategy is set
         if (watermarkStrategy != null) {
@@ -457,5 +470,10 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
 
     public void setWatermarkStrategy(WatermarkStrategy<RowData> watermarkStrategy) {
         this.watermarkStrategy = watermarkStrategy;
+    }
+
+    public void setMockData(String mockData) {
+        Preconditions.checkArgument(mockData != null, "Auron kafka source mock data must not null");
+        this.mockData = mockData;
     }
 }

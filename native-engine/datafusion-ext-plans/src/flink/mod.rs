@@ -13,5 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod kafka_mock_scan_exec;
 pub mod kafka_scan_exec;
 pub mod serde;

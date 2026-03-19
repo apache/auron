@@ -72,7 +72,7 @@ use datafusion_ext_plans::{
     expand_exec::ExpandExec,
     ffi_reader_exec::FFIReaderExec,
     filter_exec::FilterExec,
-    flink::kafka_scan_exec::KafkaScanExec,
+    flink::{kafka_mock_scan_exec::KafkaMockScanExec, kafka_scan_exec::KafkaScanExec},
     generate::{create_generator, create_udtf_generator},
     generate_exec::GenerateExec,
     ipc_reader_exec::IpcReaderExec,
@@ -804,16 +804,24 @@ impl PhysicalPlanner {
             }
             PhysicalPlanType::KafkaScan(kafka_scan) => {
                 let schema = Arc::new(convert_required!(kafka_scan.schema)?);
-                Ok(Arc::new(KafkaScanExec::new(
-                    kafka_scan.kafka_topic.clone(),
-                    kafka_scan.kafka_properties_json.clone(),
-                    schema,
-                    kafka_scan.batch_size as i32,
-                    kafka_scan.startup_mode,
-                    kafka_scan.auron_operator_id.clone(),
-                    kafka_scan.data_format,
-                    kafka_scan.format_config_json.clone(),
-                )))
+                if !kafka_scan.mock_data_json_array.is_empty() {
+                    Ok(Arc::new(KafkaMockScanExec::new(
+                        schema,
+                        kafka_scan.auron_operator_id.clone(),
+                        kafka_scan.mock_data_json_array.clone(),
+                    )))
+                } else {
+                    Ok(Arc::new(KafkaScanExec::new(
+                        kafka_scan.kafka_topic.clone(),
+                        kafka_scan.kafka_properties_json.clone(),
+                        schema,
+                        kafka_scan.batch_size as i32,
+                        kafka_scan.startup_mode,
+                        kafka_scan.auron_operator_id.clone(),
+                        kafka_scan.data_format,
+                        kafka_scan.format_config_json.clone(),
+                    )))
+                }
             }
         }
     }
