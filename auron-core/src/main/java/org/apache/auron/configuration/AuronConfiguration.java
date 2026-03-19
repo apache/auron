@@ -61,7 +61,8 @@ public abstract class AuronConfiguration {
             .withDescription(
                     "Number of CPU cores allocated per Spark task. This setting determines the parallelism level "
                             + "for individual tasks and affects resource allocation and task scheduling. "
-                            + "Defaults to spark.task.cpus.")
+                            + "In Spark, the value is retrieved from SparkEnv via the 'spark.task.cpus' option; "
+                            + "if not configured, the default value of 1 is used.")
             .withDefaultValue(1);
 
     public abstract <T> Optional<T> getOptional(ConfigOption<T> option);
