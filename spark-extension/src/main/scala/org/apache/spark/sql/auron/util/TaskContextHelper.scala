@@ -120,8 +120,7 @@ object TaskContextHelper extends Logging {
       if (callerContextSupported) {
         try {
           val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-          val builder: Class[AnyRef] =
-            Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+          val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
           val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
           val hdfsContext = builder.getMethod("build").invoke(builderInst)
           callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)

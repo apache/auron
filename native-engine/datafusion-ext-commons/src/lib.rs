@@ -140,10 +140,9 @@ macro_rules! assume {
 macro_rules! prefetch_read_data {
     ($e:expr) => {{
         // safety: use prefetch
-        let locality = 3;
         #[allow(unused_unsafe)]
         unsafe {
-            std::intrinsics::prefetch_read_data($e, locality)
+            std::intrinsics::prefetch_read_data($e)
         }
     }};
 }
@@ -151,10 +150,9 @@ macro_rules! prefetch_read_data {
 macro_rules! prefetch_write_data {
     ($e:expr) => {{
         // safety: use prefetch
-        let locality = 3;
         #[allow(unused_unsafe)]
         unsafe {
-            std::intrinsics::prefetch_write_data($e, locality)
+            std::intrinsics::prefetch_write_data($e)
         }
     }};
 }
