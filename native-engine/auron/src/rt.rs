@@ -29,7 +29,7 @@ use arrow::{
     record_batch::RecordBatch,
 };
 use auron_jni_bridge::{
-    conf::{IntConf, SPARK_TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU},
+    conf::{IntConf, TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU},
     is_task_running, jni_call, jni_call_static, jni_convert_byte_array, jni_exception_check,
     jni_exception_occurred, jni_new_global_ref, jni_new_object, jni_new_string,
 };
@@ -105,8 +105,8 @@ impl NativeExecutionRuntime {
 
         let num_worker_threads = {
             let worker_threads_per_cpu = TOKIO_WORKER_THREADS_PER_CPU.value().unwrap_or(0);
-            let spark_task_cpus = SPARK_TASK_CPUS.value().unwrap_or(0);
-            worker_threads_per_cpu * spark_task_cpus
+            let task_cpus = TASK_CPUS.value().unwrap_or(0);
+            worker_threads_per_cpu * task_cpus
         };
 
         // create tokio runtime

@@ -40,7 +40,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.auron.arrowio.AuronArrowFFIExporter
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.jni.AuronAdaptor
-import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
     extends AuronArrowFFIExporter
@@ -49,7 +48,7 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
     AuronAdaptor.getInstance.getAuronConfiguration
   private val maxBatchNumRows = sparkAuronConfig.getInteger(AuronConfiguration.BATCH_SIZE)
   private val maxBatchMemorySize =
-    sparkAuronConfig.getInteger(SparkAuronConfiguration.SUGGESTED_BATCH_MEM_SIZE)
+    sparkAuronConfig.getInteger(AuronConfiguration.SUGGESTED_BATCH_MEM_SIZE)
 
   private val arrowSchema = ArrowUtils.toArrowSchema(schema)
   private val emptyDictionaryProvider = new MapDictionaryProvider()
