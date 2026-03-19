@@ -142,7 +142,7 @@ macro_rules! prefetch_read_data {
         // safety: use prefetch
         #[allow(unused_unsafe)]
         unsafe {
-            std::intrinsics::prefetch_read_data($e)
+            std::intrinsics::prefetch_read_data::<_, 3>($e)
         }
     }};
 }
@@ -152,7 +152,7 @@ macro_rules! prefetch_write_data {
         // safety: use prefetch
         #[allow(unused_unsafe)]
         unsafe {
-            std::intrinsics::prefetch_write_data($e)
+            std::intrinsics::prefetch_write_data::<_, 3>($e)
         }
     }};
 }
