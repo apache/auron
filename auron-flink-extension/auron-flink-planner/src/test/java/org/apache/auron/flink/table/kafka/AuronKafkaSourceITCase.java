@@ -40,9 +40,9 @@ public class AuronKafkaSourceITCase extends AuronKafkaSourceTestBase {
         assertThat(rows.size()).isEqualTo(3);
         assertRowsContains(
                 rows,
-                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T20:03:00")},
-                new Object[] {"zm2", 1L, LocalDateTime.parse("2026-03-16T20:03:00")},
-                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T20:05:00")});
+                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T12:03:00")},
+                new Object[] {"zm2", 1L, LocalDateTime.parse("2026-03-16T12:03:00")},
+                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T12:05:00")});
     }
 
     @Test
@@ -55,8 +55,8 @@ public class AuronKafkaSourceITCase extends AuronKafkaSourceTestBase {
         assertThat(rows.size()).isEqualTo(3);
         assertRowsContains(
                 rows,
-                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T20:03:00")},
-                new Object[] {"zm2", 1L, LocalDateTime.parse("2026-03-16T20:03:00")},
-                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T20:05:00")});
+                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T12:03:00")},
+                new Object[] {"zm2", 1L, LocalDateTime.parse("2026-03-16T12:03:00")},
+                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T12:05:00")});
     }
 }

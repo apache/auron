@@ -44,6 +44,8 @@ public class AuronKafkaSourceTestBase {
         Configuration configuration = new Configuration();
         // TODO Resolving the issue where the Flink classloader is closed and CompileUtils.doCompile fails
         configuration.setString("classloader.check-leaked-classloader", "false");
+        // set time zone to UTC
+        configuration.setString("table.local-time-zone", "UTC");
         configuration.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.STREAMING);
         environment = StreamExecutionEnvironment.getExecutionEnvironment(configuration);
         environment.setRestartStrategy(RestartStrategies.noRestart());
