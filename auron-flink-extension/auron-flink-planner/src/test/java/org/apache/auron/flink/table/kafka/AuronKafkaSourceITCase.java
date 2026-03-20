@@ -34,8 +34,8 @@ public class AuronKafkaSourceITCase extends AuronKafkaSourceTestBase {
         environment.setParallelism(1);
         List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
                 .executeSql(
-                        "SELECT `name`, count(1), window_start FROM TABLE(" +
-                                "TUMBLE(TABLE T2, DESCRIPTOR(`ts`), INTERVAL '1' MINUTE)) GROUP BY `name`, window_start, window_end")
+                        "SELECT `name`, count(1), window_start FROM TABLE("
+                                + "TUMBLE(TABLE T2, DESCRIPTOR(`ts`), INTERVAL '1' MINUTE)) GROUP BY `name`, window_start, window_end")
                 .collect());
         assertThat(rows.size()).isEqualTo(3);
         assertRowsContains(
@@ -49,9 +49,8 @@ public class AuronKafkaSourceITCase extends AuronKafkaSourceTestBase {
     public void testEventTimeTumbleGroupWindow() {
         environment.setParallelism(1);
         List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
-                .executeSql(
-                        "SELECT `name`, count(1), TUMBLE_START(`ts`, INTERVAL '1' MINUTE) " +
-                                "FROM T2 group by TUMBLE(`ts`, INTERVAL '1' MINUTE), `name`")
+                .executeSql("SELECT `name`, count(1), TUMBLE_START(`ts`, INTERVAL '1' MINUTE) "
+                        + "FROM T2 group by TUMBLE(`ts`, INTERVAL '1' MINUTE), `name`")
                 .collect());
         assertThat(rows.size()).isEqualTo(3);
         assertRowsContains(

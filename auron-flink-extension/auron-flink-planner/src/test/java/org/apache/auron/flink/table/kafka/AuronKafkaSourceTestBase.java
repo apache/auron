@@ -28,31 +28,35 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.types.Row;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.TestInstance;
 
 /**
  * Base class for Auron Flink Kafka Table Tests.
  */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class AuronKafkaSourceTestBase {
     protected StreamExecutionEnvironment environment;
     protected StreamTableEnvironment tableEnvironment;
 
-    @BeforeEach
+    @BeforeAll
     public void before() {
-        environment = StreamExecutionEnvironment.getExecutionEnvironment();
         Configuration configuration = new Configuration();
+        // TODO Resolving the issue where the Flink classloader is closed and CompileUtils.doCompile fails
+        configuration.setString("classloader.check-leaked-classloader", "false");
         configuration.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.STREAMING);
+        environment = StreamExecutionEnvironment.getExecutionEnvironment(configuration);
         environment.setRestartStrategy(RestartStrategies.noRestart());
         environment.getConfig().setAutoWatermarkInterval(1);
         tableEnvironment =
                 StreamTableEnvironment.create(environment, EnvironmentSettings.fromConfiguration(configuration));
         String jsonArray = "["
-                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 100000, " +
-                "\"serialized_kafka_records_timestamp\": 1773662603760, \"event_time\": 1773662603760, \"age\": 20, \"name\":\"zm1\"},"
-                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 100001, " +
-                "\"serialized_kafka_records_timestamp\": 1773662603761, \"event_time\": 1773662633760, \"age\": 21, \"name\":\"zm2\"},"
-                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 100002, " +
-                "\"serialized_kafka_records_timestamp\": 1773662603762, \"event_time\": 1773662703761, \"age\": 22, \"name\":\"zm1\"}"
+                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 100000, "
+                + "\"serialized_kafka_records_timestamp\": 1773662603760, \"event_time\": 1773662603760, \"age\": 20, \"name\":\"zm1\"},"
+                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 100001, "
+                + "\"serialized_kafka_records_timestamp\": 1773662603761, \"event_time\": 1773662633760, \"age\": 21, \"name\":\"zm2\"},"
+                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 100002, "
+                + "\"serialized_kafka_records_timestamp\": 1773662603762, \"event_time\": 1773662703761, \"age\": 22, \"name\":\"zm1\"}"
                 + "]";
         tableEnvironment.executeSql(" CREATE TABLE T2 ( "
                 + "\n `event_time` BIGINT, "

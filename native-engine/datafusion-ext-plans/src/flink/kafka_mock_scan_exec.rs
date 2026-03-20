@@ -285,34 +285,49 @@ mod tests {
             {"name": "Alice", "age": 30, "score": 95.5, "is_active": true, "ts": 1700000000000},
             {"name": "Bob", "age": 25, "score": 88.0, "is_active": false, "ts": 1700000001000}
         ]"#;
-        let json_value: sonic_rs::Value = sonic_rs::from_str(json_str).unwrap();
-        let rows = json_value.as_array().unwrap();
+        let json_value: sonic_rs::Value =
+            sonic_rs::from_str(json_str).expect("Failed to parse JSON");
+        let rows = json_value
+            .as_array()
+            .expect("Failed to get array from JSON");
 
         // Utf8
         let field = Field::new("name", DataType::Utf8, false);
-        let array = build_array_from_json(&field, rows).unwrap();
-        let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+        let array = build_array_from_json(&field, rows).expect("Failed to build array from JSON");
+        let string_array = array
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("Failed to downcast to StringArray");
         assert_eq!(string_array.value(0), "Alice");
         assert_eq!(string_array.value(1), "Bob");
 
         // Int32
         let field = Field::new("age", DataType::Int32, false);
-        let array = build_array_from_json(&field, rows).unwrap();
-        let int_array = array.as_any().downcast_ref::<Int32Array>().unwrap();
+        let array = build_array_from_json(&field, rows).expect("Failed to build array from JSON");
+        let int_array = array
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("Failed to downcast to Int32Array");
         assert_eq!(int_array.value(0), 30);
         assert_eq!(int_array.value(1), 25);
 
         // Float64
         let field = Field::new("score", DataType::Float64, false);
-        let array = build_array_from_json(&field, rows).unwrap();
-        let float_array = array.as_any().downcast_ref::<Float64Array>().unwrap();
+        let array = build_array_from_json(&field, rows).expect("Failed to build array from JSON");
+        let float_array = array
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .expect("Failed to downcast to Float64Array");
         assert!((float_array.value(0) - 95.5).abs() < f64::EPSILON);
         assert!((float_array.value(1) - 88.0).abs() < f64::EPSILON);
 
         // Boolean
         let field = Field::new("is_active", DataType::Boolean, false);
-        let array = build_array_from_json(&field, rows).unwrap();
-        let bool_array = array.as_any().downcast_ref::<BooleanArray>().unwrap();
+        let array = build_array_from_json(&field, rows).expect("Failed to build array from JSON");
+        let bool_array = array
+            .as_any()
+            .downcast_ref::<BooleanArray>()
+            .expect("Failed to downcast to BooleanArray");
         assert!(bool_array.value(0));
         assert!(!bool_array.value(1));
 
@@ -322,11 +337,11 @@ mod tests {
             DataType::Timestamp(TimeUnit::Millisecond, None),
             false,
         );
-        let array = build_array_from_json(&field, rows).unwrap();
+        let array = build_array_from_json(&field, rows).expect("Failed to build array from JSON");
         let ts_array = array
             .as_any()
             .downcast_ref::<TimestampMillisecondArray>()
-            .unwrap();
+            .expect("Failed to downcast to TimestampMillisecondArray");
         assert_eq!(ts_array.value(0), 1700000000000);
         assert_eq!(ts_array.value(1), 1700000001000);
     }
@@ -338,12 +353,18 @@ mod tests {
             {"value": null},
             {}
         ]"#;
-        let json_value: sonic_rs::Value = sonic_rs::from_str(json_str).unwrap();
-        let rows = json_value.as_array().unwrap();
+        let json_value: sonic_rs::Value =
+            sonic_rs::from_str(json_str).expect("Failed to parse JSON");
+        let rows = json_value
+            .as_array()
+            .expect("Failed to get array from JSON");
 
         let field = Field::new("value", DataType::Int64, true);
-        let array = build_array_from_json(&field, rows).unwrap();
-        let int_array = array.as_any().downcast_ref::<Int64Array>().unwrap();
+        let array = build_array_from_json(&field, rows).expect("Failed to build array from JSON");
+        let int_array = array
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .expect("Failed to downcast to Int64Array");
         assert_eq!(int_array.value(0), 100);
         assert!(int_array.is_null(1));
         assert!(int_array.is_null(2));
@@ -352,8 +373,11 @@ mod tests {
     #[test]
     fn test_build_array_from_json_non_nullable_null_value_errors() {
         let json_str = r#"[{"value": null}]"#;
-        let json_value: sonic_rs::Value = sonic_rs::from_str(json_str).unwrap();
-        let rows = json_value.as_array().unwrap();
+        let json_value: sonic_rs::Value =
+            sonic_rs::from_str(json_str).expect("Failed to parse JSON");
+        let rows = json_value
+            .as_array()
+            .expect("Failed to get array from JSON");
 
         let field = Field::new("value", DataType::Int32, false);
         let result = build_array_from_json(&field, rows);
@@ -363,11 +387,14 @@ mod tests {
     #[test]
     fn test_build_array_from_json_empty_array() {
         let json_str = r#"[]"#;
-        let json_value: sonic_rs::Value = sonic_rs::from_str(json_str).unwrap();
-        let rows = json_value.as_array().unwrap();
+        let json_value: sonic_rs::Value =
+            sonic_rs::from_str(json_str).expect("Failed to parse JSON");
+        let rows = json_value
+            .as_array()
+            .expect("Failed to get array from JSON");
 
         let field = Field::new("name", DataType::Utf8, false);
-        let array = build_array_from_json(&field, rows).unwrap();
+        let array = build_array_from_json(&field, rows).expect("Failed to build array from JSON");
         assert_eq!(array.len(), 0);
     }
 
@@ -386,15 +413,20 @@ mod tests {
             {"name": "Bob", "age": null, "_kafka_partition": 0, "_kafka_offset": 1, "_kafka_timestamp": 1700000001000}
         ]"#;
 
-        let json_value: sonic_rs::Value = sonic_rs::from_str(mock_json).unwrap();
-        let rows = json_value.as_array().unwrap();
+        let json_value: sonic_rs::Value =
+            sonic_rs::from_str(mock_json).expect("Failed to parse JSON");
+        let rows = json_value
+            .as_array()
+            .expect("Failed to get array from JSON");
 
         let mut columns: Vec<ArrayRef> = Vec::new();
         for field in schema.fields() {
-            columns.push(build_array_from_json(field, rows).unwrap());
+            columns
+                .push(build_array_from_json(field, rows).expect("Failed to build array from JSON"));
         }
 
-        let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+        let batch =
+            RecordBatch::try_new(schema.clone(), columns).expect("Failed to create record batch");
 
         assert_eq!(batch.num_rows(), 2);
         assert_eq!(batch.num_columns(), 5);
@@ -403,7 +435,7 @@ mod tests {
             .column(0)
             .as_any()
             .downcast_ref::<StringArray>()
-            .unwrap();
+            .expect("Failed to downcast to StringArray");
         assert_eq!(name_col.value(0), "Alice");
         assert_eq!(name_col.value(1), "Bob");
 
@@ -411,7 +443,7 @@ mod tests {
             .column(1)
             .as_any()
             .downcast_ref::<Int32Array>()
-            .unwrap();
+            .expect("Failed to downcast to Int32Array");
         assert_eq!(age_col.value(0), 30);
         assert!(age_col.is_null(1));
 
@@ -419,7 +451,7 @@ mod tests {
             .column(2)
             .as_any()
             .downcast_ref::<Int32Array>()
-            .unwrap();
+            .expect("Failed to downcast to Int32Array");
         assert_eq!(partition_col.value(0), 0);
         assert_eq!(partition_col.value(1), 0);
 
@@ -427,7 +459,7 @@ mod tests {
             .column(3)
             .as_any()
             .downcast_ref::<Int64Array>()
-            .unwrap();
+            .expect("Failed to downcast to Int64Array");
         assert_eq!(offset_col.value(0), 0);
         assert_eq!(offset_col.value(1), 1);
     }
