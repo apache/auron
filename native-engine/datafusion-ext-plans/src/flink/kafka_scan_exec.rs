@@ -52,7 +52,10 @@ use sonic_rs::{JsonContainerTrait, JsonValueTrait};
 
 use crate::{
     common::{column_pruning::ExecuteWithColumnPruning, execution_context::ExecutionContext},
-    flink::serde::{flink_deserializer::FlinkDeserializer, pb_deserializer::PbDeserializer},
+    flink::serde::{
+        flink_deserializer::FlinkDeserializer, json_deserializer::JsonDeserializer,
+        pb_deserializer::PbDeserializer,
+    },
     rdkafka::Message,
 };
 
@@ -132,6 +135,7 @@ impl KafkaScanExec {
             exec_ctx.output_schema(),
             exec_ctx.clone(),
             serialized_pb_stream,
+            self.data_format,
             self.format_config_json.clone(),
         )?;
         Ok(deserialized_pb_stream)
@@ -481,6 +485,7 @@ fn parse_records(
     schema: SchemaRef,
     exec_ctx: Arc<ExecutionContext>,
     mut input_stream: SendableRecordBatchStream,
+    data_format: i32,
     parser_config_json: String,
 ) -> Result<SendableRecordBatchStream> {
     let parser_config = sonic_rs::from_str::<sonic_rs::Value>(&parser_config_json)
@@ -523,13 +528,17 @@ fn parse_records(
         "KafkaScanExec.ParseRecords",
         move |sender| async move {
             // TODO: json parser
-            let mut parser: Box<dyn FlinkDeserializer> = Box::new(PbDeserializer::new(
-                &file_descriptor_bytes,
-                &root_message_name,
-                schema.clone(),
-                &nested_msg_mapping,
-                &skip_fields_vec,
-            )?);
+            let mut parser: Box<dyn FlinkDeserializer> = if data_format == 0 {
+                Box::new(JsonDeserializer::new(schema.clone(), &nested_msg_mapping)?)
+            } else {
+                Box::new(PbDeserializer::new(
+                    &file_descriptor_bytes,
+                    &root_message_name,
+                    schema.clone(),
+                    &nested_msg_mapping,
+                    &skip_fields_vec,
+                )?)
+            };
             while let Some(batch) = input_stream.next().await.transpose()? {
                 let kafka_partition = batch
                     .column(0)
