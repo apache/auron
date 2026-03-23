@@ -13,7 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{any::Any, collections::HashMap, env, fmt::Formatter, fs, sync::Arc};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    env,
+    fmt::Formatter,
+    fs,
+    sync::Arc,
+    time::Instant,
+};
 
 use arrow::array::{
     ArrayBuilder, BinaryArray, BinaryBuilder, Int32Array, Int32Builder, Int64Array, Int64Builder,
@@ -262,6 +270,10 @@ fn read_serialized_records_from_kafka(
             "No partitions found for topic: {kafka_topic}"
         )));
     }
+    let partition_discovery_interval_ms = task_json
+        .get("partition_discovery_interval_ms")
+        .as_i64()
+        .expect("partition_discovery_interval_ms is not valid json");
     let kafka_properties = sonic_rs::from_str::<sonic_rs::Value>(&kafka_properties_json)
         .expect("kafka_properties_json is not valid json");
     let mut config = ClientConfig::new();
@@ -337,6 +349,11 @@ fn read_serialized_records_from_kafka(
             let mut serialized_kafka_records_offset_builder = Int64Builder::with_capacity(0);
             let mut serialized_kafka_records_timestamp_builder = Int64Builder::with_capacity(0);
             let mut serialized_pb_records_builder = BinaryBuilder::with_capacity(batch_size, 0);
+
+            let mut last_partition_check = Instant::now();
+            let partition_check_interval =
+                std::time::Duration::from_millis(partition_discovery_interval_ms.max(0) as u64);
+
             loop {
                 while serialized_pb_records_builder.len() < batch_size {
                     match consumer.recv().await {
@@ -363,6 +380,62 @@ fn read_serialized_records_from_kafka(
                     ],
                 )?;
                 sender.send(batch).await;
+
+                // Check for new partitions if partition discovery is enabled
+                if partition_discovery_interval_ms > 0
+                    && last_partition_check.elapsed() >= partition_check_interval
+                {
+                    let mut known_partitions: HashSet<i32> = partitions.iter().cloned().collect();
+                    last_partition_check = Instant::now();
+                    let new_partitions_key = auron_operator_id.clone() + "-new-partitions";
+                    let resource_id = jni_new_string!(&new_partitions_key)?;
+                    let java_json_str = jni_call_static!(
+                        JniBridge.getResource(resource_id.as_obj()) -> JObject
+                    )?;
+                    if !java_json_str.0.is_null() {
+                        let new_partitions_json = jni_get_string!(java_json_str.as_obj().into())
+                            .expect("new_partitions json is not valid java string");
+                        let new_partitions: Vec<i32> = sonic_rs::from_str(&new_partitions_json)
+                            .expect("new_partitions_json is not valid json");
+
+                        let truly_new: Vec<i32> = new_partitions
+                            .iter()
+                            .filter(|p| !known_partitions.contains(p))
+                            .cloned()
+                            .collect();
+
+                        if !truly_new.is_empty() {
+                            log::info!(
+                                "Subtask {subtask_index} discovered new partitions: \
+                                 {truly_new:?}, consuming from beginning"
+                            );
+
+                            known_partitions.extend(&truly_new);
+
+                            let all_partitions: Vec<i32> =
+                                known_partitions.iter().cloned().collect();
+
+                            let mut ressgined =
+                                consumer.position().expect("Cannot got partitions position");
+
+                            // New partitions start from the beginning
+                            for &p in &truly_new {
+                                let _ = ressgined.add_partition_offset(
+                                    &kafka_topic,
+                                    p,
+                                    Offset::Beginning,
+                                );
+                            }
+
+                            consumer
+                                .assign(&ressgined)
+                                .expect("Cannot reassign partitions to consumer");
+
+                            partitions = all_partitions;
+                        }
+                    }
+                }
+
                 if enable_checkpoint {
                     // if checkpoint is enabled, commit offsets to kafka
                     let offset_to_commit = auron_operator_id.clone() + "-offsets2commit";

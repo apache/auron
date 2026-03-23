@@ -48,6 +48,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
     private final int bufferSize;
     private final String startupMode;
     private final String mockData;
+    private final long partitionDiscoveryIntervalMs;
     /** Watermark strategy that is used to generate per-partition watermark. */
     protected @Nullable WatermarkStrategy<RowData> watermarkStrategy;
 
@@ -59,7 +60,8 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
             Map<String, String> formatConfig,
             int bufferSize,
             String startupMode,
-            String mockData) {
+            String mockData,
+            long partitionDiscoveryIntervalMs) {
         final LogicalType physicalType = physicalDataType.getLogicalType();
         Preconditions.checkArgument(physicalType.is(LogicalTypeRoot.ROW), "Row data type expected.");
         this.physicalDataType = physicalDataType;
@@ -70,6 +72,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
         this.bufferSize = bufferSize;
         this.startupMode = startupMode;
         this.mockData = mockData;
+        this.partitionDiscoveryIntervalMs = partitionDiscoveryIntervalMs;
     }
 
     @Override
@@ -88,7 +91,8 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
                 format,
                 formatConfig,
                 bufferSize,
-                startupMode);
+                startupMode,
+                partitionDiscoveryIntervalMs);
 
         if (watermarkStrategy != null) {
             sourceFunction.setWatermarkStrategy(watermarkStrategy);
@@ -116,7 +120,15 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
     @Override
     public DynamicTableSource copy() {
         return new AuronKafkaDynamicTableSource(
-                physicalDataType, kafkaTopic, kafkaProperties, format, formatConfig, bufferSize, startupMode, mockData);
+                physicalDataType,
+                kafkaTopic,
+                kafkaProperties,
+                format,
+                formatConfig,
+                bufferSize,
+                startupMode,
+                mockData,
+                partitionDiscoveryIntervalMs);
     }
 
     @Override

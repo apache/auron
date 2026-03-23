@@ -93,6 +93,13 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
             .withDescription(
                     "When mock data generated, remember that the first three columns of each row are serialized_kafka_records_partition, serialized_kafka_records_offset, and serialized_kafka_records_timestamp.");
 
+    public static final ConfigOption<Long> PARTITION_DISCOVERY_INTERVAL_MS = ConfigOptions.key(
+                    "partition.discovery.interval.ms")
+            .longType()
+            .defaultValue(300000L)
+            .withDescription("Kafka source partition discovery interval in milliseconds. "
+                    + "Non-positive values disable partition discovery. Default is 300000 (5 minutes).");
+
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
         final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
@@ -114,7 +121,8 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
                     formatConfig,
                     tableOptions.get(BUFFER_SIZE),
                     tableOptions.get(START_UP_MODE),
-                    tableOptions.get(KAFKA_MOCK_DATA));
+                    tableOptions.get(KAFKA_MOCK_DATA),
+                    tableOptions.get(PARTITION_DISCOVERY_INTERVAL_MS));
         } catch (Exception e) {
             throw new FlinkRuntimeException("Could not create Auron Kafka dynamic table source", e);
         }
@@ -146,6 +154,10 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
         options.add(PB_ROOT_MESSAGE_NAME);
         options.add(BUFFER_SIZE);
         options.add(NESTED_COLS_FIELD_MAPPING);
+        options.add(PB_SKIP_FIELDS);
+        options.add(START_UP_MODE);
+        options.add(KAFKA_MOCK_DATA);
+        options.add(PARTITION_DISCOVERY_INTERVAL_MS);
         return options;
     }
 

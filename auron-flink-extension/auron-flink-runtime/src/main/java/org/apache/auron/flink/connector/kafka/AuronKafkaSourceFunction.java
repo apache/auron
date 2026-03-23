@@ -22,6 +22,9 @@ import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
@@ -94,6 +97,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private final Map<String, String> formatConfig;
     private final int bufferSize;
     private final String startupMode;
+    private final long partitionDiscoveryIntervalMs;
     private String mockData;
     private transient PhysicalPlanNode physicalPlanNode;
 
@@ -117,6 +121,10 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private transient KafkaConsumer<byte[], byte[]> kafkaConsumer;
     private transient List<Integer> assignedPartitions;
 
+    // Partition discovery related
+    private transient ScheduledExecutorService partitionDiscoveryScheduler;
+    private transient volatile int knownPartitionCount;
+
     // Watermark related: uses table-runtime WatermarkGenerator directly
     private WatermarkStrategy<RowData> watermarkStrategy;
     private transient WatermarkGenerator tableWatermarkGenerator;
@@ -131,7 +139,8 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             String format,
             Map<String, String> formatConfig,
             int bufferSize,
-            String startupMode) {
+            String startupMode,
+            long partitionDiscoveryIntervalMs) {
         this.outputType = outputType;
         this.auronOperatorId = auronOperatorId;
         this.topic = topic;
@@ -140,6 +149,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         this.formatConfig = formatConfig;
         this.bufferSize = bufferSize;
         this.startupMode = startupMode;
+        this.partitionDiscoveryIntervalMs = partitionDiscoveryIntervalMs;
     }
 
     @Override
@@ -223,6 +233,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             auronRuntimeInfo.put("enable_checkpoint", enableCheckpoint);
             auronRuntimeInfo.put("restored_offsets", restoredOffsets);
             auronRuntimeInfo.put("assigned_partitions", assignedPartitions);
+            auronRuntimeInfo.put("partition_discovery_interval_ms", partitionDiscoveryIntervalMs);
             JniBridge.putResource(auronOperatorIdWithSubtaskIndex, mapper.writeValueAsString(auronRuntimeInfo));
             LOG.info(
                     "Auron kafka source init successful, Auron operator id: {}, enableCheckpoint is {}, "
@@ -231,6 +242,25 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                     enableCheckpoint,
                     subtaskIndex,
                     assignedPartitions);
+
+            // 4. Initialize partition discovery scheduler
+            this.knownPartitionCount = partitionInfos.size();
+            if (partitionDiscoveryIntervalMs > 0) {
+                this.partitionDiscoveryScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "auron-kafka-partition-discovery-" + subtaskIndex);
+                    t.setDaemon(true);
+                    return t;
+                });
+                partitionDiscoveryScheduler.scheduleWithFixedDelay(
+                        () -> discoverNewPartitions(subtaskIndex, numSubtasks),
+                        partitionDiscoveryIntervalMs,
+                        partitionDiscoveryIntervalMs,
+                        TimeUnit.MILLISECONDS);
+                LOG.info(
+                        "Partition discovery enabled for subtask {} with interval {}ms",
+                        subtaskIndex,
+                        partitionDiscoveryIntervalMs);
+            }
         }
         sourcePlan.setKafkaScan(scanExecNode.build());
         this.physicalPlanNode = sourcePlan.build();
@@ -356,6 +386,15 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     public void close() throws Exception {
         this.isRunning = false;
 
+        // Shut down partition discovery scheduler before closing the consumer it uses
+        if (partitionDiscoveryScheduler != null) {
+            try {
+                partitionDiscoveryScheduler.shutdownNow();
+            } catch (Exception e) {
+                partitionDiscoveryScheduler.shutdownNow();
+            }
+        }
+
         // Close the metadata-only Kafka Consumer
         if (kafkaConsumer != null) {
             kafkaConsumer.close();
@@ -475,5 +514,47 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     public void setMockData(String mockData) {
         Preconditions.checkArgument(mockData != null, "Auron kafka source mock data must not null");
         this.mockData = mockData;
+    }
+
+    private void discoverNewPartitions(int subtaskIndex, int numSubtasks) {
+        if (isRunning) {
+            try {
+                List<PartitionInfo> currentPartitionInfos = kafkaConsumer.partitionsFor(topic);
+                int currentPartitionCount = currentPartitionInfos.size();
+
+                if (currentPartitionCount > knownPartitionCount) {
+                    LOG.info(
+                            "Discovered new partitions for topic {}: {} -> {}",
+                            topic,
+                            knownPartitionCount,
+                            currentPartitionCount);
+
+                    // Always send all new partitions since initialPartitionCount (not incremental)
+                    List<Integer> allNewPartitionsForThisSubtask = new ArrayList<>();
+                    for (PartitionInfo partitionInfo : currentPartitionInfos) {
+                        int partitionId = partitionInfo.partition();
+                        if (partitionId >= knownPartitionCount) {
+                            if (KafkaTopicPartitionAssigner.assign(topic, partitionId, numSubtasks) == subtaskIndex) {
+                                allNewPartitionsForThisSubtask.add(partitionId);
+                            }
+                        }
+                    }
+
+                    if (!allNewPartitionsForThisSubtask.isEmpty()) {
+                        String newPartitionsKey = auronOperatorIdWithSubtaskIndex + "-new-partitions";
+                        LOG.info(
+                                "Subtask {} discovered new partitions to consume: {}",
+                                subtaskIndex,
+                                allNewPartitionsForThisSubtask);
+                        JniBridge.putResource(
+                                newPartitionsKey, mapper.writeValueAsString(allNewPartitionsForThisSubtask));
+                    }
+
+                    knownPartitionCount = currentPartitionCount;
+                }
+            } catch (Exception e) {
+                LOG.warn("Error discovering new partitions for topic {}: {}", topic, e.getMessage());
+            }
+        }
     }
 }
