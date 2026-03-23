@@ -391,7 +391,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             try {
                 partitionDiscoveryScheduler.shutdownNow();
             } catch (Exception e) {
-                partitionDiscoveryScheduler.shutdownNow();
+                LOG.warn("Fail to shut down kafka partition discovery thread pool", e);
             }
         }
 
