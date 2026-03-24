@@ -41,8 +41,7 @@ use crate::flink::serde::{
     shared_struct_array_builder::SharedStructArrayBuilder,
 };
 
-type ValueHandler =
-    Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> Result<()> + Send>;
+type ValueHandler = Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> Result<()> + Send>;
 type ValueHandlerMap = hashbrown::HashMap<u32, ValueHandler, foldhash::fast::RandomState>;
 
 pub struct PbDeserializer {
@@ -884,10 +883,7 @@ pub(crate) fn ensure_output_array_builders_size(
     }))
 }
 
-fn get_output_array(
-    struct_array: &StructArray,
-    nested_field_name: &[usize],
-) -> Result<ArrayRef> {
+fn get_output_array(struct_array: &StructArray, nested_field_name: &[usize]) -> Result<ArrayRef> {
     let column = struct_array.column(nested_field_name[0]);
     if nested_field_name.len() > 1 {
         return get_output_array(downcast_any!(column, StructArray)?, &nested_field_name[1..]);
