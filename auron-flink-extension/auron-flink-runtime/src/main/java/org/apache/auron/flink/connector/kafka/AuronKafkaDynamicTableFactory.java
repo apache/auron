@@ -81,7 +81,7 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
             .defaultValue("")
             .withDescription("Protobuf fields to skip when deserializing. The format is: field1,field2,field3");
 
-    public static final ConfigOption<String> START_UP_MODE = ConfigOptions.key("start-up.mode")
+    public static final ConfigOption<String> START_UP_MODE = ConfigOptions.key("scan.startup.mode")
             .stringType()
             .defaultValue("GROUP_OFFSET")
             .withDescription(
