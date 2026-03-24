@@ -29,7 +29,7 @@ use arrow::array::{
 };
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit};
 use bytes::Buf;
-use datafusion::error::DataFusionError;
+use datafusion::error::{DataFusionError, Result};
 use datafusion_ext_commons::{df_execution_err, downcast_any};
 use prost::encoding::{DecodeContext, WireType};
 use prost_reflect::{DescriptorPool, FieldDescriptor, Kind, MessageDescriptor, UnknownField};
@@ -42,7 +42,7 @@ use crate::flink::serde::{
 };
 
 type ValueHandler =
-    Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> datafusion::error::Result<()> + Send>;
+    Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> Result<()> + Send>;
 type ValueHandlerMap = hashbrown::HashMap<u32, ValueHandler, foldhash::fast::RandomState>;
 
 pub struct PbDeserializer {
@@ -128,7 +128,7 @@ impl PbDeserializer {
         // "pb_field1.pb_sub_field3.pb_sub_sub_field1"}
         nested_msg_mapping: &HashMap<String, String>,
         skip_fields: &[String],
-    ) -> datafusion::error::Result<Self> {
+    ) -> Result<Self> {
         let pool: DescriptorPool =
             DescriptorPool::decode(proto_desc_data.as_ref()).map_err(|e| {
                 DataFusionError::Execution(format!("Failed to parse descriptor file: {e}"))
@@ -149,7 +149,7 @@ impl PbDeserializer {
         output_schema: SchemaRef,
         nested_msg_mapping: &HashMap<String, String>,
         skip_fields: &[String],
-    ) -> datafusion::error::Result<Self> {
+    ) -> Result<Self> {
         // The output schema includes Kafka's meta fields, but these are absent in the
         // PB data, so they must be filtered out.
         let output_schema_without_meta = Arc::new(Schema::new(
@@ -194,7 +194,7 @@ impl PbDeserializer {
                     )?,
                 ))
             })
-            .collect::<datafusion::error::Result<hashbrown::HashMap<_, _, foldhash::fast::RandomState>>>()?;
+            .collect::<Result<hashbrown::HashMap<_, _, foldhash::fast::RandomState>>>()?;
 
         // precompute message mappings
         let msg_mapping = output_schema_without_meta
@@ -231,7 +231,7 @@ impl PbDeserializer {
                 }
                 Ok(mapped_field_indices)
             })
-            .collect::<datafusion::error::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             output_schema,
@@ -250,7 +250,7 @@ fn transfer_output_schema_to_pb_schema(
     output_schema: &SchemaRef,
     nested_msg_mapping: HashMap<String, String>,
     skip_fields: &[String],
-) -> datafusion::error::Result<SchemaRef> {
+) -> Result<SchemaRef> {
     let mut pb_schema_fields: Vec<Field> = vec![];
     let mut sub_pb_nested_msg_mapping: HashMap<String, String> = HashMap::new();
     let mut sub_pb_schema_mapping: HashMap<String, Vec<Field>> = HashMap::new();
@@ -352,7 +352,7 @@ fn convert_pb_type_to_arrow(
     is_map: bool,
     field_name: &str,
     skip_fields: &[String],
-) -> datafusion::error::Result<DataType> {
+) -> Result<DataType> {
     match field_kind {
         Kind::Bool => {
             if is_list {
@@ -538,7 +538,7 @@ fn create_tag_to_output_mapping(
 fn create_output_array_builders(
     schema: &SchemaRef,
     message_descriptor: MessageDescriptor,
-) -> datafusion::error::Result<Vec<SharedArrayBuilder>> {
+) -> Result<Vec<SharedArrayBuilder>> {
     let mut array_builders: Vec<SharedArrayBuilder> = vec![];
     for field in schema.fields() {
         let field_name = field.name();
@@ -636,7 +636,7 @@ fn create_output_array_builders(
 fn create_shared_array_builder_by_data_type(
     data_type: DataType,
     field_desc: FieldDescriptor,
-) -> datafusion::error::Result<SharedArrayBuilder> {
+) -> Result<SharedArrayBuilder> {
     match data_type {
         DataType::Boolean => {
             return Ok(SharedArrayBuilder::new(BooleanBuilder::new()));
@@ -716,7 +716,7 @@ fn create_shared_array_builder_by_data_type(
 
 pub(crate) fn ensure_output_array_builders_size(
     builders: &[SharedArrayBuilder],
-) -> datafusion::error::Result<Box<dyn FnMut(usize) + Send + Sync>> {
+) -> Result<Box<dyn FnMut(usize) + Send + Sync>> {
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     enum BuilderType {
         Boolean,
@@ -815,7 +815,7 @@ pub(crate) fn ensure_output_array_builders_size(
             let builders = $builders
                 .into_iter()
                 .map(|builder| builder.get_mut::<$builder_type>())
-                .collect::<datafusion::error::Result<Vec<_>>>()?;
+                .collect::<Result<Vec<_>>>()?;
             Box::new(move |size| {
                 for builder in &builders {
                     let builder = builder.get_mut();
@@ -875,7 +875,7 @@ pub(crate) fn ensure_output_array_builders_size(
                 }
             })
         })
-        .collect::<datafusion::error::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(Box::new(move |size| {
         adaptive_append_nulls.iter_mut().for_each(|imp| {
@@ -887,7 +887,7 @@ pub(crate) fn ensure_output_array_builders_size(
 fn get_output_array(
     struct_array: &StructArray,
     nested_field_name: &[usize],
-) -> datafusion::error::Result<ArrayRef> {
+) -> Result<ArrayRef> {
     let column = struct_array.column(nested_field_name[0]);
     if nested_field_name.len() > 1 {
         return get_output_array(downcast_any!(column, StructArray)?, &nested_field_name[1..]);
@@ -901,7 +901,7 @@ fn create_value_handler(
     tag_to_output_index: &HashMap<u32, usize>,
     pb_schema: &SchemaRef,
     output_array_builders: &[SharedArrayBuilder],
-) -> datafusion::error::Result<ValueHandler> {
+) -> Result<ValueHandler> {
     let output_index = tag_to_output_index.get(&tag_id);
     let field = message_descriptor.get_field(tag_id);
 

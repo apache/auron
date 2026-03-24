@@ -22,7 +22,7 @@ use arrow::array::{
     new_null_array,
 };
 use arrow_schema::{DataType, Field, Fields, Schema, SchemaRef, TimeUnit};
-use datafusion::error::DataFusionError;
+use datafusion::error::{DataFusionError, Result};
 use datafusion_ext_commons::{df_execution_err, downcast_any};
 use sonic_rs::{JsonContainerTrait, JsonValueTrait, Value};
 
@@ -33,7 +33,7 @@ use crate::flink::serde::{
     shared_struct_array_builder::SharedStructArrayBuilder,
 };
 
-type ValueHandler = Box<dyn Fn(&Value) -> datafusion::error::Result<()> + Send>;
+type ValueHandler = Box<dyn Fn(&Value) -> Result<()> + Send>;
 
 pub struct JsonDeserializer {
     output_schema: SchemaRef,
@@ -92,10 +92,10 @@ impl FlinkDeserializer for JsonDeserializer {
             if array_ref.null_count() == array_ref.len() {
                 output_arrays.push(new_null_array(field.data_type(), array_ref.len()));
             } else {
-                output_arrays.push(
-                    datafusion_ext_commons::arrow::cast::cast(&array_ref, field.data_type())
-                        .expect("Failed to cast array"),
-                );
+                output_arrays.push(datafusion_ext_commons::arrow::cast::cast(
+                    &array_ref,
+                    field.data_type(),
+                )?);
             }
         }
 
@@ -112,7 +112,7 @@ impl JsonDeserializer {
     pub fn new(
         output_schema: SchemaRef,
         nested_msg_mapping: &HashMap<String, String>,
-    ) -> datafusion::error::Result<Self> {
+    ) -> Result<Self> {
         let output_schema_without_meta = Arc::new(Schema::new(
             output_schema
                 .fields()
@@ -168,7 +168,7 @@ impl JsonDeserializer {
                 }
                 Ok(mapped_field_indices)
             })
-            .collect::<datafusion::error::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             output_schema,
@@ -189,7 +189,7 @@ impl JsonDeserializer {
 fn transfer_output_schema_to_json_schema(
     output_schema: &SchemaRef,
     nested_msg_mapping: &HashMap<String, String>,
-) -> datafusion::error::Result<SchemaRef> {
+) -> Result<SchemaRef> {
     let mut json_schema_fields: Vec<Field> = vec![];
     let mut sub_nested_mapping: HashMap<String, String> = HashMap::new();
     let mut sub_schema_mapping: HashMap<String, Vec<Field>> = HashMap::new();
@@ -247,9 +247,7 @@ fn transfer_output_schema_to_json_schema(
     Ok(Arc::new(Schema::new(json_schema_fields)))
 }
 
-fn create_output_array_builders(
-    schema: &SchemaRef,
-) -> datafusion::error::Result<Vec<SharedArrayBuilder>> {
+fn create_output_array_builders(schema: &SchemaRef) -> Result<Vec<SharedArrayBuilder>> {
     let mut array_builders: Vec<SharedArrayBuilder> = vec![];
     for field in schema.fields() {
         array_builders.push(create_shared_array_builder_by_data_type(field.data_type())?);
@@ -257,9 +255,7 @@ fn create_output_array_builders(
     Ok(array_builders)
 }
 
-fn create_shared_array_builder_by_data_type(
-    data_type: &DataType,
-) -> datafusion::error::Result<SharedArrayBuilder> {
+fn create_shared_array_builder_by_data_type(data_type: &DataType) -> Result<SharedArrayBuilder> {
     match data_type {
         DataType::Boolean => Ok(SharedArrayBuilder::new(BooleanBuilder::new())),
         DataType::Int32 => Ok(SharedArrayBuilder::new(Int32Builder::new())),
@@ -317,7 +313,7 @@ fn create_shared_array_builder_by_data_type(
 fn create_value_handlers(
     json_schema: &SchemaRef,
     output_array_builders: &[SharedArrayBuilder],
-) -> datafusion::error::Result<Vec<(String, ValueHandler)>> {
+) -> Result<Vec<(String, ValueHandler)>> {
     let mut handlers = Vec::new();
     for (idx, field) in json_schema.fields().iter().enumerate() {
         let handler = create_value_handler_for_field(field, &output_array_builders[idx])?;
@@ -329,7 +325,7 @@ fn create_value_handlers(
 fn create_value_handler_for_field(
     field: &Field,
     output_array_builder: &SharedArrayBuilder,
-) -> datafusion::error::Result<ValueHandler> {
+) -> Result<ValueHandler> {
     match field.data_type() {
         DataType::Boolean => {
             let builder = output_array_builder.get_mut::<BooleanBuilder>()?;
@@ -564,7 +560,7 @@ fn create_value_handler_for_field(
 fn create_value_handler_for_item(
     data_type: &DataType,
     builder: &SharedArrayBuilder,
-) -> datafusion::error::Result<ValueHandler> {
+) -> Result<ValueHandler> {
     match data_type {
         DataType::Boolean => {
             let b = builder.get_mut::<BooleanBuilder>()?;
@@ -769,10 +765,7 @@ fn create_value_handler_for_item(
     }
 }
 
-fn get_output_array(
-    struct_array: &StructArray,
-    nested_field_name: &[usize],
-) -> datafusion::error::Result<ArrayRef> {
+fn get_output_array(struct_array: &StructArray, nested_field_name: &[usize]) -> Result<ArrayRef> {
     let column = struct_array.column(nested_field_name[0]);
     if nested_field_name.len() > 1 {
         return get_output_array(downcast_any!(column, StructArray)?, &nested_field_name[1..]);
