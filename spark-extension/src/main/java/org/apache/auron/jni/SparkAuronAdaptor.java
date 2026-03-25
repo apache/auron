@@ -42,8 +42,7 @@ public class SparkAuronAdaptor extends AuronAdaptor {
     public void loadAuronLib() {
         String libName = System.mapLibraryName("auron");
         ClassLoader classLoader = AuronAdaptor.class.getClassLoader();
-        try {
-            InputStream libInputStream = classLoader.getResourceAsStream(libName);
+        try (InputStream libInputStream = classLoader.getResourceAsStream(libName)) {
             File tempFile = File.createTempFile("libauron-", ".tmp");
             tempFile.deleteOnExit();
             Files.copy(libInputStream, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
