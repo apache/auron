@@ -53,6 +53,7 @@ message PhysicalPlanNode {
     OrcScanExecNode orc_scan = 25;
     KafkaScanExecNode kafka_scan = 26;
     OrcSinkExecNode orc_sink = 27;
+    CoalesceExecNode coalesce = 29;
   }
 }
 
@@ -777,6 +778,12 @@ message KafkaScanExecNode {
   KafkaFormat data_format = 7;
   string format_config_json = 8;
   string mock_data_json_array = 9;
+}
+
+message CoalesceExecNode {
+  PhysicalPlanNode input = 1;
+  int32  numPartitions = 2
+  ;
 }
 
 enum KafkaFormat {

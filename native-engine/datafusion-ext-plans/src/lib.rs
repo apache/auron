@@ -36,6 +36,7 @@ pub mod agg;
 pub mod agg_exec;
 pub mod broadcast_join_build_hash_map_exec;
 pub mod broadcast_join_exec;
+pub mod coalesce_exec;
 pub mod debug_exec;
 pub mod empty_partitions_exec;
 pub mod expand_exec;

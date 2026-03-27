@@ -411,6 +411,11 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable AggregateExec operation conversion to native Auron implementations.")
             .withDefaultValue(true);
 
+    public static final ConfigOption<Boolean> ENABLE_COALESEC = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.coalesce")
+            .withCategory("Operator Supports")
+            .withDescription("Enable CoalesceExec operation conversion to native Auron implementations.")
+            .withDefaultValue(true);
     public static final ConfigOption<Boolean> ENABLE_EXPAND = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.expand")
             .withCategory("Operator Supports")
