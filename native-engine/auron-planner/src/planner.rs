@@ -67,6 +67,7 @@ use datafusion_ext_plans::{
     agg_exec::AggExec,
     broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
     broadcast_join_exec::BroadcastJoinExec,
+    coalesce_exec::CoalesceExec,
     debug_exec::DebugExec,
     empty_partitions_exec::EmptyPartitionsExec,
     expand_exec::ExpandExec,
@@ -573,6 +574,14 @@ impl PhysicalPlanner {
                     ffi_reader.num_partitions as usize,
                     ffi_reader.export_iter_provider_resource_id.clone(),
                     schema,
+                )))
+            }
+            PhysicalPlanType::Coalesce(coalesce) => {
+                let input: Arc<dyn ExecutionPlan> =
+                    convert_box_required!(self, coalesce.input)?;
+                Ok(Arc::new(CoalesceExec::new(
+                    input,
+                    coalesce.num_partitions as usize,
                 )))
             }
             PhysicalPlanType::CoalesceBatches(coalesce_batches) => {

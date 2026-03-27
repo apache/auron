@@ -52,6 +52,7 @@ message PhysicalPlanNode {
     ParquetSinkExecNode parquet_sink = 24;
     OrcScanExecNode orc_scan = 25;
     KafkaScanExecNode kafka_scan = 26;
+    CoalesceExecNode coalesce = 29;
   }
 }
 
@@ -755,6 +756,12 @@ message KafkaScanExecNode {
   string auron_operator_id = 6;
   KafkaFormat data_format = 7;
   string format_config_json = 8;
+}
+
+message CoalesceExecNode {
+  PhysicalPlanNode input = 1;
+  int32  numPartitions = 2
+  ;
 }
 
 enum KafkaFormat {
