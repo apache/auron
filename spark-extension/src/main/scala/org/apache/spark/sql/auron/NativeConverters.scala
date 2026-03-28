@@ -274,6 +274,54 @@ object NativeConverters extends Logging {
     override def toString(): String = s"$getClass() dataType:$dataType)"
   }
 
+  private def buildSparkUdfWrapperExpr(
+      sparkExpr: Expression,
+      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    // update subquery result if needed
+    sparkExpr.foreach {
+      case subquery: ExecSubqueryExpression =>
+        prepareExecSubquery(subquery)
+      case _ =>
+    }
+    val exprString = sparkExpr.toString()
+
+    // bind all convertible children
+    val convertedChildren = mutable.LinkedHashMap[pb.PhysicalExprNode, BoundReference]()
+    val bound = sparkExpr.mapChildren(_.transformDown {
+      case p: Literal => p
+      case p =>
+        try {
+          val convertedChild = convertExprWithFallback(p, isPruningExpr = false, fallback)
+          val nextBindIndex = convertedChildren.size
+          convertedChildren.getOrElseUpdate(
+            convertedChild,
+            BoundReference(nextBindIndex, p.dataType, p.nullable))
+        } catch {
+          case _: Exception | _: NotImplementedError => p
+        }
+    })
+
+    val paramsSchema = StructType(
+      convertedChildren.values
+        .map(ref => StructField("", ref.dataType, ref.nullable))
+        .toSeq)
+
+    val serialized =
+      serializeExpression(bound.asInstanceOf[Expression with Serializable], paramsSchema)
+
+    pb.PhysicalExprNode
+      .newBuilder()
+      .setSparkUdfWrapperExpr(
+        pb.PhysicalSparkUDFWrapperExprNode
+          .newBuilder()
+          .setSerialized(ByteString.copyFrom(serialized))
+          .setReturnType(convertDataType(bound.dataType))
+          .setReturnNullable(bound.nullable)
+          .addAllParams(convertedChildren.keys.asJava)
+          .setExprString(exprString))
+      .build()
+  }
+
   def convertExpr(sparkExpr: Expression): pb.PhysicalExprNode = {
     def fallbackToError: Expression => pb.PhysicalExprNode = { e =>
       throw new NotImplementedError(s"unsupported expression: (${e.getClass}) $e")
@@ -321,52 +369,7 @@ object NativeConverters extends Logging {
     } catch {
       case e: NotImplementedError =>
         logWarning(s"Falling back expression: $e")
-
-        // update subquery result if needed
-        sparkExpr.foreach {
-          case subquery: ExecSubqueryExpression =>
-            prepareExecSubquery(subquery)
-          case _ =>
-        }
-        val exprString = sparkExpr.toString()
-
-        // bind all convertible children
-        val convertedChildren = mutable.LinkedHashMap[pb.PhysicalExprNode, BoundReference]()
-        val bound = sparkExpr.mapChildren(_.transformDown {
-          case p: Literal => p
-          case p =>
-            try {
-              val convertedChild =
-                convertExprWithFallback(p, isPruningExpr = false, fallbackToError)
-              val nextBindIndex = convertedChildren.size
-              convertedChildren.getOrElseUpdate(
-                convertedChild,
-                BoundReference(nextBindIndex, p.dataType, p.nullable))
-            } catch {
-              case _: Exception | _: NotImplementedError => p
-            }
-        })
-
-        val paramsSchema = StructType(
-          convertedChildren.values
-            .map(ref => StructField("", ref.dataType, ref.nullable))
-            .toSeq)
-
-        val serialized =
-          serializeExpression(bound.asInstanceOf[Expression with Serializable], paramsSchema)
-
-        // build SparkUDFWrapperExpr
-        pb.PhysicalExprNode
-          .newBuilder()
-          .setSparkUdfWrapperExpr(
-            pb.PhysicalSparkUDFWrapperExprNode
-              .newBuilder()
-              .setSerialized(ByteString.copyFrom(serialized))
-              .setReturnType(convertDataType(bound.dataType))
-              .setReturnNullable(bound.nullable)
-              .addAllParams(convertedChildren.keys.asJava)
-              .setExprString(exprString))
-          .build()
+        buildSparkUdfWrapperExpr(sparkExpr, fallbackToError)
     }
   }
 
@@ -467,27 +470,36 @@ object NativeConverters extends Logging {
         }
 
       // cast
-      // not performing native cast for timestamp/dates (will use UDFWrapper instead)
-      case cast: Cast
-          if !Seq(cast.dataType, cast.child.dataType).exists(t =>
-            t.isInstanceOf[TimestampType] || t.isInstanceOf[DateType]) =>
-        val castChild =
-          if (cast.child.dataType == StringType &&
-            (cast.dataType.isInstanceOf[NumericType] || cast.dataType
-              .isInstanceOf[BooleanType]) &&
-            castTrimStringEnabled) {
-            // converting Cast(str as num) to StringTrim(Cast(str as num)) if enabled
-            StringTrim(cast.child)
-          } else {
-            cast.child
+      case cast: Cast =>
+        val involvesDateOrTimestamp =
+          Seq(cast.dataType, cast.child.dataType).exists {
+            case DateType | TimestampType => true
+            case _ => false
           }
-        buildExprNode {
-          _.setTryCast(
-            pb.PhysicalTryCastNode
-              .newBuilder()
-              .setExpr(convertExprWithFallback(castChild, isPruningExpr, fallback))
-              .setArrowType(convertDataType(cast.dataType))
-              .build())
+
+        if (involvesDateOrTimestamp) {
+          // Keep timestamp/date casts executable in native projects by wrapping
+          // the Spark expression, since native cast does not support these types directly.
+          buildSparkUdfWrapperExpr(cast, fallback)
+        } else {
+          val castChild =
+            if (cast.child.dataType == StringType &&
+              (cast.dataType.isInstanceOf[NumericType] || cast.dataType
+                .isInstanceOf[BooleanType]) &&
+              castTrimStringEnabled) {
+              // converting Cast(str as num) to StringTrim(Cast(str as num)) if enabled
+              StringTrim(cast.child)
+            } else {
+              cast.child
+            }
+          buildExprNode {
+            _.setTryCast(
+              pb.PhysicalTryCastNode
+                .newBuilder()
+                .setExpr(convertExprWithFallback(castChild, isPruningExpr, fallback))
+                .setArrowType(convertDataType(cast.dataType))
+                .build())
+          }
         }
 
       // in
@@ -926,6 +938,8 @@ object NativeConverters extends Logging {
       case Year(child) => buildExtScalarFunction("Spark_Year", child :: Nil, IntegerType)
       case Month(child) => buildExtScalarFunction("Spark_Month", child :: Nil, IntegerType)
       case DayOfMonth(child) => buildExtScalarFunction("Spark_Day", child :: Nil, IntegerType)
+      case DayOfWeek(child) =>
+        buildExtScalarFunction("Spark_DayOfWeek", child :: Nil, IntegerType)
       case Quarter(child) => buildExtScalarFunction("Spark_Quarter", child :: Nil, IntegerType)
 
       case e: Levenshtein =>
