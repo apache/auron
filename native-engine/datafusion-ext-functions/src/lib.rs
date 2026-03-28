@@ -77,6 +77,7 @@ pub fn create_auron_ext_function(
         "Spark_Month" => Arc::new(spark_dates::spark_month),
         "Spark_Day" => Arc::new(spark_dates::spark_day),
         "Spark_DayOfWeek" => Arc::new(spark_dates::spark_dayofweek),
+        "Spark_WeekOfYear" => Arc::new(spark_dates::spark_weekofyear),
         "Spark_Quarter" => Arc::new(spark_dates::spark_quarter),
         "Spark_Hour" => Arc::new(spark_dates::spark_hour),
         "Spark_Minute" => Arc::new(spark_dates::spark_minute),
