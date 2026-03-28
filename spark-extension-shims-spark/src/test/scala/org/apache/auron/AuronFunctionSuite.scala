@@ -117,6 +117,14 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("ascii function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('Auron'), (''), (null)")
+      checkSparkAnswerAndOperator("select ascii(c1) from t1")
+    }
+  }
+
   test("stddev_samp function with UDAF fallback") {
     withSQLConf("spark.auron.udafFallback.enable" -> "true") {
       withTable("t1") {
