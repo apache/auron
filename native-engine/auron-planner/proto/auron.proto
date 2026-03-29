@@ -208,6 +208,7 @@ message PhysicalCaseNode {
 enum ScalarFunction {
   Abs=0;
   Acos=1;
+  Acosh=68;
   Asin=2;
   Atan=3;
   Ascii=4;

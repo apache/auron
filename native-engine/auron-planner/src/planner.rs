@@ -1226,6 +1226,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Tan => f::math::tan(),
             ScalarFunction::Asin => f::math::asin(),
             ScalarFunction::Acos => f::math::acos(),
+            ScalarFunction::Acosh => f::math::acosh(),
             ScalarFunction::Atan => f::math::atan(),
             ScalarFunction::Exp => f::math::exp(),
             ScalarFunction::Log => f::math::log(),

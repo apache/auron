@@ -814,6 +814,7 @@ object NativeConverters extends Logging {
       case e: Tan => buildScalarFunction(pb.ScalarFunction.Tan, e.children, e.dataType)
       case e: Asin => buildScalarFunction(pb.ScalarFunction.Asin, e.children, e.dataType)
       case e: Acos => buildScalarFunction(pb.ScalarFunction.Acos, e.children, e.dataType)
+      case e: Acosh => buildScalarFunction(pb.ScalarFunction.Acosh, e.children, e.dataType)
       case e: Atan => buildScalarFunction(pb.ScalarFunction.Atan, e.children, e.dataType)
       case e: Exp => buildScalarFunction(pb.ScalarFunction.Exp, e.children, e.dataType)
       case e: Log =>
