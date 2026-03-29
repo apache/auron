@@ -137,6 +137,25 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("instr function") {
+    withTable("t1") {
+      sql(
+        "create table t1(c1 string, c2 string, c3 string, c4 string, c5 string, c6 string, c7 string) using parquet")
+      sql("insert into t1 values('hello', 'll', 'x', '', 'abc', null, 'a')")
+
+      val query =
+        """select
+          |  instr(c1, c2),
+          |  instr(c1, c3),
+          |  instr(c1, c4),
+          |  instr(c6, c7),
+          |  instr(c5, c6)
+          |from t1
+          |""".stripMargin
+      checkSparkAnswerAndOperator(query)
+    }
+  }
+
   test("round function with varying scales for intPi") {
     withTable("t2") {
       sql("CREATE TABLE t2 (c1 INT) USING parquet")
