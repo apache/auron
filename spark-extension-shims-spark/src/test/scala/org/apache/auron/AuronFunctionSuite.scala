@@ -120,7 +120,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   test("ascii function") {
     withTable("t1") {
       sql("create table t1(c1 string) using parquet")
-      sql("insert into t1 values('Auron'), (''), (null)")
+      sql("insert into t1 values('Auron'), (''), (null), ('éclair'), ('你')")
       checkSparkAnswerAndOperator("select ascii(c1) from t1")
     }
   }
