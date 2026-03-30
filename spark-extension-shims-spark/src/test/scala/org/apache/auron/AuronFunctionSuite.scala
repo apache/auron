@@ -266,6 +266,14 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("acosh null propagation") {
+    withTable("t1") {
+      sql("create table t1(c1 double) using parquet")
+      sql("insert into t1 values(null), (0.0), (1.0), (2.0)")
+      checkSparkAnswerAndOperator("select acosh(c1) from t1")
+    }
+  }
+
   test("test function least") {
     withTable("test_least") {
       sql(
