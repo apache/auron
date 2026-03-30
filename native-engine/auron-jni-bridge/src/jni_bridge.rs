@@ -89,7 +89,7 @@ macro_rules! jni_map_error_with_env {
             Err($crate::jni_bridge::jni::errors::Error::JavaException) => {
                 let ex = $env
                     .exception_occurred()
-                    .expect("failed to obtain pending Java execption object");
+                    .expect("failed to obtain pending Java exception object");
                 $env.exception_describe()
                     .expect("failed to print Java exception to stderr");
                 $env.exception_clear()

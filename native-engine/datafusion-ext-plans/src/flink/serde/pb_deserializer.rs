@@ -170,7 +170,7 @@ impl PbDeserializer {
             nested_msg_mapping.clone(),
             &skip_fields,
         )
-        .expect("Failed to transfer output scheam to pb scheam");
+        .expect("Failed to transfer output schema to pb schema");
 
         let tag_to_output_mapping =
             create_tag_to_output_mapping(message_descriptor.clone(), &pb_schema);
