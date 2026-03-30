@@ -266,6 +266,20 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("map_concat function") {
+    withTable("t1") {
+      sql(
+        "create table t1(c1 map<string, int>, c2 map<string, int>, c3 map<string, int>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (map('a', 1), map('b', 2), map('c', 3)),
+          |  (map('d', 4), map('e', 5), map('f', 6)),
+          |  (null, map('x', 10), map('f', 20))
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select map_concat(c1, c2, c3) from t1")
+    }
+  }
+
   test("test function least") {
     withTable("test_least") {
       sql(

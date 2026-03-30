@@ -29,6 +29,7 @@ mod spark_initcap;
 mod spark_isnan;
 mod spark_make_array;
 mod spark_make_decimal;
+mod spark_map;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
 mod spark_round;
@@ -63,6 +64,7 @@ pub fn create_auron_ext_function(
         }
         "Spark_ParseJson" => Arc::new(spark_get_json_object::spark_parse_json),
         "Spark_MakeArray" => Arc::new(spark_make_array::array),
+        "Spark_MapConcat" => Arc::new(spark_map::map_concat),
         "Spark_StringSpace" => Arc::new(spark_strings::string_space),
         "Spark_StringRepeat" => Arc::new(spark_strings::string_repeat),
         "Spark_StringSplit" => Arc::new(spark_strings::string_split),
