@@ -620,6 +620,7 @@ fn create_output_array_builders(
                         field_desc,
                     )
                     .expect("List create_shared_array_builder_by_data_type failed"),
+                    Some(field_ref.clone()),
                 )));
             }
             other => {
@@ -707,6 +708,7 @@ fn create_shared_array_builder_by_data_type(
             return Ok(SharedArrayBuilder::new(SharedListArrayBuilder::new(
                 create_shared_array_builder_by_data_type(field_ref.data_type().clone(), field_desc)
                     .expect("List create_shared_array_builder_by_data_type failed"),
+                Some(field_ref.clone()),
             )));
         }
         other => return df_execution_err!("Unsupported data type for Arrow conversion: {other:?}"),

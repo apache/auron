@@ -63,10 +63,10 @@ impl ArrayBuilder for SharedListArrayBuilder {
 impl SharedListArrayBuilder {
     /// Creates a new [`SharedArrayListBuilder`] from a given values array
     /// builder
-    pub(crate) fn new(values_builder: SharedArrayBuilder) -> Self {
+    pub(crate) fn new(values_builder: SharedArrayBuilder, field: Option<FieldRef>) -> Self {
         let capacity = values_builder.len();
         let appender = adaptive_append_children(&values_builder);
-        Self::with_capacity(values_builder, capacity, appender)
+        Self::with_capacity(values_builder, capacity, appender, field)
     }
 
     /// Creates a new [`SharedArrayListBuilder`] with specified capacity
@@ -74,6 +74,7 @@ impl SharedListArrayBuilder {
         values_builder: SharedArrayBuilder,
         capacity: usize,
         adaptive_append_children: Option<Box<dyn FnMut(usize) + Send + Sync>>,
+        field: Option<FieldRef>,
     ) -> Self {
         let mut offsets_builder = BufferBuilder::<i32>::new(capacity + 1);
         offsets_builder.append(0);
@@ -81,7 +82,7 @@ impl SharedListArrayBuilder {
             offsets_builder,
             null_buffer_builder: NullBufferBuilder::new(capacity),
             values_builder,
-            field: None,
+            field,
             current_offset: 0,
             adaptive_append_children,
         }

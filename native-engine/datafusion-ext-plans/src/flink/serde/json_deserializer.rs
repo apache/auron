@@ -281,6 +281,7 @@ fn create_shared_array_builder_by_data_type(data_type: &DataType) -> Result<Shar
             let values_builder = create_shared_array_builder_by_data_type(field_ref.data_type())?;
             Ok(SharedArrayBuilder::new(SharedListArrayBuilder::new(
                 values_builder,
+                Some(field_ref.clone()),
             )))
         }
         DataType::Map(field_ref, _) => {
