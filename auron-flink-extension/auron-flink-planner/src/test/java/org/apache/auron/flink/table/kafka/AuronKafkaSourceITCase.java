@@ -59,4 +59,44 @@ public class AuronKafkaSourceITCase extends AuronKafkaSourceTestBase {
                 new Object[] {"zm2", 1L, LocalDateTime.parse("2026-03-16T12:03:00")},
                 new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T12:05:00")});
     }
+
+    @Test
+    public void testEventTimeTumbleTvfWindowWithIdle() {
+        environment.setParallelism(1);
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql(
+                        "SELECT `name`, count(1), window_start FROM TABLE("
+                                + "TUMBLE(TABLE T3, DESCRIPTOR(`ts`), INTERVAL '1' MINUTE)) GROUP BY `name`, window_start, window_end")
+                .collect());
+        assertThat(rows.size()).isEqualTo(3);
+        assertRowsContains(
+                rows,
+                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T12:03:00")},
+                new Object[] {"zm2", 1L, LocalDateTime.parse("2026-03-16T12:03:00")},
+                new Object[] {"zm1", 1L, LocalDateTime.parse("2026-03-16T12:05:00")});
+    }
+
+    /**
+     * Test per-partition watermark alignment with multi-partition data.
+     * T4 has 2 partitions: partition 0's data appears first in batch (event times 12:03, 12:04, 12:05),
+     * then partition 1's data (event times 12:03, 12:04, 12:05).
+     * Without per-partition watermark, partition 0 would push the watermark to 12:05,
+     * causing partition 1's 12:03 and 12:04 data to be treated as late and dropped.
+     * With per-partition watermark (min across partitions), all 6 records should be preserved.
+     */
+    @Test
+    public void testMultiPartitionWatermarkAlignment() {
+        environment.setParallelism(1);
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("SELECT count(1), window_start FROM TABLE("
+                        + "TUMBLE(TABLE T4, DESCRIPTOR(`ts`), INTERVAL '1' MINUTE)) GROUP BY window_start, window_end")
+                .collect());
+        // 3 windows (12:03, 12:04, 12:05), each with 2 records (one from each partition)
+        assertThat(rows.size()).isEqualTo(3);
+        assertRowsContains(
+                rows,
+                new Object[] {2L, LocalDateTime.parse("2026-03-16T12:03:00")},
+                new Object[] {2L, LocalDateTime.parse("2026-03-16T12:04:00")},
+                new Object[] {2L, LocalDateTime.parse("2026-03-16T12:05:00")});
+    }
 }

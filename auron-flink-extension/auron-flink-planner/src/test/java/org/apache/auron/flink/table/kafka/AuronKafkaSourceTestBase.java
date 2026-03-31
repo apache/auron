@@ -74,6 +74,56 @@ public class AuronKafkaSourceTestBase {
                 + "\n 'properties.group.id' = 'flink-test-mock',"
                 + "\n 'format' = 'JSON' "
                 + "\n )");
+
+        // watermark with idleness
+        tableEnvironment.executeSql(" CREATE TABLE T3 ( "
+                + "\n `event_time` BIGINT, "
+                + "\n `age` INT, "
+                + "\n `name` STRING,"
+                + "\n `ts` AS TO_TIMESTAMP(FROM_UNIXTIME(event_time / 1000)),"
+                + "\n WATERMARK FOR `ts` AS `ts` "
+                + "\n ) WITH ( "
+                + "\n 'connector' = 'auron-kafka',"
+                + "\n 'kafka.mock.data' = '" + jsonArray + "',"
+                + "\n 'topic' = 'mock_topic',"
+                + "\n 'properties.bootstrap.servers' = '127.0.0.1:9092',"
+                + "\n 'properties.group.id' = 'flink-test-mock',"
+                + "\n 'format' = 'JSON',"
+                + "\n 'scan.watermark.idle-timeout' = '300 s' "
+                + "\n )");
+
+        // T4: Multi-partition mock data for watermark alignment testing.
+        // Partition 0 data appears first in batch, partition 1 data appears later.
+        // Without per-partition watermark, partition 0's high watermark would cause
+        // partition 1's data to be treated as late.
+        String multiPartitionJsonArray = "["
+                + "{\"serialized_kafka_records_partition\": 0, \"serialized_kafka_records_offset\": 1, "
+                + "\"serialized_kafka_records_timestamp\": 1773662580000, \"event_time\": 1773662580000, \"age\": 1, \"name\":\"p0_min0\"},"
+                + "{\"serialized_kafka_records_partition\": 0, \"serialized_kafka_records_offset\": 2, "
+                + "\"serialized_kafka_records_timestamp\": 1773662640000, \"event_time\": 1773662640000, \"age\": 2, \"name\":\"p0_min1\"},"
+                + "{\"serialized_kafka_records_partition\": 0, \"serialized_kafka_records_offset\": 3, "
+                + "\"serialized_kafka_records_timestamp\": 1773662700000, \"event_time\": 1773662700000, \"age\": 3, \"name\":\"p0_min2\"},"
+                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 1, "
+                + "\"serialized_kafka_records_timestamp\": 1773662580000, \"event_time\": 1773662580000, \"age\": 4, \"name\":\"p1_min0\"},"
+                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 2, "
+                + "\"serialized_kafka_records_timestamp\": 1773662640000, \"event_time\": 1773662640000, \"age\": 5, \"name\":\"p1_min1\"},"
+                + "{\"serialized_kafka_records_partition\": 1, \"serialized_kafka_records_offset\": 3, "
+                + "\"serialized_kafka_records_timestamp\": 1773662700000, \"event_time\": 1773662700000, \"age\": 6, \"name\":\"p1_min2\"}"
+                + "]";
+        tableEnvironment.executeSql(" CREATE TABLE T4 ( "
+                + "\n `event_time` BIGINT, "
+                + "\n `age` INT, "
+                + "\n `name` STRING,"
+                + "\n `ts` AS TO_TIMESTAMP(FROM_UNIXTIME(event_time / 1000)),"
+                + "\n WATERMARK FOR `ts` AS `ts` "
+                + "\n ) WITH ( "
+                + "\n 'connector' = 'auron-kafka',"
+                + "\n 'kafka.mock.data' = '" + multiPartitionJsonArray + "',"
+                + "\n 'topic' = 'mock_topic',"
+                + "\n 'properties.bootstrap.servers' = '127.0.0.1:9092',"
+                + "\n 'properties.group.id' = 'flink-test-mock',"
+                + "\n 'format' = 'JSON' "
+                + "\n )");
     }
 
     protected void assertRowsContains(List<Row> actualRows, Object[]... expectedRows) {
