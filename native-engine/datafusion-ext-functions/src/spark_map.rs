@@ -27,18 +27,22 @@ use datafusion::{
 use datafusion_ext_commons::{df_execution_err, scalar_value::compacted_scalar_value_from_array};
 
 fn get_map_type(args: &[ColumnarValue]) -> Result<(Arc<Field>, bool)> {
-    let (entries_field, ordered) = args
+    if args.is_empty() {
+        return df_execution_err!("map_concat requires at least one map argument");
+    }
+
+    let (entries_field, ordered) = match args
         .iter()
         .find_map(|arg| match arg.data_type() {
             DataType::Map(entries_field, ordered) => Some((entries_field, ordered)),
             DataType::Null => None,
             _ => None,
-        })
-        .ok_or_else(|| {
-            datafusion::error::DataFusionError::Execution(
-                "map_concat requires at least one map argument".to_string(),
-            )
-        })?;
+        }) {
+        Some((entries_field, ordered)) => (entries_field, ordered),
+        None => {
+            return df_execution_err!("map_concat args must be map");
+        }
+    };
 
     validate_map_arg_types(args, &entries_field, ordered)?;
     Ok((entries_field, ordered))
