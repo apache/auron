@@ -79,6 +79,7 @@ pub fn create_auron_ext_function(
         "Spark_Hour" => Arc::new(spark_dates::spark_hour),
         "Spark_Minute" => Arc::new(spark_dates::spark_minute),
         "Spark_Second" => Arc::new(spark_dates::spark_second),
+        "Spark_MonthsBetween" => Arc::new(spark_dates::spark_months_between),
         "Spark_BrickhouseArrayUnion" => Arc::new(brickhouse::array_union::array_union),
         "Spark_Round" => Arc::new(spark_round::spark_round),
         "Spark_BRound" => Arc::new(spark_bround::spark_bround),

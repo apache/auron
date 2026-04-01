@@ -685,4 +685,55 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       }
     }
   }
+
+  test("months_between function") {
+    withSQLConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.sql.session.timeZone" -> "UTC") {
+      withTable("t1") {
+        sql("""
+              |create table t1(
+              |  same_day_of_month_later_ts timestamp,
+              |  same_day_of_month_earlier_ts timestamp,
+              |  last_day_of_month_later_dt date,
+              |  last_day_of_month_earlier_dt date,
+              |  fractional_later_ts timestamp,
+              |  fractional_earlier_ts timestamp,
+              |  null_ts timestamp
+              |) using parquet
+              |""".stripMargin)
+        sql("""
+              |insert into t1 values (
+              |  timestamp'2024-03-15 23:59:59',
+              |  timestamp'2024-01-15 00:00:00',
+              |  date'2024-02-29',
+              |  date'2024-01-31',
+              |  timestamp'2024-03-02 12:00:00',
+              |  timestamp'2024-01-01 00:00:00',
+              |  null
+              |)
+              |""".stripMargin)
+        val query =
+          """
+              |select
+              |  months_between(same_day_of_month_later_ts, same_day_of_month_earlier_ts)
+              |    as same_day_of_month_ignores_time_positive,
+              |  months_between(last_day_of_month_later_dt, last_day_of_month_earlier_dt)
+              |    as last_day_of_month_ignores_time,
+              |  months_between(fractional_later_ts, fractional_earlier_ts)
+              |    as rounded_fractional_positive,
+              |  months_between(same_day_of_month_earlier_ts, same_day_of_month_later_ts)
+              |    as same_day_of_month_ignores_time_negative,
+              |  months_between(fractional_earlier_ts, fractional_later_ts)
+              |    as rounded_fractional_negative,
+              |  months_between(fractional_later_ts, fractional_earlier_ts, false)
+              |    as unrounded_fractional_positive,
+              |  months_between(null_ts, fractional_earlier_ts)
+              |    as null_propagation
+              |from t1
+              |""".stripMargin
+        checkSparkAnswerAndOperator(query)
+      }
+    }
+  }
 }
