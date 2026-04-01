@@ -53,6 +53,15 @@ public class SparkAuronAdaptor extends AuronAdaptor {
     }
 
     @Override
+    public boolean isTaskRunning() {
+        TaskContext tc = TaskContext$.MODULE$.get();
+        if (tc == null) { // driver is always running
+            return true;
+        }
+        return !tc.isCompleted() && !tc.isInterrupted();
+    }
+
+    @Override
     public Object getThreadContext() {
         return TaskContext$.MODULE$.get();
     }

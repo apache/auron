@@ -20,7 +20,6 @@ import static org.apache.auron.flink.connector.kafka.KafkaConstants.*;
 
 import java.io.File;
 import java.io.InputStream;
-import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -41,6 +40,7 @@ import org.apache.auron.protobuf.KafkaStartupMode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.commons.collections.map.LinkedMap;
 import org.apache.commons.io.FileUtils;
+import org.apache.flink.api.common.eventtime.WatermarkOutput;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.CheckpointListener;
 import org.apache.flink.api.common.state.ListState;
@@ -63,8 +63,6 @@ import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartition;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartitionAssigner;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.runtime.generated.GeneratedWatermarkGeneratorSupplier;
-import org.apache.flink.table.runtime.generated.WatermarkGenerator;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -73,6 +71,7 @@ import org.apache.flink.util.SerializableObject;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,9 +81,12 @@ import org.slf4j.LoggerFactory;
  * If checkpoints are enabled, Kafka offsets are committed via Auron after a successful checkpoint.
  * If checkpoints are disabled, Kafka offsets are committed periodically via Auron.
  *
- * <p>Watermark support uses the table-runtime {@link WatermarkGenerator} directly
- * (from {@code WatermarkPushDownSpec}) with per-partition watermark tracking.
- * The combined watermark emitted downstream is the minimum across all assigned partitions.
+ * <p>Watermark support uses per-partition {@code WatermarkGenerator<RowData>} instances
+ * (from {@code WatermarkPushDownSpec}). Each Kafka partition gets an independent generator
+ * with a capture-only {@code WatermarkOutput}. The final watermark emitted to downstream is
+ * {@code min(non-idle partition watermarks)}, preventing a fast partition from pushing the
+ * watermark past a slow partition's progress. Supports both {@code DefaultWatermarkGenerator}
+ * and {@code WatermarksWithIdleness} (when {@code table.exec.source.idle-timeout} is set).
  */
 public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData>
         implements FlinkAuronFunction, CheckpointListener, CheckpointedFunction {
@@ -125,11 +127,11 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private transient ScheduledExecutorService partitionDiscoveryScheduler;
     private transient volatile int knownPartitionCount;
 
-    // Watermark related: uses table-runtime WatermarkGenerator directly
+    // Watermark related: per-partition WatermarkGenerator with alignment
     private WatermarkStrategy<RowData> watermarkStrategy;
-    private transient WatermarkGenerator tableWatermarkGenerator;
-    private transient Map<Integer, Long> partitionWatermarks;
-    private transient long currentCombinedWatermark;
+    private transient Map<Integer, PartitionWatermarkTracker> partitionWatermarkTrackers;
+    private transient long combinedWatermark;
+    private transient boolean allPartitionsIdle;
 
     public AuronKafkaSourceFunction(
             LogicalType outputType,
@@ -208,12 +210,9 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             // Override to ensure this consumer does not interfere with actual data consumption
             kafkaProps.put(ConsumerConfig.GROUP_ID_CONFIG, "flink-auron-fetch-meta");
             kafkaProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-            kafkaProps.put(
-                    ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
-                    "org.apache.kafka.common.serialization.ByteArrayDeserializer");
-            kafkaProps.put(
-                    ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                    "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+            kafkaProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
+            kafkaProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
+
             this.kafkaConsumer = new KafkaConsumer<>(kafkaProps);
 
             // 2. Discover and assign partitions for this subtask
@@ -265,26 +264,20 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         sourcePlan.setKafkaScan(scanExecNode.build());
         this.physicalPlanNode = sourcePlan.build();
 
-        // 3. Initialize table-runtime WatermarkGenerator if watermarkStrategy is set
+        // 3. Initialize per-partition WatermarkGenerators if watermarkStrategy is set
         if (watermarkStrategy != null) {
             MetricGroup metricGroup = runtimeContext.getMetricGroup();
-            // Create DataStream API WatermarkGenerator via the strategy
-            org.apache.flink.api.common.eventtime.WatermarkGenerator<RowData> dsGenerator =
-                    watermarkStrategy.createWatermarkGenerator(() -> metricGroup);
-            // Extract inner table-runtime WatermarkGenerator from DefaultWatermarkGenerator
-            if (dsGenerator instanceof GeneratedWatermarkGeneratorSupplier.DefaultWatermarkGenerator) {
-                Field field = GeneratedWatermarkGeneratorSupplier.DefaultWatermarkGenerator.class.getDeclaredField(
-                        "innerWatermarkGenerator");
-                field.setAccessible(true);
-                this.tableWatermarkGenerator = (WatermarkGenerator) field.get(dsGenerator);
-            } else {
-                throw new IllegalStateException("Expected DefaultWatermarkGenerator from WatermarkPushDownSpec, got: "
-                        + dsGenerator.getClass().getName());
+            this.partitionWatermarkTrackers = new HashMap<>();
+            this.combinedWatermark = Long.MIN_VALUE;
+            this.allPartitionsIdle = false;
+
+            for (int partitionId : assignedPartitions) {
+                org.apache.flink.api.common.eventtime.WatermarkGenerator<RowData> generator =
+                        watermarkStrategy.createWatermarkGenerator(() -> metricGroup);
+                partitionWatermarkTrackers.put(partitionId, new PartitionWatermarkTracker(generator));
             }
-            this.partitionWatermarks = new HashMap<>();
-            this.currentCombinedWatermark = Long.MIN_VALUE;
+            this.isRunning = true;
         }
-        this.isRunning = true;
     }
 
     @Override
@@ -304,7 +297,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         RowType auronOutputRowType = new RowType(fieldList);
 
         // Pre-check watermark flag to avoid per-record null checks in the hot path
-        final boolean enableWatermark = tableWatermarkGenerator != null;
+        final boolean enableWatermark = partitionWatermarkTrackers != null && !partitionWatermarkTrackers.isEmpty();
 
         AuronCallNativeWrapper wrapper = new AuronCallNativeWrapper(
                 FlinkArrowUtils.getRootAllocator(),
@@ -316,61 +309,52 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                 AuronAdaptor.getInstance().getAuronConfiguration().getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE));
 
         if (enableWatermark) {
-            // Watermark-enabled path: use table-runtime WatermarkGenerator directly
+            // Per-partition watermark path: each partition has its own WatermarkGenerator
+            // with a capture-only WatermarkOutput. Combined watermark = min(non-idle partitions).
             while (wrapper.loadNextBatch(batch -> {
-                Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
-                FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
-                for (int i = 0; i < batch.getRowCount(); i++) {
-                    AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
-                    // Extract kafka meta fields
-                    int partitionId = tmpRowData.getInt(-3);
-                    long offset = tmpRowData.getLong(-2);
-                    long kafkaTimestamp = tmpRowData.getLong(-1);
-                    tmpOffsets.put(partitionId, offset);
+                if (isRunning) {
+                    Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
+                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
+                    for (int i = 0; i < batch.getRowCount(); i++) {
+                        AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
+                        int partitionId = tmpRowData.getInt(-3);
+                        long offset = tmpRowData.getLong(-2);
+                        long kafkaTimestamp = tmpRowData.getLong(-1);
+                        tmpOffsets.put(partitionId, offset);
 
-                    try {
-                        // Compute watermark using table-runtime WatermarkGenerator (stateless pure function)
-                        // with local Timezone
-                        Long watermark = tableWatermarkGenerator.currentWatermark(tmpRowData);
-                        // Update per-partition watermark tracking
-                        if (watermark != null) {
-                            partitionWatermarks.merge(partitionId, watermark, Math::max);
-                        }
-                    } catch (Exception e) {
-                        throw new RuntimeException("Generated WatermarkGenerator fails to generate:", e);
+                        // Feed into the partition's own generator (output captures, does NOT forward)
+                        PartitionWatermarkTracker tracker = getOrCreateTracker(partitionId);
+                        tracker.generator.onEvent(tmpRowData, kafkaTimestamp, tracker.output);
+
+                        sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
                     }
-                    // Emit record with kafka timestamp
-                    sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
-                }
-
-                // After each batch, compute combined watermark (min across all partitions) and emit
-                if (!partitionWatermarks.isEmpty()) {
-                    long minWatermark = Collections.min(partitionWatermarks.values());
-                    if (minWatermark > currentCombinedWatermark) {
-                        currentCombinedWatermark = minWatermark;
-                        sourceContext.emitWatermark(new Watermark(minWatermark));
+                    // After batch: trigger onPeriodicEmit for all partitions, then combine and emit
+                    for (PartitionWatermarkTracker tracker : partitionWatermarkTrackers.values()) {
+                        tracker.generator.onPeriodicEmit(tracker.output);
                     }
-                }
-
-                synchronized (lock) {
-                    currentOffsets = tmpOffsets;
+                    emitCombinedWatermark(sourceContext);
+                    synchronized (lock) {
+                        currentOffsets = tmpOffsets;
+                    }
                 }
             })) {}
         } else {
             // No-watermark path: still use collectWithTimestamp with kafka timestamp
             while (wrapper.loadNextBatch(batch -> {
-                Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
-                FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
-                for (int i = 0; i < batch.getRowCount(); i++) {
-                    AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
-                    int partitionId = tmpRowData.getInt(-3);
-                    long offset = tmpRowData.getLong(-2);
-                    long kafkaTimestamp = tmpRowData.getLong(-1);
-                    tmpOffsets.put(partitionId, offset);
-                    sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
-                }
-                synchronized (lock) {
-                    currentOffsets = tmpOffsets;
+                if (isRunning) {
+                    Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
+                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
+                    for (int i = 0; i < batch.getRowCount(); i++) {
+                        AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
+                        int partitionId = tmpRowData.getInt(-3);
+                        long offset = tmpRowData.getLong(-2);
+                        long kafkaTimestamp = tmpRowData.getLong(-1);
+                        tmpOffsets.put(partitionId, offset);
+                        sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
+                    }
+                    synchronized (lock) {
+                        currentOffsets = tmpOffsets;
+                    }
                 }
             })) {}
         }
@@ -398,11 +382,6 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         // Close the metadata-only Kafka Consumer
         if (kafkaConsumer != null) {
             kafkaConsumer.close();
-        }
-
-        // Close table-runtime WatermarkGenerator
-        if (tableWatermarkGenerator != null) {
-            tableWatermarkGenerator.close();
         }
 
         super.close();
@@ -555,6 +534,86 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             } catch (Exception e) {
                 LOG.warn("Error discovering new partitions for topic {}: {}", topic, e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Compute min(non-idle partition watermarks) and emit to sourceContext if it advanced.
+     * If all partitions are idle, mark the source as temporarily idle.
+     * This is the ONLY path that emits watermarks to sourceContext.
+     */
+    private void emitCombinedWatermark(SourceContext<RowData> sourceContext) {
+        long minWatermark = Long.MAX_VALUE;
+        boolean allIdle = true;
+
+        for (PartitionWatermarkTracker tracker : partitionWatermarkTrackers.values()) {
+            if (!tracker.idle) {
+                minWatermark = Math.min(minWatermark, tracker.currentWatermark);
+                allIdle = false;
+            }
+        }
+
+        if (allIdle) {
+            if (!allPartitionsIdle) {
+                allPartitionsIdle = true;
+                sourceContext.markAsTemporarilyIdle();
+            }
+        } else {
+            allPartitionsIdle = false;
+            if (minWatermark > combinedWatermark && minWatermark < Long.MAX_VALUE) {
+                combinedWatermark = minWatermark;
+                sourceContext.emitWatermark(new Watermark(combinedWatermark));
+            }
+        }
+    }
+
+    /**
+     * Get or create a watermark tracker for the given partition.
+     * Supports dynamically discovered partitions.
+     */
+    private PartitionWatermarkTracker getOrCreateTracker(int partitionId) {
+        PartitionWatermarkTracker tracker = partitionWatermarkTrackers.get(partitionId);
+        if (tracker == null) {
+            MetricGroup metricGroup = getRuntimeContext().getMetricGroup();
+            org.apache.flink.api.common.eventtime.WatermarkGenerator<RowData> generator =
+                    watermarkStrategy.createWatermarkGenerator(() -> metricGroup);
+            tracker = new PartitionWatermarkTracker(generator);
+            partitionWatermarkTrackers.put(partitionId, tracker);
+            LOG.info("Created watermark tracker for dynamically discovered partition {}", partitionId);
+        }
+        return tracker;
+    }
+
+    /**
+     * Per-partition watermark tracking. Each partition has its own WatermarkGenerator
+     * and a capture-only WatermarkOutput that stores watermark/idle state locally
+     * without forwarding to sourceContext.
+     */
+    private static class PartitionWatermarkTracker {
+        final org.apache.flink.api.common.eventtime.WatermarkGenerator<RowData> generator;
+        long currentWatermark = Long.MIN_VALUE;
+        boolean idle = false;
+
+        final WatermarkOutput output = new WatermarkOutput() {
+            @Override
+            public void emitWatermark(org.apache.flink.api.common.eventtime.Watermark watermark) {
+                currentWatermark = Math.max(currentWatermark, watermark.getTimestamp());
+                idle = false;
+            }
+
+            @Override
+            public void markIdle() {
+                idle = true;
+            }
+
+            @Override
+            public void markActive() {
+                idle = false;
+            }
+        };
+
+        PartitionWatermarkTracker(org.apache.flink.api.common.eventtime.WatermarkGenerator<RowData> generator) {
+            this.generator = generator;
         }
     }
 }

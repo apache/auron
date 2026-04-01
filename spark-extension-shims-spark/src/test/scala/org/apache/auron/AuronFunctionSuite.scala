@@ -19,6 +19,7 @@ package org.apache.auron
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 
 import org.apache.auron.util.AuronTestUtils
 
@@ -114,6 +115,32 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       sql("create table t1(c1 int, c2 string) using parquet")
       sql("insert into t1 values(17, 'Spark SQL')")
       checkSparkAnswerAndOperator("select hex(c1), hex(c2) from t1")
+    }
+  }
+
+  test("dayofweek function") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTable("t1") {
+        sql("create table t1(c1 date, c2 timestamp) using parquet")
+        sql("""
+            |insert into t1 values
+            |  (date'2009-07-30', timestamp'2009-07-30 12:34:56'),
+            |  (date'2024-02-29', timestamp'2024-02-29 23:59:59'),
+            |  (null, null)
+            |""".stripMargin)
+
+        // DATE column
+        checkSparkAnswerAndOperator("select dayofweek(c1) from t1 where c1 is not null")
+
+        // NULL DATE input should return NULL
+        checkSparkAnswerAndOperator("select dayofweek(c1) from t1 where c1 is null")
+
+        // TIMESTAMP column
+        checkSparkAnswerAndOperator("select dayofweek(c2) from t1 where c2 is not null")
+
+        // NULL TIMESTAMP input should return NULL
+        checkSparkAnswerAndOperator("select dayofweek(c2) from t1 where c2 is null")
+      }
     }
   }
 
@@ -277,6 +304,12 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |  (null, map('x', 10), map('f', 20))
           |""".stripMargin)
       checkSparkAnswerAndOperator("select map_concat(c1, c2, c3) from t1")
+
+  test("acosh null propagation") {
+    withTable("t1") {
+      sql("create table t1(c1 double) using parquet")
+      sql("insert into t1 values(null), (0.0), (1.0), (2.0)")
+      checkSparkAnswerAndOperator("select acosh(c1) from t1")
     }
   }
 

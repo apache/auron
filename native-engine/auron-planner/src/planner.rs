@@ -1066,7 +1066,7 @@ impl PhysicalPlanner {
         input: &Arc<dyn ExecutionPlan>,
         sort: &Box<SortExecNode>,
     ) -> Result<Vec<PhysicalSortExpr>, PlanSerDeError> {
-        let pyhsical_sort_expr = sort
+        let physical_sort_expr = sort
             .expr
             .iter()
             .map(|expr| {
@@ -1099,7 +1099,7 @@ impl PhysicalPlanner {
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(pyhsical_sort_expr)
+        Ok(physical_sort_expr)
     }
 
     pub fn parse_protobuf_partitioning(
@@ -1226,6 +1226,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Tan => f::math::tan(),
             ScalarFunction::Asin => f::math::asin(),
             ScalarFunction::Acos => f::math::acos(),
+            ScalarFunction::Acosh => f::math::acosh(),
             ScalarFunction::Atan => f::math::atan(),
             ScalarFunction::Exp => f::math::exp(),
             ScalarFunction::Log => f::math::log(),
