@@ -31,13 +31,11 @@ fn get_map_type(args: &[ColumnarValue]) -> Result<(Arc<Field>, bool)> {
         return df_execution_err!("map_concat requires at least one map argument");
     }
 
-    let (entries_field, ordered) = match args
-        .iter()
-        .find_map(|arg| match arg.data_type() {
-            DataType::Map(entries_field, ordered) => Some((entries_field, ordered)),
-            DataType::Null => None,
-            _ => None,
-        }) {
+    let (entries_field, ordered) = match args.iter().find_map(|arg| match arg.data_type() {
+        DataType::Map(entries_field, ordered) => Some((entries_field, ordered)),
+        DataType::Null => None,
+        _ => None,
+    }) {
         Some((entries_field, ordered)) => (entries_field, ordered),
         None => {
             return df_execution_err!("map_concat args must be map");
@@ -214,6 +212,10 @@ pub fn map_concat(args: &[ColumnarValue]) -> Result<ColumnarValue> {
             let values = entries.column(1);
 
             for i in 0..entries.len() {
+                if keys.is_null(i) {
+                    return df_execution_err!("map_concat does not support null map keys");
+                }
+
                 let key = compacted_scalar_value_from_array(keys.as_ref(), i)?;
                 if !row_keys.insert(key.clone()) {
                     return df_execution_err!("map_concat duplicate key found: {key}");
