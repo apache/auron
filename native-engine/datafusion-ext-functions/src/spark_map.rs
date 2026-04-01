@@ -16,9 +16,9 @@
 use std::{collections::HashSet, sync::Arc};
 
 use arrow::{
-    array::{Array, ArrayRef, Int32Array, MapArray, StringArray, StructArray, new_empty_array},
+    array::{Array, ArrayRef, MapArray, StructArray, new_empty_array},
     buffer::{NullBuffer, OffsetBuffer, ScalarBuffer},
-    datatypes::{DataType, Field, Fields},
+    datatypes::{DataType, Field},
 };
 use datafusion::{
     common::{Result, ScalarValue},
@@ -266,9 +266,19 @@ pub fn map_concat(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
 #[cfg(test)]
 mod test {
+    use arrow::{
+        array::{Int32Array, StringArray},
+        datatypes::Fields,
+    };
+
     use super::*;
 
-    fn build_string_int_map_array(rows: Vec<Option<Vec<(&'static str, Option<i32>)>>>) -> MapArray {
+    type StringIntMapEntries = Vec<(&'static str, Option<i32>)>;
+    type StringIntMapRow = Option<StringIntMapEntries>;
+    type StringStringMapEntries = Vec<(&'static str, Option<&'static str>)>;
+    type StringStringMapRow = Option<StringStringMapEntries>;
+
+    fn build_string_int_map_array(rows: Vec<StringIntMapRow>) -> MapArray {
         let key_field = Arc::new(Field::new("key", DataType::Utf8, false));
         let value_field = Arc::new(Field::new("value", DataType::Int32, true));
         let entries_field = Arc::new(Field::new(
@@ -331,9 +341,7 @@ mod test {
         )
     }
 
-    fn build_string_string_map_array(
-        rows: Vec<Option<Vec<(&'static str, Option<&'static str>)>>>,
-    ) -> MapArray {
+    fn build_string_string_map_array(rows: Vec<StringStringMapRow>) -> MapArray {
         let key_field = Arc::new(Field::new("key", DataType::Utf8, false));
         let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
         let entries_field = Arc::new(Field::new(
@@ -454,7 +462,7 @@ mod test {
             ColumnarValue::Array(Arc::new(left)),
             ColumnarValue::Array(Arc::new(right)),
         ])
-        .unwrap_err();
+        .expect_err("map_concat should fail when duplicate keys exist");
 
         assert!(err.to_string().contains("duplicate key"));
     }
@@ -468,7 +476,7 @@ mod test {
             ColumnarValue::Array(Arc::new(left)),
             ColumnarValue::Array(Arc::new(right)),
         ])
-        .unwrap_err();
+        .expect_err("map_concat should fail when map types differ");
 
         assert!(err.to_string().contains("same type"));
     }
@@ -489,7 +497,7 @@ mod test {
             ColumnarValue::Array(Arc::new(left)),
             ColumnarValue::Array(Arc::new(right)),
         ])
-        .unwrap_err();
+        .expect_err("map_concat should fail when input map array lengths differ");
 
         assert!(err.to_string().contains("same length"));
     }

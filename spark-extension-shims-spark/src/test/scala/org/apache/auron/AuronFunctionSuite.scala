@@ -304,6 +304,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |  (null, map('x', 10), map('f', 20))
           |""".stripMargin)
       checkSparkAnswerAndOperator("select map_concat(c1, c2, c3) from t1")
+    }
+  }
 
   test("acosh null propagation") {
     withTable("t1") {
