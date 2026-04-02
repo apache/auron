@@ -1140,12 +1140,11 @@ mod tests {
         let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
         let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("America/New_York".to_string())));
 
-        let out_year = spark_year(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
-            .into_array(1)?;
-        let out_month = spark_month(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
-            .into_array(1)?;
-        let out_day = spark_day(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
-            .into_array(1)?;
+        let out_year =
+            spark_year(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
+        let out_month =
+            spark_month(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
+        let out_day = spark_day(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
 
         let expected_year: ArrayRef = Arc::new(Int32Array::from(vec![Some(2021)]));
         let expected_month: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
@@ -1192,14 +1191,13 @@ mod tests {
         let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
         let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("Asia/Shanghai".to_string())));
 
-        let out_year = spark_year(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
-            .into_array(1)?;
-        let out_month = spark_month(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
-            .into_array(1)?;
-        let out_day = spark_day(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
-            .into_array(1)?;
-        let out_quarter = spark_quarter(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
-            .into_array(1)?;
+        let out_year =
+            spark_year(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
+        let out_month =
+            spark_month(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
+        let out_day = spark_day(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
+        let out_quarter =
+            spark_quarter(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
         let out_dow = spark_dayofweek(&[ColumnarValue::Array(ts), tz])?.into_array(1)?;
 
         let expected_year: ArrayRef = Arc::new(Int32Array::from(vec![Some(2022)]));
@@ -1223,18 +1221,18 @@ mod tests {
         let input = Arc::new(Date32Array::from(vec![Some(0), Some(100), None]));
         let null_tz = ColumnarValue::Scalar(ScalarValue::Utf8(None));
 
-        let out_year = spark_year(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?
-            .into_array(1)?;
+        let out_year =
+            spark_year(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?.into_array(1)?;
         let out_no_tz = spark_year(&[ColumnarValue::Array(input.clone())])?.into_array(1)?;
         assert_eq!(&out_year, &out_no_tz);
 
-        let out_month = spark_month(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?
-            .into_array(1)?;
+        let out_month =
+            spark_month(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?.into_array(1)?;
         let out_no_tz = spark_month(&[ColumnarValue::Array(input.clone())])?.into_array(1)?;
         assert_eq!(&out_month, &out_no_tz);
 
-        let out_day = spark_day(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?
-            .into_array(1)?;
+        let out_day =
+            spark_day(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?.into_array(1)?;
         let out_no_tz = spark_day(&[ColumnarValue::Array(input)])?.into_array(1)?;
         assert_eq!(&out_day, &out_no_tz);
 
