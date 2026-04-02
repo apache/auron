@@ -308,7 +308,8 @@ pub fn spark_quarter(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     Ok(ColumnarValue::Array(Arc::new(quarter)))
 }
 
-/// Extract hour/minute/second from a `TimestampMillisecondArray` with optional timezone.
+/// Extract hour/minute/second from a `TimestampMillisecondArray` with optional
+/// timezone.
 fn extract_hms_with_tz(
     ts: &TimestampMillisecondArray,
     tz_opt: Option<Tz>,
