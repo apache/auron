@@ -30,50 +30,6 @@ use datafusion::{
 };
 use datafusion_ext_commons::arrow::cast::cast;
 
-// ---- date parts on Date32 via Arrow's date_part
-// -----------------------------------------------
-
-pub fn spark_year(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    let input = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
-    Ok(ColumnarValue::Array(date_part(&input, DatePart::Year)?))
-}
-
-pub fn spark_month(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    let input = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
-    Ok(ColumnarValue::Array(date_part(&input, DatePart::Month)?))
-}
-
-pub fn spark_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    let input = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
-    Ok(ColumnarValue::Array(date_part(&input, DatePart::Day)?))
-}
-
-/// `spark_dayofweek(date/timestamp/compatible-string)`
-///
-/// Matches Spark's `dayofweek()` semantics:
-/// Sunday = 1, Monday = 2, ..., Saturday = 7.
-pub fn spark_dayofweek(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    let input = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
-    let input = input
-        .as_any()
-        .downcast_ref::<Date32Array>()
-        .expect("internal cast to Date32 must succeed");
-
-    // Date32 is days since 1970-01-01. 1970-01-01 is a Thursday.
-    // If we number weekdays so that Sunday = 0, ..., Saturday = 6,
-    // then 1970-01-01 corresponds to 4. For an offset `days`,
-    // weekday_index = (days + 4) mod 7 gives 0 = Sunday, ..., 6 = Saturday.
-    // Spark wants Sunday = 1, ..., Saturday = 7, so we add 1.
-    let dayofweek = Int32Array::from_iter(input.iter().map(|opt_days| {
-        opt_days.map(|days| {
-            let weekday_index = (days as i64 + 4).rem_euclid(7);
-            weekday_index as i32 + 1
-        })
-    }));
-
-    Ok(ColumnarValue::Array(Arc::new(dayofweek)))
-}
-
 /// `spark_weekofyear(date/timestamp/compatible-string[, timezone])`
 ///
 /// Matches Spark's `weekofyear()` semantics:
@@ -147,33 +103,6 @@ pub fn spark_weekofyear(args: &[ColumnarValue]) -> Result<ColumnarValue> {
             Ok(ColumnarValue::Array(Arc::new(weekofyear)))
         }
     }
-}
-
-/// `spark_quarter(date/timestamp/compatible-string)`
-///
-/// Simulates Spark's `quarter()` function.
-/// Converts the input to `Date32`, extracts the month (1–12),
-/// and computes the quarter as `((month - 1) / 3) + 1`.
-/// Null values are propagated transparently.
-pub fn spark_quarter(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    // Cast input to Date32 for compatibility with date_part()
-    let input = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
-
-    // Extract month (1–12) using Arrow's date_part
-    let month_arr: ArrayRef = date_part(&input, DatePart::Month)?;
-    let month_arr = month_arr
-        .as_any()
-        .downcast_ref::<Int32Array>()
-        .expect("date_part(Month) must return Int32Array");
-
-    // Compute quarter: ((month - 1) / 3) + 1, preserving NULLs
-    let quarter = Int32Array::from_iter(
-        month_arr
-            .iter()
-            .map(|opt_m| opt_m.map(|m| ((m - 1) / 3 + 1))),
-    );
-
-    Ok(ColumnarValue::Array(Arc::new(quarter)))
 }
 
 // ---- timezone handling (custom, Spark-like)
@@ -302,6 +231,130 @@ fn offset_seconds_at(tz: Tz, epoch_ms: i64) -> i32 {
         None => 0, // Gracefully return 0 on invalid inputs to avoid panic.
     }
 }
+
+// ---- date parts with optional timezone support
+// -----------------------------------------------
+
+/// Convert epoch milliseconds to local Date32 days, accounting for timezone.
+fn ts_ms_to_local_date32(ts: &TimestampMillisecondArray, tz: Tz) -> Date32Array {
+    const MS_PER_SEC: i64 = 1000;
+    const MS_PER_DAY: i64 = 86_400_000;
+
+    Date32Array::from_iter(ts.iter().map(|opt_ms| {
+        opt_ms.map(|epoch_ms| {
+            let local_ms = epoch_ms + offset_seconds_at(tz, epoch_ms) as i64 * MS_PER_SEC;
+            // floor division for correct pre-epoch handling
+            let local_days = if local_ms >= 0 {
+                local_ms / MS_PER_DAY
+            } else {
+                (local_ms - MS_PER_DAY + 1) / MS_PER_DAY
+            };
+            local_days as i32
+        })
+    }))
+}
+
+/// Resolve input to a timezone-adjusted Date32Array. When a timezone argument
+/// is present, timestamp inputs are first localized; otherwise the input is
+/// cast directly to Date32.
+fn resolve_local_date32(args: &[ColumnarValue]) -> Result<Date32Array> {
+    match parse_tz(args) {
+        Some(tz) => {
+            let arr = cast(
+                &args[0].clone().into_array(1)?,
+                &DataType::Timestamp(TimeUnit::Millisecond, None),
+            )?;
+            let ts = arr
+                .as_any()
+                .downcast_ref::<TimestampMillisecondArray>()
+                .expect("cast to Timestamp(Millisecond, None) must succeed");
+            Ok(ts_ms_to_local_date32(ts, tz))
+        }
+        None => {
+            let arr = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
+            Ok(arr
+                .as_any()
+                .downcast_ref::<Date32Array>()
+                .expect("cast to Date32 must succeed")
+                .clone())
+        }
+    }
+}
+
+pub fn spark_year(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let local = resolve_local_date32(args)?;
+    Ok(ColumnarValue::Array(date_part(
+        &(Arc::new(local) as ArrayRef),
+        DatePart::Year,
+    )?))
+}
+
+pub fn spark_month(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let local = resolve_local_date32(args)?;
+    Ok(ColumnarValue::Array(date_part(
+        &(Arc::new(local) as ArrayRef),
+        DatePart::Month,
+    )?))
+}
+
+pub fn spark_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let local = resolve_local_date32(args)?;
+    Ok(ColumnarValue::Array(date_part(
+        &(Arc::new(local) as ArrayRef),
+        DatePart::Day,
+    )?))
+}
+
+/// `spark_dayofweek(date/timestamp/compatible-string)`
+///
+/// Matches Spark's `dayofweek()` semantics:
+/// Sunday = 1, Monday = 2, ..., Saturday = 7.
+pub fn spark_dayofweek(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let input = resolve_local_date32(args)?;
+
+    // Date32 is days since 1970-01-01. 1970-01-01 is a Thursday.
+    // If we number weekdays so that Sunday = 0, ..., Saturday = 6,
+    // then 1970-01-01 corresponds to 4. For an offset `days`,
+    // weekday_index = (days + 4) mod 7 gives 0 = Sunday, ..., 6 = Saturday.
+    // Spark wants Sunday = 1, ..., Saturday = 7, so we add 1.
+    let dayofweek = Int32Array::from_iter(input.iter().map(|opt_days| {
+        opt_days.map(|days| {
+            let weekday_index = (days as i64 + 4).rem_euclid(7);
+            weekday_index as i32 + 1
+        })
+    }));
+
+    Ok(ColumnarValue::Array(Arc::new(dayofweek)))
+}
+
+/// `spark_quarter(date/timestamp/compatible-string)`
+///
+/// Simulates Spark's `quarter()` function.
+/// Resolves the input to a local `Date32`, extracts the month (1–12),
+/// and computes the quarter as `((month - 1) / 3) + 1`.
+/// Null values are propagated transparently.
+pub fn spark_quarter(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let local = resolve_local_date32(args)?;
+
+    // Extract month (1–12) using Arrow's date_part
+    let month_arr: ArrayRef = date_part(&(Arc::new(local) as ArrayRef), DatePart::Month)?;
+    let month_arr = month_arr
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .expect("date_part(Month) must return Int32Array");
+
+    // Compute quarter: ((month - 1) / 3) + 1, preserving NULLs
+    let quarter = Int32Array::from_iter(
+        month_arr
+            .iter()
+            .map(|opt_m| opt_m.map(|m| ((m - 1) / 3 + 1))),
+    );
+
+    Ok(ColumnarValue::Array(Arc::new(quarter)))
+}
+
+// ---- Spark-like hour/minute/second built on custom TZ logic
+// -----------------------------------
 
 /// Extract hour/minute/second from a `TimestampMillisecondArray` with optional
 /// timezone. `which`: "hour" | "minute" | "second"
@@ -1075,6 +1128,116 @@ mod tests {
 
         let expected: ArrayRef = Arc::new(Float64Array::from(vec![None]));
         assert_eq!(&out, &expected);
+        Ok(())
+    }
+
+    // ---- timezone-aware date-part tests ----
+
+    #[test]
+    fn test_year_month_day_with_tz_new_york() -> Result<()> {
+        // 2021-01-04 04:30:00 UTC -> 2021-01-03 23:30:00 America/New_York (EST, UTC-5)
+        let epoch = utc_ms(2021, 1, 4, 4, 30, 0);
+        let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
+        let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("America/New_York".to_string())));
+
+        let out_year = spark_year(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
+            .into_array(1)?;
+        let out_month = spark_month(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
+            .into_array(1)?;
+        let out_day = spark_day(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
+            .into_array(1)?;
+
+        let expected_year: ArrayRef = Arc::new(Int32Array::from(vec![Some(2021)]));
+        let expected_month: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
+        let expected_day: ArrayRef = Arc::new(Int32Array::from(vec![Some(3)]));
+
+        assert_eq!(&out_year, &expected_year);
+        assert_eq!(&out_month, &expected_month);
+        assert_eq!(&out_day, &expected_day);
+        Ok(())
+    }
+
+    #[test]
+    fn test_dayofweek_with_tz_new_york() -> Result<()> {
+        // 2021-01-04 04:30:00 UTC -> 2021-01-03 (Sunday) in New York
+        let epoch = utc_ms(2021, 1, 4, 4, 30, 0);
+        let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
+        let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("America/New_York".to_string())));
+
+        let out = spark_dayofweek(&[ColumnarValue::Array(ts), tz])?.into_array(1)?;
+        // Sunday = 1 in Spark
+        let expected: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
+        assert_eq!(&out, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_quarter_with_tz_boundary() -> Result<()> {
+        // 2021-04-01 03:00:00 UTC -> 2021-03-31 23:00:00 America/New_York (EDT, UTC-4)
+        // Quarter should be 1 (March), not 2 (April)
+        let epoch = utc_ms(2021, 4, 1, 3, 0, 0);
+        let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
+        let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("America/New_York".to_string())));
+
+        let out = spark_quarter(&[ColumnarValue::Array(ts), tz])?.into_array(1)?;
+        let expected: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
+        assert_eq!(&out, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_date_parts_with_shanghai() -> Result<()> {
+        // 2021-12-31 17:00:00 UTC -> 2022-01-01 01:00:00 Asia/Shanghai (+08:00)
+        let epoch = utc_ms(2021, 12, 31, 17, 0, 0);
+        let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
+        let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("Asia/Shanghai".to_string())));
+
+        let out_year = spark_year(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
+            .into_array(1)?;
+        let out_month = spark_month(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
+            .into_array(1)?;
+        let out_day = spark_day(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
+            .into_array(1)?;
+        let out_quarter = spark_quarter(&[ColumnarValue::Array(ts.clone()), tz.clone()])?
+            .into_array(1)?;
+        let out_dow = spark_dayofweek(&[ColumnarValue::Array(ts), tz])?.into_array(1)?;
+
+        let expected_year: ArrayRef = Arc::new(Int32Array::from(vec![Some(2022)]));
+        let expected_month: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
+        let expected_day: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
+        let expected_quarter: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
+        // 2022-01-01 is a Saturday -> Spark dayofweek = 7
+        let expected_dow: ArrayRef = Arc::new(Int32Array::from(vec![Some(7)]));
+
+        assert_eq!(&out_year, &expected_year);
+        assert_eq!(&out_month, &expected_month);
+        assert_eq!(&out_day, &expected_day);
+        assert_eq!(&out_quarter, &expected_quarter);
+        assert_eq!(&out_dow, &expected_dow);
+        Ok(())
+    }
+
+    #[test]
+    fn test_date_parts_null_tz_unchanged() -> Result<()> {
+        // Date32 input with null timezone arg should work the same as no tz arg
+        let input = Arc::new(Date32Array::from(vec![Some(0), Some(100), None]));
+        let null_tz = ColumnarValue::Scalar(ScalarValue::Utf8(None));
+
+        let out_year = spark_year(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?
+            .into_array(1)?;
+        let out_no_tz = spark_year(&[ColumnarValue::Array(input.clone())])?.into_array(1)?;
+        assert_eq!(&out_year, &out_no_tz);
+
+        let out_month = spark_month(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?
+            .into_array(1)?;
+        let out_no_tz = spark_month(&[ColumnarValue::Array(input.clone())])?.into_array(1)?;
+        assert_eq!(&out_month, &out_no_tz);
+
+        let out_day = spark_day(&[ColumnarValue::Array(input.clone()), null_tz.clone()])?
+            .into_array(1)?;
+        let out_no_tz = spark_day(&[ColumnarValue::Array(input)])?.into_array(1)?;
+        assert_eq!(&out_day, &out_no_tz);
+
         Ok(())
     }
 }
