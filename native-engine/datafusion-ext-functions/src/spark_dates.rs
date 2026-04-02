@@ -881,6 +881,27 @@ mod tests {
     }
 
     #[test]
+    fn test_spark_months_between_respects_dst_gap_in_session_timezone() -> Result<()> {
+        let out = spark_months_between(&months_between_args(
+            // 2024-03-10 07:30:00 UTC -> 2024-03-10 03:30:00 local in America/New_York.
+            // The 02:00-02:59 hour does not exist on this day due to spring-forward DST.
+            Some(utc_ms(2024, 3, 10, 7, 30, 0)),
+            // 2024-02-09 06:30:00 UTC -> 2024-02-09 01:30:00 local.
+            Some(utc_ms(2024, 2, 9, 6, 30, 0)),
+            Some(false),
+            Some("America/New_York"),
+        ))?
+        .into_array(1)?;
+
+        let out = out
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .expect("months_between should return Float64Array");
+        assert!((out.value(0) - 1.0336021505376345).abs() < 1e-12);
+        Ok(())
+    }
+
+    #[test]
     fn test_spark_months_between_negative_when_timestamp1_is_earlier() -> Result<()> {
         let out = spark_months_between(&months_between_args(
             Some(utc_ms(2024, 1, 15, 0, 0, 0)),

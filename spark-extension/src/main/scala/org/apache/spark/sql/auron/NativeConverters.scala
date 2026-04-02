@@ -952,7 +952,7 @@ object NativeConverters extends Logging {
         buildTimePartExt("Spark_Minute", e.children.head, isPruningExpr, fallback)
       case e: Second if datetimeExtractEnabled =>
         buildTimePartExt("Spark_Second", e.children.head, isPruningExpr, fallback)
-      case e: MonthsBetween if datetimeExtractEnabled =>
+      case e: MonthsBetween =>
         buildMonthsBetweenExt("Spark_MonthsBetween", e, isPruningExpr, fallback)
 
       // startswith is converted to scalar function in pruning-expr mode

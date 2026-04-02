@@ -687,9 +687,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("months_between function") {
-    withSQLConf(
-      "spark.auron.datetime.extract.enabled" -> "true",
-      "spark.sql.session.timeZone" -> "UTC") {
+    withSQLConf("spark.sql.session.timeZone" -> "UTC") {
       withTable("t1") {
         sql("""
               |create table t1(
