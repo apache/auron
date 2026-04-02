@@ -148,7 +148,6 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/New_York") {
       withTable("t1") {
         sql("create table t1(c1 timestamp) using parquet")
-        // 2021-01-04 04:30:00 UTC -> 2021-01-03 23:30:00 America/New_York
         sql("insert into t1 values(timestamp'2021-01-04 04:30:00')")
         checkSparkAnswerAndOperator(
           "select year(c1), month(c1), dayofmonth(c1), dayofweek(c1), quarter(c1) from t1")

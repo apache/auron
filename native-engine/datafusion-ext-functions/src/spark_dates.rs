@@ -30,25 +30,12 @@ use datafusion::{
 };
 use datafusion_ext_commons::arrow::cast::cast;
 
-/// `spark_weekofyear(date/timestamp/compatible-string[, timezone])`
-///
-/// Matches Spark's `weekofyear()` semantics:
-/// ISO week numbering, with Monday as the first day of the week,
-/// and week 1 defined as the first week with more than 3 days.
-///
-/// For `Timestamp` inputs, this function interprets epoch milliseconds in the
-/// provided timezone (if any) before deriving the calendar date and ISO week.
-/// If no timezone is provided, `UTC` is used by default. If an invalid
-/// timezone string is provided, the function returns an execution error.
-/// For `Date` and compatible string inputs, the behavior is unchanged: the
-/// value is cast to `Date32` and the ISO week is computed from the resulting
-/// date.
+/// Spark `weekofyear()`: ISO week number (Monday-based, week 1 has >3 days).
+/// For timestamps, localizes to the given timezone before computing the week.
+/// Defaults to UTC when no timezone is provided.
 pub fn spark_weekofyear(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    // First argument as an Arrow array (date/timestamp/string, etc.)
     let array = args[0].clone().into_array(1)?;
 
-    // Determine timezone (for timestamp inputs). Default to UTC to match
-    // existing behavior when no timezone is provided.
     let default_tz = chrono_tz::UTC;
     let tz: Tz = if args.len() > 1 {
         match &args[1] {
@@ -65,7 +52,6 @@ pub fn spark_weekofyear(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     };
 
     match array.data_type() {
-        // Timestamp inputs: localize epoch milliseconds before computing ISO week
         DataType::Timestamp(TimeUnit::Millisecond, _) => {
             let ts_arr = array
                 .as_any()
@@ -82,7 +68,6 @@ pub fn spark_weekofyear(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
             Ok(ColumnarValue::Array(Arc::new(weekofyear)))
         }
-        // Non-timestamp inputs: preserve existing Date32-based behavior
         _ => {
             let input = cast(&array, &DataType::Date32)?;
             let input = input
@@ -105,10 +90,6 @@ pub fn spark_weekofyear(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }
 }
 
-// ---- timezone handling (custom, Spark-like)
-// ---------------------------------------------------
-
-/// Parse optional timezone (2nd argument) into `Option<Tz>`.
 fn parse_tz(args: &[ColumnarValue]) -> Option<Tz> {
     parse_tz_value(args.get(1))
 }
@@ -138,8 +119,6 @@ fn start_of_local_day_ms(local_date: NaiveDate, tz_opt: Option<Tz>) -> Option<i6
                 Some(dt1.min(dt2).with_timezone(&Utc).timestamp_millis())
             }
             LocalResult::None => {
-                // Align with Java's LocalDate.atStartOfDay(zone): choose the first valid
-                // local time on that date if midnight itself falls in a gap.
                 for minute in 1..=(24 * 60) {
                     let candidate = local_midnight + chrono::Duration::minutes(minute);
                     match tz.from_local_datetime(&candidate) {
@@ -218,24 +197,19 @@ fn months_between_value(
     })
 }
 
-/// Return the UTC offset in **seconds** for `epoch_ms` at the given `tz`
-/// (DST-aware).
+/// DST-aware UTC offset in seconds for a given instant and timezone.
 fn offset_seconds_at(tz: Tz, epoch_ms: i64) -> i32 {
-    // Convert epoch_ms to UTC DateTime, then ask the tz for local offset.
     let dt_utc = Utc.timestamp_millis_opt(epoch_ms).single();
     match dt_utc {
         Some(dt) => tz
             .offset_from_utc_datetime(&dt.naive_utc())
             .fix()
             .local_minus_utc(),
-        None => 0, // Gracefully return 0 on invalid inputs to avoid panic.
+        None => 0,
     }
 }
 
-// ---- date parts with optional timezone support
-// -----------------------------------------------
-
-/// Convert epoch milliseconds to local Date32 days, accounting for timezone.
+/// Convert timestamp millis to local-timezone Date32 (days since epoch).
 fn ts_ms_to_local_date32(ts: &TimestampMillisecondArray, tz: Tz) -> Date32Array {
     const MS_PER_SEC: i64 = 1000;
     const MS_PER_DAY: i64 = 86_400_000;
@@ -243,7 +217,6 @@ fn ts_ms_to_local_date32(ts: &TimestampMillisecondArray, tz: Tz) -> Date32Array 
     Date32Array::from_iter(ts.iter().map(|opt_ms| {
         opt_ms.map(|epoch_ms| {
             let local_ms = epoch_ms + offset_seconds_at(tz, epoch_ms) as i64 * MS_PER_SEC;
-            // floor division for correct pre-epoch handling
             let local_days = if local_ms >= 0 {
                 local_ms / MS_PER_DAY
             } else {
@@ -254,9 +227,7 @@ fn ts_ms_to_local_date32(ts: &TimestampMillisecondArray, tz: Tz) -> Date32Array 
     }))
 }
 
-/// Resolve input to a timezone-adjusted Date32Array. When a timezone argument
-/// is present, timestamp inputs are first localized; otherwise the input is
-/// cast directly to Date32.
+/// Resolve input to a Date32Array, applying timezone adjustment for timestamps.
 fn resolve_local_date32(args: &[ColumnarValue]) -> Result<Date32Array> {
     match parse_tz(args) {
         Some(tz) => {
@@ -305,18 +276,12 @@ pub fn spark_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     )?))
 }
 
-/// `spark_dayofweek(date/timestamp/compatible-string)`
-///
-/// Matches Spark's `dayofweek()` semantics:
-/// Sunday = 1, Monday = 2, ..., Saturday = 7.
+/// Spark `dayofweek()`: Sunday = 1, Monday = 2, ..., Saturday = 7.
 pub fn spark_dayofweek(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let input = resolve_local_date32(args)?;
 
-    // Date32 is days since 1970-01-01. 1970-01-01 is a Thursday.
-    // If we number weekdays so that Sunday = 0, ..., Saturday = 6,
-    // then 1970-01-01 corresponds to 4. For an offset `days`,
-    // weekday_index = (days + 4) mod 7 gives 0 = Sunday, ..., 6 = Saturday.
-    // Spark wants Sunday = 1, ..., Saturday = 7, so we add 1.
+    // Date32 days since epoch; epoch (1970-01-01) is Thursday (index 4).
+    // (days + 4) mod 7 → 0=Sun..6=Sat; Spark wants 1=Sun..7=Sat.
     let dayofweek = Int32Array::from_iter(input.iter().map(|opt_days| {
         opt_days.map(|days| {
             let weekday_index = (days as i64 + 4).rem_euclid(7);
@@ -327,23 +292,13 @@ pub fn spark_dayofweek(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     Ok(ColumnarValue::Array(Arc::new(dayofweek)))
 }
 
-/// `spark_quarter(date/timestamp/compatible-string)`
-///
-/// Simulates Spark's `quarter()` function.
-/// Resolves the input to a local `Date32`, extracts the month (1–12),
-/// and computes the quarter as `((month - 1) / 3) + 1`.
-/// Null values are propagated transparently.
 pub fn spark_quarter(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let local = resolve_local_date32(args)?;
-
-    // Extract month (1–12) using Arrow's date_part
     let month_arr: ArrayRef = date_part(&(Arc::new(local) as ArrayRef), DatePart::Month)?;
     let month_arr = month_arr
         .as_any()
         .downcast_ref::<Int32Array>()
         .expect("date_part(Month) must return Int32Array");
-
-    // Compute quarter: ((month - 1) / 3) + 1, preserving NULLs
     let quarter = Int32Array::from_iter(
         month_arr
             .iter()
@@ -353,11 +308,7 @@ pub fn spark_quarter(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     Ok(ColumnarValue::Array(Arc::new(quarter)))
 }
 
-// ---- Spark-like hour/minute/second built on custom TZ logic
-// -----------------------------------
-
-/// Extract hour/minute/second from a `TimestampMillisecondArray` with optional
-/// timezone. `which`: "hour" | "minute" | "second"
+/// Extract hour/minute/second from a `TimestampMillisecondArray` with optional timezone.
 fn extract_hms_with_tz(
     ts: &TimestampMillisecondArray,
     tz_opt: Option<Tz>,
@@ -370,15 +321,13 @@ fn extract_hms_with_tz(
 
     Int32Array::from_iter(ts.iter().map(|opt_ms| {
         opt_ms.map(|epoch_ms| {
-            // Localize by applying tz offset in seconds (if provided).
             let local_ms = if let Some(tz) = tz_opt {
                 let off_sec = offset_seconds_at(tz, epoch_ms) as i64;
                 epoch_ms + off_sec * MS_PER_SEC
             } else {
-                epoch_ms // Treat as UTC when tz is None.
+                epoch_ms
             };
 
-            // Milliseconds within the day with positive modulo.
             let mut day_ms = local_ms % MS_PER_DAY;
             if day_ms < 0 {
                 day_ms += MS_PER_DAY;
@@ -394,12 +343,6 @@ fn extract_hms_with_tz(
     }))
 }
 
-// ---- Spark-like hour/minute/second built on custom TZ logic
-// -----------------------------------
-
-/// Extract the HOUR component. We first cast any input to
-/// `Timestamp(Millisecond, None)` (to get the physical milliseconds) and then
-/// apply our own timezone/DST logic.
 pub fn spark_hour(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let arr_ts_ms_none = cast(
         &args[0].clone().into_array(1)?,
@@ -417,7 +360,6 @@ pub fn spark_hour(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     ))))
 }
 
-/// Extract the MINUTE component (same approach as `spark_hour`).
 pub fn spark_minute(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let arr_ts_ms_none = cast(
         &args[0].clone().into_array(1)?,
@@ -435,7 +377,6 @@ pub fn spark_minute(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     ))))
 }
 
-/// Extract the SECOND component (same approach as `spark_hour`).
 pub fn spark_second(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let arr_ts_ms_none = cast(
         &args[0].clone().into_array(1)?,
@@ -1131,11 +1072,9 @@ mod tests {
         Ok(())
     }
 
-    // ---- timezone-aware date-part tests ----
-
     #[test]
     fn test_year_month_day_with_tz_new_york() -> Result<()> {
-        // 2021-01-04 04:30:00 UTC -> 2021-01-03 23:30:00 America/New_York (EST, UTC-5)
+        // 04:30 UTC on Jan 4 is 23:30 on Jan 3 in New York
         let epoch = utc_ms(2021, 1, 4, 4, 30, 0);
         let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
         let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("America/New_York".to_string())));
@@ -1158,13 +1097,12 @@ mod tests {
 
     #[test]
     fn test_dayofweek_with_tz_new_york() -> Result<()> {
-        // 2021-01-04 04:30:00 UTC -> 2021-01-03 (Sunday) in New York
+        // Same instant as above; Jan 3 2021 is a Sunday (=1 in Spark)
         let epoch = utc_ms(2021, 1, 4, 4, 30, 0);
         let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
         let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("America/New_York".to_string())));
 
         let out = spark_dayofweek(&[ColumnarValue::Array(ts), tz])?.into_array(1)?;
-        // Sunday = 1 in Spark
         let expected: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         assert_eq!(&out, &expected);
         Ok(())
@@ -1172,8 +1110,7 @@ mod tests {
 
     #[test]
     fn test_quarter_with_tz_boundary() -> Result<()> {
-        // 2021-04-01 03:00:00 UTC -> 2021-03-31 23:00:00 America/New_York (EDT, UTC-4)
-        // Quarter should be 1 (March), not 2 (April)
+        // 03:00 UTC on Apr 1 is 23:00 on Mar 31 in New York → Q1, not Q2
         let epoch = utc_ms(2021, 4, 1, 3, 0, 0);
         let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
         let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("America/New_York".to_string())));
@@ -1186,7 +1123,7 @@ mod tests {
 
     #[test]
     fn test_date_parts_with_shanghai() -> Result<()> {
-        // 2021-12-31 17:00:00 UTC -> 2022-01-01 01:00:00 Asia/Shanghai (+08:00)
+        // 17:00 UTC on Dec 31 is 01:00 on Jan 1 in Shanghai → crosses year boundary
         let epoch = utc_ms(2021, 12, 31, 17, 0, 0);
         let ts = Arc::new(TimestampMillisecondArray::from(vec![Some(epoch)]));
         let tz = ColumnarValue::Scalar(ScalarValue::Utf8(Some("Asia/Shanghai".to_string())));
@@ -1204,8 +1141,7 @@ mod tests {
         let expected_month: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         let expected_day: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         let expected_quarter: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
-        // 2022-01-01 is a Saturday -> Spark dayofweek = 7
-        let expected_dow: ArrayRef = Arc::new(Int32Array::from(vec![Some(7)]));
+        let expected_dow: ArrayRef = Arc::new(Int32Array::from(vec![Some(7)])); // Saturday
 
         assert_eq!(&out_year, &expected_year);
         assert_eq!(&out_month, &expected_month);
@@ -1217,7 +1153,6 @@ mod tests {
 
     #[test]
     fn test_date_parts_null_tz_unchanged() -> Result<()> {
-        // Date32 input with null timezone arg should work the same as no tz arg
         let input = Arc::new(Date32Array::from(vec![Some(0), Some(100), None]));
         let null_tz = ColumnarValue::Scalar(ScalarValue::Utf8(None));
 
