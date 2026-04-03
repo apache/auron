@@ -145,10 +145,12 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("date-part functions with non-UTC timezone") {
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/New_York") {
-      withTable("t1") {
-        sql("create table t1(c1 timestamp) using parquet")
+    withTable("t1") {
+      sql("create table t1(c1 timestamp) using parquet")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         sql("insert into t1 values(timestamp'2021-01-04 04:30:00')")
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/New_York") {
         checkSparkAnswerAndOperator(
           "select year(c1), month(c1), dayofmonth(c1), dayofweek(c1), quarter(c1) from t1")
       }
