@@ -22,7 +22,7 @@ use arrow::{
     compute::{DatePart, date_part},
     datatypes::{DataType, TimeUnit},
 };
-use chrono::{Duration, LocalResult, NaiveDate, TimeZone, Utc, prelude::*};
+use chrono::{Duration, LocalResult, NaiveDate, Offset, TimeZone, Utc, prelude::*};
 use chrono_tz::Tz;
 use datafusion::{
     common::{DataFusionError, Result, ScalarValue},
