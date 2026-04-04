@@ -697,7 +697,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   test("bit_length function") {
     withTable("t1") {
       sql("create table t1(c1 string) using parquet")
-      sql("insert into t1 values('hello'), (''), (null), ('世界')")
+      sql("insert into t1 values('hello'), (''), (null), ('longer string')")
       checkSparkAnswerAndOperator("select bit_length(c1) from t1")
     }
   }
