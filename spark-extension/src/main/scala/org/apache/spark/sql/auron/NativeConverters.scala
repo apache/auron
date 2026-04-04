@@ -891,6 +891,17 @@ object NativeConverters extends Logging {
         buildScalarFunction(pb.ScalarFunction.FindInSet, e.children, e.dataType)
       case e: Abs if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
         buildScalarFunction(pb.ScalarFunction.Abs, e.children, e.dataType)
+      case e: Ascii => buildScalarFunction(pb.ScalarFunction.Ascii, e.children, e.dataType)
+      case e: BitLength =>
+        buildScalarFunction(pb.ScalarFunction.BitLength, e.children, e.dataType)
+      case e: Chr => buildScalarFunction(pb.ScalarFunction.Chr, e.children, e.dataType)
+      case e: StringTranslate =>
+        buildScalarFunction(pb.ScalarFunction.Translate, e.children, e.dataType)
+      case e: StringReplace =>
+        buildScalarFunction(pb.ScalarFunction.Replace, e.children, e.dataType)
+      case e: TruncTimestamp =>
+        buildScalarFunction(pb.ScalarFunction.DateTrunc, e.children, e.dataType)
+
       case e: OctetLength =>
         buildScalarFunction(pb.ScalarFunction.OctetLength, e.children, e.dataType)
       case Length(arg) if arg.dataType == StringType =>

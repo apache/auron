@@ -685,4 +685,62 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       }
     }
   }
+
+  test("ascii function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('A'), ('abc'), (''), (null)")
+      checkSparkAnswerAndOperator("select ascii(c1) from t1")
+    }
+  }
+
+  test("bit_length function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('hello'), (''), (null), ('世界')")
+      checkSparkAnswerAndOperator("select bit_length(c1) from t1")
+    }
+  }
+
+  test("chr function") {
+    withTable("t1") {
+      sql("create table t1(c1 bigint) using parquet")
+      sql("insert into t1 values(65), (97), (48), (null)")
+      checkSparkAnswerAndOperator("select chr(c1) from t1")
+    }
+  }
+
+  test("translate function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('AaBbCc'), ('hello'), (''), (null)")
+      checkSparkAnswerAndOperator("select translate(c1, 'ABC', 'xyz') from t1")
+    }
+  }
+
+  test("replace function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('hello world'), ('aaa'), (''), (null)")
+      checkSparkAnswerAndOperator("select replace(c1, 'world', 'spark') from t1")
+      checkSparkAnswerAndOperator("select replace(c1, 'a', '') from t1")
+    }
+  }
+
+  test("date_trunc function") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTable("t1") {
+        sql("create table t1(c1 timestamp) using parquet")
+        sql("""insert into t1 values
+            |  (timestamp'2024-03-15 14:30:45'),
+            |  (timestamp'2024-12-31 23:59:59'),
+            |  (null)
+            |""".stripMargin)
+        checkSparkAnswerAndOperator("select date_trunc('year', c1) from t1")
+        checkSparkAnswerAndOperator("select date_trunc('month', c1) from t1")
+        checkSparkAnswerAndOperator("select date_trunc('day', c1) from t1")
+        checkSparkAnswerAndOperator("select date_trunc('hour', c1) from t1")
+      }
+    }
+  }
 }
