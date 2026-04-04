@@ -81,19 +81,30 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
             .defaultValue("")
             .withDescription("Protobuf fields to skip when deserializing. The format is: field1,field2,field3");
 
-    public static final ConfigOption<String> START_UP_MODE = ConfigOptions.key("start-up.mode")
+    public static final ConfigOption<String> START_UP_MODE = ConfigOptions.key("scan.startup.mode")
             .stringType()
             .defaultValue("GROUP_OFFSET")
             .withDescription(
                     "offset mode for kafka source, support GROUP_OFFSET, LATEST, EARLIEST, TIMESTAMP will be supported.");
+
+    public static final ConfigOption<String> KAFKA_MOCK_DATA = ConfigOptions.key("kafka.mock.data")
+            .stringType()
+            .noDefaultValue()
+            .withDescription(
+                    "When mock data generated, remember that the first three columns of each row are serialized_kafka_records_partition, serialized_kafka_records_offset, and serialized_kafka_records_timestamp.");
+
+    public static final ConfigOption<Long> PARTITION_DISCOVERY_INTERVAL_MS = ConfigOptions.key(
+                    "partition.discovery.interval.ms")
+            .longType()
+            .defaultValue(300000L)
+            .withDescription("Kafka source partition discovery interval in milliseconds. "
+                    + "Non-positive values disable partition discovery. Default is 300000 (5 minutes).");
 
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
         final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         final ReadableConfig tableOptions = helper.getOptions();
         try {
-            String kafkaPropertiesJson = mapper.writeValueAsString(
-                    getKafkaProperties(context.getCatalogTable().getOptions()));
             Map<String, String> formatConfig = new HashMap<>();
             String format = tableOptions.getOptional(FactoryUtil.FORMAT).get();
             formatConfig.put(KAFKA_PB_FORMAT_NESTED_COL_MAPPING_FIELD, tableOptions.get(NESTED_COLS_FIELD_MAPPING));
@@ -105,11 +116,13 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
             return new AuronKafkaDynamicTableSource(
                     context.getCatalogTable().getSchema().toPhysicalRowDataType(),
                     tableOptions.get(TOPIC),
-                    kafkaPropertiesJson,
+                    getKafkaProperties(context.getCatalogTable().getOptions()),
                     format,
                     formatConfig,
                     tableOptions.get(BUFFER_SIZE),
-                    tableOptions.get(START_UP_MODE));
+                    tableOptions.get(START_UP_MODE),
+                    tableOptions.get(KAFKA_MOCK_DATA),
+                    tableOptions.get(PARTITION_DISCOVERY_INTERVAL_MS));
         } catch (Exception e) {
             throw new FlinkRuntimeException("Could not create Auron Kafka dynamic table source", e);
         }
@@ -141,6 +154,10 @@ public class AuronKafkaDynamicTableFactory implements DynamicTableSourceFactory 
         options.add(PB_ROOT_MESSAGE_NAME);
         options.add(BUFFER_SIZE);
         options.add(NESTED_COLS_FIELD_MAPPING);
+        options.add(PB_SKIP_FIELDS);
+        options.add(START_UP_MODE);
+        options.add(KAFKA_MOCK_DATA);
+        options.add(PARTITION_DISCOVERY_INTERVAL_MS);
         return options;
     }
 

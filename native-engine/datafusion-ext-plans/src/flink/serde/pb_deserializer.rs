@@ -29,14 +29,9 @@ use arrow::array::{
 };
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit};
 use bytes::Buf;
-use datafusion::{
-    common::ExprSchema, error::DataFusionError, logical_expr::UserDefinedLogicalNode,
-};
+use datafusion::error::{DataFusionError, Result};
 use datafusion_ext_commons::{df_execution_err, downcast_any};
-use prost::{
-    DecodeError,
-    encoding::{DecodeContext, WireType},
-};
+use prost::encoding::{DecodeContext, WireType};
 use prost_reflect::{DescriptorPool, FieldDescriptor, Kind, MessageDescriptor, UnknownField};
 
 use crate::flink::serde::{
@@ -46,8 +41,7 @@ use crate::flink::serde::{
     shared_struct_array_builder::SharedStructArrayBuilder,
 };
 
-type ValueHandler =
-    Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> datafusion::error::Result<()> + Send>;
+type ValueHandler = Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> Result<()> + Send>;
 type ValueHandlerMap = hashbrown::HashMap<u32, ValueHandler, foldhash::fast::RandomState>;
 
 pub struct PbDeserializer {
@@ -133,7 +127,7 @@ impl PbDeserializer {
         // "pb_field1.pb_sub_field3.pb_sub_sub_field1"}
         nested_msg_mapping: &HashMap<String, String>,
         skip_fields: &[String],
-    ) -> datafusion::error::Result<Self> {
+    ) -> Result<Self> {
         let pool: DescriptorPool =
             DescriptorPool::decode(proto_desc_data.as_ref()).map_err(|e| {
                 DataFusionError::Execution(format!("Failed to parse descriptor file: {e}"))
@@ -154,7 +148,7 @@ impl PbDeserializer {
         output_schema: SchemaRef,
         nested_msg_mapping: &HashMap<String, String>,
         skip_fields: &[String],
-    ) -> datafusion::error::Result<Self> {
+    ) -> Result<Self> {
         // The output schema includes Kafka's meta fields, but these are absent in the
         // PB data, so they must be filtered out.
         let output_schema_without_meta = Arc::new(Schema::new(
@@ -176,7 +170,7 @@ impl PbDeserializer {
             nested_msg_mapping.clone(),
             &skip_fields,
         )
-        .expect("Failed to transfer output scheam to pb scheam");
+        .expect("Failed to transfer output schema to pb schema");
 
         let tag_to_output_mapping =
             create_tag_to_output_mapping(message_descriptor.clone(), &pb_schema);
@@ -199,7 +193,7 @@ impl PbDeserializer {
                     )?,
                 ))
             })
-            .collect::<datafusion::error::Result<hashbrown::HashMap<_, _, foldhash::fast::RandomState>>>()?;
+            .collect::<Result<hashbrown::HashMap<_, _, foldhash::fast::RandomState>>>()?;
 
         // precompute message mappings
         let msg_mapping = output_schema_without_meta
@@ -236,7 +230,7 @@ impl PbDeserializer {
                 }
                 Ok(mapped_field_indices)
             })
-            .collect::<datafusion::error::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             output_schema,
@@ -255,13 +249,13 @@ fn transfer_output_schema_to_pb_schema(
     output_schema: &SchemaRef,
     nested_msg_mapping: HashMap<String, String>,
     skip_fields: &[String],
-) -> datafusion::error::Result<SchemaRef> {
+) -> Result<SchemaRef> {
     let mut pb_schema_fields: Vec<Field> = vec![];
     let mut sub_pb_nested_msg_mapping: HashMap<String, String> = HashMap::new();
     let mut sub_pb_schema_mapping: HashMap<String, Vec<Field>> = HashMap::new();
     // To ensure sequential processing, the output schema is used to traverse the
     // data.
-    for (output_index, field) in output_schema.fields().iter().enumerate() {
+    for field in output_schema.fields().iter() {
         if let Some(pb_nested_msg_name) = nested_msg_mapping.get(field.name()) {
             let index_start = pb_nested_msg_name.find(".");
             if let Some(index) = index_start {
@@ -279,17 +273,18 @@ fn transfer_output_schema_to_pb_schema(
         }
     }
     let mut msg_set: HashSet<String> = HashSet::new();
-    for (index, field) in output_schema.fields().iter().enumerate() {
+    for field in output_schema.fields().iter() {
         if let Some(field_name) = nested_msg_mapping.get(field.name()) {
             let index_start = field_name.find(".");
             if let Some(index) = index_start {
                 let msg_field_name = &field_name[..index];
-                let msg_field_desc =
-                    message_descriptor
-                        .get_field_by_name(msg_field_name)
-                        .expect(&format!(
-                            "nested field {msg_field_name} not exits in message_descriptor"
-                        ));
+                let msg_field_desc = message_descriptor
+                    .get_field_by_name(msg_field_name)
+                    .ok_or_else(|| {
+                        DataFusionError::Execution(format!(
+                            "nested field {msg_field_name} does not exist in message_descriptor"
+                        ))
+                    })?;
                 if let Kind::Message(sub_message_desc) = msg_field_desc.kind() {
                     if !msg_set.contains(msg_field_name) {
                         let sub_fields = sub_pb_schema_mapping
@@ -318,18 +313,24 @@ fn transfer_output_schema_to_pb_schema(
                     return df_execution_err!("not message field");
                 }
             } else {
-                let msg_field_desc =
-                    message_descriptor
-                        .get_field_by_name(field_name)
-                        .expect(&format!(
-                            "nested innermost field {field_name} not exits in message_descriptor"
-                        ));
+                let msg_field_desc = message_descriptor
+                    .get_field_by_name(field_name)
+                    .ok_or_else(|| {
+                        DataFusionError::Execution(format!(
+                            "nested innermost field {field_name} does not exist in message_descriptor"
+                        ))
+                    })?;
                 pb_schema_fields.push(create_arrow_field(msg_field_desc.clone(), skip_fields));
             }
         } else {
             let msg_field_desc = message_descriptor
                 .get_field_by_name(field.name())
-                .expect(&format!("{} not exits in message_descriptor", field.name()));
+                .ok_or_else(|| {
+                    DataFusionError::Execution(format!(
+                        "{} does not exist in message_descriptor",
+                        field.name()
+                    ))
+                })?;
             pb_schema_fields.push(create_arrow_field(msg_field_desc.clone(), skip_fields));
         }
     }
@@ -357,7 +358,7 @@ fn convert_pb_type_to_arrow(
     is_map: bool,
     field_name: &str,
     skip_fields: &[String],
-) -> datafusion::error::Result<DataType> {
+) -> Result<DataType> {
     match field_kind {
         Kind::Bool => {
             if is_list {
@@ -458,7 +459,7 @@ fn convert_pb_type_to_arrow(
                 Ok(DataType::UInt64)
             }
         }
-        Kind::Enum(enum_descriptor) => {
+        Kind::Enum(_enum_descriptor) => {
             // Enum to get the Name, so use String.
             if is_list {
                 Ok(DataType::List(create_arrow_field_ref(
@@ -543,15 +544,17 @@ fn create_tag_to_output_mapping(
 fn create_output_array_builders(
     schema: &SchemaRef,
     message_descriptor: MessageDescriptor,
-) -> datafusion::error::Result<Vec<SharedArrayBuilder>> {
+) -> Result<Vec<SharedArrayBuilder>> {
     let mut array_builders: Vec<SharedArrayBuilder> = vec![];
     for field in schema.fields() {
         let field_name = field.name();
         let field_desc = message_descriptor
             .get_field_by_name(field_name)
-            .expect(&format!(
-                "Field {field_name} not exits in message_descriptor",
-            ));
+            .ok_or_else(|| {
+                DataFusionError::Execution(format!(
+                    "Field {field_name} does not exist in message_descriptor"
+                ))
+            })?;
         match field.data_type() {
             DataType::Boolean => {
                 array_builders.push(SharedArrayBuilder::new(BooleanBuilder::new()));
@@ -596,7 +599,7 @@ fn create_output_array_builders(
                     struct_builder,
                 )));
             }
-            DataType::Map(field_ref, boolean) => {
+            DataType::Map(field_ref, _boolean) => {
                 let field_kind = field_desc.kind();
                 let sub_msg_desc = field_kind.as_message().expect("map as_message failed");
                 if let DataType::Struct(fields) = field_ref.data_type() {
@@ -626,6 +629,7 @@ fn create_output_array_builders(
                         field_desc,
                     )
                     .expect("List create_shared_array_builder_by_data_type failed"),
+                    Some(field_ref.clone()),
                 )));
             }
             other => {
@@ -641,7 +645,7 @@ fn create_output_array_builders(
 fn create_shared_array_builder_by_data_type(
     data_type: DataType,
     field_desc: FieldDescriptor,
-) -> datafusion::error::Result<SharedArrayBuilder> {
+) -> Result<SharedArrayBuilder> {
     match data_type {
         DataType::Boolean => {
             return Ok(SharedArrayBuilder::new(BooleanBuilder::new()));
@@ -686,7 +690,7 @@ fn create_shared_array_builder_by_data_type(
                 struct_builder,
             )));
         }
-        DataType::Map(field_ref, boolean) => {
+        DataType::Map(field_ref, _boolean) => {
             let field_kind = field_desc.kind();
             let sub_msg_desc = field_kind.as_message().expect("map as_message failed");
             if let DataType::Struct(fields) = field_ref.data_type() {
@@ -713,6 +717,7 @@ fn create_shared_array_builder_by_data_type(
             return Ok(SharedArrayBuilder::new(SharedListArrayBuilder::new(
                 create_shared_array_builder_by_data_type(field_ref.data_type().clone(), field_desc)
                     .expect("List create_shared_array_builder_by_data_type failed"),
+                Some(field_ref.clone()),
             )));
         }
         other => return df_execution_err!("Unsupported data type for Arrow conversion: {other:?}"),
@@ -721,7 +726,7 @@ fn create_shared_array_builder_by_data_type(
 
 pub(crate) fn ensure_output_array_builders_size(
     builders: &[SharedArrayBuilder],
-) -> datafusion::error::Result<Box<dyn FnMut(usize) + Send + Sync>> {
+) -> Result<Box<dyn FnMut(usize) + Send + Sync>> {
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     enum BuilderType {
         Boolean,
@@ -820,7 +825,7 @@ pub(crate) fn ensure_output_array_builders_size(
             let builders = $builders
                 .into_iter()
                 .map(|builder| builder.get_mut::<$builder_type>())
-                .collect::<datafusion::error::Result<Vec<_>>>()?;
+                .collect::<Result<Vec<_>>>()?;
             Box::new(move |size| {
                 for builder in &builders {
                     let builder = builder.get_mut();
@@ -880,7 +885,7 @@ pub(crate) fn ensure_output_array_builders_size(
                 }
             })
         })
-        .collect::<datafusion::error::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(Box::new(move |size| {
         adaptive_append_nulls.iter_mut().for_each(|imp| {
@@ -889,10 +894,7 @@ pub(crate) fn ensure_output_array_builders_size(
     }))
 }
 
-fn get_output_array(
-    struct_array: &StructArray,
-    nested_field_name: &[usize],
-) -> datafusion::error::Result<ArrayRef> {
+fn get_output_array(struct_array: &StructArray, nested_field_name: &[usize]) -> Result<ArrayRef> {
     let column = struct_array.column(nested_field_name[0]);
     if nested_field_name.len() > 1 {
         return get_output_array(downcast_any!(column, StructArray)?, &nested_field_name[1..]);
@@ -906,7 +908,7 @@ fn create_value_handler(
     tag_to_output_index: &HashMap<u32, usize>,
     pb_schema: &SchemaRef,
     output_array_builders: &[SharedArrayBuilder],
-) -> datafusion::error::Result<ValueHandler> {
+) -> Result<ValueHandler> {
     let output_index = tag_to_output_index.get(&tag_id);
     let field = message_descriptor.get_field(tag_id);
 
@@ -983,7 +985,7 @@ fn create_value_handler(
 
         macro_rules! impl_for_message_builder {
             ($handle_fn:expr) => {{
-                Box::new(move |cursor: &mut Cursor<&[u8]>, tag, wire_type| {
+                Box::new(move |cursor: &mut Cursor<&[u8]>, _tag, wire_type| {
                     prost::encoding::check_wire_type(WireType::LengthDelimited, wire_type)
                         .or_else(|err| df_execution_err!("{err}"))?;
                     let len = prost::encoding::decode_varint(cursor)
@@ -1380,7 +1382,7 @@ fn create_value_handler(
                             output_field.data_type()
                         )));
                     }
-                } else if let DataType::Map(struct_fields, boolean) = output_field.data_type() {
+                } else if let DataType::Map(struct_fields, _boolean) = output_field.data_type() {
                     if let DataType::Struct(sub_fields) = struct_fields.data_type() {
                         let sub_pb_schema = Arc::new(Schema::new(sub_fields.clone()));
                         let sub_tag_to_output_mapping = create_tag_to_output_mapping(
@@ -1473,7 +1475,7 @@ fn create_value_handler(
                     }));
                 }
             }
-            other => {
+            _other => {
                 return Err(DataFusionError::Execution(format!(
                     "Failed to create value handler field: {:?}, {}",
                     field.kind(),
@@ -1487,29 +1489,37 @@ fn create_value_handler(
         let mut skip_value = move || {
             match wire_type {
                 WireType::Varint => {
-                    prost::encoding::decode_varint(cursor)?;
+                    prost::encoding::decode_varint(cursor)
+                        .map_err(|e| DataFusionError::Execution(e.to_string()))?;
                 }
                 WireType::ThirtyTwoBit => {
                     if cursor.remaining() < 4 {
-                        return Err(DecodeError::new("buffer underflow"));
+                        return df_execution_err!("buffer underflow");
                     }
                     cursor.advance(4);
                 }
                 WireType::SixtyFourBit => {
                     if cursor.remaining() < 8 {
-                        return Err(DecodeError::new("buffer underflow"));
+                        return df_execution_err!("buffer underflow");
                     }
                     cursor.advance(8);
                 }
                 WireType::LengthDelimited => {
-                    let len = prost::encoding::decode_varint(cursor)? as usize;
+                    let len = prost::encoding::decode_varint(cursor)
+                        .map_err(|e| DataFusionError::Execution(e.to_string()))?
+                        as usize;
                     if cursor.remaining() < len {
-                        return Err(DecodeError::new("buffer underflow"));
+                        return df_execution_err!("buffer underflow");
                     }
                     cursor.advance(len);
                 }
                 _ => {
-                    UnknownField::decode_value(tag, wire_type, cursor, DecodeContext::default())?;
+                    UnknownField::decode_value(tag, wire_type, cursor, DecodeContext::default())
+                        .map_err(|e| {
+                            DataFusionError::Execution(format!(
+                                "Failed to decode unknown value: {e}"
+                            ))
+                        })?;
                 }
             }
             Ok(())

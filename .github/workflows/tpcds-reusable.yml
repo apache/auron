@@ -179,7 +179,7 @@ jobs:
       - name: Upload auron it (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
         uses: actions/upload-artifact@v7
         with:
-          name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
+          name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
           path: dev/auron-it/target/auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}*-jar-with-dependencies.jar
           overwrite: true
 
@@ -248,7 +248,7 @@ jobs:
       - name: Download auron-it JAR
         uses: actions/download-artifact@v8
         with:
-          name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}
+          name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Checkout TPC-DS Data
         uses: actions/checkout@v6

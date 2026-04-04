@@ -29,6 +29,7 @@ mod spark_initcap;
 mod spark_isnan;
 mod spark_make_array;
 mod spark_make_decimal;
+mod spark_map;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
 mod spark_round;
@@ -38,7 +39,7 @@ mod spark_unscaled_value;
 #[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 pub fn create_auron_ext_function(
     name: &str,
-    spark_partition_id: usize,
+    #[allow(unused_variables)] spark_partition_id: usize,
 ) -> Result<ScalarFunctionImplementation> {
     // auron ext functions, if used for spark should be start with 'Spark_',
     // if used for flink should be start with 'Flink_',
@@ -63,6 +64,7 @@ pub fn create_auron_ext_function(
         }
         "Spark_ParseJson" => Arc::new(spark_get_json_object::spark_parse_json),
         "Spark_MakeArray" => Arc::new(spark_make_array::array),
+        "Spark_MapConcat" => Arc::new(spark_map::map_concat),
         "Spark_StringSpace" => Arc::new(spark_strings::string_space),
         "Spark_StringRepeat" => Arc::new(spark_strings::string_repeat),
         "Spark_StringSplit" => Arc::new(spark_strings::string_split),
@@ -74,6 +76,7 @@ pub fn create_auron_ext_function(
         "Spark_Year" => Arc::new(spark_dates::spark_year),
         "Spark_Month" => Arc::new(spark_dates::spark_month),
         "Spark_Day" => Arc::new(spark_dates::spark_day),
+        "Spark_DayOfWeek" => Arc::new(spark_dates::spark_dayofweek),
         "Spark_Quarter" => Arc::new(spark_dates::spark_quarter),
         "Spark_Hour" => Arc::new(spark_dates::spark_hour),
         "Spark_Minute" => Arc::new(spark_dates::spark_minute),

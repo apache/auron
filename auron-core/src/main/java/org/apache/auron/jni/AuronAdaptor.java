@@ -125,4 +125,9 @@ public abstract class AuronAdaptor {
      * @throws UnsupportedOperationException If the method is not implemented.
      */
     public abstract AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized);
+
+    /**
+     * Returns the name of the current engine, such as Spark or Flink.
+     */
+    public abstract String getEngineName();
 }

@@ -190,6 +190,7 @@ class ShimsImpl extends Shims with Logging {
     auronBuildInfo.put(AuronBuildInfo.CELEBORN_VERSION_STRING, AuronBuildInfo.CELEBORN_VERSION)
     auronBuildInfo.put(AuronBuildInfo.UNIFFLE_VERSION_STRING, AuronBuildInfo.UNIFFLE_VERSION)
     auronBuildInfo.put(AuronBuildInfo.PAIMON_VERSION_STRING, AuronBuildInfo.PAIMON_VERSION)
+    auronBuildInfo.put(AuronBuildInfo.ICEBERG_VERSION_STRING, AuronBuildInfo.ICEBERG_VERSION)
     auronBuildInfo.put(AuronBuildInfo.FLINK_VERSION_STRING, AuronBuildInfo.FLINK_VERSION)
     auronBuildInfo.put(AuronBuildInfo.BUILD_DATE_STRING, AuronBuildInfo.BUILD_DATE)
     auronBuildInfo.retain { case (_, v) => v != null && v.nonEmpty }

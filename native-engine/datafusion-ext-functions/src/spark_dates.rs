@@ -16,7 +16,7 @@
 use std::sync::Arc;
 
 use arrow::{
-    array::{ArrayRef, Int32Array, TimestampMillisecondArray},
+    array::{ArrayRef, Date32Array, Int32Array, TimestampMillisecondArray},
     compute::{DatePart, date_part},
     datatypes::{DataType, TimeUnit},
 };
@@ -44,6 +44,32 @@ pub fn spark_month(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 pub fn spark_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let input = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
     Ok(ColumnarValue::Array(date_part(&input, DatePart::Day)?))
+}
+
+/// `spark_dayofweek(date/timestamp/compatible-string)`
+///
+/// Matches Spark's `dayofweek()` semantics:
+/// Sunday = 1, Monday = 2, ..., Saturday = 7.
+pub fn spark_dayofweek(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let input = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
+    let input = input
+        .as_any()
+        .downcast_ref::<Date32Array>()
+        .expect("internal cast to Date32 must succeed");
+
+    // Date32 is days since 1970-01-01. 1970-01-01 is a Thursday.
+    // If we number weekdays so that Sunday = 0, ..., Saturday = 6,
+    // then 1970-01-01 corresponds to 4. For an offset `days`,
+    // weekday_index = (days + 4) mod 7 gives 0 = Sunday, ..., 6 = Saturday.
+    // Spark wants Sunday = 1, ..., Saturday = 7, so we add 1.
+    let dayofweek = Int32Array::from_iter(input.iter().map(|opt_days| {
+        opt_days.map(|days| {
+            let weekday_index = (days as i64 + 4).rem_euclid(7);
+            weekday_index as i32 + 1
+        })
+    }));
+
+    Ok(ColumnarValue::Array(Arc::new(dayofweek)))
 }
 
 /// `spark_quarter(date/timestamp/compatible-string)`
@@ -255,6 +281,29 @@ mod tests {
             None,
         ]));
         assert_eq!(&spark_day(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_dayofweek() -> Result<()> {
+        let input = Arc::new(Date32Array::from(vec![
+            Some(-1),
+            Some(0),
+            Some(2),
+            Some(3),
+            Some(4),
+            None,
+        ]));
+        let args = vec![ColumnarValue::Array(input)];
+        let expected_ret: ArrayRef = Arc::new(Int32Array::from(vec![
+            Some(4),
+            Some(5),
+            Some(7),
+            Some(1),
+            Some(2),
+            None,
+        ]));
+        assert_eq!(&spark_dayofweek(&args)?.into_array(1)?, &expected_ret);
         Ok(())
     }
 

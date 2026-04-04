@@ -39,6 +39,32 @@ public abstract class AuronConfiguration {
             .withDescription("Log level for native execution.")
             .withDefaultValue("info");
 
+    public static final ConfigOption<Integer> TOKIO_WORKER_THREADS_PER_CPU = new ConfigOption<>(Integer.class)
+            .withKey("auron.tokio.worker.threads.per.cpu")
+            .withCategory("Runtime Configuration")
+            .withDescription(
+                    "Number of Tokio worker threads to create per CPU core (spark.task.cpus). Set to 0 for automatic detection "
+                            + "based on available CPU cores. This setting controls the thread pool size for Tokio-based asynchronous operations.")
+            .withDefaultValue(0);
+
+    public static final ConfigOption<Integer> SUGGESTED_BATCH_MEM_SIZE = new ConfigOption<>(Integer.class)
+            .withKey("auron.suggested.batch.memSize")
+            .withCategory("Runtime Configuration")
+            .withDescription(
+                    "Suggested memory size in bytes for record batches. This setting controls the target memory allocation "
+                            + "for individual data batches to optimize memory usage and processing efficiency. Default is 8MB (8,388,608 bytes).")
+            .withDefaultValue(8388608);
+
+    public static final ConfigOption<Integer> TASK_CPUS = new ConfigOption<>(Integer.class)
+            .withKey("task.cpus")
+            .withCategory("Runtime Configuration")
+            .withDescription(
+                    "Number of CPU cores allocated per Spark task. This setting determines the parallelism level "
+                            + "for individual tasks and affects resource allocation and task scheduling. "
+                            + "In Spark, the value is retrieved from SparkEnv via the 'spark.task.cpus' option; "
+                            + "if not configured, the default value of 1 is used.")
+            .withDefaultValue(1);
+
     public abstract <T> Optional<T> getOptional(ConfigOption<T> option);
 
     public <T> T get(ConfigOption<T> option) {

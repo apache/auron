@@ -195,6 +195,10 @@ object SparkOnHeapSpillManager extends Logging {
 
   def current: OnHeapSpillManager = {
     val tc = TaskContext.get
-    all.getOrElseUpdate(tc.taskAttemptId(), new SparkOnHeapSpillManager(tc))
+    if (tc != null) {
+      all.getOrElseUpdate(tc.taskAttemptId(), new SparkOnHeapSpillManager(tc))
+    } else {
+      OnHeapSpillManager.getDisabledOnHeapSpillManager
+    }
   }
 }

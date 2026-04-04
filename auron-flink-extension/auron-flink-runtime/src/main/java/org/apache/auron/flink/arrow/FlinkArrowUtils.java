@@ -29,11 +29,18 @@ import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.NullVector;
 import org.apache.arrow.vector.SmallIntVector;
+import org.apache.arrow.vector.TimeMicroVector;
+import org.apache.arrow.vector.TimeMilliVector;
+import org.apache.arrow.vector.TimeNanoVector;
+import org.apache.arrow.vector.TimeSecVector;
+import org.apache.arrow.vector.TimeStampVector;
 import org.apache.arrow.vector.TinyIntVector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.MapVector;
+import org.apache.arrow.vector.complex.StructVector;
 import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.TimeUnit;
@@ -41,6 +48,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.types.pojo.Schema;
+import org.apache.auron.flink.arrow.writers.ArrayWriter;
 import org.apache.auron.flink.arrow.writers.ArrowFieldWriter;
 import org.apache.auron.flink.arrow.writers.BigIntWriter;
 import org.apache.auron.flink.arrow.writers.BooleanWriter;
@@ -49,8 +57,12 @@ import org.apache.auron.flink.arrow.writers.DecimalWriter;
 import org.apache.auron.flink.arrow.writers.DoubleWriter;
 import org.apache.auron.flink.arrow.writers.FloatWriter;
 import org.apache.auron.flink.arrow.writers.IntWriter;
+import org.apache.auron.flink.arrow.writers.MapWriter;
 import org.apache.auron.flink.arrow.writers.NullWriter;
+import org.apache.auron.flink.arrow.writers.RowWriter;
 import org.apache.auron.flink.arrow.writers.SmallIntWriter;
+import org.apache.auron.flink.arrow.writers.TimeWriter;
+import org.apache.auron.flink.arrow.writers.TimestampWriter;
 import org.apache.auron.flink.arrow.writers.TinyIntWriter;
 import org.apache.auron.flink.arrow.writers.VarBinaryWriter;
 import org.apache.auron.flink.arrow.writers.VarCharWriter;
@@ -283,6 +295,45 @@ public final class FlinkArrowUtils {
             return DecimalWriter.forRow((DecimalVector) vector, decimalType.getPrecision(), decimalType.getScale());
         } else if (vector instanceof DateDayVector) {
             return DateWriter.forRow((DateDayVector) vector);
+        } else if (vector instanceof TimeSecVector
+                || vector instanceof TimeMilliVector
+                || vector instanceof TimeMicroVector
+                || vector instanceof TimeNanoVector) {
+            return TimeWriter.forRow(vector);
+        } else if (vector instanceof TimeStampVector) {
+            int precision;
+            if (fieldType instanceof LocalZonedTimestampType) {
+                precision = ((LocalZonedTimestampType) fieldType).getPrecision();
+            } else {
+                precision = ((TimestampType) fieldType).getPrecision();
+            }
+            return TimestampWriter.forRow(vector, precision);
+        } else if (vector instanceof MapVector) {
+            // MapVector extends ListVector, so this check must come before ListVector
+            MapVector mapVector = (MapVector) vector;
+            MapType mapType = (MapType) fieldType;
+            StructVector entriesVector = (StructVector) mapVector.getDataVector();
+            ArrowFieldWriter<ArrayData> keyWriter =
+                    createArrowFieldWriterForArray(entriesVector.getChild(MapVector.KEY_NAME), mapType.getKeyType());
+            ArrowFieldWriter<ArrayData> valueWriter = createArrowFieldWriterForArray(
+                    entriesVector.getChild(MapVector.VALUE_NAME), mapType.getValueType());
+            return MapWriter.forRow(mapVector, keyWriter, valueWriter);
+        } else if (vector instanceof ListVector) {
+            ListVector listVector = (ListVector) vector;
+            ArrayType arrayType = (ArrayType) fieldType;
+            ArrowFieldWriter<ArrayData> elementWriter =
+                    createArrowFieldWriterForArray(listVector.getDataVector(), arrayType.getElementType());
+            return ArrayWriter.forRow(listVector, elementWriter);
+        } else if (vector instanceof StructVector) {
+            StructVector structVector = (StructVector) vector;
+            RowType rowType = (RowType) fieldType;
+            @SuppressWarnings("unchecked")
+            ArrowFieldWriter<RowData>[] fieldsWriters = new ArrowFieldWriter[rowType.getFieldCount()];
+            for (int i = 0; i < fieldsWriters.length; i++) {
+                fieldsWriters[i] =
+                        createArrowFieldWriterForRow(structVector.getChildByOrdinal(i), rowType.getTypeAt(i));
+            }
+            return RowWriter.forRow(structVector, fieldsWriters);
         } else {
             throw new UnsupportedOperationException(
                     "Unsupported vector type: " + vector.getClass().getSimpleName());
@@ -323,6 +374,45 @@ public final class FlinkArrowUtils {
             return DecimalWriter.forArray((DecimalVector) vector, decimalType.getPrecision(), decimalType.getScale());
         } else if (vector instanceof DateDayVector) {
             return DateWriter.forArray((DateDayVector) vector);
+        } else if (vector instanceof TimeSecVector
+                || vector instanceof TimeMilliVector
+                || vector instanceof TimeMicroVector
+                || vector instanceof TimeNanoVector) {
+            return TimeWriter.forArray(vector);
+        } else if (vector instanceof TimeStampVector) {
+            int precision;
+            if (fieldType instanceof LocalZonedTimestampType) {
+                precision = ((LocalZonedTimestampType) fieldType).getPrecision();
+            } else {
+                precision = ((TimestampType) fieldType).getPrecision();
+            }
+            return TimestampWriter.forArray(vector, precision);
+        } else if (vector instanceof MapVector) {
+            // MapVector extends ListVector, so this check must come before ListVector
+            MapVector mapVector = (MapVector) vector;
+            MapType mapType = (MapType) fieldType;
+            StructVector entriesVector = (StructVector) mapVector.getDataVector();
+            ArrowFieldWriter<ArrayData> keyWriter =
+                    createArrowFieldWriterForArray(entriesVector.getChild(MapVector.KEY_NAME), mapType.getKeyType());
+            ArrowFieldWriter<ArrayData> valueWriter = createArrowFieldWriterForArray(
+                    entriesVector.getChild(MapVector.VALUE_NAME), mapType.getValueType());
+            return MapWriter.forArray(mapVector, keyWriter, valueWriter);
+        } else if (vector instanceof ListVector) {
+            ListVector listVector = (ListVector) vector;
+            ArrayType arrayType = (ArrayType) fieldType;
+            ArrowFieldWriter<ArrayData> elementWriter =
+                    createArrowFieldWriterForArray(listVector.getDataVector(), arrayType.getElementType());
+            return ArrayWriter.forArray(listVector, elementWriter);
+        } else if (vector instanceof StructVector) {
+            StructVector structVector = (StructVector) vector;
+            RowType rowType = (RowType) fieldType;
+            @SuppressWarnings("unchecked")
+            ArrowFieldWriter<RowData>[] fieldsWriters = new ArrowFieldWriter[rowType.getFieldCount()];
+            for (int i = 0; i < fieldsWriters.length; i++) {
+                fieldsWriters[i] =
+                        createArrowFieldWriterForRow(structVector.getChildByOrdinal(i), rowType.getTypeAt(i));
+            }
+            return RowWriter.forArray(structVector, fieldsWriters);
         } else {
             throw new UnsupportedOperationException(
                     "Unsupported vector type: " + vector.getClass().getSimpleName());

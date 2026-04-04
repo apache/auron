@@ -14,6 +14,7 @@
 // limitations under the License.
 
 pub mod flink_deserializer;
+pub mod json_deserializer;
 pub mod pb_deserializer;
 pub mod shared_array_builder;
 pub mod shared_list_array_builder;

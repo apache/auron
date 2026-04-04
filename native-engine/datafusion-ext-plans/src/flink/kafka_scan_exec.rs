@@ -13,7 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{any::Any, collections::HashMap, env, fmt::Formatter, fs, sync::Arc};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    env,
+    fmt::Formatter,
+    fs,
+    sync::Arc,
+    time::Instant,
+};
 
 use arrow::array::{
     ArrayBuilder, BinaryArray, BinaryBuilder, Int32Array, Int32Builder, Int64Array, Int64Builder,
@@ -25,7 +33,6 @@ use datafusion::{
     common::{DataFusionError, Statistics},
     error::Result,
     execution::TaskContext,
-    logical_expr::UserDefinedLogicalNode,
     physical_expr::{EquivalenceProperties, Partitioning::UnknownPartitioning},
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties, SendableRecordBatchStream,
@@ -45,7 +52,10 @@ use sonic_rs::{JsonContainerTrait, JsonValueTrait};
 
 use crate::{
     common::{column_pruning::ExecuteWithColumnPruning, execution_context::ExecutionContext},
-    flink::serde::{flink_deserializer::FlinkDeserializer, pb_deserializer::PbDeserializer},
+    flink::serde::{
+        flink_deserializer::FlinkDeserializer, json_deserializer::JsonDeserializer,
+        pb_deserializer::PbDeserializer,
+    },
     rdkafka::Message,
 };
 
@@ -125,6 +135,7 @@ impl KafkaScanExec {
             exec_ctx.output_schema(),
             exec_ctx.clone(),
             serialized_pb_stream,
+            self.data_format,
             self.format_config_json.clone(),
         )?;
         Ok(deserialized_pb_stream)
@@ -225,8 +236,8 @@ fn read_serialized_records_from_kafka(
     batch_size: usize,
     startup_mode: i32,
     auron_operator_id: String,
-    data_format: i32,
-    format_config_json: String,
+    _data_format: i32,
+    _format_config_json: String,
 ) -> Result<SendableRecordBatchStream> {
     let context = CustomContext;
     // get source json string from jni bridge resource
@@ -237,10 +248,6 @@ fn read_serialized_records_from_kafka(
         .expect("kafka_task_json_java is not valid java string");
     let task_json = sonic_rs::from_str::<sonic_rs::Value>(&kafka_task_json)
         .expect("source_json_str is not valid json");
-    let num_readers = task_json
-        .get("num_readers")
-        .as_i64()
-        .expect("num_readers is not valid json") as i32;
     let subtask_index = task_json
         .get("subtask_index")
         .as_i64()
@@ -252,6 +259,25 @@ fn read_serialized_records_from_kafka(
     let restored_offsets = task_json
         .get("restored_offsets")
         .expect("restored_offsets is not valid json");
+    let mut partitions: Vec<i32> = vec![];
+    if let Some(assigned_partitions) = task_json.get("assigned_partitions") {
+        if let Some(array) = assigned_partitions.as_array() {
+            array.iter().for_each(|v| {
+                if let Some(num) = v.as_i64() {
+                    partitions.push(num as i32);
+                }
+            });
+        }
+    }
+    if partitions.is_empty() {
+        return Err(DataFusionError::Execution(format!(
+            "No partitions found for topic: {kafka_topic}"
+        )));
+    }
+    let partition_discovery_interval_ms = task_json
+        .get("partition_discovery_interval_ms")
+        .as_i64()
+        .expect("partition_discovery_interval_ms is not valid json");
     let kafka_properties = sonic_rs::from_str::<sonic_rs::Value>(&kafka_properties_json)
         .expect("kafka_properties_json is not valid json");
     let mut config = ClientConfig::new();
@@ -279,34 +305,6 @@ fn read_serialized_records_from_kafka(
             .create_with_context(context)
             .expect("Kafka Consumer creation failed"),
     );
-    let metadata = consumer
-        .fetch_metadata(Some(&kafka_topic), Some(std::time::Duration::from_secs(5)))
-        .expect("Failed to fetch kafka metadata");
-
-    // get topic metadata
-    let topic_metadata = metadata
-        .topics()
-        .iter()
-        .find(|t| t.name() == kafka_topic)
-        .expect("Topic not found");
-
-    // get partition metadata
-    let partitions: Vec<i32> = topic_metadata
-        .partitions()
-        .iter()
-        .filter(|p| {
-            flink_kafka_partition_assign(kafka_topic.clone(), p.id(), num_readers)
-                .expect("flink_kafka_partition_assign failed")
-                == subtask_index
-        })
-        .map(|p| p.id())
-        .collect();
-
-    if partitions.is_empty() {
-        return Err(DataFusionError::Execution(format!(
-            "No partitions found for topic: {kafka_topic}"
-        )));
-    }
 
     // GROUP_OFFSET = 0;
     // EARLIEST = 1;
@@ -335,7 +333,7 @@ fn read_serialized_records_from_kafka(
         } else {
             offset
         };
-        partition_list.add_partition_offset(&kafka_topic, *partition, partition_offset);
+        let _ = partition_list.add_partition_offset(&kafka_topic, *partition, partition_offset);
     }
     consumer
         .assign(&partition_list)
@@ -355,6 +353,11 @@ fn read_serialized_records_from_kafka(
             let mut serialized_kafka_records_offset_builder = Int64Builder::with_capacity(0);
             let mut serialized_kafka_records_timestamp_builder = Int64Builder::with_capacity(0);
             let mut serialized_pb_records_builder = BinaryBuilder::with_capacity(batch_size, 0);
+
+            let mut last_partition_check = Instant::now();
+            let partition_check_interval =
+                std::time::Duration::from_millis(partition_discovery_interval_ms.max(0) as u64);
+
             loop {
                 while serialized_pb_records_builder.len() < batch_size {
                     match consumer.recv().await {
@@ -381,6 +384,62 @@ fn read_serialized_records_from_kafka(
                     ],
                 )?;
                 sender.send(batch).await;
+
+                // Check for new partitions if partition discovery is enabled
+                if partition_discovery_interval_ms > 0
+                    && last_partition_check.elapsed() >= partition_check_interval
+                {
+                    let mut known_partitions: HashSet<i32> = partitions.iter().cloned().collect();
+                    last_partition_check = Instant::now();
+                    let new_partitions_key = auron_operator_id.clone() + "-new-partitions";
+                    let resource_id = jni_new_string!(&new_partitions_key)?;
+                    let java_json_str = jni_call_static!(
+                        JniBridge.getResource(resource_id.as_obj()) -> JObject
+                    )?;
+                    if !java_json_str.0.is_null() {
+                        let new_partitions_json = jni_get_string!(java_json_str.as_obj().into())
+                            .expect("new_partitions json is not valid java string");
+                        let new_partitions: Vec<i32> = sonic_rs::from_str(&new_partitions_json)
+                            .expect("new_partitions_json is not valid json");
+
+                        let truly_new: Vec<i32> = new_partitions
+                            .iter()
+                            .filter(|p| !known_partitions.contains(p))
+                            .cloned()
+                            .collect();
+
+                        if !truly_new.is_empty() {
+                            log::info!(
+                                "Subtask {subtask_index} discovered new partitions: \
+                                 {truly_new:?}, consuming from beginning"
+                            );
+
+                            known_partitions.extend(&truly_new);
+
+                            let all_partitions: Vec<i32> =
+                                known_partitions.iter().cloned().collect();
+
+                            let mut ressgined =
+                                consumer.position().expect("Cannot got partitions position");
+
+                            // New partitions start from the beginning
+                            for &p in &truly_new {
+                                let _ = ressgined.add_partition_offset(
+                                    &kafka_topic,
+                                    p,
+                                    Offset::Beginning,
+                                );
+                            }
+
+                            consumer
+                                .assign(&ressgined)
+                                .expect("Cannot reassign partitions to consumer");
+
+                            partitions = all_partitions;
+                        }
+                    }
+                }
+
                 if enable_checkpoint {
                     // if checkpoint is enabled, commit offsets to kafka
                     let offset_to_commit = auron_operator_id.clone() + "-offsets2commit";
@@ -402,7 +461,7 @@ fn read_serialized_records_from_kafka(
                         if let Some(obj) = offsets_to_commit.as_object() {
                             if !obj.is_empty() {
                                 for (partition, offset) in obj {
-                                    partition_list.add_partition_offset(
+                                    let _ = partition_list.add_partition_offset(
                                         &kafka_topic,
                                         partition
                                             .parse::<i32>()
@@ -413,7 +472,7 @@ fn read_serialized_records_from_kafka(
                                     );
                                 }
                                 log::info!("auron consumer to commit offset: {partition_list:?}");
-                                consumer.commit(&partition_list, CommitMode::Async);
+                                let _ = consumer.commit(&partition_list, CommitMode::Async);
                             }
                         }
                     }
@@ -426,6 +485,7 @@ fn parse_records(
     schema: SchemaRef,
     exec_ctx: Arc<ExecutionContext>,
     mut input_stream: SendableRecordBatchStream,
+    data_format: i32,
     parser_config_json: String,
 ) -> Result<SendableRecordBatchStream> {
     let parser_config = sonic_rs::from_str::<sonic_rs::Value>(&parser_config_json)
@@ -468,13 +528,17 @@ fn parse_records(
         "KafkaScanExec.ParseRecords",
         move |sender| async move {
             // TODO: json parser
-            let mut parser: Box<dyn FlinkDeserializer> = Box::new(PbDeserializer::new(
-                &file_descriptor_bytes,
-                &root_message_name,
-                schema.clone(),
-                &nested_msg_mapping,
-                &skip_fields_vec,
-            )?);
+            let mut parser: Box<dyn FlinkDeserializer> = if data_format == 0 {
+                Box::new(JsonDeserializer::new(schema.clone(), &nested_msg_mapping)?)
+            } else {
+                Box::new(PbDeserializer::new(
+                    &file_descriptor_bytes,
+                    &root_message_name,
+                    schema.clone(),
+                    &nested_msg_mapping,
+                    &skip_fields_vec,
+                )?)
+            };
             while let Some(batch) = input_stream.next().await.transpose()? {
                 let kafka_partition = batch
                     .column(0)
@@ -508,38 +572,4 @@ fn parse_records(
             Ok(())
         },
     ))
-}
-
-fn java_string_hashcode(s: &str) -> i32 {
-    let mut hash: i32 = 0;
-    for c in s.chars() {
-        let mut buf = [0; 2];
-        let encoded = c.encode_utf16(&mut buf);
-        for code_unit in encoded.iter().cloned() {
-            hash = hash.wrapping_mul(31).wrapping_add(code_unit as i32);
-        }
-    }
-    hash
-}
-
-fn flink_kafka_partition_assign(topic: String, partition_id: i32, num_readers: i32) -> Result<i32> {
-    if num_readers <= 0 {
-        return Err(DataFusionError::Execution(format!(
-            "num_readers must be positive: {num_readers}"
-        )));
-    }
-    // Java hashcode
-    let hash_code = java_string_hashcode(&topic);
-    let start_index = (hash_code.wrapping_mul(31) & i32::MAX) % num_readers;
-    Ok((start_index + partition_id).rem_euclid(num_readers))
-}
-
-#[test]
-fn test_flink_kafka_partition_assign() {
-    let topic = "flink_test_topic".to_string();
-    let partition_id = 0;
-    let num_readers = 1000;
-    // the result same with flink
-    let result = flink_kafka_partition_assign(topic, partition_id, num_readers);
-    assert_eq!(result.expect("Error assigning partition"), 471);
 }

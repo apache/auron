@@ -130,6 +130,10 @@ public class JniBridge {
         return getConfValue(confKey);
     }
 
+    public static String getEngineName() {
+        return AuronAdaptor.getInstance().getEngineName();
+    }
+
     static <T> T getConfValue(String confKey) {
         Class<? extends AuronConfiguration> confClass =
                 AuronAdaptor.getInstance().getAuronConfiguration().getClass();

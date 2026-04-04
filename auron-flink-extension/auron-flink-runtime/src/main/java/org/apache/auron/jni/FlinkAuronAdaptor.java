@@ -35,8 +35,7 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
     public void loadAuronLib() {
         String libName = System.mapLibraryName("auron");
         ClassLoader classLoader = AuronAdaptor.class.getClassLoader();
-        try {
-            InputStream libInputStream = classLoader.getResourceAsStream(libName);
+        try (InputStream libInputStream = classLoader.getResourceAsStream(libName)) {
             File tempFile = File.createTempFile("libauron-", ".tmp");
             tempFile.deleteOnExit();
             Files.copy(libInputStream, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -71,5 +70,10 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
     @Override
     public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer byteBuffer) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String getEngineName() {
+        return "Flink";
     }
 }

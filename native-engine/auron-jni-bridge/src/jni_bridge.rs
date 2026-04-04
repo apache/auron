@@ -89,7 +89,7 @@ macro_rules! jni_map_error_with_env {
             Err($crate::jni_bridge::jni::errors::Error::JavaException) => {
                 let ex = $env
                     .exception_occurred()
-                    .expect("failed to obtain pending Java execption object");
+                    .expect("failed to obtain pending Java exception object");
                 $env.exception_describe()
                     .expect("failed to print Java exception to stderr");
                 $env.exception_clear()
@@ -442,21 +442,21 @@ pub struct JavaClasses<'a> {
 
     pub cSparkFileSegment: SparkFileSegment<'a>,
     pub cSparkSQLMetric: SparkSQLMetric<'a>,
-    pub cSparkMetricNode: SparkMetricNode<'a>,
     pub cSparkAuronUDFWrapperContext: SparkAuronUDFWrapperContext<'a>,
     pub cSparkUDAFWrapperContext: SparkUDAFWrapperContext<'a>,
     pub cSparkUDTFWrapperContext: SparkUDTFWrapperContext<'a>,
     pub cSparkUDAFMemTracker: SparkUDAFMemTracker<'a>,
     pub cAuronRssPartitionWriterBase: AuronRssPartitionWriterBase<'a>,
-    pub cAuronCallNativeWrapper: AuronCallNativeWrapper<'a>,
     pub cAuronOnHeapSpillManager: AuronOnHeapSpillManager<'a>,
     pub cAuronNativeParquetSinkUtils: AuronNativeParquetSinkUtils<'a>,
     pub cAuronBlockObject: AuronBlockObject<'a>,
-    pub cAuronArrowFFIExporter: AuronArrowFFIExporter<'a>,
-    pub cAuronFSDataInputWrapper: AuronFSDataInputWrapper<'a>,
-    pub cAuronFSDataOutputWrapper: AuronFSDataOutputWrapper<'a>,
     pub cAuronJsonFallbackWrapper: AuronJsonFallbackWrapper<'a>,
 
+    pub cAuronArrowFFIExporter: AuronArrowFFIExporter<'a>,
+    pub cAuronCallNativeWrapper: AuronCallNativeWrapper<'a>,
+    pub cAuronFSDataInputWrapper: AuronFSDataInputWrapper<'a>,
+    pub cAuronFSDataOutputWrapper: AuronFSDataOutputWrapper<'a>,
+    pub cMetricNode: MetricNode<'a>,
     pub cAuronUDFWrapperContext: AuronUDFWrapperContext<'a>,
 }
 
@@ -480,6 +480,61 @@ impl JavaClasses<'static> {
                     &[],
                 )?
                 .l()?;
+
+            let engine_name_java = env
+                .call_static_method_unchecked(
+                    jni_bridge.class,
+                    jni_bridge.method_getEngineName,
+                    jni_bridge.method_getEngineName_ret.clone(),
+                    &[],
+                )?
+                .l()?;
+            let engine_name = env
+                .get_string(engine_name_java.into())
+                .map(|s| String::from(s))
+                .expect("engine_name is not valid");
+            log::info!("Runtime engine is {engine_name}");
+
+            let (
+                c_spark_file_segment,
+                c_spark_sql_metric,
+                c_spark_auron_udf_wrapper_context,
+                c_spark_udaf_wrapper_context,
+                c_spark_udtf_wrapper_context,
+                c_spark_udaf_mem_tracker,
+                c_auron_rss_partition_writer_base,
+                c_auron_on_heap_spill_manager,
+                c_auron_native_parquet_sink_utils,
+                c_auron_block_object,
+                c_auron_json_fallback_wrapper,
+            ) = match engine_name.as_str() {
+                "Spark" => (
+                    SparkFileSegment::new(env)?,
+                    SparkSQLMetric::new(env)?,
+                    SparkAuronUDFWrapperContext::new(env)?,
+                    SparkUDAFWrapperContext::new(env)?,
+                    SparkUDTFWrapperContext::new(env)?,
+                    SparkUDAFMemTracker::new(env)?,
+                    AuronRssPartitionWriterBase::new(env)?,
+                    AuronOnHeapSpillManager::new(env)?,
+                    AuronNativeParquetSinkUtils::new(env)?,
+                    AuronBlockObject::new(env)?,
+                    AuronJsonFallbackWrapper::new(env)?,
+                ),
+                _ => (
+                    SparkFileSegment::default(),
+                    SparkSQLMetric::default(),
+                    SparkAuronUDFWrapperContext::default(),
+                    SparkUDAFWrapperContext::default(),
+                    SparkUDTFWrapperContext::default(),
+                    SparkUDAFMemTracker::default(),
+                    AuronRssPartitionWriterBase::default(),
+                    AuronOnHeapSpillManager::default(),
+                    AuronNativeParquetSinkUtils::default(),
+                    AuronBlockObject::default(),
+                    AuronJsonFallbackWrapper::default(),
+                ),
+            };
 
             let java_classes = JavaClasses {
                 jvm: env.get_java_vm()?,
@@ -505,23 +560,23 @@ impl JavaClasses<'static> {
                 cHadoopFileSystem: HadoopFileSystem::new(env)?,
                 cHadoopPath: HadoopPath::new(env)?,
 
-                cSparkFileSegment: SparkFileSegment::new(env)?,
-                cSparkSQLMetric: SparkSQLMetric::new(env)?,
-                cSparkMetricNode: SparkMetricNode::new(env)?,
-                cSparkAuronUDFWrapperContext: SparkAuronUDFWrapperContext::new(env)?,
-                cSparkUDAFWrapperContext: SparkUDAFWrapperContext::new(env)?,
-                cSparkUDTFWrapperContext: SparkUDTFWrapperContext::new(env)?,
-                cSparkUDAFMemTracker: SparkUDAFMemTracker::new(env)?,
-                cAuronRssPartitionWriterBase: AuronRssPartitionWriterBase::new(env)?,
-                cAuronCallNativeWrapper: AuronCallNativeWrapper::new(env)?,
-                cAuronOnHeapSpillManager: AuronOnHeapSpillManager::new(env)?,
-                cAuronNativeParquetSinkUtils: AuronNativeParquetSinkUtils::new(env)?,
-                cAuronBlockObject: AuronBlockObject::new(env)?,
+                cSparkFileSegment: c_spark_file_segment,
+                cSparkSQLMetric: c_spark_sql_metric,
+                cSparkAuronUDFWrapperContext: c_spark_auron_udf_wrapper_context,
+                cSparkUDAFWrapperContext: c_spark_udaf_wrapper_context,
+                cSparkUDTFWrapperContext: c_spark_udtf_wrapper_context,
+                cSparkUDAFMemTracker: c_spark_udaf_mem_tracker,
+                cAuronRssPartitionWriterBase: c_auron_rss_partition_writer_base,
+                cAuronOnHeapSpillManager: c_auron_on_heap_spill_manager,
+                cAuronNativeParquetSinkUtils: c_auron_native_parquet_sink_utils,
+                cAuronBlockObject: c_auron_block_object,
+                cAuronJsonFallbackWrapper: c_auron_json_fallback_wrapper,
+
                 cAuronArrowFFIExporter: AuronArrowFFIExporter::new(env)?,
+                cAuronCallNativeWrapper: AuronCallNativeWrapper::new(env)?,
                 cAuronFSDataInputWrapper: AuronFSDataInputWrapper::new(env)?,
                 cAuronFSDataOutputWrapper: AuronFSDataOutputWrapper::new(env)?,
-                cAuronJsonFallbackWrapper: AuronJsonFallbackWrapper::new(env)?,
-
+                cMetricNode: MetricNode::new(env)?,
                 cAuronUDFWrapperContext: AuronUDFWrapperContext::new(env)?,
             };
             log::info!("Initializing JavaClasses finished");
@@ -587,6 +642,8 @@ pub struct JniBridge<'a> {
     pub method_booleanConf_ret: ReturnType,
     pub method_stringConf: JStaticMethodID,
     pub method_stringConf_ret: ReturnType,
+    pub method_getEngineName: JStaticMethodID,
+    pub method_getEngineName_ret: ReturnType,
 }
 impl<'a> JniBridge<'a> {
     pub const SIG_TYPE: &'static str = "org/apache/auron/jni/JniBridge";
@@ -700,6 +757,12 @@ impl<'a> JniBridge<'a> {
                 "(Ljava/lang/String;)Ljava/lang/String;",
             )?,
             method_stringConf_ret: ReturnType::Object,
+            method_getEngineName: env.get_static_method_id(
+                class,
+                "getEngineName",
+                "()Ljava/lang/String;",
+            )?,
+            method_getEngineName_ret: ReturnType::Object,
         })
     }
 }
@@ -1110,6 +1173,10 @@ impl<'a> SparkFileSegment<'a> {
             method_length_ret: ReturnType::Primitive(Primitive::Long),
         })
     }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1129,22 +1196,26 @@ impl<'a> SparkSQLMetric<'a> {
             method_add_ret: ReturnType::Primitive(Primitive::Void),
         })
     }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
 }
 
 #[allow(non_snake_case)]
-pub struct SparkMetricNode<'a> {
+pub struct MetricNode<'a> {
     pub class: JClass<'a>,
     pub method_getChild: JMethodID,
     pub method_getChild_ret: ReturnType,
     pub method_add: JMethodID,
     pub method_add_ret: ReturnType,
 }
-impl<'a> SparkMetricNode<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/auron/metric/SparkMetricNode";
+impl<'a> MetricNode<'a> {
+    pub const SIG_TYPE: &'static str = "org/apache/auron/metric/MetricNode";
 
-    pub fn new(env: &JNIEnv<'a>) -> JniResult<SparkMetricNode<'a>> {
+    pub fn new(env: &JNIEnv<'a>) -> JniResult<MetricNode<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;
-        Ok(SparkMetricNode {
+        Ok(MetricNode {
             class,
             method_getChild: env.get_method_id(
                 class,
@@ -1181,6 +1252,10 @@ impl<'a> AuronRssPartitionWriterBase<'_> {
             method_flush_ret: ReturnType::Primitive(Primitive::Void),
         })
     }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1201,6 +1276,10 @@ impl<'a> SparkAuronUDFWrapperContext<'a> {
             method_eval: env.get_method_id(class, "eval", "(JJ)V")?,
             method_eval_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1318,6 +1397,10 @@ impl<'a> SparkUDAFWrapperContext<'a> {
             method_unspill_ret: ReturnType::Object,
         })
     }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1346,6 +1429,10 @@ impl<'a> SparkUDTFWrapperContext<'a> {
             method_terminateLoop: env.get_method_id(class, "terminateLoop", "(J)V")?,
             method_terminateLoop_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1379,6 +1466,10 @@ impl<'a> SparkUDAFMemTracker<'a> {
             method_updateUsed: env.get_method_id(class, "updateUsed", "()Z")?,
             method_updateUsed_ret: ReturnType::Primitive(Primitive::Boolean),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1444,7 +1535,7 @@ pub struct AuronOnHeapSpillManager<'a> {
     pub method_releaseSpill_ret: ReturnType,
 }
 impl<'a> AuronOnHeapSpillManager<'a> {
-    pub const SIG_TYPE: &'static str = "org/apache/spark/sql/auron/memory/SparkOnHeapSpillManager";
+    pub const SIG_TYPE: &'static str = "org/apache/auron/memory/OnHeapSpillManager";
 
     pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronOnHeapSpillManager<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;
@@ -1469,6 +1560,10 @@ impl<'a> AuronOnHeapSpillManager<'a> {
             method_releaseSpill: env.get_method_id(class, "releaseSpill", "(I)V")?,
             method_releaseSpill_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1501,6 +1596,10 @@ impl<'a> AuronNativeParquetSinkUtils<'a> {
             )?,
             method_completeOutput_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1561,6 +1660,10 @@ impl<'a> AuronBlockObject<'a> {
             )?,
             method_throwFetchFailed_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -1647,6 +1750,10 @@ impl<'a> AuronJsonFallbackWrapper<'a> {
             method_parseJsons: env.get_method_id(class, "parseJsons", "(JJ)V")?,
             method_parseJsons_ret: ReturnType::Primitive(Primitive::Void),
         })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
     }
 }
 

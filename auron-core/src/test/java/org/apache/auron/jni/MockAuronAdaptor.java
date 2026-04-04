@@ -59,4 +59,9 @@ public class MockAuronAdaptor extends AuronAdaptor {
     public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
         return new MockAuronUDFWrapperContext(udfSerialized);
     }
+
+    @Override
+    public String getEngineName() {
+        return "Test";
+    }
 }
