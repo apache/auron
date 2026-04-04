@@ -929,6 +929,8 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_Murmur3Hash", children, IntegerType)
       case XxHash64(children, 42L) =>
         buildExtScalarFunction("Spark_XxHash64", children, LongType)
+      case e: MapFromArrays =>
+        buildExtScalarFunction("Spark_MapFromArrays", e.children, e.dataType)
       case e: Greatest =>
         buildScalarFunction(pb.ScalarFunction.Greatest, e.children, e.dataType)
       case e: Pow =>

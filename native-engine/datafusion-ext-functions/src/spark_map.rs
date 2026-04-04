@@ -16,7 +16,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use arrow::{
-    array::{Array, ArrayRef, MapArray, StructArray, new_empty_array},
+    array::{Array, ArrayRef, ListArray, MapArray, StructArray, new_empty_array},
     buffer::{NullBuffer, OffsetBuffer, ScalarBuffer},
     datatypes::{DataType, Field},
 };
@@ -153,6 +153,47 @@ fn get_arg_arrays(
         .collect()
 }
 
+fn as_list_array(array: &ArrayRef) -> Result<ListArray> {
+    array
+        .as_any()
+        .downcast_ref::<ListArray>()
+        .cloned()
+        .ok_or_else(|| {
+            datafusion::error::DataFusionError::Execution(format!(
+                "map_from_arrays args must be array, found {:?}",
+                array.data_type()
+            ))
+        })
+}
+
+fn columnar_value_to_list_array(arg: &ColumnarValue, arg_name: &str) -> Result<ListArray> {
+    match arg {
+        ColumnarValue::Array(array) => as_list_array(array),
+        ColumnarValue::Scalar(scalar) if scalar.is_null() => Ok(ListArray::new_null(
+            Arc::new(Field::new_list_field(DataType::Null, true)),
+            1,
+        )),
+        ColumnarValue::Scalar(scalar) => {
+            let array = scalar.to_array()?;
+            as_list_array(&array)
+        }
+    }
+    .map_err(|err| {
+        datafusion::error::DataFusionError::Execution(format!(
+            "map_from_arrays {arg_name} arg must be array: {err}"
+        ))
+    })
+}
+
+fn get_list_field(arg: &ColumnarValue, arg_name: &str) -> Result<Arc<Field>> {
+    match arg.data_type() {
+        DataType::List(field) => Ok(field),
+        data_type => {
+            df_execution_err!("map_from_arrays {arg_name} arg must be array, found {data_type:?}")
+        }
+    }
+}
+
 /// Returns the union of all given maps.
 ///
 /// This follows Spark's default duplicate-key behavior by raising an error,
@@ -270,10 +311,128 @@ pub fn map_concat(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     ))))
 }
 
+/// Creates a map from the given key/value arrays.
+///
+/// This follows Spark semantics by propagating null when either input array
+/// for a row is null, rejecting null keys, and raising an error on duplicate
+/// keys under Spark's default map-key dedup policy.
+pub fn map_from_arrays(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 2 {
+        return df_execution_err!("map_from_arrays requires exactly 2 arguments");
+    }
+
+    let key_list_field = get_list_field(&args[0], "keys")?;
+    let value_list_field = get_list_field(&args[1], "values")?;
+
+    let key_field = Arc::new(Field::new("key", key_list_field.data_type().clone(), false));
+    let value_field = Arc::new(Field::new(
+        "value",
+        value_list_field.data_type().clone(),
+        value_list_field.is_nullable(),
+    ));
+    let entries_field = Arc::new(Field::new(
+        "entries",
+        DataType::Struct(vec![key_field.as_ref().clone(), value_field.as_ref().clone()].into()),
+        false,
+    ));
+
+    let key_array = columnar_value_to_list_array(&args[0], "keys")?;
+    let value_array = columnar_value_to_list_array(&args[1], "values")?;
+
+    let num_rows = [key_array.len(), value_array.len()]
+        .into_iter()
+        .filter(|&len| len != 1)
+        .max()
+        .unwrap_or(1);
+
+    if [key_array.len(), value_array.len()]
+        .into_iter()
+        .any(|len| len != 1 && len != num_rows)
+    {
+        return df_execution_err!("all arrays of map_from_arrays must have the same length");
+    }
+
+    let mut all_keys = Vec::new();
+    let mut all_values = Vec::new();
+    let mut offsets = Vec::with_capacity(num_rows + 1);
+    let mut valids = Vec::with_capacity(num_rows);
+    let mut next_offset = 0i32;
+
+    offsets.push(next_offset);
+
+    for row_idx in 0..num_rows {
+        let key_idx = if key_array.len() == 1 { 0 } else { row_idx };
+        let value_idx = if value_array.len() == 1 { 0 } else { row_idx };
+
+        if key_array.is_null(key_idx) || value_array.is_null(value_idx) {
+            valids.push(false);
+            offsets.push(next_offset);
+            continue;
+        }
+
+        let keys = key_array.value(key_idx);
+        let values = value_array.value(value_idx);
+
+        if keys.len() != values.len() {
+            return df_execution_err!(
+                "map_from_arrays requires key/value arrays to have the same length"
+            );
+        }
+
+        let mut row_keys = HashSet::new();
+        valids.push(true);
+
+        for i in 0..keys.len() {
+            if keys.is_null(i) {
+                return df_execution_err!("map_from_arrays does not support null map keys");
+            }
+
+            let key = compacted_scalar_value_from_array(keys.as_ref(), i)?;
+            if !row_keys.insert(key.clone()) {
+                return df_execution_err!("map_from_arrays duplicate key found: {key}");
+            }
+
+            let value = compacted_scalar_value_from_array(values.as_ref(), i)?;
+            all_keys.push(key);
+            all_values.push(value);
+        }
+
+        next_offset += keys.len() as i32;
+        offsets.push(next_offset);
+    }
+
+    let keys = if all_keys.is_empty() {
+        new_empty_array(key_field.data_type())
+    } else {
+        ScalarValue::iter_to_array(all_keys.into_iter())?
+    };
+
+    let values = if all_values.is_empty() {
+        new_empty_array(value_field.data_type())
+    } else {
+        ScalarValue::iter_to_array(all_values.into_iter())?
+    };
+
+    let entries = StructArray::from(vec![(key_field, keys), (value_field, values)]);
+    let nulls = if valids.iter().all(|valid| *valid) {
+        None
+    } else {
+        Some(NullBuffer::from(valids))
+    };
+
+    Ok(ColumnarValue::Array(Arc::new(MapArray::new(
+        entries_field,
+        OffsetBuffer::new(ScalarBuffer::from(offsets)),
+        entries,
+        nulls,
+        false,
+    ))))
+}
+
 #[cfg(test)]
 mod test {
     use arrow::{
-        array::{Int32Array, StringArray},
+        array::{Int32Array, Int32Builder, ListBuilder, StringArray, StringBuilder},
         datatypes::Fields,
     };
 
@@ -410,6 +569,44 @@ mod test {
         )
     }
 
+    fn build_string_list_array(rows: Vec<Option<Vec<Option<&'static str>>>>) -> ListArray {
+        let mut builder = ListBuilder::new(StringBuilder::new());
+        for row in rows {
+            match row {
+                Some(values) => {
+                    for value in values {
+                        match value {
+                            Some(value) => builder.values().append_value(value),
+                            None => builder.values().append_null(),
+                        }
+                    }
+                    builder.append(true);
+                }
+                None => builder.append(false),
+            }
+        }
+        builder.finish()
+    }
+
+    fn build_int_list_array(rows: Vec<Option<Vec<Option<i32>>>>) -> ListArray {
+        let mut builder = ListBuilder::new(Int32Builder::new());
+        for row in rows {
+            match row {
+                Some(values) => {
+                    for value in values {
+                        match value {
+                            Some(value) => builder.values().append_value(value),
+                            None => builder.values().append_null(),
+                        }
+                    }
+                    builder.append(true);
+                }
+                None => builder.append(false),
+            }
+        }
+        builder.finish()
+    }
+
     #[test]
     fn test_map_concat() -> Result<()> {
         let left = build_string_int_map_array(vec![
@@ -506,5 +703,45 @@ mod test {
         .expect_err("map_concat should fail when input map array lengths differ");
 
         assert!(err.to_string().contains("same length"));
+    }
+
+    #[test]
+    fn test_map_from_arrays() -> Result<()> {
+        let keys = Arc::new(build_string_list_array(vec![
+            Some(vec![Some("a"), Some("b")]),
+            Some(vec![Some("x")]),
+            None,
+            Some(vec![Some("m"), Some("n")]),
+        ])) as ArrayRef;
+        let values = Arc::new(build_int_list_array(vec![
+            Some(vec![Some(1), Some(2)]),
+            Some(vec![Some(10)]),
+            Some(vec![Some(20)]),
+            Some(vec![None, Some(30)]),
+        ])) as ArrayRef;
+
+        let actual = map_from_arrays(&[ColumnarValue::Array(keys), ColumnarValue::Array(values)])?
+            .into_array(4)?;
+
+        let expected = Arc::new(build_string_int_map_array(vec![
+            Some(vec![("a", Some(1)), ("b", Some(2))]),
+            Some(vec![("x", Some(10))]),
+            None,
+            Some(vec![("m", None), ("n", Some(30))]),
+        ])) as ArrayRef;
+
+        assert_eq!(&actual, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_map_from_arrays_rejects_null_keys() {
+        let keys = Arc::new(build_string_list_array(vec![Some(vec![Some("a"), None])])) as ArrayRef;
+        let values = Arc::new(build_int_list_array(vec![Some(vec![Some(1), Some(2)])])) as ArrayRef;
+
+        let err = map_from_arrays(&[ColumnarValue::Array(keys), ColumnarValue::Array(values)])
+            .expect_err("map_from_arrays should fail when null keys exist");
+
+        assert!(err.to_string().contains("null map keys"));
     }
 }

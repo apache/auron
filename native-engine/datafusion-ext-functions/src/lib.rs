@@ -65,6 +65,7 @@ pub fn create_auron_ext_function(
         "Spark_ParseJson" => Arc::new(spark_get_json_object::spark_parse_json),
         "Spark_MakeArray" => Arc::new(spark_make_array::array),
         "Spark_MapConcat" => Arc::new(spark_map::map_concat),
+        "Spark_MapFromArrays" => Arc::new(spark_map::map_from_arrays),
         "Spark_StringSpace" => Arc::new(spark_strings::string_space),
         "Spark_StringRepeat" => Arc::new(spark_strings::string_repeat),
         "Spark_StringSplit" => Arc::new(spark_strings::string_split),
