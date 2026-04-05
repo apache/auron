@@ -325,10 +325,20 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     withTable("t1") {
       sql("create table t1(c1 array<string>, c2 array<int>) using parquet")
       sql("insert into t1 values (array('a', cast(null as string)), array(1, 2))")
+      val df = sql("select map_from_arrays(c1, c2) from t1")
       val err = intercept[Exception] {
-        sql("select map_from_arrays(c1, c2) from t1").collect()
+        df.collect()
       }
       assert(err.getMessage.contains("null map keys"))
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan:
+               |${plan}""".stripMargin)
+        }
     }
   }
 

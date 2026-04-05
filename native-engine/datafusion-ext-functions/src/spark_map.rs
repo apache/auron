@@ -166,16 +166,47 @@ fn as_list_array(array: &ArrayRef) -> Result<ListArray> {
         })
 }
 
+fn new_null_list_field() -> Arc<Field> {
+    Arc::new(Field::new_list_field(DataType::Null, true))
+}
+
+fn new_null_list_array(list_field: Arc<Field>, len: usize) -> ListArray {
+    ListArray::new_null(list_field, len)
+}
+
+fn get_list_array_field(array: &ListArray, arg_name: &str) -> Result<Arc<Field>> {
+    match array.data_type() {
+        DataType::List(field) => Ok(field.clone()),
+        data_type => {
+            df_execution_err!("map_from_arrays {arg_name} arg must be array, found {data_type:?}")
+        }
+    }
+}
+
 fn columnar_value_to_list_array(arg: &ColumnarValue, arg_name: &str) -> Result<ListArray> {
     match arg {
+        ColumnarValue::Array(array) if matches!(array.data_type(), DataType::Null) => {
+            Ok(new_null_list_array(new_null_list_field(), array.len()))
+        }
         ColumnarValue::Array(array) => as_list_array(array),
-        ColumnarValue::Scalar(scalar) if scalar.is_null() => Ok(ListArray::new_null(
-            Arc::new(Field::new_list_field(DataType::Null, true)),
-            1,
-        )),
+        ColumnarValue::Scalar(scalar) if scalar.is_null() => {
+            let list_field = match scalar.data_type() {
+                DataType::List(field) => field,
+                _ => new_null_list_field(),
+            };
+            Ok(new_null_list_array(list_field, 1))
+        }
         ColumnarValue::Scalar(scalar) => {
             let array = scalar.to_array()?;
-            as_list_array(&array)
+            if matches!(array.data_type(), DataType::Null) {
+                let list_field = match scalar.data_type() {
+                    DataType::List(field) => field,
+                    _ => new_null_list_field(),
+                };
+                Ok(new_null_list_array(list_field, array.len()))
+            } else {
+                as_list_array(&array)
+            }
         }
     }
     .map_err(|err| {
@@ -183,15 +214,6 @@ fn columnar_value_to_list_array(arg: &ColumnarValue, arg_name: &str) -> Result<L
             "map_from_arrays {arg_name} arg must be array: {err}"
         ))
     })
-}
-
-fn get_list_field(arg: &ColumnarValue, arg_name: &str) -> Result<Arc<Field>> {
-    match arg.data_type() {
-        DataType::List(field) => Ok(field),
-        data_type => {
-            df_execution_err!("map_from_arrays {arg_name} arg must be array, found {data_type:?}")
-        }
-    }
 }
 
 /// Returns the union of all given maps.
@@ -321,8 +343,10 @@ pub fn map_from_arrays(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         return df_execution_err!("map_from_arrays requires exactly 2 arguments");
     }
 
-    let key_list_field = get_list_field(&args[0], "keys")?;
-    let value_list_field = get_list_field(&args[1], "values")?;
+    let key_array = columnar_value_to_list_array(&args[0], "keys")?;
+    let value_array = columnar_value_to_list_array(&args[1], "values")?;
+    let key_list_field = get_list_array_field(&key_array, "keys")?;
+    let value_list_field = get_list_array_field(&value_array, "values")?;
 
     let key_field = Arc::new(Field::new("key", key_list_field.data_type().clone(), false));
     let value_field = Arc::new(Field::new(
@@ -335,9 +359,6 @@ pub fn map_from_arrays(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         DataType::Struct(vec![key_field.as_ref().clone(), value_field.as_ref().clone()].into()),
         false,
     ));
-
-    let key_array = columnar_value_to_list_array(&args[0], "keys")?;
-    let value_array = columnar_value_to_list_array(&args[1], "values")?;
 
     let num_rows = [key_array.len(), value_array.len()]
         .into_iter()
@@ -432,7 +453,7 @@ pub fn map_from_arrays(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 #[cfg(test)]
 mod test {
     use arrow::{
-        array::{Int32Array, Int32Builder, ListBuilder, StringArray, StringBuilder},
+        array::{Int32Array, Int32Builder, ListBuilder, NullArray, StringArray, StringBuilder},
         datatypes::Fields,
     };
 
@@ -743,5 +764,31 @@ mod test {
             .expect_err("map_from_arrays should fail when null keys exist");
 
         assert!(err.to_string().contains("null map keys"));
+    }
+
+    #[test]
+    fn test_map_from_arrays_null_array_propagation() -> Result<()> {
+        let keys = Arc::new(NullArray::new(1)) as ArrayRef;
+        let values = Arc::new(build_int_list_array(vec![Some(vec![Some(1), Some(2)])])) as ArrayRef;
+
+        let actual = map_from_arrays(&[ColumnarValue::Array(keys), ColumnarValue::Array(values)])?
+            .into_array(1)?;
+
+        assert!(actual.is_null(0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_map_from_arrays_null_scalar_propagation() -> Result<()> {
+        let values = Arc::new(build_int_list_array(vec![Some(vec![Some(1), Some(2)])])) as ArrayRef;
+
+        let actual = map_from_arrays(&[
+            ColumnarValue::Scalar(ScalarValue::Null),
+            ColumnarValue::Array(values),
+        ])?
+        .into_array(1)?;
+
+        assert!(actual.is_null(0));
+        Ok(())
     }
 }
