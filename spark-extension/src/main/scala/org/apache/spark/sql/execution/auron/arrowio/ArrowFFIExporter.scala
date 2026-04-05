@@ -160,6 +160,7 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
       tc.addTaskFailureListener((_, _) => close())
     }
 
+    thread.setName(s"ArrowFFIExporter-$exporterId")
     thread.setDaemon(true)
     thread.setUncaughtExceptionHandler(new UncaughtExceptionHandler {
       override def uncaughtException(t: Thread, e: Throwable): Unit = {

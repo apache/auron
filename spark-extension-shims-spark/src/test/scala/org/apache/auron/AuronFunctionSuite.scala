@@ -164,6 +164,35 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("weekofyear function") {
+    withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
+      withTable("t1") {
+        sql(
+          "create table t1(c1 date, c2 date, c3 date, c4 date, c5 timestamp, c6 string) using parquet")
+        sql("""insert into t1 values (
+            |  date'2009-07-30',
+            |  date'1980-12-31',
+            |  date'2016-01-01',
+            |  date'2017-01-01',
+            |  timestamp'2016-01-03 23:30:00',
+            |  '2016-01-01'
+            |)""".stripMargin)
+
+        val query =
+          """select
+            |  weekofyear(c1),
+            |  weekofyear(c2),
+            |  weekofyear(c3),
+            |  weekofyear(c4),
+            |  weekofyear(c5),
+            |  weekofyear(c6)
+            |from t1
+            |""".stripMargin
+        checkSparkAnswerAndOperator(query)
+      }
+    }
+  }
+
   test("round function with varying scales for intPi") {
     withTable("t2") {
       sql("CREATE TABLE t2 (c1 INT) USING parquet")
@@ -290,6 +319,20 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       sql("create table t1(c1 double, c2 double) using parquet")
       sql("insert into t1 values(null, 2),(2, null),(null, null)")
       checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+    }
+  }
+
+  test("map_concat function") {
+    withTable("t1") {
+      sql(
+        "create table t1(c1 map<string, int>, c2 map<string, int>, c3 map<string, int>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (map('a', 1), map('b', 2), map('c', 3)),
+          |  (map('d', 4), map('e', 5), map('f', 6)),
+          |  (null, map('x', 10), map('f', 20))
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select map_concat(c1, c2, c3) from t1")
     }
   }
 

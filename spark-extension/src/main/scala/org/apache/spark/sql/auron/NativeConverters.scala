@@ -941,6 +941,9 @@ object NativeConverters extends Logging {
       case DayOfMonth(child) => buildExtScalarFunction("Spark_Day", child :: Nil, IntegerType)
       case DayOfWeek(child) =>
         buildExtScalarFunction("Spark_DayOfWeek", child :: Nil, IntegerType)
+      case WeekOfYear(child) =>
+        buildTimePartExt("Spark_WeekOfYear", child, isPruningExpr, fallback)
+
       case Quarter(child) => buildExtScalarFunction("Spark_Quarter", child :: Nil, IntegerType)
 
       case e: Levenshtein =>
@@ -1091,6 +1094,7 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_NormalizeNanAndZero", e.children, e.dataType)
 
       case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
+      case e: MapConcat => buildExtScalarFunction("Spark_MapConcat", e.children, e.dataType)
 
       case e: CreateNamedStruct =>
         buildExprNode {

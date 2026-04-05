@@ -16,6 +16,7 @@
 #
 
 [workspace]
+resolver = "2"
 members = [
     "native-engine/datafusion-ext-commons",
     "native-engine/datafusion-ext-exprs",
@@ -26,6 +27,17 @@ members = [
     "native-engine/auron-planner",
     "native-engine/auron-memmgr",
 ]
+
+[workspace.package]
+edition = "2024"
+
+[workspace.lints.rust]
+# Pending processing (temporarily allow)
+unused_variables = "allow"
+dead_code = "allow"
+unused_imports = "allow"
+unused_must_use = "allow"
+deprecated = "allow"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"

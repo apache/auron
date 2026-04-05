@@ -278,12 +278,13 @@ fn transfer_output_schema_to_pb_schema(
             let index_start = field_name.find(".");
             if let Some(index) = index_start {
                 let msg_field_name = &field_name[..index];
-                let msg_field_desc =
-                    message_descriptor
-                        .get_field_by_name(msg_field_name)
-                        .expect(&format!(
-                            "nested field {msg_field_name} not exits in message_descriptor"
-                        ));
+                let msg_field_desc = message_descriptor
+                    .get_field_by_name(msg_field_name)
+                    .ok_or_else(|| {
+                        DataFusionError::Execution(format!(
+                            "nested field {msg_field_name} does not exist in message_descriptor"
+                        ))
+                    })?;
                 if let Kind::Message(sub_message_desc) = msg_field_desc.kind() {
                     if !msg_set.contains(msg_field_name) {
                         let sub_fields = sub_pb_schema_mapping
@@ -312,18 +313,24 @@ fn transfer_output_schema_to_pb_schema(
                     return df_execution_err!("not message field");
                 }
             } else {
-                let msg_field_desc =
-                    message_descriptor
-                        .get_field_by_name(field_name)
-                        .expect(&format!(
-                            "nested innermost field {field_name} not exits in message_descriptor"
-                        ));
+                let msg_field_desc = message_descriptor
+                    .get_field_by_name(field_name)
+                    .ok_or_else(|| {
+                        DataFusionError::Execution(format!(
+                            "nested innermost field {field_name} does not exist in message_descriptor"
+                        ))
+                    })?;
                 pb_schema_fields.push(create_arrow_field(msg_field_desc.clone(), skip_fields));
             }
         } else {
             let msg_field_desc = message_descriptor
                 .get_field_by_name(field.name())
-                .expect(&format!("{} not exits in message_descriptor", field.name()));
+                .ok_or_else(|| {
+                    DataFusionError::Execution(format!(
+                        "{} does not exist in message_descriptor",
+                        field.name()
+                    ))
+                })?;
             pb_schema_fields.push(create_arrow_field(msg_field_desc.clone(), skip_fields));
         }
     }
@@ -543,9 +550,11 @@ fn create_output_array_builders(
         let field_name = field.name();
         let field_desc = message_descriptor
             .get_field_by_name(field_name)
-            .expect(&format!(
-                "Field {field_name} not exits in message_descriptor",
-            ));
+            .ok_or_else(|| {
+                DataFusionError::Execution(format!(
+                    "Field {field_name} does not exist in message_descriptor"
+                ))
+            })?;
         match field.data_type() {
             DataType::Boolean => {
                 array_builders.push(SharedArrayBuilder::new(BooleanBuilder::new()));
