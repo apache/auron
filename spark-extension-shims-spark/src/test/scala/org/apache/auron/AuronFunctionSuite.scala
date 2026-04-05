@@ -371,6 +371,86 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("map_from_entries function") {
+    withTable("t1") {
+      sql("create table t1(c1 array<struct<k:string,v:int>>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(named_struct('k', 'a', 'v', 1), named_struct('k', 'b', 'v', 2))),
+          |  (array(named_struct('k', 'x', 'v', 10))),
+          |  (cast(null as array<struct<k:string,v:int>>)),
+          |  (array(cast(null as struct<k:string,v:int>), named_struct('k', 'z', 'v', 30))),
+          |  (array(named_struct('k', 'm', 'v', cast(null as int))))
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select map_from_entries(c1) from t1")
+    }
+  }
+
+  test("map_from_entries rejects null keys") {
+    withTable("t1") {
+      sql("create table t1(c1 array<struct<k:string,v:int>>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(named_struct('k', 'a', 'v', 1), named_struct('k', cast(null as string), 'v', 2)))
+          |""".stripMargin)
+      val df = sql("select map_from_entries(c1) from t1")
+      val err = intercept[Exception] {
+        df.collect()
+      }
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan:
+               |${plan}""".stripMargin)
+        }
+      assert(err.getMessage.toLowerCase.contains("null map key"))
+    }
+  }
+
+  test("map_from_entries duplicate keys") {
+    withTable("t1") {
+      sql("create table t1(c1 array<struct<k:string,v:int>>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(named_struct('k', 'a', 'v', 1), named_struct('k', 'a', 'v', 2)))
+          |""".stripMargin)
+      val df = sql("select map_from_entries(c1) from t1")
+      val err = intercept[Exception] {
+        df.collect()
+      }
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan:
+               |${plan}""".stripMargin)
+        }
+      assert(err.getMessage.toLowerCase.contains("duplicate key"))
+    }
+  }
+
+  test("map_from_entries last win dedup policy") {
+    withTable("t1") {
+      sql("create table t1(c1 array<struct<k:string,v:int>>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(
+          |    named_struct('k', 'a', 'v', 1),
+          |    named_struct('k', 'b', 'v', 2),
+          |    named_struct('k', 'a', 'v', 3)))
+          |""".stripMargin)
+      withSQLConf(
+        SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkSparkAnswerAndOperator("select map_from_entries(c1) from t1")
+      }
+    }
+  }
+
   test("acosh null propagation") {
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")
