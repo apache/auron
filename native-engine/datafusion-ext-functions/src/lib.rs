@@ -29,6 +29,7 @@ mod spark_initcap;
 mod spark_isnan;
 mod spark_make_array;
 mod spark_make_decimal;
+mod spark_map;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
 mod spark_round;
@@ -63,6 +64,7 @@ pub fn create_auron_ext_function(
         }
         "Spark_ParseJson" => Arc::new(spark_get_json_object::spark_parse_json),
         "Spark_MakeArray" => Arc::new(spark_make_array::array),
+        "Spark_MapConcat" => Arc::new(spark_map::map_concat),
         "Spark_StringSpace" => Arc::new(spark_strings::string_space),
         "Spark_StringRepeat" => Arc::new(spark_strings::string_repeat),
         "Spark_StringSplit" => Arc::new(spark_strings::string_split),
@@ -75,10 +77,12 @@ pub fn create_auron_ext_function(
         "Spark_Month" => Arc::new(spark_dates::spark_month),
         "Spark_Day" => Arc::new(spark_dates::spark_day),
         "Spark_DayOfWeek" => Arc::new(spark_dates::spark_dayofweek),
+        "Spark_WeekOfYear" => Arc::new(spark_dates::spark_weekofyear),
         "Spark_Quarter" => Arc::new(spark_dates::spark_quarter),
         "Spark_Hour" => Arc::new(spark_dates::spark_hour),
         "Spark_Minute" => Arc::new(spark_dates::spark_minute),
         "Spark_Second" => Arc::new(spark_dates::spark_second),
+        "Spark_MonthsBetween" => Arc::new(spark_dates::spark_months_between),
         "Spark_BrickhouseArrayUnion" => Arc::new(brickhouse::array_union::array_union),
         "Spark_Round" => Arc::new(spark_round::spark_round),
         "Spark_BRound" => Arc::new(spark_bround::spark_bround),

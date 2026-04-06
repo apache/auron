@@ -16,6 +16,7 @@
 #
 
 [workspace]
+resolver = "2"
 members = [
     "native-engine/datafusion-ext-commons",
     "native-engine/datafusion-ext-exprs",
@@ -26,6 +27,17 @@ members = [
     "native-engine/auron-planner",
     "native-engine/auron-memmgr",
 ]
+
+[workspace.package]
+edition = "2024"
+
+[workspace.lints.rust]
+# Pending processing (temporarily allow)
+unused_variables = "allow"
+dead_code = "allow"
+unused_imports = "allow"
+unused_must_use = "allow"
+deprecated = "allow"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
@@ -174,7 +186,7 @@ rand = "0.9.2"
 smallvec = "2.0.0-alpha.11"
 sonic-rs = "0.5.7"
 tempfile = "3"
-tokio = "1.50.0"
+tokio = "1.51.0"
 tonic-build = "0.13.1"
 transpose = "0.2.3"
 unchecked-index = "0.2.2"

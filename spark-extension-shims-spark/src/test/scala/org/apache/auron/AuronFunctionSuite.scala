@@ -164,6 +164,35 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("weekofyear function") {
+    withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
+      withTable("t1") {
+        sql(
+          "create table t1(c1 date, c2 date, c3 date, c4 date, c5 timestamp, c6 string) using parquet")
+        sql("""insert into t1 values (
+            |  date'2009-07-30',
+            |  date'1980-12-31',
+            |  date'2016-01-01',
+            |  date'2017-01-01',
+            |  timestamp'2016-01-03 23:30:00',
+            |  '2016-01-01'
+            |)""".stripMargin)
+
+        val query =
+          """select
+            |  weekofyear(c1),
+            |  weekofyear(c2),
+            |  weekofyear(c3),
+            |  weekofyear(c4),
+            |  weekofyear(c5),
+            |  weekofyear(c6)
+            |from t1
+            |""".stripMargin
+        checkSparkAnswerAndOperator(query)
+      }
+    }
+  }
+
   test("round function with varying scales for intPi") {
     withTable("t2") {
       sql("CREATE TABLE t2 (c1 INT) USING parquet")
@@ -290,6 +319,20 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       sql("create table t1(c1 double, c2 double) using parquet")
       sql("insert into t1 values(null, 2),(2, null),(null, null)")
       checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+    }
+  }
+
+  test("map_concat function") {
+    withTable("t1") {
+      sql(
+        "create table t1(c1 map<string, int>, c2 map<string, int>, c3 map<string, int>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (map('a', 1), map('b', 2), map('c', 3)),
+          |  (map('d', 4), map('e', 5), map('f', 6)),
+          |  (null, map('x', 10), map('f', 20))
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select map_concat(c1, c2, c3) from t1")
     }
   }
 
@@ -740,6 +783,55 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         checkSparkAnswerAndOperator("select date_trunc('month', c1) from t1")
         checkSparkAnswerAndOperator("select date_trunc('day', c1) from t1")
         checkSparkAnswerAndOperator("select date_trunc('hour', c1) from t1")
+      }
+    }
+  }
+
+  test("months_between function") {
+    withSQLConf("spark.sql.session.timeZone" -> "UTC") {
+      withTable("t1") {
+        sql("""
+              |create table t1(
+              |  same_day_of_month_later_ts timestamp,
+              |  same_day_of_month_earlier_ts timestamp,
+              |  last_day_of_month_later_dt date,
+              |  last_day_of_month_earlier_dt date,
+              |  fractional_later_ts timestamp,
+              |  fractional_earlier_ts timestamp,
+              |  null_ts timestamp
+              |) using parquet
+              |""".stripMargin)
+        sql("""
+              |insert into t1 values (
+              |  timestamp'2024-03-15 23:59:59',
+              |  timestamp'2024-01-15 00:00:00',
+              |  date'2024-02-29',
+              |  date'2024-01-31',
+              |  timestamp'2024-03-02 12:00:00',
+              |  timestamp'2024-01-01 00:00:00',
+              |  null
+              |)
+              |""".stripMargin)
+        val query =
+          """
+              |select
+              |  months_between(same_day_of_month_later_ts, same_day_of_month_earlier_ts)
+              |    as same_day_of_month_ignores_time_positive,
+              |  months_between(last_day_of_month_later_dt, last_day_of_month_earlier_dt)
+              |    as last_day_of_month_ignores_time,
+              |  months_between(fractional_later_ts, fractional_earlier_ts)
+              |    as rounded_fractional_positive,
+              |  months_between(same_day_of_month_earlier_ts, same_day_of_month_later_ts)
+              |    as same_day_of_month_ignores_time_negative,
+              |  months_between(fractional_earlier_ts, fractional_later_ts)
+              |    as rounded_fractional_negative,
+              |  months_between(fractional_later_ts, fractional_earlier_ts, false)
+              |    as unrounded_fractional_positive,
+              |  months_between(null_ts, fractional_earlier_ts)
+              |    as null_propagation
+              |from t1
+              |""".stripMargin
+        checkSparkAnswerAndOperator(query)
       }
     }
   }
