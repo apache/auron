@@ -17,6 +17,7 @@
 package org.apache.auron.flink.table.planner.converter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.apache.auron.protobuf.PhysicalExprNode;
@@ -56,9 +57,16 @@ class RexInputRefConverterTest {
     }
 
     @Test
-    void testIsSupportedAlwaysTrue() {
+    void testIsSupportedValidIndex() {
         RexNode inputRef = REX_BUILDER.makeInputRef(TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER), 0);
         assertTrue(converter.isSupported(inputRef, context));
+    }
+
+    @Test
+    void testIsNotSupportedOutOfRangeIndex() {
+        // Schema has 2 fields (f0, f1) — index 5 is out of range
+        RexNode inputRef = REX_BUILDER.makeInputRef(TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER), 5);
+        assertFalse(converter.isSupported(inputRef, context));
     }
 
     @Test

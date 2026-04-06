@@ -25,8 +25,9 @@ import org.apache.calcite.rex.RexNode;
  * Converts a Calcite {@link RexInputRef} (column reference) to an Auron native {@link
  * PhysicalExprNode} containing a {@link PhysicalColumn}.
  *
- * <p>Column references are always supported — every {@code RexInputRef} maps directly to a named,
- * indexed column in the input schema provided by the {@link ConverterContext}.
+ * <p>Column references are supported when the index is within the input schema bounds. Every valid
+ * {@code RexInputRef} maps directly to a named, indexed column in the input schema provided by the
+ * {@link ConverterContext}.
  */
 public class RexInputRefConverter implements FlinkRexNodeConverter {
 
@@ -37,15 +38,16 @@ public class RexInputRefConverter implements FlinkRexNodeConverter {
     }
 
     /**
-     * Always returns {@code true} — column references are unconditionally supported.
+     * Returns {@code true} if the column index is within the input schema bounds.
      *
      * @param node the RexNode to check (must be a {@link RexInputRef})
      * @param context shared conversion state
-     * @return {@code true}
+     * @return {@code true} if the index is valid
      */
     @Override
     public boolean isSupported(RexNode node, ConverterContext context) {
-        return true;
+        RexInputRef inputRef = (RexInputRef) node;
+        return inputRef.getIndex() < context.getInputType().getFieldCount();
     }
 
     /**

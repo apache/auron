@@ -226,8 +226,18 @@ class RexCallConverterTest {
     }
 
     @Test
-    void testCommonTypeDoubleFallback() {
-        // INT + FLOAT → DOUBLE (FLOAT is approx, so BIGINT rule skipped)
+    void testCommonTypeExactIntegerPromotesToBigint() {
+        // TINYINT + INTEGER → BIGINT (both exact, promoted to widest exact type)
+        RelDataType tinyintType = TYPE_FACTORY.createSqlType(SqlTypeName.TINYINT);
+        RelDataType integerType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
+        RelDataType result = RexCallConverter.getCommonTypeForComparison(tinyintType, integerType, TYPE_FACTORY);
+
+        assertEquals(SqlTypeName.BIGINT, result.getSqlTypeName());
+    }
+
+    @Test
+    void testCommonTypeApproxFallbackToDouble() {
+        // INT + FLOAT → DOUBLE (FLOAT is approx, so exact integer rule skipped)
         RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
         RelDataType floatType = TYPE_FACTORY.createSqlType(SqlTypeName.FLOAT);
         RelDataType result = RexCallConverter.getCommonTypeForComparison(intType, floatType, TYPE_FACTORY);

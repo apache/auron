@@ -205,7 +205,7 @@ public class RexCallConverter implements FlinkRexNodeConverter {
             if (t1 == SqlTypeName.DECIMAL || t2 == SqlTypeName.DECIMAL) {
                 return typeFactory.createSqlType(SqlTypeName.DECIMAL);
             }
-            if ((t1 == SqlTypeName.BIGINT || t2 == SqlTypeName.BIGINT) && notApproxType(t1) && notApproxType(t2)) {
+            if (notApproxType(t1) && notApproxType(t2)) {
                 return typeFactory.createSqlType(SqlTypeName.BIGINT);
             }
             return typeFactory.createSqlType(SqlTypeName.DOUBLE);

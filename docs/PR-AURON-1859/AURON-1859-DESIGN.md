@@ -350,26 +350,15 @@ private PhysicalExprNode buildBinaryExpr(RexCall call, String op, ConverterConte
 - **Gluten-Flink**: CAST is registered in the same `RexCallConverterFactory` map as arithmetic via `Map.entry("CAST", Arrays.asList(() -> new DefaultRexCallConverter("cast")))` — Source: `RexCallConverterFactory.java`
 - **Flink/Calcite**: Optimizer inserts explicit CAST RexCall nodes for type promotion in arithmetic (via `StandardConvertletTable.convertOperands()` → `RexBuilder.ensureType()` → `makeCast()`) — Source: `apache/calcite StandardConvertletTable.java`
 
-**Decision**: Include basic numeric CAST in this PR. Use `PhysicalCastNode` (not `PhysicalTryCastNode`).
+**Decision**: Include basic numeric CAST in this PR. Use `PhysicalTryCastNode` (not `PhysicalCastNode`).
 
-**Rationale for `PhysicalCastNode` over `PhysicalTryCastNode`**:
-- Flink's CAST is strict by default (errors on invalid input)
-- Flink has `TRY_CAST` as a separate function for safe casting
-- Spark uses `TryCast` because Spark's CAST is lenient by default — different semantics
-- For numeric-to-numeric widening (INT→BIGINT), both behave identically anyway
+**Rev 2 update** (2026-04-04): Originally chose `PhysicalCastNode` for Flink's strict CAST semantics. Revised to `PhysicalTryCastNode` per reviewer @Tartarus0zm's PoC, which uses TryCast for both operand promotion casts and explicit CAST expressions. For numeric-to-numeric widening (INT→BIGINT), both behave identically. Aligning with the PoC keeps the codebase consistent with the reviewer's architectural direction.
 
 **Design**:
 ```java
-private PhysicalExprNode buildCast(RexCall call, ConverterContext context) {
+private PhysicalExprNode buildTryCast(RexCall call, ConverterContext context) {
     PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
-    LogicalType targetLogicalType = FlinkTypeUtils.toLogicalType(call.getType());
-    ArrowType targetArrowType = SchemaConverters.convertToAuronArrowType(targetLogicalType);
-    return PhysicalExprNode.newBuilder()
-            .setCast(PhysicalCastNode.newBuilder()
-                    .setExpr(operand)
-                    .setArrowType(targetArrowType)
-                    .build())
-            .build();
+    return wrapInTryCast(operand, call.getType());
 }
 ```
 
