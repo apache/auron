@@ -202,23 +202,6 @@ public class SparkAuronConfiguration extends AuronConfiguration {
                     + "but require more CPU time and memory.")
             .withDynamicDefaultValue(_conf -> SparkEnv.get().conf().getInt("spark.io.compression.zstd.level", 1));
 
-    public static final ConfigOption<Integer> TOKIO_WORKER_THREADS_PER_CPU = new ConfigOption<>(Integer.class)
-            .withKey("auron.tokio.worker.threads.per.cpu")
-            .withCategory("Runtime Configuration")
-            .withDescription(
-                    "Number of Tokio worker threads to create per CPU core (spark.task.cpus). Set to 0 for automatic detection "
-                            + "based on available CPU cores. This setting controls the thread pool size for Tokio-based asynchronous operations.")
-            .withDefaultValue(0);
-
-    public static final ConfigOption<Integer> SPARK_TASK_CPUS = new ConfigOption<>(Integer.class)
-            .withKey("task.cpus")
-            .withCategory("Runtime Configuration")
-            .withDescription(
-                    "Number of CPU cores allocated per Spark task. This setting determines the parallelism level "
-                            + "for individual tasks and affects resource allocation and task scheduling. "
-                            + "Defaults to spark.task.cpus.")
-            .withDynamicDefaultValue(_conf -> SparkEnv.get().conf().getInt("spark.task.cpus", 1));
-
     public static final ConfigOption<Boolean> FORCE_SHUFFLED_HASH_JOIN = new ConfigOption<>(Boolean.class)
             .withKey("auron.forceShuffledHashJoin")
             .withCategory("Operator Supports")
@@ -275,14 +258,6 @@ public class SparkAuronConfiguration extends AuronConfiguration {
                     "Maximum memory fraction allocated for on-heap spilling operations. This controls what portion "
                             + "of the available on-heap memory can be used for spilling data to disk when memory pressure occurs.")
             .withDefaultValue(0.9);
-
-    public static final ConfigOption<Integer> SUGGESTED_BATCH_MEM_SIZE = new ConfigOption<>(Integer.class)
-            .withKey("auron.suggested.batch.memSize")
-            .withCategory("Runtime Configuration")
-            .withDescription(
-                    "Suggested memory size in bytes for record batches. This setting controls the target memory allocation "
-                            + "for individual data batches to optimize memory usage and processing efficiency. Default is 8MB (8,388,608 bytes).")
-            .withDefaultValue(8388608);
 
     public static final ConfigOption<Boolean> PARSE_JSON_ERROR_FALLBACK = new ConfigOption<>(Boolean.class)
             .withKey("auron.parseJsonError.fallback")
@@ -344,6 +319,18 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withKey("auron.enable.paimon.scan")
             .withCategory("Operator Supports")
             .withDescription("Enable PaimonScanExec operation conversion to native Auron implementations.")
+            .withDefaultValue(true);
+
+    public static final ConfigOption<Boolean> ENABLE_ICEBERG_SCAN = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.iceberg.scan")
+            .withCategory("Operator Supports")
+            .withDescription("Enable Iceberg scan operation conversion to native Auron implementations.")
+            .withDefaultValue(true);
+
+    public static final ConfigOption<Boolean> ENABLE_HUDI_SCAN = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.hudi.scan")
+            .withCategory("Operator Supports")
+            .withDescription("Enable Hudi scan operation conversion to native Auron implementations.")
             .withDefaultValue(true);
 
     public static final ConfigOption<Boolean> ENABLE_PROJECT = new SQLConfOption<>(Boolean.class)

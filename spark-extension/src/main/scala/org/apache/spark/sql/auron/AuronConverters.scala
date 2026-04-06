@@ -19,8 +19,8 @@ package org.apache.spark.sql.auron
 import java.util.ServiceLoader
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
@@ -126,7 +126,9 @@ object AuronConverters extends Logging {
     Seq("AuronShuffleManager", "AuronUniffleShuffleManager", "AuronCelebornShuffleManager")
 
   def supportedShuffleManager: Boolean = {
-    val name = SQLConf.get.getConfString(config.SHUFFLE_MANAGER.key)
+    val name = SQLConf.get.getConfString(
+      config.SHUFFLE_MANAGER.key,
+      config.SHUFFLE_MANAGER.defaultValueString)
     supportedShuffleManagers.exists(name.contains)
   }
 
@@ -159,7 +161,10 @@ object AuronConverters extends Logging {
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
-        tryConvert(e, convertFileSourceScanExec)
+        extConvertProviders.find(p => p.isEnabled && p.isSupported(e)) match {
+          case Some(provider) => tryConvert(e, provider.convert)
+          case None => tryConvert(e, convertFileSourceScanExec)
+        }
       case e: ProjectExec if enableProject => // project
         tryConvert(e, convertProjectExec)
       case e: FilterExec if enableFilter => // filter

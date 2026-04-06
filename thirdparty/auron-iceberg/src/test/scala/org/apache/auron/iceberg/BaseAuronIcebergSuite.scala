@@ -22,14 +22,29 @@ import org.apache.spark.sql.test.SharedSparkSession
 trait BaseAuronIcebergSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = {
+    val extraJavaOptions =
+      "--add-opens=java.base/java.lang=ALL-UNNAMED " +
+        "--add-opens=java.base/java.nio=ALL-UNNAMED " +
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED " +
+        "-Dio.netty.tryReflectionSetAccessible=true"
     super.sparkConf
       .set(
         "spark.sql.extensions",
-        "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+        "org.apache.spark.sql.auron.AuronSparkSessionExtension," +
+          "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
       .set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog")
       .set("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
       .set("spark.sql.catalog.local.type", "hadoop")
       .set("spark.sql.catalog.local.warehouse", "iceberg_warehouse")
+      .set("spark.auron.enabled", "true")
+      .set(
+        "spark.shuffle.manager",
+        "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager")
+      .set("spark.auron.enable.shuffleExchange", "true")
+      .set("spark.auron.enable.project", "false")
+      .set("spark.auron.ui.enabled", "false")
       .set("spark.ui.enabled", "false")
+      .set("spark.driver.extraJavaOptions", extraJavaOptions)
+      .set("spark.executor.extraJavaOptions", extraJavaOptions)
   }
 }

@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.auron.plan
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext

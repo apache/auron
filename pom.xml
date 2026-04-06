@@ -46,11 +46,11 @@
   </modules>
 
   <properties>
-    <project.version>7.0.0-SNAPSHOT</project.version>
+    <project.version>8.0.0-SNAPSHOT</project.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <arrowVersion>16.0.0</arrowVersion>
     <bytebuddyVersion>1.14.11</bytebuddyVersion>
-    <hadoopVersion>3.4.2</hadoopVersion>
+    <hadoopVersion>3.4.3</hadoopVersion>
     <protobufVersion>3.25.5</protobufVersion>
     <nettyVersion>4.2.7.Final</nettyVersion>
     <javaVersion>8</javaVersion>
@@ -60,6 +60,7 @@
     <scalaLongVersion>2.12.18</scalaLongVersion>
     <scala-xml.version>2.1.0</scala-xml.version>
     <scalaJava8CompatVersion>1.0.2</scalaJava8CompatVersion>
+    <scalaCollectionCompatVersion>2.12.0</scalaCollectionCompatVersion>
     <maven.version>3.9.12</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
     <maven.plugin.scalatest.version>2.2.0</maven.plugin.scalatest.version>
@@ -75,6 +76,11 @@
     <spotless.plugin.version>2.30.0</spotless.plugin.version>
     <maven.plugin.flatten.version>1.3.0</maven.plugin.flatten.version>
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
+    <icebergVersion>1.10.1</icebergVersion>
+    <icebergEnabled>false</icebergEnabled>
+    <releaseMode>pre</releaseMode>
+    <buildNativeWithRelease>false</buildNativeWithRelease>
+    <buildWithFeatures />
 
     <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
     <scalamacros.paradise.version>2.1.1</scalamacros.paradise.version>
@@ -125,6 +131,17 @@
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-java8-compat_${scalaVersion}</artifactId>
         <version>${scalaJava8CompatVersion}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-collection-compat_${scalaVersion}</artifactId>
+        <version>${scalaCollectionCompatVersion}</version>
         <exclusions>
           <exclusion>
             <groupId>org.scala-lang</groupId>
@@ -204,6 +221,16 @@
       <dependency>
         <groupId>org.apache.arrow</groupId>
         <artifactId>arrow-compression</artifactId>
+        <version>${arrowVersion}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-memory-core</artifactId>
+        <version>${arrowVersion}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-memory-netty</artifactId>
         <version>${arrowVersion}</version>
       </dependency>
       <dependency>
@@ -300,6 +327,10 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-reflect</artifactId>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-collection-compat_${scalaVersion}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
@@ -779,6 +810,32 @@
         <shortSparkVersion>3.0</shortSparkVersion>
         <nettyVersion>4.1.47.Final</nettyVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark30-disallow-iceberg</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergEnabled</property>
+                      <regex>false</regex>
+                      <regexMessage>Spark 3.0 is not supported for Iceberg. Use Spark 3.4-4.0 or disable icebergEnabled.</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -790,6 +847,32 @@
         <shortSparkVersion>3.1</shortSparkVersion>
         <nettyVersion>4.1.51.Final</nettyVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark31-disallow-iceberg</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergEnabled</property>
+                      <regex>false</regex>
+                      <regexMessage>Spark 3.1 is not supported for Iceberg. Use Spark 3.4-4.0 or disable icebergEnabled.</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -801,6 +884,32 @@
         <shortSparkVersion>3.2</shortSparkVersion>
         <nettyVersion>4.1.68.Final</nettyVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark32-disallow-iceberg</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergEnabled</property>
+                      <regex>false</regex>
+                      <regexMessage>Spark 3.2 is not supported for Iceberg. Use Spark 3.4-4.0 or disable icebergEnabled.</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -812,6 +921,32 @@
         <shortSparkVersion>3.3</shortSparkVersion>
         <nettyVersion>4.1.74.Final</nettyVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark33-disallow-iceberg</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergEnabled</property>
+                      <regex>false</regex>
+                      <regexMessage>Spark 3.3 is not supported for Iceberg. Use Spark 3.4-4.0 or disable icebergEnabled.</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -822,7 +957,34 @@
         <sparkVersion>3.4.4</sparkVersion>
         <shortSparkVersion>3.4</shortSparkVersion>
         <nettyVersion>4.1.87.Final</nettyVersion>
+        <icebergVersion>1.10.1</icebergVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark34-enforce-iceberg-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergVersion</property>
+                      <regex>1\.10\.1</regex>
+                      <regexMessage>Spark 3.4 requires Iceberg 1.10.1. Current: ${icebergVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -833,7 +995,34 @@
         <sparkVersion>3.5.8</sparkVersion>
         <shortSparkVersion>3.5</shortSparkVersion>
         <nettyVersion>4.1.96.Final</nettyVersion>
+        <icebergVersion>1.10.1</icebergVersion>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark35-enforce-iceberg-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergVersion</property>
+                      <regex>1\.10\.1</regex>
+                      <regexMessage>Spark 3.5 requires Iceberg 1.10.1. Current: ${icebergVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
@@ -844,6 +1033,7 @@
         <sparkVersion>4.0.2</sparkVersion>
         <shortSparkVersion>4.0</shortSparkVersion>
         <nettyVersion>4.1.111.Final</nettyVersion>
+        <icebergVersion>1.10.1</icebergVersion>
       </properties>
       <build>
         <plugins>
@@ -868,6 +1058,21 @@
                       <property>scalaLongVersion</property>
                       <regex>2\.13\.\d+</regex>
                       <regexMessage>Spark 4.0 requires Scala 2.13.x. Current: ${scalaLongVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+              <execution>
+                <id>spark40-enforce-iceberg-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergVersion</property>
+                      <regex>1\.10\.1</regex>
+                      <regexMessage>Spark 4.0 requires Iceberg 1.10.1. Current: ${icebergVersion}</regexMessage>
                     </requireProperty>
                   </rules>
                 </configuration>
@@ -910,6 +1115,21 @@
                       <property>scalaLongVersion</property>
                       <regex>2\.13\.\d+</regex>
                       <regexMessage>Spark 4.1 requires Scala 2.13.x. Current: ${scalaLongVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+              <execution>
+                <id>spark41-disallow-iceberg</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergEnabled</property>
+                      <regex>false</regex>
+                      <regexMessage>Spark 4.1 is not supported for Iceberg. Use Spark 3.4-4.0 or disable icebergEnabled.</regexMessage>
                     </requireProperty>
                   </rules>
                 </configuration>
@@ -1100,6 +1320,16 @@
     </profile>
 
     <profile>
+      <id>hudi-0.15</id>
+      <modules>
+        <module>thirdparty/auron-hudi</module>
+      </modules>
+      <properties>
+        <hudiVersion>0.15.0</hudiVersion>
+      </properties>
+    </profile>
+
+    <profile>
       <id>flink-1.18</id>
       <modules>
         <module>auron-flink-extension</module>
@@ -1110,13 +1340,39 @@
     </profile>
 
     <profile>
-      <id>iceberg-1.9</id>
+      <id>iceberg-1.10.1</id>
       <modules>
         <module>thirdparty/auron-iceberg</module>
       </modules>
       <properties>
-        <icebergVersion>1.9.2</icebergVersion>
+        <icebergEnabled>true</icebergEnabled>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>iceberg-enforce-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergVersion</property>
+                      <regex>1\.10\.1</regex>
+                      <regexMessage>Iceberg integration supports only Iceberg 1.10.1. Current: ${icebergVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>

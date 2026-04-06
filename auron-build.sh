@@ -37,7 +37,8 @@ SUPPORTED_CELEBORN_VERSIONS=("0.5" "0.6")
 SUPPORTED_UNIFFLE_VERSIONS=("0.10")
 SUPPORTED_PAIMON_VERSIONS=("1.2")
 SUPPORTED_FLINK_VERSIONS=("1.18")
-SUPPORTED_ICEBERG_VERSIONS=("1.9")
+SUPPORTED_ICEBERG_VERSIONS=("1.10.1")
+SUPPORTED_HUDI_VERSIONS=("0.15")
 
 # -----------------------------------------------------------------------------
 # Function: print_help
@@ -55,6 +56,7 @@ print_help() {
     echo "  --skiptests <true|false> Skip unit tests (default: true)"
     echo "  --sparktests <true|false> Run spark tests (default: false)"
     echo "  --docker <true|false>    Build in Docker environment (default: false)"
+    echo "  --threads <N|NC>         Maven build threads (e.g. 1, 4, 1C). Default: local unset, docker 8"
     IFS=','; echo "  --image <NAME>           Docker image to use (e.g. ${SUPPORTED_OS_IMAGES[*]}, default: ${SUPPORTED_OS_IMAGES[*]:0:1})"; unset IFS
     IFS=','; echo "  --sparkver <VERSION>     Specify Spark version (e.g. ${SUPPORTED_SPARK_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --flinkver <VERSION>     Specify Flink version (e.g. ${SUPPORTED_FLINK_VERSIONS[*]})"; unset IFS
@@ -63,6 +65,7 @@ print_help() {
     IFS=','; echo "  --uniffle <VERSION>      Specify Uniffle version (e.g. ${SUPPORTED_UNIFFLE_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --paimon <VERSION>       Specify Paimon version (e.g. ${SUPPORTED_PAIMON_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --iceberg <VERSION>      Specify Iceberg version (e.g. ${SUPPORTED_ICEBERG_VERSIONS[*]})"; unset IFS
+    IFS=','; echo "  --hudi <VERSION>         Specify Hudi version (e.g. ${SUPPORTED_HUDI_VERSIONS[*]})"; unset IFS
 
     echo "  -h, --help               Show this help message"
     echo
@@ -77,7 +80,8 @@ print_help() {
          "--celeborn ${SUPPORTED_CELEBORN_VERSIONS[*]: -1}" \
          "--uniffle ${SUPPORTED_UNIFFLE_VERSIONS[*]: -1}" \
          "--paimon ${SUPPORTED_PAIMON_VERSIONS[*]: -1}" \
-         "--iceberg ${SUPPORTED_ICEBERG_VERSIONS[*]: -1}"
+         "--iceberg ${SUPPORTED_ICEBERG_VERSIONS[*]: -1}" \
+         "--hudi ${SUPPORTED_HUDI_VERSIONS[*]: -1}"
     exit 0
 }
 
@@ -126,6 +130,7 @@ RELEASE_PROFILE=false
 CLEAN=true
 SKIP_TESTS=true
 SPARK_TESTS=false
+THREADS=""
 SPARK_VER=""
 FLINK_VER=""
 SCALA_VER=""
@@ -133,6 +138,7 @@ CELEBORN_VER=""
 UNIFFLE_VER=""
 PAIMON_VER=""
 ICEBERG_VER=""
+HUDI_VER=""
 
 # -----------------------------------------------------------------------------
 # Section: Argument Parsing
@@ -155,6 +161,21 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "ERROR: --docker requires true/false" >&2
+                exit 1
+            fi
+            ;;
+        --threads)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                THREADS="$2"
+                # Validate THREADS to prevent command injection when passed through Docker
+                # Maven -T accepts an integer, optionally followed by 'C' (e.g., 4, 8, 2C)
+                if [[ ! "$THREADS" =~ ^[0-9]+C?$ ]]; then
+                    echo "ERROR: Invalid --threads value '$THREADS'. Expected digits with optional 'C' (e.g., 4, 8, 2C)." >&2
+                    exit 1
+                fi
+                shift 2
+            else
+                echo "ERROR: --threads requires a value (e.g. 1, 4, 1C)" >&2
                 exit 1
             fi
             ;;
@@ -270,17 +291,38 @@ while [[ $# -gt 0 ]]; do
                   print_invalid_option_error Iceberg "$ICEBERG_VER" "${SUPPORTED_ICEBERG_VERSIONS[@]}"
                 fi
                 if [ -z "$SPARK_VER" ]; then
-                  echo "ERROR: Building iceberg requires spark at the same time, and only Spark versions 3.4 or 3.5 are supported."
+                  echo "ERROR: Building iceberg requires spark at the same time, and only Spark versions 3.4 to 4.0 are supported."
                   exit 1
                 fi
-                if [ "$SPARK_VER" != "3.4" ] && [ "$SPARK_VER" != "3.5" ]; then
-                  echo "ERROR: Building iceberg requires spark versions are 3.4 or 3.5."
+                if [ "$SPARK_VER" != "3.4" ] && [ "$SPARK_VER" != "3.5" ] && [ "$SPARK_VER" != "4.0" ]; then
+                  echo "ERROR: Building iceberg requires spark versions are 3.4, 3.5 or 4.0."
                   exit 1
                 fi
                 shift 2
             else
                 IFS=','; echo "ERROR: Missing argument for --iceberg," \
                 "specify one of: ${SUPPORTED_ICEBERG_VERSIONS[*]}" >&2; unset IFS
+                exit 1
+            fi
+            ;;
+        --hudi)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                HUDI_VER="$2"
+                if ! check_supported_version "$HUDI_VER" "${SUPPORTED_HUDI_VERSIONS[@]}"; then
+                  print_invalid_option_error Hudi "$HUDI_VER" "${SUPPORTED_HUDI_VERSIONS[@]}"
+                fi
+                if [ -z "$SPARK_VER" ]; then
+                  echo "ERROR: Building hudi requires spark at the same time, and only Spark versions 3.0 to 3.5 are supported."
+                  exit 1
+                fi
+                if [ "$SPARK_VER" != "3.0" ] && [ "$SPARK_VER" != "3.1" ] && [ "$SPARK_VER" != "3.2" ] && [ "$SPARK_VER" != "3.3" ] && [ "$SPARK_VER" != "3.4" ] && [ "$SPARK_VER" != "3.5" ]; then
+                  echo "ERROR: Building hudi requires spark versions are 3.0 to 3.5."
+                  exit 1
+                fi
+                shift 2
+            else
+                IFS=','; echo "ERROR: Missing argument for --hudi," \
+                "specify one of: ${SUPPORTED_HUDI_VERSIONS[*]}" >&2; unset IFS
                 exit 1
             fi
             ;;
@@ -315,6 +357,31 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Detect conflict between --threads and raw Maven -T arguments.
+if [[ -n "$THREADS" ]]; then
+    HAS_MVN_THREADS=false
+    PREV_MVN_ARG=""
+    for arg in "$@"; do
+        if [[ "$PREV_MVN_ARG" == "-T" ]]; then
+            HAS_MVN_THREADS=true
+            break
+        fi
+        if [[ "$arg" == "-T" ]]; then
+            PREV_MVN_ARG="-T"
+            continue
+        fi
+        if [[ "$arg" =~ ^-T.+ ]]; then
+            HAS_MVN_THREADS=true
+            break
+        fi
+        PREV_MVN_ARG=""
+    done
+    if [[ "$HAS_MVN_THREADS" == true ]]; then
+        echo "ERROR: Do not combine --threads with Maven -T options. Use only one." >&2
+        exit 1
+    fi
+fi
 
 # -----------------------------------------------------------------------------
 # Section: Argument Validation
@@ -395,6 +462,18 @@ fi
 if [[ -n "$ICEBERG_VER" ]]; then
     BUILD_ARGS+=("-Piceberg-$ICEBERG_VER")
 fi
+if [[ -n "$HUDI_VER" ]]; then
+    BUILD_ARGS+=("-Phudi-$HUDI_VER")
+fi
+
+# Configure Maven build threads:
+# - local builds default to Maven's single-threaded behavior
+# - docker builds default to -T8 unless overridden
+if [[ -n "$THREADS" ]]; then
+    BUILD_ARGS+=("-T$THREADS")
+elif [[ "$USE_DOCKER" == true ]]; then
+    BUILD_ARGS+=("-T8")
+fi
 
 MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
 
@@ -422,6 +501,7 @@ get_build_info() {
     "paimon.version") echo "${PAIMON_VER}" ;;
     "flink.version") echo "${FLINK_VER}" ;;
     "iceberg.version") echo "${ICEBERG_VER}" ;;
+    "hudi.version") echo "${HUDI_VER}" ;;
     "build.timestamp") echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" ;;
     *) echo "" ;;
   esac
@@ -470,8 +550,6 @@ fi
 # -----------------------------------------------------------------------------
 if [[ "$USE_DOCKER" == true ]]; then
     echo "[INFO] Compiling inside Docker container using image: $IMAGE_NAME"
-    # In Docker mode, use multi-threaded Maven build with -T8 for faster compilation
-    BUILD_ARGS+=("-T8")
     if [[ "$CLEAN" == true ]]; then
         # Clean the host-side directory that is mounted into the Docker container.
         # This avoids "device or resource busy" errors when running `mvn clean` inside the container.

@@ -18,8 +18,8 @@
 [package]
 name = "auron-jni-bridge"
 version = "0.1.0"
-edition = "2024"
-resolver = "1"
+license = "Apache-2.0"
+edition.workspace = true
 
 [lints]
 workspace = true

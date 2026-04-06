@@ -21,6 +21,16 @@
 #![feature(portable_simd)]
 #![feature(ptr_as_ref_unchecked)]
 
+extern crate arrow;
+extern crate arrow_schema;
+extern crate bytes;
+extern crate datafusion;
+extern crate datafusion_ext_commons;
+extern crate prost;
+extern crate prost_reflect;
+extern crate rdkafka;
+extern crate sonic_rs;
+
 // execution plan implementations
 pub mod agg;
 pub mod agg_exec;
@@ -50,6 +60,7 @@ pub mod window_exec;
 
 // helper modules
 pub mod common;
+pub mod flink;
 pub mod generate;
 mod scan;
 pub mod shuffle;

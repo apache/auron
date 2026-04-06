@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.auron.arrowio.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._

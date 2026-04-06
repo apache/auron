@@ -128,6 +128,7 @@ Run `./auron-build.sh --help` to see all available options, including:
 - `--celeborn`, `--uniffle`, `--paimon`, `--iceberg`: Optional integrations
 - `--skiptests`: Skip unit tests (default: true)
 - `--sparktests`: Run Spark integration tests
+- `--threads`: Maven build threads (e.g. 1, 4, 1C). Defaults to single-threaded local builds; Docker defaults to 8 unless overridden.
 
 ### Running Tests
 

@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.auron.plan
 import java.util.UUID
 
 import scala.annotation.nowarn
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.hashing.byteswap32
 

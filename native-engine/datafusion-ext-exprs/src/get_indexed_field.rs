@@ -17,7 +17,7 @@ use std::{
     any::Any,
     convert::TryInto,
     fmt::{Debug, Formatter},
-    hash::{Hash, Hasher},
+    hash::Hash,
     sync::Arc,
 };
 

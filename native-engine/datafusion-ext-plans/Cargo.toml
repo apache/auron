@@ -18,8 +18,8 @@
 [package]
 name = "datafusion-ext-plans"
 version = "0.1.0"
-edition = "2024"
-resolver = "1"
+license = "Apache-2.0"
+edition.workspace = true
 
 [lints]
 workspace = true
@@ -63,6 +63,11 @@ paste = { workspace = true }
 smallvec = { workspace = true }
 tokio = { workspace = true }
 unchecked-index = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+prost-reflect = { workspace = true }
+rdkafka = { workspace = true }
+sonic-rs = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }

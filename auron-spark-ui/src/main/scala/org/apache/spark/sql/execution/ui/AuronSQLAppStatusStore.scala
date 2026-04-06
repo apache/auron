@@ -16,14 +16,25 @@
  */
 package org.apache.spark.sql.execution.ui
 
+import scala.util.control.NonFatal
+
 import com.fasterxml.jackson.annotation.JsonIgnore
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
-class AuronSQLAppStatusStore(store: KVStore) {
+class AuronSQLAppStatusStore(store: KVStore) extends Logging {
 
-  def buildInfo(): AuronBuildInfoUIData = {
+  def buildInfo(): Option[AuronBuildInfoUIData] = {
     val kClass = classOf[AuronBuildInfoUIData]
-    store.read(kClass, kClass.getName)
+    // KVStore throws when the record doesn't exist; treat missing data as "no build info".
+    try {
+      Option(store.read(kClass, kClass.getName))
+    } catch {
+      case _: NoSuchElementException => None
+      case NonFatal(e) =>
+        logWarning("Failed to read BuildInfo from KVStore", e)
+        None
+    }
   }
 }
 

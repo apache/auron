@@ -27,7 +27,7 @@ use arrow::{
 };
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use datafusion::{
-    common::{ExprSchema, Result, ScalarValue, stats::Precision},
+    common::{Result, ScalarValue, stats::Precision},
     datasource::{
         file_format::file_compression_type::FileCompressionType,
         listing::{FileRange, PartitionedFile},
@@ -40,7 +40,7 @@ use datafusion::{
         expressions::{LikeExpr, SCAndExpr, SCOrExpr, in_list},
     },
     physical_plan::{
-        ColumnStatistics, ExecutionPlan, PhysicalExpr, Statistics, expressions as phys_expr,
+        ColumnStatistics, ExecutionPlan, Statistics, expressions as phys_expr,
         expressions::{
             BinaryExpr, CaseExpr, CastExpr, Column, IsNotNullExpr, IsNullExpr, Literal,
             NegativeExpr, NotExpr, PhysicalSortExpr,
@@ -72,6 +72,7 @@ use datafusion_ext_plans::{
     expand_exec::ExpandExec,
     ffi_reader_exec::FFIReaderExec,
     filter_exec::FilterExec,
+    flink::{kafka_mock_scan_exec::KafkaMockScanExec, kafka_scan_exec::KafkaScanExec},
     generate::{create_generator, create_udtf_generator},
     generate_exec::GenerateExec,
     ipc_reader_exec::IpcReaderExec,
@@ -801,6 +802,27 @@ impl PhysicalPlanner {
                     props,
                 )))
             }
+            PhysicalPlanType::KafkaScan(kafka_scan) => {
+                let schema = Arc::new(convert_required!(kafka_scan.schema)?);
+                if !kafka_scan.mock_data_json_array.is_empty() {
+                    Ok(Arc::new(KafkaMockScanExec::new(
+                        schema,
+                        kafka_scan.auron_operator_id.clone(),
+                        kafka_scan.mock_data_json_array.clone(),
+                    )))
+                } else {
+                    Ok(Arc::new(KafkaScanExec::new(
+                        kafka_scan.kafka_topic.clone(),
+                        kafka_scan.kafka_properties_json.clone(),
+                        schema,
+                        kafka_scan.batch_size as i32,
+                        kafka_scan.startup_mode,
+                        kafka_scan.auron_operator_id.clone(),
+                        kafka_scan.data_format,
+                        kafka_scan.format_config_json.clone(),
+                    )))
+                }
+            }
         }
     }
 
@@ -1044,7 +1066,7 @@ impl PhysicalPlanner {
         input: &Arc<dyn ExecutionPlan>,
         sort: &Box<SortExecNode>,
     ) -> Result<Vec<PhysicalSortExpr>, PlanSerDeError> {
-        let pyhsical_sort_expr = sort
+        let physical_sort_expr = sort
             .expr
             .iter()
             .map(|expr| {
@@ -1077,7 +1099,7 @@ impl PhysicalPlanner {
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(pyhsical_sort_expr)
+        Ok(physical_sort_expr)
     }
 
     pub fn parse_protobuf_partitioning(
@@ -1204,6 +1226,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Tan => f::math::tan(),
             ScalarFunction::Asin => f::math::asin(),
             ScalarFunction::Acos => f::math::acos(),
+            ScalarFunction::Acosh => f::math::acosh(),
             ScalarFunction::Atan => f::math::atan(),
             ScalarFunction::Exp => f::math::exp(),
             ScalarFunction::Log => f::math::log(),
