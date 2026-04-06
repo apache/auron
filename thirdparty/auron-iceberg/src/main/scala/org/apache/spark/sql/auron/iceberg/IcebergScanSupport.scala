@@ -27,10 +27,14 @@ import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.types.StructType
 
+// fileSchema is read from the data files. partitionSchema carries supported metadata columns
+// (for example _file) that are materialized as per-file constant values in the native scan.
 final case class IcebergScanPlan(
     fileTasks: Seq[FileScanTask],
     fileFormat: FileFormat,
-    readSchema: StructType)
+    readSchema: StructType,
+    fileSchema: StructType,
+    partitionSchema: StructType)
 
 object IcebergScanSupport extends Logging {
 
@@ -48,12 +52,24 @@ object IcebergScanSupport extends Logging {
     }
 
     val readSchema = scan.readSchema
-    // Native scan does not support Iceberg metadata columns (e.g. _file, _pos).
-    if (hasMetadataColumns(readSchema)) {
+    val unsupportedMetadataColumns = collectUnsupportedMetadataColumns(readSchema)
+    // Native scan can project file-level metadata columns such as _file via partition values.
+    // Metadata columns that require per-row materialization (for example _pos) still fallback.
+    if (unsupportedMetadataColumns.nonEmpty) {
       return None
     }
 
-    if (!readSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType))) {
+    val fileSchema = StructType(readSchema.fields.filterNot(isSupportedMetadataColumn))
+    // Supported metadata columns are materialized via per-file constant values rather than
+    // read from the Iceberg data file payload.
+    val partitionSchema = StructType(readSchema.fields.filter(isSupportedMetadataColumn))
+
+    if (!fileSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType))) {
+      return None
+    }
+
+    if (!partitionSchema.fields.forall(field =>
+        NativeConverters.isTypeSupported(field.dataType))) {
       return None
     }
 
@@ -61,7 +77,8 @@ object IcebergScanSupport extends Logging {
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
     if (partitions.isEmpty) {
       logWarning(s"Native Iceberg scan planned with empty partitions for $scanClassName.")
-      return Some(IcebergScanPlan(Seq.empty, FileFormat.PARQUET, readSchema))
+      return Some(
+        IcebergScanPlan(Seq.empty, FileFormat.PARQUET, readSchema, fileSchema, partitionSchema))
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
@@ -93,11 +110,19 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    Some(IcebergScanPlan(fileTasks, format, readSchema))
+    Some(IcebergScanPlan(fileTasks, format, readSchema, fileSchema, partitionSchema))
   }
 
-  private def hasMetadataColumns(schema: StructType): Boolean =
-    schema.fields.exists(field => MetadataColumns.isMetadataColumn(field.name))
+  private def collectUnsupportedMetadataColumns(schema: StructType): Seq[String] =
+    schema.fields.collect {
+      case field
+          if MetadataColumns.isMetadataColumn(field.name) &&
+            !isSupportedMetadataColumn(field) =>
+        field.name
+    }
+
+  private def isSupportedMetadataColumn(field: org.apache.spark.sql.types.StructField): Boolean =
+    field.name == MetadataColumns.FILE_PATH.name()
 
   private def inputPartitions(exec: BatchScanExec): Seq[InputPartition] = {
     // Prefer DataSource V2 batch API; if not available, fallback to exec methods via reflection.
