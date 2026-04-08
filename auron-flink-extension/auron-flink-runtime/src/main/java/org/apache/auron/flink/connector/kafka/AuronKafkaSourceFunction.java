@@ -24,6 +24,7 @@ import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.apache.flink.metrics.Counter;
 import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
@@ -117,6 +118,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private volatile boolean isRunning;
     private transient String auronOperatorIdWithSubtaskIndex;
     private transient MetricNode nativeMetric;
+    private transient MetricGroup metricGroup;
     private transient ObjectMapper mapper;
 
     // Kafka Consumer for partition metadata discovery only (does NOT consume data)
@@ -282,11 +284,20 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
 
     @Override
     public void run(SourceContext<RowData> sourceContext) throws Exception {
+        metricGroup = getRuntimeContext().getMetricGroup();
+        final Map<String, Counter> flinkCounters = new HashMap<>();
+        
         nativeMetric = new MetricNode(new ArrayList<>()) {
             @Override
             public void add(String name, long value) {
-                // TODO Integration with Flink metrics
-                LOG.info("Metric Auron Source: {} = {}", name, value);
+                // Integration with Flink metrics
+                Counter counter = flinkCounters.get(name);
+                if (counter == null) {
+                    counter = metricGroup.counter(name);
+                    flinkCounters.put(name, counter);
+                }
+                counter.inc(value);
+                LOG.debug("Metric Auron Source: {} = {}", name, value);
             }
         };
         List<RowType.RowField> fieldList = new LinkedList<>();
