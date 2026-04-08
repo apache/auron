@@ -73,11 +73,16 @@ import org.apache.spark.sql.execution.auron.plan.NativeGlobalLimitBase
 import org.apache.spark.sql.execution.auron.plan.NativeGlobalLimitExec
 import org.apache.spark.sql.execution.auron.plan.NativeLocalLimitBase
 import org.apache.spark.sql.execution.auron.plan.NativeLocalLimitExec
+import org.apache.spark.sql.execution.auron.plan.NativeOrcInsertIntoHiveTableBase
+import org.apache.spark.sql.execution.auron.plan.NativeOrcInsertIntoHiveTableExec
 import org.apache.spark.sql.execution.auron.plan.NativeOrcScanExec
+import org.apache.spark.sql.execution.auron.plan.NativeOrcSinkBase
+import org.apache.spark.sql.execution.auron.plan.NativeOrcSinkExec
 import org.apache.spark.sql.execution.auron.plan.NativeParquetInsertIntoHiveTableBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetInsertIntoHiveTableExec
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanExec
+import org.apache.spark.sql.execution.auron.plan.NativeParquetSinkBase
 import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.execution.auron.plan.NativeRenameColumnsBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
@@ -330,6 +335,11 @@ class ShimsImpl extends Shims with Logging {
       child: SparkPlan): NativeParquetInsertIntoHiveTableBase =
     NativeParquetInsertIntoHiveTableExec(cmd, child)
 
+  override def createNativeOrcInsertIntoHiveTableExec(
+      cmd: InsertIntoHiveTable,
+      child: SparkPlan): NativeOrcInsertIntoHiveTableBase =
+    NativeOrcInsertIntoHiveTableExec(cmd, child)
+
   override def createNativeParquetScanExec(
       basedFileScan: FileSourceScanExec): NativeParquetScanBase =
     NativeParquetScanExec(basedFileScan)
@@ -394,6 +404,14 @@ class ShimsImpl extends Shims with Logging {
       child: SparkPlan,
       metrics: Map[String, SQLMetric]): NativeParquetSinkBase =
     NativeParquetSinkExec(sparkSession, table, partition, child, metrics)
+
+  override def createNativeOrcSinkExec(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      partition: Map[String, Option[String]],
+      child: SparkPlan,
+      metrics: Map[String, SQLMetric]): NativeOrcSinkBase =
+    NativeOrcSinkExec(sparkSession, table, partition, child, metrics)
 
   override def getUnderlyingBroadcast(plan: SparkPlan): BroadcastExchangeLike = {
     plan match {

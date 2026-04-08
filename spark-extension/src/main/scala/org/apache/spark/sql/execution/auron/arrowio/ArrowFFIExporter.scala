@@ -36,12 +36,13 @@ import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils.CHILD_ALLOCA
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils.ROOT_ALLOCATOR
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowWriter
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 import org.apache.auron.arrowio.AuronArrowFFIExporter
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.jni.AuronAdaptor
 
-class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
+class ArrowFFIExporter(inputIter: Iterator[Any], schema: StructType)
     extends AuronArrowFFIExporter
     with Logging {
   private val sparkAuronConfig: AuronConfiguration =
@@ -69,6 +70,7 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
   private val outputQueue: BlockingQueue[QueueState] = new ArrayBlockingQueue[QueueState](16)
   private val processingQueue: BlockingQueue[Unit] = new ArrayBlockingQueue[Unit](16)
   private var currentRoot: VectorSchemaRoot = _
+  private val rowIter = new InputToRowIter(inputIter)
   private val outputThread = startOutputThread()
 
   def exportSchema(exportArrowSchemaPtr: Long): Unit = {
@@ -149,6 +151,8 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
                 logDebug(s"ArrowFFIExporter-$exporterId: outputThread interrupted, exiting")
                 outputQueue.clear()
                 outputQueue.put(Finished(None))
+            } finally {
+              rowIter.close()
             }
           }
         })
@@ -195,6 +199,79 @@ class ArrowFFIExporter(rowIter: Iterator[InternalRow], schema: StructType)
           logDebug(s"ArrowFFIExporter-$exporterId: interrupted while waiting for outputThread")
       }
       logDebug(s"ArrowFFIExporter-$exporterId: close() completed")
+    }
+  }
+
+  private class InputToRowIter(inputIter: Iterator[Any]) extends Iterator[InternalRow] {
+    private var currentBatch: ColumnarBatch = _
+    private var currentBatchRowId = 0
+    private var pendingRow: InternalRow = _
+
+    override def hasNext: Boolean = {
+      if (pendingRow != null) {
+        return true
+      }
+
+      closeFinishedBatch()
+      if (currentBatch != null) {
+        return true
+      }
+
+      while (inputIter.hasNext) {
+        inputIter.next() match {
+          case row: InternalRow =>
+            pendingRow = row
+            return true
+          case batch: ColumnarBatch if batch.numRows() > 0 =>
+            currentBatch = batch
+            currentBatchRowId = 0
+            return true
+          case batch: ColumnarBatch =>
+            batch.close()
+          case null =>
+            throw new IllegalStateException(
+              "ArrowFFIExporter expects InternalRow or ColumnarBatch input, but got null")
+          case other =>
+            throw new IllegalStateException(
+              s"ArrowFFIExporter expects InternalRow or ColumnarBatch input, " +
+                s"but got ${other.getClass.getName}")
+        }
+      }
+
+      false
+    }
+
+    override def next(): InternalRow = {
+      if (!hasNext) {
+        throw new NoSuchElementException("no more rows")
+      }
+
+      if (pendingRow != null) {
+        val row = pendingRow
+        pendingRow = null
+        row
+      } else {
+        val row = currentBatch.getRow(currentBatchRowId)
+        currentBatchRowId += 1
+        row
+      }
+    }
+
+    def close(): Unit = {
+      if (currentBatch != null) {
+        currentBatch.close()
+        currentBatch = null
+      }
+      currentBatchRowId = 0
+      pendingRow = null
+    }
+
+    private def closeFinishedBatch(): Unit = {
+      if (currentBatch != null && currentBatchRowId >= currentBatch.numRows()) {
+        currentBatch.close()
+        currentBatch = null
+        currentBatchRowId = 0
+      }
     }
   }
 }

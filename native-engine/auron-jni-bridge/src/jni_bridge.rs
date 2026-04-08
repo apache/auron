@@ -448,6 +448,7 @@ pub struct JavaClasses<'a> {
     pub cSparkUDAFMemTracker: SparkUDAFMemTracker<'a>,
     pub cAuronRssPartitionWriterBase: AuronRssPartitionWriterBase<'a>,
     pub cAuronOnHeapSpillManager: AuronOnHeapSpillManager<'a>,
+    pub cAuronNativeOrcSinkUtils: AuronNativeOrcSinkUtils<'a>,
     pub cAuronNativeParquetSinkUtils: AuronNativeParquetSinkUtils<'a>,
     pub cAuronBlockObject: AuronBlockObject<'a>,
     pub cAuronJsonFallbackWrapper: AuronJsonFallbackWrapper<'a>,
@@ -504,6 +505,7 @@ impl JavaClasses<'static> {
                 c_spark_udaf_mem_tracker,
                 c_auron_rss_partition_writer_base,
                 c_auron_on_heap_spill_manager,
+                c_auron_native_orc_sink_utils,
                 c_auron_native_parquet_sink_utils,
                 c_auron_block_object,
                 c_auron_json_fallback_wrapper,
@@ -517,6 +519,7 @@ impl JavaClasses<'static> {
                     SparkUDAFMemTracker::new(env)?,
                     AuronRssPartitionWriterBase::new(env)?,
                     AuronOnHeapSpillManager::new(env)?,
+                    AuronNativeOrcSinkUtils::new(env)?,
                     AuronNativeParquetSinkUtils::new(env)?,
                     AuronBlockObject::new(env)?,
                     AuronJsonFallbackWrapper::new(env)?,
@@ -530,6 +533,7 @@ impl JavaClasses<'static> {
                     SparkUDAFMemTracker::default(),
                     AuronRssPartitionWriterBase::default(),
                     AuronOnHeapSpillManager::default(),
+                    AuronNativeOrcSinkUtils::default(),
                     AuronNativeParquetSinkUtils::default(),
                     AuronBlockObject::default(),
                     AuronJsonFallbackWrapper::default(),
@@ -568,6 +572,7 @@ impl JavaClasses<'static> {
                 cSparkUDAFMemTracker: c_spark_udaf_mem_tracker,
                 cAuronRssPartitionWriterBase: c_auron_rss_partition_writer_base,
                 cAuronOnHeapSpillManager: c_auron_on_heap_spill_manager,
+                cAuronNativeOrcSinkUtils: c_auron_native_orc_sink_utils,
                 cAuronNativeParquetSinkUtils: c_auron_native_parquet_sink_utils,
                 cAuronBlockObject: c_auron_block_object,
                 cAuronJsonFallbackWrapper: c_auron_json_fallback_wrapper,
@@ -1582,6 +1587,42 @@ impl<'a> AuronNativeParquetSinkUtils<'a> {
     pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronNativeParquetSinkUtils<'a>> {
         let class = get_global_jclass(env, Self::SIG_TYPE)?;
         Ok(AuronNativeParquetSinkUtils {
+            class,
+            method_getTaskOutputPath: env.get_static_method_id(
+                class,
+                "getTaskOutputPath",
+                "()Ljava/lang/String;",
+            )?,
+            method_getTaskOutputPath_ret: ReturnType::Object,
+            method_completeOutput: env.get_static_method_id(
+                class,
+                "completeOutput",
+                "(Ljava/lang/String;JJ)V",
+            )?,
+            method_completeOutput_ret: ReturnType::Primitive(Primitive::Void),
+        })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
+}
+
+#[allow(non_snake_case)]
+pub struct AuronNativeOrcSinkUtils<'a> {
+    pub class: JClass<'a>,
+    pub method_getTaskOutputPath: JStaticMethodID,
+    pub method_getTaskOutputPath_ret: ReturnType,
+    pub method_completeOutput: JStaticMethodID,
+    pub method_completeOutput_ret: ReturnType,
+}
+impl<'a> AuronNativeOrcSinkUtils<'a> {
+    pub const SIG_TYPE: &'static str =
+        "org/apache/spark/sql/execution/auron/plan/NativeOrcSinkUtils";
+
+    pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronNativeOrcSinkUtils<'a>> {
+        let class = get_global_jclass(env, Self::SIG_TYPE)?;
+        Ok(AuronNativeOrcSinkUtils {
             class,
             method_getTaskOutputPath: env.get_static_method_id(
                 class,
