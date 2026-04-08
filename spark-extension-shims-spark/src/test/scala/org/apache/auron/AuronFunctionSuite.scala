@@ -868,6 +868,117 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
               |""".stripMargin
         checkSparkAnswerAndOperator(query)
       }
+
+  test("instr function - basic functionality") {
+    withTable("t1") {
+      sql("""
+        CREATE TABLE t1(str STRING, substr STRING) USING parquet
+      """)
+      sql("""
+        INSERT INTO t1 VALUES
+          ('hello world', 'world'),
+          ('hello world', 'hello'),
+          ('hello world', 'o'),
+          ('hello world', 'z'),
+          (null, 'test'),
+          ('test', null)
+      """)
+
+      // Test basic instr functionality
+      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+    }
+  }
+
+  test("instr function - empty substring") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(str STRING) USING parquet")
+      sql("INSERT INTO t1 VALUES ('hello'), ('world'), ('')")
+
+      // Empty substring should return 0
+      checkSparkAnswerAndOperator("SELECT instr(str, '') FROM t1")
+    }
+  }
+
+  test("instr function - UTF-8 multi-byte characters") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("""
+        INSERT INTO t1 VALUES
+          ('你好世界', '世界'),
+          ('hello世界', '世界'),
+          ('test', '世界'),
+          ('hello😀world', '😀'),
+          ('test😀', '😀')
+      """)
+
+      // Test UTF-8 character position (not byte position)
+      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+    }
+  }
+
+  test("instr function - with expressions") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("INSERT INTO t1 VALUES ('banana', 'a'), ('testtesttest', 'test'), ('abcabcabc', 'abc')")
+
+      // Test with array column as substring (element-wise)
+      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+    }
+  }
+
+  test("instr function - case sensitivity") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("""
+        INSERT INTO t1 VALUES
+          ('Hello', 'hello'),
+          ('HELLO', 'hello'),
+          ('Hello', 'Hello'),
+          ('hElLo', 'hello')
+      """)
+
+      // Instr is case-sensitive
+      checkSparkAnswerAndOperator("SELECT instr(str, substr) FROM t1")
+    }
+  }
+
+  test("instr function - in filter clause") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("""
+        INSERT INTO t1 VALUES
+          ('hello world', 'world'),
+          ('hello', 'world'),
+          ('testing', 'test'),
+          ('abc', 'def')
+      """)
+
+      // Test instr in WHERE clause
+      checkSparkAnswerAndOperator("""
+        SELECT str FROM t1 WHERE instr(str, substr) > 0
+      """)
+    }
+  }
+
+  test("instr function - with grouping") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(str STRING, substr STRING) USING parquet")
+      sql("""
+        INSERT INTO t1 VALUES
+          ('test1', 'test'),
+          ('test2', 'test'),
+          ('hello', 'world'),
+          ('testing', 'test')
+      """)
+
+      // Test instr in GROUP BY
+      checkSparkAnswerAndOperator("""
+        SELECT substr, COUNT(*) as cnt
+        FROM t1
+        WHERE instr(str, substr) > 0
+        GROUP BY substr
+        ORDER BY substr
+      """)
     }
   }
 }

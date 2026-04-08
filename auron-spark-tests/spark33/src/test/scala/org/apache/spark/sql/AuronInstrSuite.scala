@@ -29,14 +29,17 @@ class AuronInstrSuite extends QueryTest with SparkQueryTestsBase {
     )
 
     val df = spark.createDataFrame(data).toDF("str", "substr")
-    val result = df.selectExpr("instr(str, substr)").collect().map(_.getInt(0))
+    val rows = df.selectExpr("instr(str, substr)").collect()
 
-    assert(result(0) == 7, "instr('hello world', 'world') should return 7")
-    assert(result(1) == 1, "instr('hello world', 'hello') should return 1")
-    assert(result(2) == 5, "instr('hello world', 'o') should return 5")
-    assert(result(3) == 0, "instr('hello world', 'z') should return 0")
-    assert(result(4) == 0, "instr(null, 'test') should return null")
-    assert(result(5) == 0, "instr('test', null) should return null")
+    // Check non-null results
+    assert(rows(0).getInt(0) == 7, "instr('hello world', 'world') should return 7")
+    assert(rows(1).getInt(0) == 1, "instr('hello world', 'hello') should return 1")
+    assert(rows(2).getInt(0) == 5, "instr('hello world', 'o') should return 5")
+    assert(rows(3).getInt(0) == 0, "instr('hello world', 'z') should return 0")
+    
+    // Check null results
+    assert(rows(4).isNullAt(0), "instr(null, 'test') should return null")
+    assert(rows(5).isNullAt(0), "instr('test', null) should return null")
   }
 
   test("test instr function - multiple occurrences") {

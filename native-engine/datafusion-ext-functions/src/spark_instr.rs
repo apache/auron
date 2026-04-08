@@ -70,7 +70,7 @@ pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                     if substr.is_empty() {
                         Some(0)
                     } else {
-                        Some(s.find(substr).map(|pos| (pos + 1) as i32).unwrap_or(0))
+                        Some(find_char_position(s, substr))
                     }
                 }
             }),
@@ -85,6 +85,33 @@ pub fn spark_instr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         }))
     } else {
         Ok(ColumnarValue::Array(result_array))
+    }
+}
+
+/// Find the 1-based character position of substr in s
+/// Returns 0 if not found
+fn find_char_position(s: &str, substr: &str) -> i32 {
+    if substr.is_empty() {
+        return 0;
+    }
+
+    // Use char_indices to get byte offset to char position mapping
+    let char_positions: Vec<usize> = s.char_indices().map(|(byte_pos, _)| byte_pos).collect();
+
+    // Find byte offset using find
+    if let Some(byte_pos) = s.find(substr) {
+        // Find the character position (1-based)
+        // char_positions contains the byte offset for each character
+        // We need to find which character index corresponds to this byte offset
+        for (char_idx, &char_byte_pos) in char_positions.iter().enumerate() {
+            if char_byte_pos == byte_pos {
+                return (char_idx + 1) as i32;
+            }
+        }
+        // Fallback: if exact match not found, estimate
+        char_positions.len() as i32 + 1
+    } else {
+        0
     }
 }
 
@@ -209,6 +236,41 @@ mod test {
             as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
             vec![Some(0), Some(0),]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_instr_utf8() -> Result<()> {
+        // Test UTF-8 multi-byte characters
+        // "你好世界" - "世界" should return 3 (character position), not 6 (byte
+        // position)
+        let r = spark_instr(&vec![
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("你好世界".to_string()),
+                Some("hello世界".to_string()),
+                Some("test".to_string()),
+            ]))),
+            ColumnarValue::Scalar(ScalarValue::from("世界")),
+        ])?;
+        let s = r.into_array(3)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![Some(3), Some(6), Some(0),]
+        );
+
+        // Test with emoji (4-byte UTF-8)
+        let r = spark_instr(&vec![
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![Some(
+                "hello😀world".to_string(),
+            )]))),
+            ColumnarValue::Scalar(ScalarValue::from("😀")),
+        ])?;
+        let s = r.into_array(1)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![Some(6),]
+        );
+
         Ok(())
     }
 }
