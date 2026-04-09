@@ -19,6 +19,8 @@ package org.apache.auron
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.execution.auron.plan.NativeWindowBase
 
+import org.apache.auron.util.AuronTestUtils
+
 class AuronWindowSuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
 
   test("lead window function") {
@@ -40,20 +42,22 @@ class AuronWindowSuite extends AuronQueryTest with BaseAuronSQLSuite with AuronS
   }
 
   test("lead window function with ignore nulls falls back") {
-    withSQLConf("spark.auron.enable.window" -> "true") {
-      withTable("t1") {
-        sql("create table t1(id int, grp int, v string) using parquet")
-        sql("insert into t1 values (1, 1, 'a'), (2, 1, null), (3, 1, 'c'), (4, 2, 'x')")
+    if (AuronTestUtils.isSparkV32OrGreater) {
+      withSQLConf("spark.auron.enable.window" -> "true") {
+        withTable("t1") {
+          sql("create table t1(id int, grp int, v string) using parquet")
+          sql("insert into t1 values (1, 1, 'a'), (2, 1, null), (3, 1, 'c'), (4, 2, 'x')")
 
-        val df = checkSparkAnswer("""select
-            |  id,
-            |  grp,
-            |  lead(v, 1, 'fallback') ignore nulls
-            |    over (partition by grp order by id) as next_non_null_v
-            |from t1
-            |""".stripMargin)
-        val plan = stripAQEPlan(df.queryExecution.executedPlan)
-        assert(plan.collectFirst { case _: NativeWindowBase => true }.isEmpty)
+          val df = checkSparkAnswer("""select
+              |  id,
+              |  grp,
+              |  lead(v, 1, 'fallback') ignore nulls
+              |    over (partition by grp order by id) as next_non_null_v
+              |from t1
+              |""".stripMargin)
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(plan.collectFirst { case _: NativeWindowBase => true }.isEmpty)
+        }
       }
     }
   }
