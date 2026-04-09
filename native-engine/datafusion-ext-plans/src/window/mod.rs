@@ -23,8 +23,8 @@ use crate::{
     agg::{AggFunction, agg::create_agg},
     window::{
         processors::{
-            agg_processor::AggProcessor, rank_processor::RankProcessor,
-            row_number_processor::RowNumberProcessor,
+            agg_processor::AggProcessor, lead_processor::LeadProcessor,
+            rank_processor::RankProcessor, row_number_processor::RowNumberProcessor,
         },
         window_context::WindowContext,
     },
@@ -36,6 +36,7 @@ pub mod window_context;
 #[derive(Debug, Clone, Copy)]
 pub enum WindowFunction {
     RankLike(WindowRankType),
+    Lead,
     Agg(AggFunction),
 }
 
@@ -87,6 +88,7 @@ impl WindowExpr {
             WindowFunction::RankLike(WindowRankType::DenseRank) => {
                 Ok(Box::new(RankProcessor::new(true)))
             }
+            WindowFunction::Lead => Ok(Box::new(LeadProcessor::new(self.children.clone()))),
             WindowFunction::Agg(agg_func) => {
                 let agg = create_agg(
                     agg_func.clone(),
@@ -97,5 +99,9 @@ impl WindowExpr {
                 Ok(Box::new(AggProcessor::try_new(agg)?))
             }
         }
+    }
+
+    pub fn requires_full_partition(&self) -> bool {
+        matches!(self.func, WindowFunction::Lead)
     }
 }

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.DenseRank
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.Lead
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.NullsFirst
 import org.apache.spark.sql.catalyst.expressions.Rank
@@ -89,6 +90,11 @@ abstract class NativeWindowBase(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
 
+  private def leadIgnoreNulls(expr: Lead): Boolean =
+    expr.getClass.getMethods
+      .find(method => method.getName == "ignoreNulls" && method.getParameterCount == 0)
+      .exists(method => method.invoke(expr).asInstanceOf[Boolean])
+
   private def nativeWindowExprs = windowExpression.map { named =>
     val field = NativeConverters.convertField(Util.getSchema(named :: Nil).fields(0))
     val windowExprBuilder = pb.WindowExprNode.newBuilder().setField(field)
@@ -117,6 +123,17 @@ abstract class NativeWindowBase(
               s"window frame not supported: ${spec.frameSpecification}")
             windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
             windowExprBuilder.setWindowFunc(pb.WindowFunction.DENSE_RANK)
+
+          case e: Lead =>
+            assert(
+              spec.frameSpecification == e.frame,
+              s"window frame not supported: ${spec.frameSpecification}")
+            assert(!leadIgnoreNulls(e), "window function not supported: lead with IGNORE NULLS")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(pb.WindowFunction.LEAD)
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.input))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.offset))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.default))
 
           case e: Sum =>
             assert(
