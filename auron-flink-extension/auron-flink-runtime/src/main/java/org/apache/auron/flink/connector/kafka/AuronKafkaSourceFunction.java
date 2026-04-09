@@ -286,7 +286,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     public void run(SourceContext<RowData> sourceContext) throws Exception {
         metricGroup = getRuntimeContext().getMetricGroup();
         final Map<String, Counter> flinkCounters = new HashMap<>();
-        
+
         nativeMetric = new MetricNode(new ArrayList<>()) {
             @Override
             public void add(String name, long value) {
