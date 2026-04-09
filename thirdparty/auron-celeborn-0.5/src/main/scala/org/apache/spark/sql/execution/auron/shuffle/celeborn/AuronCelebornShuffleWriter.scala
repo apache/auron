@@ -63,7 +63,7 @@ class AuronCelebornShuffleWriter[K, V](
     celebornPartitionWriter
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
   override def getPartitionLengths(): Array[Long] = {
     celebornPartitionWriter.getPartitionLengthMap
   }
