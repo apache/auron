@@ -642,6 +642,8 @@ pub struct JniBridge<'a> {
     pub method_booleanConf_ret: ReturnType,
     pub method_stringConf: JStaticMethodID,
     pub method_stringConf_ret: ReturnType,
+    pub method_strToMapSplit: JStaticMethodID,
+    pub method_strToMapSplit_ret: ReturnType,
     pub method_getEngineName: JStaticMethodID,
     pub method_getEngineName_ret: ReturnType,
 }
@@ -757,6 +759,12 @@ impl<'a> JniBridge<'a> {
                 "(Ljava/lang/String;)Ljava/lang/String;",
             )?,
             method_stringConf_ret: ReturnType::Object,
+            method_strToMapSplit: env.get_static_method_id(
+                class,
+                "strToMapSplit",
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)[Ljava/lang/String;",
+            )?,
+            method_strToMapSplit_ret: ReturnType::Object,
             method_getEngineName: env.get_static_method_id(
                 class,
                 "getEngineName",

@@ -67,6 +67,7 @@ pub fn create_auron_ext_function(
         "Spark_MapConcat" => Arc::new(spark_map::map_concat),
         "Spark_MapFromArrays" => Arc::new(spark_map::map_from_arrays),
         "Spark_MapFromEntries" => Arc::new(spark_map::map_from_entries),
+        "Spark_StrToMap" => Arc::new(spark_map::str_to_map),
         "Spark_StringSpace" => Arc::new(spark_strings::string_space),
         "Spark_StringRepeat" => Arc::new(spark_strings::string_repeat),
         "Spark_StringSplit" => Arc::new(spark_strings::string_split),

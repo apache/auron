@@ -461,6 +461,67 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("str_to_map function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("""
+          |insert into t1 values
+          |  ('a:1,b:2'),
+          |  ('a:1:2,b'),
+          |  (null)
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select str_to_map(c1) from t1")
+    }
+  }
+
+  test("str_to_map regex delimiters") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values ('a::1,,b:::2')")
+      checkSparkAnswerAndOperator("select str_to_map(c1, ',+', ':+') from t1")
+    }
+  }
+
+  test("str_to_map Java regex delimiters") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values ('a:1,b:2,c:3')")
+      checkSparkAnswerAndOperator("select str_to_map(c1, ',(?=b:|c:)', ':') from t1")
+    }
+  }
+
+  test("str_to_map duplicate keys") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values ('a:1,a:2')")
+      val df = sql("select str_to_map(c1) from t1")
+      val err = intercept[Exception] {
+        df.collect()
+      }
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan:
+               |${plan}""".stripMargin)
+        }
+      assert(allCauseMessages(err).toLowerCase.contains("duplicate key"))
+    }
+  }
+
+  test("str_to_map last win dedup policy") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values ('a:1,b:2,a:3')")
+      withSQLConf(
+        SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkSparkAnswerAndOperator("select str_to_map(c1) from t1")
+      }
+    }
+  }
+
   test("acosh null propagation") {
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")

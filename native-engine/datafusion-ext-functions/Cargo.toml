@@ -29,11 +29,13 @@ arrow = { workspace = true }
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }
 datafusion-ext-commons = { workspace = true }
+jni = { workspace = true }
 
 itertools = { workspace = true }
 log = { workspace = true }
 num = { workspace = true }
 paste = { workspace = true }
+regex = "1.12.3"
 serde_json = { workspace = true }
 sonic-rs = { workspace = true }
 chrono = "0.4.44"

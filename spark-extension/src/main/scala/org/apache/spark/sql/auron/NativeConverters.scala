@@ -945,6 +945,14 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_XxHash64", children, LongType)
       case e: MapFromArrays =>
         buildExtScalarFunction("Spark_MapFromArrays", e.children, e.dataType)
+      case e: StringToMap =>
+        buildExtScalarFunction(
+          "Spark_StrToMap",
+          e.text :: e.pairDelim :: e.keyValueDelim :: Literal
+            .create(
+              SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY).toString,
+              StringType) :: Nil,
+          e.dataType)
       case e: Greatest =>
         buildScalarFunction(pb.ScalarFunction.Greatest, e.children, e.dataType)
       case e: Pow =>

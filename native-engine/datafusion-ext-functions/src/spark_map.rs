@@ -19,17 +19,26 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, ArrayRef, ListArray, MapArray, StructArray, new_empty_array},
+    array::{Array, ArrayRef, ListArray, MapArray, StringArray, StructArray, new_empty_array},
     buffer::{NullBuffer, OffsetBuffer, ScalarBuffer},
     datatypes::{DataType, Field, Fields},
 };
+use auron_jni_bridge::{
+    is_jni_bridge_inited, jni_call_static, jni_get_string, jni_map_error_with_env, jni_new_string,
+};
 use datafusion::{
-    common::{Result, ScalarValue},
+    common::{Result, ScalarValue, cast::as_string_array},
     logical_expr::ColumnarValue,
 };
 use datafusion_ext_commons::{
     df_execution_err, downcast_any, scalar_value::compacted_scalar_value_from_array,
 };
+use jni::{
+    JNIEnv,
+    objects::{JObject, JString},
+    sys::{jarray, jobjectArray},
+};
+use regex::Regex;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MapKeyDedupPolicy {
@@ -267,6 +276,271 @@ fn parse_map_key_dedup_policy(args: &[ColumnarValue], idx: usize) -> Result<MapK
         | ColumnarValue::Scalar(ScalarValue::LargeUtf8(None)) => Ok(MapKeyDedupPolicy::Exception),
         _ => df_execution_err!("map key dedup policy arg must be string scalar"),
     }
+}
+
+fn get_or_compile_test_regex(
+    cache: &mut HashMap<String, Regex>,
+    pattern: &str,
+    arg_name: &str,
+) -> Result<Regex> {
+    if let Some(regex) = cache.get(pattern) {
+        return Ok(regex.clone());
+    }
+
+    let regex = Regex::new(pattern).map_err(|err| {
+        datafusion::error::DataFusionError::Execution(format!(
+            "str_to_map {arg_name} arg must be a valid regex in unit-test fallback mode: {err}"
+        ))
+    })?;
+    cache.insert(pattern.to_owned(), regex.clone());
+    Ok(regex)
+}
+
+fn jobject_to_string(env: &JNIEnv<'_>, value: JObject<'_>) -> Result<String> {
+    let auto_local = env.auto_local(value);
+    let jstring: JString<'_> = auto_local.as_obj().into();
+    jni_get_string!(jstring)
+}
+
+fn jobject_to_optional_string(env: &JNIEnv<'_>, value: JObject<'_>) -> Result<Option<String>> {
+    if value.is_null() {
+        Ok(None)
+    } else {
+        jobject_to_string(env, value).map(Some)
+    }
+}
+
+fn java_str_to_map_split(
+    text: &str,
+    pair_delim: &str,
+    key_value_delim: &str,
+) -> Result<Vec<(String, Option<String>)>> {
+    let text = jni_new_string!(text)?;
+    let pair_delim = jni_new_string!(pair_delim)?;
+    let key_value_delim = jni_new_string!(key_value_delim)?;
+    let flattened = jni_call_static!(
+        JniBridge.strToMapSplit(text.as_obj(), pair_delim.as_obj(), key_value_delim.as_obj())
+            -> JObject
+    )?;
+
+    auron_jni_bridge::jni_bridge::THREAD_JNIENV.with(|env| {
+        let flattened: jobjectArray = flattened.as_obj().into_raw() as jobjectArray;
+        let len = jni_map_error_with_env!(env, env.get_array_length(flattened as jarray))? as usize;
+        if len % 2 != 0 {
+            return df_execution_err!(
+                "str_to_map internal error: Java split returned an odd number of fields",
+            );
+        }
+
+        let mut out = Vec::with_capacity(len / 2);
+        for idx in (0..len).step_by(2) {
+            let key_obj =
+                jni_map_error_with_env!(env, env.get_object_array_element(flattened, idx as i32))?;
+            let value_obj = jni_map_error_with_env!(
+                env,
+                env.get_object_array_element(flattened, (idx + 1) as i32)
+            )?;
+            let key = jobject_to_string(env, key_obj)?;
+            let value = jobject_to_optional_string(env, value_obj)?;
+            out.push((key, value));
+        }
+        Ok(out)
+    })
+}
+
+fn fallback_str_to_map_split(
+    text: &str,
+    pair_delim: &str,
+    key_value_delim: &str,
+    pair_regex_cache: &mut HashMap<String, Regex>,
+    key_value_regex_cache: &mut HashMap<String, Regex>,
+) -> Result<Vec<(String, Option<String>)>> {
+    let pair_regex = get_or_compile_test_regex(pair_regex_cache, pair_delim, "pairDelim")?;
+    let key_value_regex =
+        get_or_compile_test_regex(key_value_regex_cache, key_value_delim, "keyValueDelim")?;
+
+    Ok(pair_regex
+        .split(text)
+        .map(|kv_entry| {
+            let mut kv_parts = key_value_regex.splitn(kv_entry, 2);
+            let key = kv_parts.next().unwrap_or_default().to_owned();
+            let value = kv_parts.next().map(ToOwned::to_owned);
+            (key, value)
+        })
+        .collect())
+}
+
+fn str_to_map_split(
+    text: &str,
+    pair_delim: &str,
+    key_value_delim: &str,
+    pair_regex_cache: &mut HashMap<String, Regex>,
+    key_value_regex_cache: &mut HashMap<String, Regex>,
+) -> Result<Vec<(String, Option<String>)>> {
+    if is_jni_bridge_inited() {
+        java_str_to_map_split(text, pair_delim, key_value_delim)
+    } else {
+        fallback_str_to_map_split(
+            text,
+            pair_delim,
+            key_value_delim,
+            pair_regex_cache,
+            key_value_regex_cache,
+        )
+    }
+}
+
+fn columnar_value_to_string_array(
+    arg: &ColumnarValue,
+    len: usize,
+    arg_name: &str,
+) -> Result<StringArray> {
+    let array = arg.clone().into_array(len)?;
+    match array.data_type() {
+        DataType::Null => Ok(StringArray::from(vec![None::<&str>; array.len()])),
+        DataType::Utf8 => Ok(as_string_array(&array)?.clone()),
+        data_type => {
+            df_execution_err!("str_to_map {arg_name} arg must be string, found {data_type:?}")
+        }
+    }
+}
+
+/// Creates a map after splitting text into key/value pairs using Java regex
+/// delimiters.
+///
+/// This follows Spark StringToMap semantics:
+/// - null in any argument => null result
+/// - pairDelim is applied as Pattern.compile(pairDelim).split(text, -1)
+/// - keyValueDelim is applied as Pattern.compile(keyValueDelim).split(entry, 2)
+/// - missing value => null
+/// - duplicate keys follow spark.sql.mapKeyDedupPolicy
+pub fn str_to_map(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() < 3 || args.len() > 4 {
+        return df_execution_err!("str_to_map requires 3 or 4 arguments");
+    }
+
+    let dedup_policy = parse_map_key_dedup_policy(args, 3)?;
+    let num_rows = args
+        .iter()
+        .filter_map(|arg| match arg {
+            ColumnarValue::Array(array) => Some(array.len()),
+            ColumnarValue::Scalar(_) => None,
+        })
+        .filter(|&len| len != 1)
+        .max()
+        .unwrap_or(1);
+
+    if args.iter().any(|arg| match arg {
+        ColumnarValue::Array(array) => array.len() != 1 && array.len() != num_rows,
+        ColumnarValue::Scalar(_) => false,
+    }) {
+        return df_execution_err!("all arguments of str_to_map must have the same length");
+    }
+
+    let text_array = columnar_value_to_string_array(&args[0], num_rows, "text")?;
+    let pair_delim_array = columnar_value_to_string_array(&args[1], num_rows, "pairDelim")?;
+    let key_value_delim_array =
+        columnar_value_to_string_array(&args[2], num_rows, "keyValueDelim")?;
+
+    let key_field = Arc::new(Field::new("key", DataType::Utf8, false));
+    let value_field = Arc::new(Field::new("value", DataType::Utf8, true));
+    let entries_field = Arc::new(Field::new(
+        "entries",
+        DataType::Struct(Fields::from(vec![
+            key_field.as_ref().clone(),
+            value_field.as_ref().clone(),
+        ])),
+        false,
+    ));
+
+    let mut pair_regex_cache = HashMap::new();
+    let mut key_value_regex_cache = HashMap::new();
+
+    let mut all_keys = Vec::new();
+    let mut all_values = Vec::new();
+    let mut offsets = Vec::with_capacity(num_rows + 1);
+    let mut valids = Vec::with_capacity(num_rows);
+    let mut next_offset = 0i32;
+
+    offsets.push(next_offset);
+
+    for row_idx in 0..num_rows {
+        if text_array.is_null(row_idx)
+            || pair_delim_array.is_null(row_idx)
+            || key_value_delim_array.is_null(row_idx)
+        {
+            valids.push(false);
+            offsets.push(next_offset);
+            continue;
+        }
+
+        let text = text_array.value(row_idx);
+        let pair_delim = pair_delim_array.value(row_idx);
+        let key_value_delim = key_value_delim_array.value(row_idx);
+
+        let split_entries = str_to_map_split(
+            text,
+            pair_delim,
+            key_value_delim,
+            &mut pair_regex_cache,
+            &mut key_value_regex_cache,
+        )?;
+        let mut row_entries: Vec<(String, Option<String>)> =
+            Vec::with_capacity(split_entries.len());
+        let mut row_key_to_index: HashMap<String, usize> = HashMap::new();
+
+        for (key, value) in split_entries {
+            if let Some(idx) = row_key_to_index.get(&key).copied() {
+                match dedup_policy {
+                    MapKeyDedupPolicy::Exception => {
+                        return df_execution_err!("str_to_map duplicate key found: {key}");
+                    }
+                    MapKeyDedupPolicy::LastWin => {
+                        row_entries[idx].1 = value;
+                    }
+                }
+            } else {
+                row_key_to_index.insert(key.clone(), row_entries.len());
+                row_entries.push((key, value));
+            }
+        }
+
+        valids.push(true);
+        next_offset += row_entries.len() as i32;
+        offsets.push(next_offset);
+
+        for (key, value) in row_entries {
+            all_keys.push(ScalarValue::Utf8(Some(key)));
+            all_values.push(ScalarValue::Utf8(value));
+        }
+    }
+
+    let keys = if all_keys.is_empty() {
+        new_empty_array(key_field.data_type())
+    } else {
+        ScalarValue::iter_to_array(all_keys.into_iter())?
+    };
+
+    let values = if all_values.is_empty() {
+        new_empty_array(value_field.data_type())
+    } else {
+        ScalarValue::iter_to_array(all_values.into_iter())?
+    };
+
+    let entries = StructArray::from(vec![(key_field, keys), (value_field, values)]);
+    let nulls = if valids.iter().all(|valid| *valid) {
+        None
+    } else {
+        Some(NullBuffer::from(valids))
+    };
+
+    Ok(ColumnarValue::Array(Arc::new(MapArray::new(
+        entries_field,
+        OffsetBuffer::new(ScalarBuffer::from(offsets)),
+        entries,
+        nulls,
+        false,
+    ))))
 }
 
 /// Returns a map created from the given array of entries.
@@ -1137,6 +1411,103 @@ mod test {
         let expected = Arc::new(build_string_int_map_array(vec![Some(vec![
             ("a", Some(3)),
             ("b", Some(2)),
+        ])])) as ArrayRef;
+
+        assert_eq!(&actual, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_str_to_map() -> Result<()> {
+        let text = Arc::new(StringArray::from(vec![
+            Some("a:1,b:2"),
+            Some("a:1:2,b"),
+            None,
+        ])) as ArrayRef;
+
+        let actual = str_to_map(&[
+            ColumnarValue::Array(text),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(",".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(":".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("EXCEPTION".to_string()))),
+        ])?
+        .into_array(3)?;
+
+        let expected = Arc::new(build_string_string_map_array(vec![
+            Some(vec![("a", Some("1")), ("b", Some("2"))]),
+            Some(vec![("a", Some("1:2")), ("b", None)]),
+            None,
+        ])) as ArrayRef;
+
+        assert_eq!(&actual, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_str_to_map_regex_delims() -> Result<()> {
+        let text = Arc::new(StringArray::from(vec![Some("a::1,,b:::2")])) as ArrayRef;
+
+        let actual = str_to_map(&[
+            ColumnarValue::Array(text),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(",+".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(":+".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("EXCEPTION".to_string()))),
+        ])?
+        .into_array(1)?;
+
+        let expected = Arc::new(build_string_string_map_array(vec![Some(vec![
+            ("a", Some("1")),
+            ("b", Some("2")),
+        ])])) as ArrayRef;
+
+        assert_eq!(&actual, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_str_to_map_null_scalar_propagation() -> Result<()> {
+        let actual = str_to_map(&[
+            ColumnarValue::Scalar(ScalarValue::Utf8(None)),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(",".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(":".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("EXCEPTION".to_string()))),
+        ])?
+        .into_array(1)?;
+
+        assert!(actual.is_null(0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_str_to_map_duplicate_keys() {
+        let text = Arc::new(StringArray::from(vec![Some("a:1,a:2")])) as ArrayRef;
+
+        let err = str_to_map(&[
+            ColumnarValue::Array(text),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(",".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(":".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("EXCEPTION".to_string()))),
+        ])
+        .expect_err("str_to_map should fail when duplicate keys exist");
+
+        assert!(err.to_string().contains("duplicate key"));
+    }
+
+    #[test]
+    fn test_str_to_map_last_win() -> Result<()> {
+        let text = Arc::new(StringArray::from(vec![Some("a:1,b:2,a:3")])) as ArrayRef;
+
+        let actual = str_to_map(&[
+            ColumnarValue::Array(text),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(",".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(":".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("LAST_WIN".to_string()))),
+        ])?
+        .into_array(1)?;
+
+        let expected = Arc::new(build_string_string_map_array(vec![Some(vec![
+            ("a", Some("3")),
+            ("b", Some("2")),
         ])])) as ArrayRef;
 
         assert_eq!(&actual, &expected);
