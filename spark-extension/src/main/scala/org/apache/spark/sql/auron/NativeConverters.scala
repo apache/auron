@@ -469,6 +469,9 @@ object NativeConverters extends Logging {
               .setReturnNullable(subquery.nullable))
         }
 
+      case expr if isNoOpAnsiCast(expr) =>
+        convertExprWithFallback(expr.children.head, isPruningExpr, fallback)
+
       // cast
       case cast: Cast =>
         val involvesDateOrTimestamp =
@@ -1438,6 +1441,11 @@ object NativeConverters extends Logging {
     }
     Cast(expr, dataType)
   }
+
+  private def isNoOpAnsiCast(expr: Expression): Boolean =
+    expr.getClass.getSimpleName == "AnsiCast" &&
+      expr.children.size == 1 &&
+      expr.children.head.dataType == expr.dataType
 
   def unpackBinaryTypeCast(expr: Expression): Expression =
     expr match {

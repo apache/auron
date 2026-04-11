@@ -358,7 +358,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       val err = intercept[Exception] {
         df.collect()
       }
-      assert(err.getMessage.contains("null map keys"))
+      assert(allCauseMessages(err).toLowerCase.contains("null map keys"))
       val plan = stripAQEPlan(df.queryExecution.executedPlan)
       plan
         .collectFirst { case op if !isNativeOrPassThrough(op) => op }
@@ -406,7 +406,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
                |plan:
                |${plan}""".stripMargin)
         }
-      assert(err.getMessage.toLowerCase.contains("null map key"))
+      assert(allCauseMessages(err).toLowerCase.contains("null map key"))
     }
   }
 
@@ -430,8 +430,18 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
                |plan:
                |${plan}""".stripMargin)
         }
-      assert(err.getMessage.toLowerCase.contains("duplicate key"))
+      assert(allCauseMessages(err).toLowerCase.contains("duplicate key"))
     }
+  }
+
+  private def allCauseMessages(err: Throwable): String = {
+    val messages = scala.collection.mutable.ArrayBuffer.empty[String]
+    var current = err
+    while (current != null) {
+      Option(current.getMessage).foreach(messages += _)
+      current = current.getCause
+    }
+    messages.mkString(" | caused by: ")
   }
 
   test("map_from_entries last win dedup policy") {
