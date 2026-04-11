@@ -38,7 +38,7 @@ final case class IcebergScanPlan(
     fileFormat: FileFormat,
     readSchema: StructType,
     fileSchema: StructType,
-    partitionSchema: StructType)
+    partitionSchema: StructType,
     pruningPredicates: Seq[pb.PhysicalExprNode])
 
 object IcebergScanSupport extends Logging {
@@ -83,7 +83,13 @@ object IcebergScanSupport extends Logging {
     if (partitions.isEmpty) {
       logWarning(s"Native Iceberg scan planned with empty partitions for $scanClassName.")
       return Some(
-        IcebergScanPlan(Seq.empty, FileFormat.PARQUET, readSchema, fileSchema, partitionSchema))
+        IcebergScanPlan(
+          Seq.empty,
+          FileFormat.PARQUET,
+          readSchema,
+          fileSchema,
+          partitionSchema,
+          Seq.empty))
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
@@ -110,8 +116,15 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    Some(IcebergScanPlan(fileTasks, format, readSchema, fileSchema, partitionSchema, pruningPredicates))
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
+    Some(
+      IcebergScanPlan(
+        fileTasks,
+        format,
+        readSchema,
+        fileSchema,
+        partitionSchema,
+        pruningPredicates))
   }
 
   private def collectUnsupportedMetadataColumns(schema: StructType): Seq[String] =
