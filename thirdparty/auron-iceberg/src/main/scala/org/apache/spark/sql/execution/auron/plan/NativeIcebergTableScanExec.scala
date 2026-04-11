@@ -63,6 +63,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
   private lazy val projectableSchema: StructType =
     StructType(fileSchema.fields ++ partitionSchema.fields)
   private lazy val fileTasks: Seq[FileScanTask] = plan.fileTasks
+  private lazy val pruningPredicates: Seq[pb.PhysicalExprNode] = plan.pruningPredicates
 
   private lazy val partitions: Array[FilePartition] = buildFilePartitions()
   private lazy val fileSizes: Map[String, Long] = buildFileSizes()
@@ -184,8 +185,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
             .newBuilder()
             .setBaseConf(nativeFileScanConf)
             .setFsResourceId(resourceId)
-            // No pruning predicates are pushed down in the native scan yet.
-            .addAllPruningPredicates(new java.util.ArrayList())
+            .addAllPruningPredicates(pruningPredicates.asJava)
 
           pb.PhysicalPlanNode
             .newBuilder()
@@ -196,8 +196,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
             .newBuilder()
             .setBaseConf(nativeFileScanConf)
             .setFsResourceId(resourceId)
-            // No pruning predicates are pushed down in the native scan yet.
-            .addAllPruningPredicates(new java.util.ArrayList())
+            .addAllPruningPredicates(pruningPredicates.asJava)
 
           pb.PhysicalPlanNode
             .newBuilder()
