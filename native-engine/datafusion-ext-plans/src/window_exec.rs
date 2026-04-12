@@ -210,7 +210,8 @@ fn execute_window(
     Ok(exec_ctx
         .clone()
         .output_with_sender("Window", |sender| async move {
-            sender.exclude_time(exec_ctx.baseline_metrics().elapsed_compute());
+            let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
+            sender.exclude_time(&elapsed_compute);
 
             let mut processors = window_ctx
                 .window_exprs
@@ -225,6 +226,7 @@ fn execute_window(
                 }
 
                 if !staging_batches.is_empty() {
+                    let _timer = elapsed_compute.timer();
                     let batch = concat_batches(&window_ctx.input_schema, &staging_batches)?;
                     let output_batch =
                         process_window_batch(batch, &window_ctx, processors.as_mut_slice())?;
@@ -237,7 +239,7 @@ fn execute_window(
             }
 
             while let Some(batch) = input.next().await.transpose()? {
-                let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
+                let _timer = elapsed_compute.timer();
                 let output_batch =
                     process_window_batch(batch, &window_ctx, processors.as_mut_slice())?;
                 exec_ctx
