@@ -129,6 +129,7 @@ enum WindowFunction {
   ROW_NUMBER = 0;
   RANK = 1;
   DENSE_RANK = 2;
+  LAG = 3;
 }
 
 enum AggFunction {
