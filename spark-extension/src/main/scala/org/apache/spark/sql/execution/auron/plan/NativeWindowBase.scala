@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.DenseRank
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.Lag
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.NullsFirst
 import org.apache.spark.sql.catalyst.expressions.Rank
@@ -89,6 +90,11 @@ abstract class NativeWindowBase(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
 
+  private def lagIgnoreNulls(expr: Lag): Boolean =
+    expr.getClass.getMethods
+      .find(method => method.getName == "ignoreNulls" && method.getParameterCount == 0)
+      .exists(method => method.invoke(expr).asInstanceOf[Boolean])
+
   private def nativeWindowExprs = windowExpression.map { named =>
     val field = NativeConverters.convertField(Util.getSchema(named :: Nil).fields(0))
     val windowExprBuilder = pb.WindowExprNode.newBuilder().setField(field)
@@ -117,6 +123,17 @@ abstract class NativeWindowBase(
               s"window frame not supported: ${spec.frameSpecification}")
             windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
             windowExprBuilder.setWindowFunc(pb.WindowFunction.DENSE_RANK)
+
+          case e: Lag =>
+            assert(
+              spec.frameSpecification == e.frame,
+              s"window frame not supported: ${spec.frameSpecification}")
+            assert(!lagIgnoreNulls(e), "window function not supported: lag with IGNORE NULLS")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(pb.WindowFunction.LAG)
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.input))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.inputOffset))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.default))
 
           case e: Sum =>
             assert(
