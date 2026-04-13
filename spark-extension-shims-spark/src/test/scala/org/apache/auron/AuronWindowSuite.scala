@@ -61,4 +61,149 @@ class AuronWindowSuite extends AuronQueryTest with BaseAuronSQLSuite with AuronS
       }
     }
   }
+
+  test("first_value window function") {
+    withSQLConf("spark.auron.enable.window" -> "true") {
+      withTable("t1") {
+        sql("create table t1(id int, grp int, v string) using parquet")
+        sql("insert into t1 values (1, 1, null), (2, 1, 'b'), (3, 1, 'c'), (4, 2, 'x')")
+
+        checkSparkAnswerAndOperator("""select
+            |  id,
+            |  grp,
+            |  v,
+            |  first_value(v) over (partition by grp order by id) as first_v
+            |from t1
+            |""".stripMargin)
+      }
+    }
+  }
+
+  test("first_value window function with ignore nulls") {
+    if (AuronTestUtils.isSparkV32OrGreater) {
+      withSQLConf("spark.auron.enable.window" -> "true") {
+        withTable("t1") {
+          sql("create table t1(id int, grp int, v string) using parquet")
+          sql("insert into t1 values (1, 1, null), (2, 1, 'b'), (3, 1, 'c'), (4, 2, 'x')")
+
+          checkSparkAnswerAndOperator("""select
+              |  id,
+              |  grp,
+              |  v,
+              |  first_value(v) ignore nulls over (partition by grp order by id) as first_non_null_v
+              |from t1
+              |""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("last_value window function") {
+    withSQLConf("spark.auron.enable.window" -> "true") {
+      withTable("t1") {
+        sql("create table t1(id int, grp int, v string) using parquet")
+        sql("insert into t1 values (1, 1, 'a'), (2, 1, null), (3, 1, 'c'), (4, 2, 'x')")
+
+        checkSparkAnswerAndOperator("""select
+            |  id,
+            |  grp,
+            |  v,
+            |  last_value(v) over (partition by grp order by id) as last_v
+            |from t1
+            |""".stripMargin)
+      }
+    }
+  }
+
+  test("last_value window function with ignore nulls") {
+    if (AuronTestUtils.isSparkV32OrGreater) {
+      withSQLConf("spark.auron.enable.window" -> "true") {
+        withTable("t1") {
+          sql("create table t1(id int, grp int, v string) using parquet")
+          sql("insert into t1 values (1, 1, 'a'), (2, 1, null), (3, 1, 'c'), (4, 2, 'x')")
+
+          checkSparkAnswerAndOperator("""select
+              |  id,
+              |  grp,
+              |  v,
+              |  last_value(v) ignore nulls over (partition by grp order by id) as last_non_null_v
+              |from t1
+              |""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("last_value window function over int and boolean columns") {
+    withSQLConf("spark.auron.enable.window" -> "true") {
+      withTable("t1") {
+        sql("create table t1(id int, grp int, int_v int, bool_v boolean) using parquet")
+        sql("""insert into t1 values
+            |  (1, 1, 10, true),
+            |  (2, 1, null, false),
+            |  (3, 1, 30, null),
+            |  (4, 2, null, true),
+            |  (5, 2, 50, false)
+            |""".stripMargin)
+
+        checkSparkAnswerAndOperator("""select
+            |  id,
+            |  grp,
+            |  int_v,
+            |  bool_v,
+            |  last_value(int_v) over (partition by grp order by id) as last_int_v,
+            |  last_value(bool_v) over (partition by grp order by id) as last_bool_v
+            |from t1
+            |""".stripMargin)
+      }
+    }
+  }
+
+  test("last_value window function with ignore nulls over int and boolean columns") {
+    if (AuronTestUtils.isSparkV32OrGreater) {
+      withSQLConf("spark.auron.enable.window" -> "true") {
+        withTable("t1") {
+          sql("create table t1(id int, grp int, int_v int, bool_v boolean) using parquet")
+          sql("""insert into t1 values
+              |  (1, 1, 10, true),
+              |  (2, 1, null, false),
+              |  (3, 1, 30, null),
+              |  (4, 2, null, true),
+              |  (5, 2, 50, false)
+              |""".stripMargin)
+
+          checkSparkAnswerAndOperator("""select
+              |  id,
+              |  grp,
+              |  int_v,
+              |  bool_v,
+              |  last_value(int_v) ignore nulls over (partition by grp order by id) as last_int_v,
+              |  last_value(bool_v) ignore nulls over (partition by grp order by id) as last_bool_v
+              |from t1
+              |""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("last aggregate function") {
+    withTable("t1") {
+      sql("create table t1(grp int, v string) using parquet")
+      sql("""insert into t1 values
+          |  (1, 'a'),
+          |  (1, 'a'),
+          |  (2, null),
+          |  (2, null),
+          |  (3, 'z')
+          |""".stripMargin)
+
+      checkSparkAnswerAndOperator("""select
+          |  grp,
+          |  last(v) as last_v,
+          |  last(v, true) as last_ignore_nulls_v
+          |from t1
+          |group by grp
+          |""".stripMargin)
+    }
+  }
 }
