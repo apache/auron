@@ -37,7 +37,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.util.Using
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, CollectList, CollectSet, Count, DeclarativeAggregate, First, Max, Min, Sum, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, CollectList, CollectSet, Count, DeclarativeAggregate, First, Last, Max, Min, Sum, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.codegen.ExprCode
 import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
@@ -1256,6 +1256,18 @@ object NativeConverters extends Logging {
           pb.AggFunction.FIRST_IGNORES_NULL
         } else {
           pb.AggFunction.FIRST
+        })
+        aggBuilder.addChildren(convertExpr(child))
+
+      case Last(child, ignoresNullExpr) =>
+        val ignoresNull = ignoresNullExpr.asInstanceOf[Any] match {
+          case Literal(v: Boolean, BooleanType) => v
+          case v: Boolean => v
+        }
+        aggBuilder.setAggFunction(if (ignoresNull) {
+          pb.AggFunction.LAST_IGNORES_NULL
+        } else {
+          pb.AggFunction.LAST
         })
         aggBuilder.addChildren(convertExpr(child))
 
