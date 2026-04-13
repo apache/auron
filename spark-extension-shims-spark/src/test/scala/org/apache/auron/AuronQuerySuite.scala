@@ -17,6 +17,8 @@
 package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
+import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
@@ -609,6 +611,91 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       // Expected: (1, 2.0), (1, 2.0), (null, null), (null, 5.0)
       checkSparkAnswer(
         "SELECT * FROM left_table LEFT ANTI JOIN right_table ON left_table.a = right_table.c")
+    }
+  }
+
+  test("native sort merge join supports inner residual condition") {
+    withSparkConf("spark.auron.forceShuffledHashJoin" -> "false") {
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.join.preferSortMergeJoin" -> "true") {
+        withTable("smj_left", "smj_right") {
+          sql("""
+                |CREATE TABLE smj_left USING parquet AS
+                |SELECT * FROM VALUES
+                |  (1, 1),
+                |  (2, 5),
+                |  (3, 7),
+                |  (4, 9)
+                |AS t(id, lv)
+                |""".stripMargin)
+
+          sql("""
+                |CREATE TABLE smj_right USING parquet AS
+                |SELECT * FROM VALUES
+                |  (1, 2),
+                |  (2, 4),
+                |  (3, 8),
+                |  (4, 9)
+                |AS t(id, rv)
+                |""".stripMargin)
+
+          val df = checkSparkAnswerAndOperator("""
+                |SELECT /*+ MERGE(l, r) */ l.id, l.lv, r.rv
+                |FROM smj_left l
+                |JOIN smj_right r
+                |  ON l.id = r.id AND l.lv < r.rv
+                |ORDER BY l.id
+                |""".stripMargin)
+
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(
+            plan.collectFirst { case _: NativeSortMergeJoinBase => true }.isDefined,
+            s"expected NativeSortMergeJoinBase in executed plan, but got:\n$plan")
+        }
+      }
+    }
+  }
+
+  test(
+    "native shuffled hash join supports inner residual condition in forceShuffledHashJoin mode") {
+    withSparkConf("spark.auron.forceShuffledHashJoin" -> "true") {
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.join.preferSortMergeJoin" -> "true") {
+        withTable("shj_left", "shj_right") {
+          sql("""
+                |CREATE TABLE shj_left USING parquet AS
+                |SELECT id, cast(id % 4 as int) AS lv
+                |FROM range(0, 1000)
+                |""".stripMargin)
+
+          sql("""
+                |CREATE TABLE shj_right USING parquet AS
+                |SELECT * FROM VALUES
+                |  (1L, 2),
+                |  (2L, 1),
+                |  (3L, 5),
+                |  (10L, 4)
+                |AS t(id, rv)
+                |""".stripMargin)
+
+          val df = checkSparkAnswerAndOperator("""
+                |SELECT /*+ MERGE(l, r) */ l.id, l.lv, r.rv
+                |FROM shj_left l
+                |JOIN shj_right r
+                |  ON l.id = r.id AND l.lv < r.rv
+                |ORDER BY l.id
+                |""".stripMargin)
+
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(
+            plan.collectFirst { case _: NativeShuffledHashJoinBase => true }.isDefined,
+            s"expected NativeShuffledHashJoinBase in executed plan, but got:\n$plan")
+        }
+      }
     }
   }
 
