@@ -25,8 +25,7 @@ class AuronInstrSuite extends QueryTest with SparkQueryTestsBase {
       ("hello world", "o"),
       ("hello world", "z"),
       (null, "test"),
-      ("test", null)
-    )
+      ("test", null))
 
     val df = spark.createDataFrame(data).toDF("str", "substr")
     val rows = df.selectExpr("instr(str, substr)").collect()
@@ -36,18 +35,14 @@ class AuronInstrSuite extends QueryTest with SparkQueryTestsBase {
     assert(rows(1).getInt(0) == 1, "instr('hello world', 'hello') should return 1")
     assert(rows(2).getInt(0) == 5, "instr('hello world', 'o') should return 5")
     assert(rows(3).getInt(0) == 0, "instr('hello world', 'z') should return 0")
-    
+
     // Check null results
     assert(rows(4).isNullAt(0), "instr(null, 'test') should return null")
     assert(rows(5).isNullAt(0), "instr('test', null) should return null")
   }
 
   test("test instr function - multiple occurrences") {
-    val data = Seq(
-      ("banana", "a"),
-      ("testtesttest", "test"),
-      ("abcabcabc", "abc")
-    )
+    val data = Seq(("banana", "a"), ("testtesttest", "test"), ("abcabcabc", "abc"))
 
     val df = spark.createDataFrame(data).toDF("str", "substr")
     val result = df.selectExpr("instr(str, substr)").collect().map(_.getInt(0))
@@ -58,12 +53,7 @@ class AuronInstrSuite extends QueryTest with SparkQueryTestsBase {
   }
 
   test("test instr function - case sensitive") {
-    val data = Seq(
-      ("Hello", "hello"),
-      ("HELLO", "hello"),
-      ("Hello", "Hello"),
-      ("hElLo", "hello")
-    )
+    val data = Seq(("Hello", "hello"), ("HELLO", "hello"), ("Hello", "Hello"), ("hElLo", "hello"))
 
     val df = spark.createDataFrame(data).toDF("str", "substr")
     val result = df.selectExpr("instr(str, substr)").collect().map(_.getInt(0))
@@ -79,8 +69,7 @@ class AuronInstrSuite extends QueryTest with SparkQueryTestsBase {
       ("hello world", "world", 1),
       ("hello", "world", 0),
       ("hello", "hello", 1),
-      ("test", "abc", 0)
-    )
+      ("test", "abc", 0))
 
     val df = spark.createDataFrame(data).toDF("str", "substr", "expected")
     val result = df
@@ -95,12 +84,7 @@ class AuronInstrSuite extends QueryTest with SparkQueryTestsBase {
   }
 
   test("test instr function - in group by") {
-    val data = Seq(
-      ("test1", "test"),
-      ("test2", "test"),
-      ("hello", "world"),
-      ("testing", "test")
-    )
+    val data = Seq(("test1", "test"), ("test2", "test"), ("hello", "world"), ("testing", "test"))
 
     val df = spark.createDataFrame(data).toDF("str", "substr")
     val result = df
@@ -114,12 +98,8 @@ class AuronInstrSuite extends QueryTest with SparkQueryTestsBase {
   }
 
   test("test instr function - in where clause") {
-    val data = Seq(
-      ("hello world", "world"),
-      ("hello", "world"),
-      ("testing", "test"),
-      ("abc", "def")
-    )
+    val data =
+      Seq(("hello world", "world"), ("hello", "world"), ("testing", "test"), ("abc", "def"))
 
     val df = spark.createDataFrame(data).toDF("str", "substr")
     val result = df

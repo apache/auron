@@ -868,6 +868,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
               |""".stripMargin
         checkSparkAnswerAndOperator(query)
       }
+    }
+  }
 
   test("instr function - basic functionality") {
     withTable("t1") {
