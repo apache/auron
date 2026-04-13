@@ -48,7 +48,8 @@ abstract class NativeSortMergeJoinBase(
     override val right: SparkPlan,
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
-    joinType: JoinType)
+    joinType: JoinType,
+    condition: Option[Expression])
     extends BinaryExecNode
     with NativeSupports {
 
@@ -95,7 +96,11 @@ abstract class NativeSortMergeJoinBase(
 
   private def nativeJoinType = NativeConverters.convertJoinType(joinType)
 
+  private def nativeJoinFilter =
+    condition.map(NativeConverters.convertJoinFilter(_, left.output, right.output))
+
   // check whether native converting is supported
+  assert(condition.isEmpty || joinType.isInstanceOf[InnerLike], "join condition is not supported")
   nativeSchema
   nativeSortOptions
   nativeJoinOn
@@ -108,6 +113,7 @@ abstract class NativeSortMergeJoinBase(
     val nativeSortOptions = this.nativeSortOptions
     val nativeJoinOn = this.nativeJoinOn
     val nativeJoinType = this.nativeJoinType
+    val nativeJoinFilter = this.nativeJoinFilter
 
     val (partitions, partitioner) = if (joinType != RightOuter) {
       (leftRDD.partitions, leftRDD.partitioner)
@@ -150,6 +156,7 @@ abstract class NativeSortMergeJoinBase(
           .setJoinType(nativeJoinType)
           .addAllOn(nativeJoinOn.asJava)
           .addAllSortOptions(nativeSortOptions.asJava)
+        nativeJoinFilter.foreach(sortMergeJoinExec.setFilter)
         PhysicalPlanNode.newBuilder().setSortMergeJoin(sortMergeJoinExec).build()
       },
       friendlyName = "NativeRDD.SortMergeJoin")

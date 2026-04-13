@@ -36,6 +36,7 @@ case object NativeShuffledHashJoinExecProvider {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       buildSide: JoinBuildSide,
       isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
 
@@ -49,12 +50,18 @@ case object NativeShuffledHashJoinExecProvider {
         override val leftKeys: Seq[Expression],
         override val rightKeys: Seq[Expression],
         override val joinType: JoinType,
+        override val condition: Option[Expression],
         buildSide: JoinBuildSide,
         skewJoin: Boolean)
-        extends NativeShuffledHashJoinBase(left, right, leftKeys, rightKeys, joinType, buildSide)
+        extends NativeShuffledHashJoinBase(
+          left,
+          right,
+          leftKeys,
+          rightKeys,
+          joinType,
+          condition,
+          buildSide)
         with org.apache.spark.sql.execution.joins.ShuffledJoin {
-
-      override def condition: Option[Expression] = None
 
       override def isSkewJoin: Boolean = false
 
@@ -79,7 +86,15 @@ case object NativeShuffledHashJoinExecProvider {
       override def nodeName: String =
         "NativeShuffledHashJoin" + (if (skewJoin) "(skew=true)" else "")
     }
-    NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, buildSide, isSkewJoin)
+    NativeShuffledHashJoinExec(
+      left,
+      right,
+      leftKeys,
+      rightKeys,
+      joinType,
+      condition,
+      buildSide,
+      isSkewJoin)
   }
 
   @nowarn("cat=unused") // Some params temporarily unused
@@ -90,6 +105,7 @@ case object NativeShuffledHashJoinExecProvider {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       buildSide: JoinBuildSide,
       isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
 
@@ -103,11 +119,17 @@ case object NativeShuffledHashJoinExecProvider {
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
         joinType: JoinType,
+        override val condition: Option[Expression],
         buildSide: JoinBuildSide)
-        extends NativeShuffledHashJoinBase(left, right, leftKeys, rightKeys, joinType, buildSide)
+        extends NativeShuffledHashJoinBase(
+          left,
+          right,
+          leftKeys,
+          rightKeys,
+          joinType,
+          condition,
+          buildSide)
         with org.apache.spark.sql.execution.joins.ShuffledJoin {
-
-      override def condition: Option[Expression] = None
 
       override def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression] =
         HashJoin.rewriteKeyExpr(exprs)
@@ -118,7 +140,14 @@ case object NativeShuffledHashJoinExecProvider {
           case JoinBuildRight => org.apache.spark.sql.catalyst.optimizer.BuildRight
         }
         val shj =
-          ShuffledHashJoinExec(leftKeys, rightKeys, joinType, sparkBuildSide, None, left, right)
+          ShuffledHashJoinExec(
+            leftKeys,
+            rightKeys,
+            joinType,
+            sparkBuildSide,
+            condition,
+            left,
+            right)
         shj.outputOrdering
       }
 
@@ -127,7 +156,7 @@ case object NativeShuffledHashJoinExecProvider {
 
       override def nodeName: String = "NativeShuffledHashJoin"
     }
-    NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, buildSide)
+    NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, condition, buildSide)
   }
 
   @nowarn("cat=unused") // Some params temporarily unused
@@ -138,6 +167,7 @@ case object NativeShuffledHashJoinExecProvider {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       buildSide: JoinBuildSide,
       isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
 
@@ -151,6 +181,7 @@ case object NativeShuffledHashJoinExecProvider {
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
         joinType: JoinType,
+        condition: Option[Expression],
         buildSide: JoinBuildSide)
         extends NativeShuffledHashJoinBase(
           left,
@@ -158,6 +189,7 @@ case object NativeShuffledHashJoinExecProvider {
           leftKeys,
           rightKeys,
           joinType,
+          condition,
           buildSide) {
 
       private def shj: ShuffledHashJoinExec = {
@@ -165,7 +197,14 @@ case object NativeShuffledHashJoinExecProvider {
           case JoinBuildLeft => org.apache.spark.sql.execution.joins.BuildLeft
           case JoinBuildRight => org.apache.spark.sql.execution.joins.BuildRight
         }
-        ShuffledHashJoinExec(leftKeys, rightKeys, joinType, sparkBuildSide, None, left, right)
+        ShuffledHashJoinExec(
+          leftKeys,
+          rightKeys,
+          joinType,
+          sparkBuildSide,
+          condition,
+          left,
+          right)
       }
 
       override def output: Seq[Attribute] = shj.output
@@ -181,6 +220,6 @@ case object NativeShuffledHashJoinExecProvider {
 
       override def nodeName: String = "NativeShuffledHashJoin"
     }
-    NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, buildSide)
+    NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, condition, buildSide)
   }
 }

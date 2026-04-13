@@ -15,7 +15,10 @@
 
 use std::{cmp::Ordering, pin::Pin, sync::Arc};
 
-use arrow::array::{RecordBatch, RecordBatchOptions};
+use arrow::{
+    array::{ArrayRef, RecordBatch, RecordBatchOptions},
+    compute::filter,
+};
 use async_trait::async_trait;
 use datafusion::common::Result;
 use datafusion_ext_commons::arrow::selection::create_batch_interleaver;
@@ -74,10 +77,35 @@ impl<const L_OUTER: bool, const R_OUTER: bool> FullJoiner<L_OUTER, R_OUTER> {
         let rbatch_interleaver = create_batch_interleaver(cur2.batches(), false)?;
         let lcols = lbatch_interleaver(&lindices)?;
         let rcols = rbatch_interleaver(&rindices)?;
+        let (output_cols, num_rows): (Vec<ArrayRef>, usize) =
+            if let Some(join_filter) = &self.join_params.join_filter {
+                let selected = join_filter.evaluate(lcols.columns(), rcols.columns(), num_rows)?;
+                let lcols = lcols
+                    .columns()
+                    .iter()
+                    .map(|col| Ok(filter(col, &selected)?))
+                    .collect::<Result<Vec<_>>>()?;
+                let rcols = rcols
+                    .columns()
+                    .iter()
+                    .map(|col| Ok(filter(col, &selected)?))
+                    .collect::<Result<Vec<_>>>()?;
+                let num_rows = selected.iter().filter(|v| matches!(v, Some(true))).count();
+                (
+                    [
+                        self.join_params.projection.project_left(&lcols),
+                        self.join_params.projection.project_right(&rcols),
+                    ]
+                    .concat(),
+                    num_rows,
+                )
+            } else {
+                ([lcols.columns(), rcols.columns()].concat(), num_rows)
+            };
 
         let output_batch = RecordBatch::try_new_with_options(
             self.join_params.projection.schema.clone(),
-            [lcols.columns(), rcols.columns()].concat(),
+            output_cols,
             &RecordBatchOptions::new().with_row_count(Some(num_rows)),
         )?;
 
