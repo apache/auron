@@ -574,6 +574,33 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("cume_dist window") {
+    withTable("t_cume_dist") {
+      sql("""
+            |create table t_cume_dist using parquet as
+            |select * from values
+            |  (1, 1, 10),
+            |  (1, 1, 20),
+            |  (1, 2, 30),
+            |  (2, 5, 40)
+            |as t(grp, id, v)
+            |""".stripMargin)
+
+      checkSparkAnswerAndOperator("""
+            |select
+            |  grp,
+            |  id,
+            |  v,
+            |  cume_dist() over (
+            |    partition by grp
+            |    order by id
+            |  ) as cume_dist_v
+            |from t_cume_dist
+            |order by grp, id, v
+            |""".stripMargin)
+    }
+  }
+
   test("nth_value window with row frame") {
     if (AuronTestUtils.isSparkV31OrGreater) {
       withTable("t_nth_value") {

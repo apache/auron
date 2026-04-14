@@ -648,6 +648,9 @@ impl PhysicalPlanner {
                                 protobuf::WindowFunction::PercentRank => {
                                     WindowFunction::PercentRank
                                 }
+                                protobuf::WindowFunction::CumeDist => {
+                                    WindowFunction::CumeDist
+                                }
                             },
                             protobuf::WindowFunctionType::Agg => match w.agg_func() {
                                 protobuf::AggFunction::Min => WindowFunction::Agg(AggFunction::Min),
