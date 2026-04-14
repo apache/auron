@@ -36,6 +36,8 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.expressions.WindowExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.Average
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.aggregate.First
+import org.apache.spark.sql.catalyst.expressions.aggregate.Last
 import org.apache.spark.sql.catalyst.expressions.aggregate.Max
 import org.apache.spark.sql.catalyst.expressions.aggregate.Min
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
@@ -156,6 +158,32 @@ abstract class NativeWindowBase(
               s"window frame not supported: ${spec.frameSpecification}")
             windowExprBuilder.setFuncType(pb.WindowFunctionType.Agg)
             windowExprBuilder.setAggFunc(pb.AggFunction.COUNT)
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(child))
+
+          case e @ First(child, ignoresNullExpr) =>
+            assert(
+              spec.frameSpecification == RowNumber().frame, // only supports RowFrame(Unbounded, CurrentRow)
+              s"window frame not supported: ${spec.frameSpecification}")
+            val ignoresNull = ignoresNullExpr.asInstanceOf[Any] match {
+              case Literal(v: Boolean, BooleanType) => v
+              case v: Boolean => v
+            }
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Agg)
+            windowExprBuilder.setAggFunc(
+              if (ignoresNull) pb.AggFunction.FIRST_IGNORES_NULL else pb.AggFunction.FIRST)
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(child))
+
+          case e @ Last(child, ignoresNullExpr) =>
+            assert(
+              spec.frameSpecification == RowNumber().frame, // only supports RowFrame(Unbounded, CurrentRow)
+              s"window frame not supported: ${spec.frameSpecification}")
+            val ignoresNull = ignoresNullExpr.asInstanceOf[Any] match {
+              case Literal(v: Boolean, BooleanType) => v
+              case v: Boolean => v
+            }
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Agg)
+            windowExprBuilder.setAggFunc(
+              if (ignoresNull) pb.AggFunction.LAST_IGNORES_NULL else pb.AggFunction.LAST)
             windowExprBuilder.addChildren(NativeConverters.convertExpr(child))
 
           case other =>

@@ -135,6 +135,8 @@ impl From<protobuf::AggFunction> for AggFunction {
             protobuf::AggFunction::CollectSet => AggFunction::CollectSet,
             protobuf::AggFunction::First => AggFunction::First,
             protobuf::AggFunction::FirstIgnoresNull => AggFunction::FirstIgnoresNull,
+            protobuf::AggFunction::Last => AggFunction::Last,
+            protobuf::AggFunction::LastIgnoresNull => AggFunction::LastIgnoresNull,
             protobuf::AggFunction::BloomFilter => AggFunction::BloomFilter,
             protobuf::AggFunction::BrickhouseCollect => AggFunction::BrickhouseCollect,
             protobuf::AggFunction::BrickhouseCombineUnique => AggFunction::BrickhouseCombineUnique,

@@ -657,6 +657,12 @@ impl PhysicalPlanner {
                                 protobuf::AggFunction::FirstIgnoresNull => {
                                     WindowFunction::Agg(AggFunction::FirstIgnoresNull)
                                 }
+                                protobuf::AggFunction::Last => {
+                                    WindowFunction::Agg(AggFunction::Last)
+                                }
+                                protobuf::AggFunction::LastIgnoresNull => {
+                                    WindowFunction::Agg(AggFunction::LastIgnoresNull)
+                                }
                                 protobuf::AggFunction::BloomFilter => {
                                     WindowFunction::Agg(AggFunction::BloomFilter)
                                 }
