@@ -17,7 +17,13 @@
 package org.apache.auron.exec
 
 import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.PercentRank
+import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.WindowExpression
+import org.apache.spark.sql.catalyst.expressions.WindowSpecDefinition
 import org.apache.spark.sql.execution.auron.plan.{NativeCollectLimitExec, NativeGlobalLimitExec, NativeLocalLimitExec, NativeTakeOrderedExec}
+import org.apache.spark.sql.execution.auron.plan.NativeWindowExec
 
 import org.apache.auron.BaseAuronSQLSuite
 import org.apache.auron.util.AuronTestUtils
@@ -126,5 +132,21 @@ class AuronExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
         }
       }
     }
+  }
+
+  test("NativeWindowExec percent_rank requires ORDER BY") {
+    val child = spark.range(1).queryExecution.executedPlan
+    val percentRank = PercentRank(Seq.empty)
+    val windowExpr = Alias(
+      WindowExpression(
+        percentRank,
+        WindowSpecDefinition(Seq.empty, Seq.empty[SortOrder], percentRank.frame)),
+      "percent_rank_without_order")()
+
+    val err = intercept[AssertionError] {
+      NativeWindowExec(Seq(windowExpr), Seq.empty, Seq.empty, None, child)
+    }
+
+    assert(err.getMessage.contains("percent_rank requires ORDER BY"))
   }
 }

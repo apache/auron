@@ -24,8 +24,8 @@ use crate::{
     window::{
         processors::{
             agg_processor::AggProcessor, lead_processor::LeadProcessor,
-            nth_value_processor::NthValueProcessor, rank_processor::RankProcessor,
-            row_number_processor::RowNumberProcessor,
+            nth_value_processor::NthValueProcessor, percent_rank_processor::PercentRankProcessor,
+            rank_processor::RankProcessor, row_number_processor::RowNumberProcessor,
         },
         window_context::WindowContext,
     },
@@ -37,6 +37,7 @@ pub mod window_context;
 #[derive(Debug, Clone, Copy)]
 pub enum WindowFunction {
     RankLike(WindowRankType),
+    PercentRank,
     NthValue { ignore_nulls: bool },
     Lead,
     Agg(AggFunction),
@@ -90,6 +91,7 @@ impl WindowExpr {
             WindowFunction::RankLike(WindowRankType::DenseRank) => {
                 Ok(Box::new(RankProcessor::new(true)))
             }
+            WindowFunction::PercentRank => Ok(Box::new(PercentRankProcessor::new())),
             WindowFunction::Lead => Ok(Box::new(LeadProcessor::new(self.children.clone()))),
             WindowFunction::NthValue { ignore_nulls } => Ok(Box::new(NthValueProcessor::try_new(
                 self.children.clone(),
@@ -108,6 +110,9 @@ impl WindowExpr {
     }
 
     pub fn requires_full_partition(&self) -> bool {
-        matches!(self.func, WindowFunction::Lead)
+        matches!(
+            self.func,
+            WindowFunction::PercentRank | WindowFunction::Lead
+        )
     }
 }

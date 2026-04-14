@@ -132,6 +132,7 @@ enum WindowFunction {
   LEAD = 3;
   NTH_VALUE = 4;
   NTH_VALUE_IGNORE_NULLS = 5;
+  PERCENT_RANK = 6;
 }
 
 enum AggFunction {

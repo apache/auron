@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Lead
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.NullsFirst
+import org.apache.spark.sql.catalyst.expressions.PercentRank
 import org.apache.spark.sql.catalyst.expressions.Rank
 import org.apache.spark.sql.catalyst.expressions.RowNumber
 import org.apache.spark.sql.catalyst.expressions.SortOrder
@@ -150,6 +151,15 @@ abstract class NativeWindowBase(
             windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
             windowExprBuilder.setWindowFunc(pb.WindowFunction.DENSE_RANK)
 
+          case e: PercentRank =>
+            assert(
+              spec.frameSpecification == e.frame,
+              s"window frame not supported: ${spec.frameSpecification}")
+            assert(
+              spec.orderSpec.nonEmpty,
+              "window function not supported: percent_rank requires ORDER BY")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(pb.WindowFunction.PERCENT_RANK)
           case e if isNthValue(e) =>
             assert(
               // Spark defaults ordered nth_value() to a RANGE frame. The current native executor

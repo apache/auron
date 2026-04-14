@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{any::Any, fmt::Formatter, sync::Arc};
+use std::{any::Any, fmt::Formatter, mem, sync::Arc};
 
 use arrow::{
     array::{Array, ArrayRef, Int32Array},
@@ -29,7 +29,7 @@ use datafusion::{
         DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
         SendableRecordBatchStream,
         execution_plan::{Boundedness, EmissionType},
-        metrics::{ExecutionPlanMetricsSet, MetricsSet},
+        metrics::{ExecutionPlanMetricsSet, MetricsSet, Time},
     },
 };
 use datafusion_ext_commons::{arrow::cast::cast, downcast_any};
@@ -37,7 +37,7 @@ use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    common::execution_context::ExecutionContext,
+    common::execution_context::{ExecutionContext, WrappedRecordBatchSender},
     window::{WindowExpr, WindowFunctionProcessor, window_context::WindowContext},
 };
 
@@ -220,21 +220,73 @@ fn execute_window(
                 .collect::<Result<Vec<_>>>()?;
 
             if window_ctx.requires_full_partition() {
-                let mut staging_batches = vec![];
-                while let Some(batch) = input.next().await.transpose()? {
-                    staging_batches.push(batch);
+                // Functions like percent_rank/lead need a complete window partition,
+                // but can still stream partition-by-partition when partition_spec exists.
+                if !window_ctx.has_partition() {
+                    let mut staging_batches = vec![];
+                    while let Some(batch) = input.next().await.transpose()? {
+                        staging_batches.push(batch);
+                    }
+
+                    flush_window_batches(
+                        &mut staging_batches,
+                        &window_ctx,
+                        &exec_ctx,
+                        &elapsed_compute,
+                        processors.as_mut_slice(),
+                        &sender,
+                    )
+                    .await?;
+                    return Ok(());
                 }
 
-                if !staging_batches.is_empty() {
-                    let _timer = elapsed_compute.timer();
-                    let batch = concat_batches(&window_ctx.input_schema, &staging_batches)?;
-                    let output_batch =
-                        process_window_batch(batch, &window_ctx, processors.as_mut_slice())?;
-                    exec_ctx
-                        .baseline_metrics()
-                        .record_output(output_batch.num_rows());
-                    sender.send(output_batch).await;
+                let mut staging_batches = vec![];
+                let mut current_partition: Option<Box<[u8]>> = None;
+                while let Some(batch) = input.next().await.transpose()? {
+                    if batch.num_rows() == 0 {
+                        continue;
+                    }
+
+                    let partition_rows = window_ctx.get_partition_rows(&batch)?;
+                    let mut partition_start = 0usize;
+                    while partition_start < batch.num_rows() {
+                        let partition_key: Box<[u8]> =
+                            partition_rows.row(partition_start).as_ref().into();
+                        let mut partition_end = partition_start + 1;
+                        while partition_end < batch.num_rows()
+                            && partition_rows.row(partition_end).as_ref() == partition_key.as_ref()
+                        {
+                            partition_end += 1;
+                        }
+
+                        if current_partition.as_deref() != Some(partition_key.as_ref()) {
+                            flush_window_batches(
+                                &mut staging_batches,
+                                &window_ctx,
+                                &exec_ctx,
+                                &elapsed_compute,
+                                processors.as_mut_slice(),
+                                &sender,
+                            )
+                            .await?;
+                            current_partition = Some(partition_key);
+                        }
+
+                        staging_batches
+                            .push(batch.slice(partition_start, partition_end - partition_start));
+                        partition_start = partition_end;
+                    }
                 }
+
+                flush_window_batches(
+                    &mut staging_batches,
+                    &window_ctx,
+                    &exec_ctx,
+                    &elapsed_compute,
+                    processors.as_mut_slice(),
+                    &sender,
+                )
+                .await?;
                 return Ok(());
             }
 
@@ -249,6 +301,29 @@ fn execute_window(
             }
             Ok(())
         }))
+}
+
+async fn flush_window_batches(
+    staging_batches: &mut Vec<RecordBatch>,
+    window_ctx: &WindowContext,
+    exec_ctx: &ExecutionContext,
+    elapsed_compute: &Time,
+    processors: &mut [Box<dyn WindowFunctionProcessor>],
+    sender: &Arc<WrappedRecordBatchSender>,
+) -> Result<()> {
+    if staging_batches.is_empty() {
+        return Ok(());
+    }
+
+    let _timer = elapsed_compute.timer();
+    let input_batches = mem::take(staging_batches);
+    let batch = concat_batches(&window_ctx.input_schema, &input_batches)?;
+    let output_batch = process_window_batch(batch, window_ctx, processors)?;
+    exec_ctx
+        .baseline_metrics()
+        .record_output(output_batch.num_rows());
+    sender.send(output_batch).await;
+    Ok(())
 }
 
 fn process_window_batch(
@@ -562,6 +637,107 @@ mod test {
             "| 2   | 1  | x |               |                        |",
             "| 2   | 2  |   |               |                        |",
             "+-----+----+---+---------------+------------------------+",
+        ];
+        assert_batches_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_percent_rank_window() -> Result<(), Box<dyn std::error::Error>> {
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+
+        let input = build_table(
+            ("grp", &vec![1, 1, 1, 2]),
+            ("id", &vec![1, 1, 2, 5]),
+            ("v", &vec![10, 20, 30, 40]),
+        )?;
+        let window_exprs = vec![WindowExpr::new(
+            WindowFunction::PercentRank,
+            vec![],
+            Arc::new(Field::new("percent_rank", DataType::Float64, false)),
+            DataType::Float64,
+        )];
+        let window = Arc::new(WindowExec::try_new(
+            input,
+            window_exprs,
+            vec![Arc::new(Column::new("grp", 0))],
+            vec![PhysicalSortExpr {
+                expr: Arc::new(Column::new("id", 1)),
+                options: Default::default(),
+            }],
+            None,
+            true,
+        )?);
+        let stream = window.execute(0, task_ctx)?;
+        let batches = datafusion::physical_plan::common::collect(stream).await?;
+        let expected = vec![
+            "+-----+----+----+--------------+",
+            "| grp | id | v  | percent_rank |",
+            "+-----+----+----+--------------+",
+            "| 1   | 1  | 10 | 0.0          |",
+            "| 1   | 1  | 20 | 0.0          |",
+            "| 1   | 2  | 30 | 1.0          |",
+            "| 2   | 5  | 40 | 0.0          |",
+            "+-----+----+----+--------------+",
+        ];
+        assert_batches_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_percent_rank_window_across_batches() -> Result<(), Box<dyn std::error::Error>> {
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+
+        let batch1 = build_table_i32(
+            ("grp", &vec![1, 1]),
+            ("id", &vec![1, 2]),
+            ("v", &vec![10, 20]),
+        )?;
+        let batch2 = build_table_i32(
+            ("grp", &vec![1, 1, 1, 2]),
+            ("id", &vec![3, 4, 5, 1]),
+            ("v", &vec![30, 40, 50, 60]),
+        )?;
+        let schema = batch1.schema();
+        let input = Arc::new(TestMemoryExec::try_new(
+            &[vec![batch1, batch2]],
+            schema,
+            None,
+        )?);
+
+        let window_exprs = vec![WindowExpr::new(
+            WindowFunction::PercentRank,
+            vec![],
+            Arc::new(Field::new("percent_rank", DataType::Float64, false)),
+            DataType::Float64,
+        )];
+        let window = Arc::new(WindowExec::try_new(
+            input,
+            window_exprs,
+            vec![Arc::new(Column::new("grp", 0))],
+            vec![PhysicalSortExpr {
+                expr: Arc::new(Column::new("id", 1)),
+                options: Default::default(),
+            }],
+            None,
+            true,
+        )?);
+
+        let stream = window.execute(0, task_ctx)?;
+        let batches = datafusion::physical_plan::common::collect(stream).await?;
+        let expected = vec![
+            "+-----+----+----+--------------+",
+            "| grp | id | v  | percent_rank |",
+            "+-----+----+----+--------------+",
+            "| 1   | 1  | 10 | 0.0          |",
+            "| 1   | 2  | 20 | 0.25         |",
+            "| 1   | 3  | 30 | 0.5          |",
+            "| 1   | 4  | 40 | 0.75         |",
+            "| 1   | 5  | 50 | 1.0          |",
+            "| 2   | 1  | 60 | 0.0          |",
+            "+-----+----+----+--------------+",
         ];
         assert_batches_eq!(expected, &batches);
         Ok(())

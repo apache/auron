@@ -626,6 +626,32 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("percent_rank window function") {
+    withTable("t_percent_rank") {
+      sql("""
+            |create table t_percent_rank using parquet as
+            |select * from values
+            |  (1, 1, 10),
+            |  (1, 1, 20),
+            |  (1, 2, 30),
+            |  (2, 5, 40)
+            |as t(grp, id, v)
+            |""".stripMargin)
+
+      checkSparkAnswerAndOperator("""
+            |select
+            |  grp,
+            |  id,
+            |  v,
+            |  percent_rank() over (
+            |    partition by grp
+            |    order by id
+            |  ) as percent_rank_v
+            |from t_percent_rank
+            |order by grp, id, v
+            |""".stripMargin)
+    }
+  }
   test("standard LEFT ANTI JOIN includes NULL keys") {
     // This test verifies that standard LEFT ANTI JOIN correctly includes NULL keys
     // NULL keys should be in the result because NULL never matches anything
