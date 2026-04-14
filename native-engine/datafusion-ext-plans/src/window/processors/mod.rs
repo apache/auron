@@ -15,5 +15,6 @@
 
 pub mod agg_processor;
 pub mod lead_processor;
+pub mod nth_value_processor;
 pub mod rank_processor;
 pub mod row_number_processor;

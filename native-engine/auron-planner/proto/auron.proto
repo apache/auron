@@ -130,6 +130,8 @@ enum WindowFunction {
   RANK = 1;
   DENSE_RANK = 2;
   LEAD = 3;
+  NTH_VALUE = 4;
+  NTH_VALUE_IGNORE_NULLS = 5;
 }
 
 enum AggFunction {

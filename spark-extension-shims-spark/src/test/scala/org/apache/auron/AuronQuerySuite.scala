@@ -574,6 +574,58 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("nth_value window with row frame") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t_nth_value") {
+        sql("""
+              |create table t_nth_value using parquet as
+              |select * from values
+              |  (1, 1, cast(null as string)),
+              |  (1, 2, 'b'),
+              |  (1, 3, 'c'),
+              |  (2, 1, 'x'),
+              |  (2, 2, cast(null as string))
+              |as t(grp, id, v)
+              |""".stripMargin)
+
+        if (AuronTestUtils.isSparkV32OrGreater) {
+          checkSparkAnswerAndOperator("""
+                |select
+                |  grp,
+                |  id,
+                |  v,
+                |  nth_value(v, 2) over (
+                |    partition by grp
+                |    order by id
+                |    rows between unbounded preceding and current row
+                |  ) as nth_value_all,
+                |  nth_value(v, 2) ignore nulls over (
+                |    partition by grp
+                |    order by id
+                |    rows between unbounded preceding and current row
+                |  ) as nth_value_ignore_nulls
+                |from t_nth_value
+                |order by grp, id
+                |""".stripMargin)
+        } else {
+          checkSparkAnswerAndOperator("""
+                |select
+                |  grp,
+                |  id,
+                |  v,
+                |  nth_value(v, 2) over (
+                |    partition by grp
+                |    order by id
+                |    rows between unbounded preceding and current row
+                |  ) as nth_value_all
+                |from t_nth_value
+                |order by grp, id
+                |""".stripMargin)
+        }
+      }
+    }
+  }
+
   test("standard LEFT ANTI JOIN includes NULL keys") {
     // This test verifies that standard LEFT ANTI JOIN correctly includes NULL keys
     // NULL keys should be in the result because NULL never matches anything

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.DenseRank
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.Lead
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.NullsFirst
 import org.apache.spark.sql.catalyst.expressions.Rank
@@ -95,6 +96,31 @@ abstract class NativeWindowBase(
       .find(method => method.getName == "ignoreNulls" && method.getParameterCount == 0)
       .exists(method => method.invoke(expr).asInstanceOf[Boolean])
 
+  private def invokeNoArg[T](expr: Expression, methodName: String): T =
+    expr.getClass.getMethod(methodName).invoke(expr).asInstanceOf[T]
+
+  private def isNthValue(expr: Expression): Boolean = expr.getClass.getSimpleName == "NthValue"
+
+  private def nthValueInput(expr: Expression): Expression = invokeNoArg[Expression](expr, "input")
+
+  private def nthValueOffset(expr: Expression): Expression =
+    invokeNoArg[Expression](expr, "offset")
+
+  private def nthValueIgnoreNulls(expr: Expression): Boolean =
+    invokeNoArg[Boolean](expr, "ignoreNulls")
+
+  private def nthValueOffsetLiteral(expr: Expression): Literal = {
+    val offset = nthValueOffset(expr)
+    offset match {
+      case literal: Literal => literal
+      case foldable if foldable.foldable =>
+        Literal.create(foldable.eval(), foldable.dataType)
+      case other =>
+        throw new NotImplementedError(
+          s"window function not supported: nth_value offset must be foldable, got: $other")
+    }
+  }
+
   private def nativeWindowExprs = windowExpression.map { named =>
     val field = NativeConverters.convertField(Util.getSchema(named :: Nil).fields(0))
     val windowExprBuilder = pb.WindowExprNode.newBuilder().setField(field)
@@ -123,6 +149,22 @@ abstract class NativeWindowBase(
               s"window frame not supported: ${spec.frameSpecification}")
             windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
             windowExprBuilder.setWindowFunc(pb.WindowFunction.DENSE_RANK)
+
+          case e if isNthValue(e) =>
+            assert(
+              // Spark defaults ordered nth_value() to a RANGE frame. The current native executor
+              // only supports cumulative ROW frames, so keep the conversion scoped to the
+              // explicit ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW case.
+              spec.frameSpecification == RowNumber().frame, // only supports RowFrame(Unbounded, CurrentRow)
+              s"window frame not supported: ${spec.frameSpecification}")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(if (nthValueIgnoreNulls(e)) {
+              pb.WindowFunction.NTH_VALUE_IGNORE_NULLS
+            } else {
+              pb.WindowFunction.NTH_VALUE
+            })
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(nthValueInput(e)))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(nthValueOffsetLiteral(e)))
 
           case e: Lead =>
             assert(

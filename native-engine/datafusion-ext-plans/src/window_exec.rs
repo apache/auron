@@ -302,14 +302,13 @@ mod test {
     use arrow::{array::*, datatypes::*, record_batch::RecordBatch};
     use datafusion::{
         assert_batches_eq,
-        common::Result,
+        common::{Result, ScalarValue},
         physical_expr::{
             PhysicalSortExpr,
             expressions::{Column, Literal},
         },
         physical_plan::{ExecutionPlan, test::TestMemoryExec},
         prelude::SessionContext,
-        scalar::ScalarValue,
     };
 
     use crate::{
@@ -346,6 +345,33 @@ mod test {
         c: (&str, &Vec<i32>),
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let batch = build_table_i32(a, b, c)?;
+        let schema = batch.schema();
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
+    }
+
+    fn build_nullable_utf8_table(
+        a: (&str, &Vec<i32>),
+        b: (&str, &Vec<i32>),
+        c: (&str, &Vec<Option<&str>>),
+    ) -> Result<Arc<dyn ExecutionPlan>> {
+        let schema = Schema::new(vec![
+            Field::new(a.0, DataType::Int32, false),
+            Field::new(b.0, DataType::Int32, false),
+            Field::new(c.0, DataType::Utf8, true),
+        ]);
+
+        let batch = RecordBatch::try_new(
+            Arc::new(schema),
+            vec![
+                Arc::new(Int32Array::from(a.1.clone())),
+                Arc::new(Int32Array::from(b.1.clone())),
+                Arc::new(StringArray::from(c.1.clone())),
+            ],
+        )?;
         let schema = batch.schema();
         Ok(Arc::new(TestMemoryExec::try_new(
             &[vec![batch]],
@@ -476,6 +502,66 @@ mod test {
             "| 1  | 3  | 0  | 6             | 6       | 3             | 10     |",
             "| 2  | 4  | 0  | 7             | 7       | 4             | 14     |",
             "+----+----+----+---------------+---------+---------------+--------+",
+        ];
+        assert_batches_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_nth_value_window() -> Result<(), Box<dyn std::error::Error>> {
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+
+        let input = build_nullable_utf8_table(
+            ("grp", &vec![1, 1, 1, 2, 2]),
+            ("id", &vec![1, 2, 3, 1, 2]),
+            ("v", &vec![None, Some("b"), Some("c"), Some("x"), None]),
+        )?;
+        let window_exprs = vec![
+            WindowExpr::new(
+                WindowFunction::NthValue {
+                    ignore_nulls: false,
+                },
+                vec![
+                    Arc::new(Column::new("v", 2)),
+                    Arc::new(Literal::new(ScalarValue::Int32(Some(2)))),
+                ],
+                Arc::new(Field::new("nth_value_all", DataType::Utf8, true)),
+                DataType::Utf8,
+            ),
+            WindowExpr::new(
+                WindowFunction::NthValue { ignore_nulls: true },
+                vec![
+                    Arc::new(Column::new("v", 2)),
+                    Arc::new(Literal::new(ScalarValue::Int32(Some(2)))),
+                ],
+                Arc::new(Field::new("nth_value_ignore_nulls", DataType::Utf8, true)),
+                DataType::Utf8,
+            ),
+        ];
+        let window = Arc::new(WindowExec::try_new(
+            input,
+            window_exprs,
+            vec![Arc::new(Column::new("grp", 0))],
+            vec![PhysicalSortExpr {
+                expr: Arc::new(Column::new("id", 1)),
+                options: Default::default(),
+            }],
+            None,
+            true,
+        )?);
+        let stream = window.execute(0, task_ctx)?;
+        let batches = datafusion::physical_plan::common::collect(stream).await?;
+        let expected = vec![
+            "+-----+----+---+---------------+------------------------+",
+            "| grp | id | v | nth_value_all | nth_value_ignore_nulls |",
+            "+-----+----+---+---------------+------------------------+",
+            "| 1   | 1  |   |               |                        |",
+            "| 1   | 2  | b | b             |                        |",
+            "| 1   | 3  | c | b             | c                      |",
+            "| 2   | 1  | x |               |                        |",
+            "| 2   | 2  |   |               |                        |",
+            "+-----+----+---+---------------+------------------------+",
         ];
         assert_batches_eq!(expected, &batches);
         Ok(())

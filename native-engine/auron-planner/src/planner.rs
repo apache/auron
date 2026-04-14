@@ -637,6 +637,14 @@ impl PhysicalPlanner {
                                     WindowFunction::RankLike(WindowRankType::DenseRank)
                                 }
                                 protobuf::WindowFunction::Lead => WindowFunction::Lead,
+                                protobuf::WindowFunction::NthValue => {
+                                    WindowFunction::NthValue {
+                                        ignore_nulls: false,
+                                    }
+                                }
+                                protobuf::WindowFunction::NthValueIgnoreNulls => {
+                                    WindowFunction::NthValue { ignore_nulls: true }
+                                }
                             },
                             protobuf::WindowFunctionType::Agg => match w.agg_func() {
                                 protobuf::AggFunction::Min => WindowFunction::Agg(AggFunction::Min),
