@@ -53,27 +53,7 @@ public class AuronCallNativeWrapper {
     private Schema arrowSchema;
     private long nativeRuntimePtr;
     private Consumer<VectorSchemaRoot> batchConsumer;
-
-    // initialize native environment
-    static {
-        LOG.info("Initializing native environment (batchSize="
-                + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.BATCH_SIZE) + ", "
-                + "memoryFraction="
-                + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.MEMORY_FRACTION) + ")");
-
-        // arrow configuration
-        System.setProperty("arrow.struct.conflict.policy", "CONFLICT_APPEND");
-
-        // preload JNI bridge classes
-        try {
-            Class.forName("org.apache.auron.jni.JniBridge");
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException("Cannot load JniBridge class", e);
-        }
-
-        AuronAdaptor.getInstance().loadAuronLib();
-        Runtime.getRuntime().addShutdownHook(new Thread(JniBridge::onExit));
-    }
+    private static volatile boolean initialized = false;
 
     public AuronCallNativeWrapper(
             BufferAllocator arrowAllocator,
@@ -90,11 +70,43 @@ public class AuronCallNativeWrapper {
         this.stageId = stageId;
         this.taskId = taskId;
 
+        init();
         LOG.warn("Start executing native plan");
         this.nativeRuntimePtr = JniBridge.callNative(
                 nativeMemory,
                 AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.NATIVE_LOG_LEVEL),
                 this);
+    }
+
+    private static void init() {
+        if (!initialized) {
+            synchronized (AuronCallNativeWrapper.class) {
+                if (!initialized) {
+                    // initialize native environment
+                    LOG.info("Initializing native environment (batchSize="
+                            + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.BATCH_SIZE)
+                            + ", "
+                            + "memoryFraction="
+                            + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.MEMORY_FRACTION)
+                            + ")");
+
+                    // arrow configuration
+                    System.setProperty("arrow.struct.conflict.policy", "CONFLICT_APPEND");
+
+                    // preload JNI bridge classes
+                    try {
+                        Class.forName("org.apache.auron.jni.JniBridge");
+                    } catch (ClassNotFoundException e) {
+                        throw new RuntimeException("Cannot load JniBridge class", e);
+                    }
+
+                    AuronAdaptor.getInstance().loadAuronLib();
+                    Runtime.getRuntime().addShutdownHook(new Thread(JniBridge::onExit));
+
+                    initialized = true;
+                }
+            }
+        }
     }
 
     /**
