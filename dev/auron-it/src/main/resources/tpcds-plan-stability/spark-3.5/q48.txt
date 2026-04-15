@@ -13,17 +13,17 @@ AdaptiveSparkPlan (112)
                      :     +- AQEShuffleRead (54)
                      :        +- ShuffleQueryStage (53), Statistics(X)
                      :           +- NativeShuffleExchange (52)
-                     :              +- ConvertToNative (51)
-                     :                 +- * Project (50)
-                     :                    +- * SortMergeJoin Inner (49)
+                     :              +- NativeProject (51)
+                     :                 +- NativeFilter (50)
+                     :                    +- NativeSortMergeJoin Inner (49)
                      :                       :- NativeSort (39)
                      :                       :  +- InputAdapter (38)
                      :                       :     +- AQEShuffleRead (37)
                      :                       :        +- ShuffleQueryStage (36), Statistics(X)
                      :                       :           +- NativeShuffleExchange (35)
-                     :                       :              +- ConvertToNative (34)
-                     :                       :                 +- * Project (33)
-                     :                       :                    +- * SortMergeJoin Inner (32)
+                     :                       :              +- NativeProject (34)
+                     :                       :                 +- NativeFilter (33)
+                     :                       :                    +- NativeSortMergeJoin Inner (32)
                      :                       :                       :- NativeSort (23)
                      :                       :                       :  +- InputAdapter (22)
                      :                       :                       :     +- AQEShuffleRead (21)
@@ -246,18 +246,19 @@ Input [3]: [#9#9, #10#10, #11#11]
 Input [3]: [#9#9, #10#10, #11#11]
 Arguments: [cd_demo_sk#9 ASC NULLS FIRST], false
 
-(32) SortMergeJoin [codegen id : X]
+(32) NativeSortMergeJoin
 Left keys [1]: [ss_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#9]
 Join type: Inner
-Join condition: ((((((cd_marital_status#10 = M) AND (cd_education_status#11 = 4 yr Degree)) AND (ss_sales_price#6 >= 100.00)) AND (ss_sales_price#6 <= 150.00)) OR ((((cd_marital_status#10 = D) AND (cd_education_status#11 = 2 yr Degree)) AND (ss_sales_price#6 >= 50.00)) AND (ss_sales_price#6 <= 100.00))) OR ((((cd_marital_status#10 = S) AND (cd_education_status#11 = College)) AND (ss_sales_price#6 >= 150.00)) AND (ss_sales_price#6 <= 200.00)))
+Join condition: None
 
-(33) Project [codegen id : X]
+(33) NativeFilter
+Input [9]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_addr_sk#3, ss_quantity#5, ss_sales_price#6, ss_net_profit#7, #9#9, #10#10, #11#11]
+Condition : ((((((cd_marital_status#10 = M) AND (cd_education_status#11 = 4 yr Degree)) AND (ss_sales_price#6 >= 100.00)) AND (ss_sales_price#6 <= 150.00)) OR ((((cd_marital_status#10 = D) AND (cd_education_status#11 = 2 yr Degree)) AND (ss_sales_price#6 >= 50.00)) AND (ss_sales_price#6 <= 100.00))) OR ((((cd_marital_status#10 = S) AND (cd_education_status#11 = College)) AND (ss_sales_price#6 >= 150.00)) AND (ss_sales_price#6 <= 200.00)))
+
+(34) NativeProject
 Output [4]: [ss_sold_date_sk#1, ss_addr_sk#3, ss_quantity#5, ss_net_profit#7]
 Input [9]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_addr_sk#3, ss_quantity#5, ss_sales_price#6, ss_net_profit#7, #9#9, #10#10, #11#11]
-
-(34) ConvertToNative
-Input [4]: [ss_sold_date_sk#1, ss_addr_sk#3, ss_quantity#5, ss_net_profit#7]
 
 (35) NativeShuffleExchange
 Input [4]: [ss_sold_date_sk#1, ss_addr_sk#3, ss_quantity#5, ss_net_profit#7]
@@ -316,18 +317,19 @@ Input [2]: [ca_address_sk#12, ca_state#13]
 Input [2]: [ca_address_sk#12, ca_state#13]
 Arguments: [ca_address_sk#12 ASC NULLS FIRST], false
 
-(49) SortMergeJoin [codegen id : X]
+(49) NativeSortMergeJoin
 Left keys [1]: [ss_addr_sk#3]
 Right keys [1]: [ca_address_sk#12]
 Join type: Inner
-Join condition: ((((ca_state#13 IN (CO,OH,TX) AND (ss_net_profit#7 >= 0.00)) AND (ss_net_profit#7 <= 2000.00)) OR ((ca_state#13 IN (OR,MN,KY) AND (ss_net_profit#7 >= 150.00)) AND (ss_net_profit#7 <= 3000.00))) OR ((ca_state#13 IN (VA,CA,MS) AND (ss_net_profit#7 >= 50.00)) AND (ss_net_profit#7 <= 25000.00)))
+Join condition: None
 
-(50) Project [codegen id : X]
+(50) NativeFilter
+Input [6]: [ss_sold_date_sk#1, ss_addr_sk#3, ss_quantity#5, ss_net_profit#7, ca_address_sk#12, ca_state#13]
+Condition : ((((ca_state#13 IN (CO,OH,TX) AND (ss_net_profit#7 >= 0.00)) AND (ss_net_profit#7 <= 2000.00)) OR ((ca_state#13 IN (OR,MN,KY) AND (ss_net_profit#7 >= 150.00)) AND (ss_net_profit#7 <= 3000.00))) OR ((ca_state#13 IN (VA,CA,MS) AND (ss_net_profit#7 >= 50.00)) AND (ss_net_profit#7 <= 25000.00)))
+
+(51) NativeProject
 Output [2]: [ss_sold_date_sk#1, ss_quantity#5]
 Input [6]: [ss_sold_date_sk#1, ss_addr_sk#3, ss_quantity#5, ss_net_profit#7, ca_address_sk#12, ca_state#13]
-
-(51) ConvertToNative
-Input [2]: [ss_sold_date_sk#1, ss_quantity#5]
 
 (52) NativeShuffleExchange
 Input [2]: [ss_sold_date_sk#1, ss_quantity#5]

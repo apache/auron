@@ -14,9 +14,9 @@ AdaptiveSparkPlan (112)
                         :     +- AQEShuffleRead (54)
                         :        +- ShuffleQueryStage (53), Statistics(X)
                         :           +- NativeShuffleExchange (52)
-                        :              +- ConvertToNative (51)
-                        :                 +- * Project (50)
-                        :                    +- * SortMergeJoin Inner (49)
+                        :              +- NativeProject (51)
+                        :                 +- NativeFilter (50)
+                        :                    +- NativeSortMergeJoin Inner (49)
                         :                       :- NativeProject (19)
                         :                       :  +- NativeSortMergeJoin Inner (18)
                         :                       :     :- NativeSort (8)
@@ -324,18 +324,19 @@ Condition : isnotnull((1.3 * avg(cs_ext_discount_amt))#17)
 Input [2]: [(1.3 * avg(cs_ext_discount_amt))#17, cs_item_sk#7]
 Arguments: [cs_item_sk#7 ASC NULLS FIRST], false
 
-(49) SortMergeJoin [codegen id : X]
+(49) NativeSortMergeJoin
 Left keys [1]: [i_item_sk#4]
 Right keys [1]: [cs_item_sk#7]
 Join type: Inner
-Join condition: (cast(cs_ext_discount_amt#3 as decimal(14,7)) > (1.3 * avg(cs_ext_discount_amt))#17)
+Join condition: None
 
-(50) Project [codegen id : X]
+(50) NativeFilter
+Input [5]: [cs_sold_date_sk#1, cs_ext_discount_amt#3, i_item_sk#4, (1.3 * avg(cs_ext_discount_amt))#17, cs_item_sk#7]
+Condition : (cast(cs_ext_discount_amt#3 as decimal(14,7)) > (1.3 * avg(cs_ext_discount_amt))#17)
+
+(51) NativeProject
 Output [2]: [cs_sold_date_sk#1, cs_ext_discount_amt#3]
 Input [5]: [cs_sold_date_sk#1, cs_ext_discount_amt#3, i_item_sk#4, (1.3 * avg(cs_ext_discount_amt))#17, cs_item_sk#7]
-
-(51) ConvertToNative
-Input [2]: [cs_sold_date_sk#1, cs_ext_discount_amt#3]
 
 (52) NativeShuffleExchange
 Input [2]: [cs_sold_date_sk#1, cs_ext_discount_amt#3]

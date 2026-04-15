@@ -6,9 +6,9 @@ AdaptiveSparkPlan (811)
       +- AQEShuffleRead (494)
          +- ShuffleQueryStage (493), Statistics(X)
             +- NativeShuffleExchange (492)
-               +- ConvertToNative (491)
-                  +- * Project (490)
-                     +- * SortMergeJoin Inner (489)
+               +- NativeProject (491)
+                  +- NativeFilter (490)
+                     +- NativeSortMergeJoin Inner (489)
                         :- NativeSort (280)
                         :  +- InputAdapter (279)
                         :     +- AQEShuffleRead (278)
@@ -74,9 +74,9 @@ AdaptiveSparkPlan (811)
                         :                                :                    :                    :                    :                    :                    :                    :                    :     +- AQEShuffleRead (159)
                         :                                :                    :                    :                    :                    :                    :                    :                    :        +- ShuffleQueryStage (158), Statistics(X)
                         :                                :                    :                    :                    :                    :                    :                    :                    :           +- NativeShuffleExchange (157)
-                        :                                :                    :                    :                    :                    :                    :                    :                    :              +- ConvertToNative (156)
-                        :                                :                    :                    :                    :                    :                    :                    :                    :                 +- * Project (155)
-                        :                                :                    :                    :                    :                    :                    :                    :                    :                    +- * SortMergeJoin Inner (154)
+                        :                                :                    :                    :                    :                    :                    :                    :                    :              +- NativeProject (156)
+                        :                                :                    :                    :                    :                    :                    :                    :                    :                 +- NativeFilter (155)
+                        :                                :                    :                    :                    :                    :                    :                    :                    :                    +- NativeSortMergeJoin Inner (154)
                         :                                :                    :                    :                    :                    :                    :                    :                    :                       :- NativeSort (147)
                         :                                :                    :                    :                    :                    :                    :                    :                    :                       :  +- InputAdapter (146)
                         :                                :                    :                    :                    :                    :                    :                    :                    :                       :     +- AQEShuffleRead (145)
@@ -354,9 +354,9 @@ AdaptiveSparkPlan (811)
                                                          :                    :                    :                    :                    :                    :                    :                    :     +- AQEShuffleRead (378)
                                                          :                    :                    :                    :                    :                    :                    :                    :        +- ShuffleQueryStage (377), Statistics(X)
                                                          :                    :                    :                    :                    :                    :                    :                    :           +- NativeShuffleExchange (376)
-                                                         :                    :                    :                    :                    :                    :                    :                    :              +- ConvertToNative (375)
-                                                         :                    :                    :                    :                    :                    :                    :                    :                 +- * Project (374)
-                                                         :                    :                    :                    :                    :                    :                    :                    :                    +- * SortMergeJoin Inner (373)
+                                                         :                    :                    :                    :                    :                    :                    :                    :              +- NativeProject (375)
+                                                         :                    :                    :                    :                    :                    :                    :                    :                 +- NativeFilter (374)
+                                                         :                    :                    :                    :                    :                    :                    :                    :                    +- NativeSortMergeJoin Inner (373)
                                                          :                    :                    :                    :                    :                    :                    :                    :                       :- NativeSort (366)
                                                          :                    :                    :                    :                    :                    :                    :                    :                       :  +- InputAdapter (365)
                                                          :                    :                    :                    :                    :                    :                    :                    :                       :     +- AQEShuffleRead (364)
@@ -1455,18 +1455,19 @@ Input [2]: [#51#51, #52#52]
 Input [2]: [#51#51, #52#52]
 Arguments: [cd_demo_sk#51 ASC NULLS FIRST], false
 
-(154) SortMergeJoin [codegen id : X]
+(154) NativeSortMergeJoin
 Left keys [1]: [c_current_cdemo_sk#40]
 Right keys [1]: [cd_demo_sk#51]
 Join type: Inner
-Join condition: NOT (cd_marital_status#50 = cd_marital_status#52)
+Join condition: None
 
-(155) Project [codegen id : X]
+(155) NativeFilter
+Input [18]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#35, s_store_name#37, s_zip#38, c_current_cdemo_sk#40, c_current_hdemo_sk#41, c_current_addr_sk#42, d_year#46, d_year#48, cd_marital_status#50, #51#51, #52#52]
+Condition : NOT (cd_marital_status#50 = cd_marital_status#52)
+
+(156) NativeProject
 Output [14]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#35, s_store_name#37, s_zip#38, c_current_hdemo_sk#41, c_current_addr_sk#42, d_year#46, d_year#48]
 Input [18]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#35, s_store_name#37, s_zip#38, c_current_cdemo_sk#40, c_current_hdemo_sk#41, c_current_addr_sk#42, d_year#46, d_year#48, cd_marital_status#50, #51#51, #52#52]
-
-(156) ConvertToNative
-Input [14]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#35, s_store_name#37, s_zip#38, c_current_hdemo_sk#41, c_current_addr_sk#42, d_year#46, d_year#48]
 
 (157) NativeShuffleExchange
 Input [14]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#35, s_store_name#37, s_zip#38, c_current_hdemo_sk#41, c_current_addr_sk#42, d_year#46, d_year#48]
@@ -2343,18 +2344,19 @@ Input [2]: [#130#130, #131#131]
 Input [2]: [#130#130, #131#131]
 Arguments: [cd_demo_sk#130 ASC NULLS FIRST], false
 
-(373) SortMergeJoin [codegen id : X]
+(373) NativeSortMergeJoin
 Left keys [1]: [c_current_cdemo_sk#119]
 Right keys [1]: [cd_demo_sk#130]
 Join type: Inner
-Join condition: NOT (cd_marital_status#129 = cd_marital_status#131)
+Join condition: None
 
-(374) Project [codegen id : X]
+(374) NativeFilter
+Input [18]: [ss_item_sk#103, ss_hdemo_sk#106, ss_addr_sk#107, ss_promo_sk#109, ss_wholesale_cost#110, ss_list_price#111, ss_coupon_amt#112, d_year#114, s_store_name#116, s_zip#117, c_current_cdemo_sk#119, c_current_hdemo_sk#120, c_current_addr_sk#121, d_year#125, d_year#127, cd_marital_status#129, #130#130, #131#131]
+Condition : NOT (cd_marital_status#129 = cd_marital_status#131)
+
+(375) NativeProject
 Output [14]: [ss_item_sk#103, ss_hdemo_sk#106, ss_addr_sk#107, ss_promo_sk#109, ss_wholesale_cost#110, ss_list_price#111, ss_coupon_amt#112, d_year#114, s_store_name#116, s_zip#117, c_current_hdemo_sk#120, c_current_addr_sk#121, d_year#125, d_year#127]
 Input [18]: [ss_item_sk#103, ss_hdemo_sk#106, ss_addr_sk#107, ss_promo_sk#109, ss_wholesale_cost#110, ss_list_price#111, ss_coupon_amt#112, d_year#114, s_store_name#116, s_zip#117, c_current_cdemo_sk#119, c_current_hdemo_sk#120, c_current_addr_sk#121, d_year#125, d_year#127, cd_marital_status#129, #130#130, #131#131]
-
-(375) ConvertToNative
-Input [14]: [ss_item_sk#103, ss_hdemo_sk#106, ss_addr_sk#107, ss_promo_sk#109, ss_wholesale_cost#110, ss_list_price#111, ss_coupon_amt#112, d_year#114, s_store_name#116, s_zip#117, c_current_hdemo_sk#120, c_current_addr_sk#121, d_year#125, d_year#127]
 
 (376) NativeShuffleExchange
 Input [14]: [ss_item_sk#103, ss_hdemo_sk#106, ss_addr_sk#107, ss_promo_sk#109, ss_wholesale_cost#110, ss_list_price#111, ss_coupon_amt#112, d_year#114, s_store_name#116, s_zip#117, c_current_hdemo_sk#120, c_current_addr_sk#121, d_year#125, d_year#127]
@@ -2805,18 +2807,19 @@ Input [8]: [item_sk#157, store_name#158, store_zip#159, syear#160, cnt#161, s1#1
 Input [8]: [item_sk#157, store_name#158, store_zip#159, syear#160, cnt#161, s1#162, s2#163, s3#164]
 Arguments: [item_sk#157 ASC NULLS FIRST, store_name#158 ASC NULLS FIRST, store_zip#159 ASC NULLS FIRST], false
 
-(489) SortMergeJoin [codegen id : X]
+(489) NativeSortMergeJoin
 Left keys [3]: [item_sk#86, store_name#87, store_zip#88]
 Right keys [3]: [item_sk#157, store_name#158, store_zip#159]
 Join type: Inner
-Join condition: (cnt#161 <= cnt#98)
+Join condition: None
 
-(490) Project [codegen id : X]
+(490) NativeFilter
+Input [25]: [product_name#85, item_sk#86, store_name#87, store_zip#88, b_street_number#89, b_streen_name#90, b_city#91, b_zip#92, c_street_number#93, c_street_name#94, c_city#95, c_zip#96, syear#97, cnt#98, s1#99, s2#100, s3#101, item_sk#157, store_name#158, store_zip#159, syear#160, cnt#161, s1#162, s2#163, s3#164]
+Condition : (cnt#161 <= cnt#98)
+
+(491) NativeProject
 Output [21]: [product_name#85, store_name#87, store_zip#88, b_street_number#89, b_streen_name#90, b_city#91, b_zip#92, c_street_number#93, c_street_name#94, c_city#95, c_zip#96, syear#97, cnt#98, s1#99, s2#100, s3#101, s1#162, s2#163, s3#164, syear#160, cnt#161]
 Input [25]: [product_name#85, item_sk#86, store_name#87, store_zip#88, b_street_number#89, b_streen_name#90, b_city#91, b_zip#92, c_street_number#93, c_street_name#94, c_city#95, c_zip#96, syear#97, cnt#98, s1#99, s2#100, s3#101, item_sk#157, store_name#158, store_zip#159, syear#160, cnt#161, s1#162, s2#163, s3#164]
-
-(491) ConvertToNative
-Input [21]: [product_name#85, store_name#87, store_zip#88, b_street_number#89, b_streen_name#90, b_city#91, b_zip#92, c_street_number#93, c_street_name#94, c_city#95, c_zip#96, syear#97, cnt#98, s1#99, s2#100, s3#101, s1#162, s2#163, s3#164, syear#160, cnt#161]
 
 (492) NativeShuffleExchange
 Input [21]: [product_name#85, store_name#87, store_zip#88, b_street_number#89, b_streen_name#90, b_city#91, b_zip#92, c_street_number#93, c_street_name#94, c_city#95, c_zip#96, syear#97, cnt#98, s1#99, s2#100, s3#101, s1#162, s2#163, s3#164, syear#160, cnt#161]
