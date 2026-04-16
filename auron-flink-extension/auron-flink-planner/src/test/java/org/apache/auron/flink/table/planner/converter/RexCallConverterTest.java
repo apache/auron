@@ -18,7 +18,6 @@ package org.apache.auron.flink.table.planner.converter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -212,47 +211,6 @@ class RexCallConverterTest {
         RexNode eq = REX_BUILDER.makeCall(SqlStdOperatorTable.EQUALS, makeIntRef(0), makeIntRef(0));
 
         assertFalse(converter.isSupported(eq, context));
-    }
-
-    // ---- getCommonTypeForComparison direct tests ----
-
-    @Test
-    void testCommonTypeDecimalWins() {
-        RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
-        RelDataType decType = TYPE_FACTORY.createSqlType(SqlTypeName.DECIMAL, 10, 2);
-        RelDataType result = RexCallConverter.getCommonTypeForComparison(intType, decType, TYPE_FACTORY);
-
-        assertEquals(SqlTypeName.DECIMAL, result.getSqlTypeName());
-    }
-
-    @Test
-    void testCommonTypeExactIntegerPromotesToBigint() {
-        // TINYINT + INTEGER → BIGINT (both exact, promoted to widest exact type)
-        RelDataType tinyintType = TYPE_FACTORY.createSqlType(SqlTypeName.TINYINT);
-        RelDataType integerType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
-        RelDataType result = RexCallConverter.getCommonTypeForComparison(tinyintType, integerType, TYPE_FACTORY);
-
-        assertEquals(SqlTypeName.BIGINT, result.getSqlTypeName());
-    }
-
-    @Test
-    void testCommonTypeApproxFallbackToDouble() {
-        // INT + FLOAT → DOUBLE (FLOAT is approx, so exact integer rule skipped)
-        RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
-        RelDataType floatType = TYPE_FACTORY.createSqlType(SqlTypeName.FLOAT);
-        RelDataType result = RexCallConverter.getCommonTypeForComparison(intType, floatType, TYPE_FACTORY);
-
-        assertEquals(SqlTypeName.DOUBLE, result.getSqlTypeName());
-    }
-
-    @Test
-    void testCommonTypeIncompatible() {
-        // BOOLEAN + INTEGER → null (incompatible)
-        RelDataType boolType = TYPE_FACTORY.createSqlType(SqlTypeName.BOOLEAN);
-        RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
-        RelDataType result = RexCallConverter.getCommonTypeForComparison(boolType, intType, TYPE_FACTORY);
-
-        assertNull(result, "Incompatible types should return null");
     }
 
     // ---- Helpers ----

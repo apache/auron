@@ -19,22 +19,14 @@ package org.apache.auron.flink.table.planner.converter;
 import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
-import org.apache.auron.flink.utils.SchemaConverters;
 import org.apache.auron.protobuf.PhysicalBinaryExprNode;
 import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalNegativeNode;
-import org.apache.auron.protobuf.PhysicalTryCastNode;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
-import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
-import org.apache.flink.table.types.logical.LogicalType;
 
 /**
  * Converts a Calcite {@link RexCall} (operator expression) to an Auron native
@@ -46,8 +38,6 @@ import org.apache.flink.table.types.logical.LogicalType;
  * the output type if it differs from the common type.
  */
 public class RexCallConverter implements FlinkRexNodeConverter {
-
-    private static final RelDataTypeFactory TYPE_FACTORY = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
 
     /** Binary arithmetic kinds that require numeric result type. */
     private static final Set<SqlKind> BINARY_ARITHMETIC_KINDS =
@@ -110,7 +100,7 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      *       promotion
      *   <li>{@code MINUS_PREFIX} → {@link PhysicalNegativeNode}
      *   <li>{@code PLUS_PREFIX} → identity (passthrough to operand)
-     *   <li>{@code CAST} → {@link PhysicalTryCastNode}
+     *   <li>{@code CAST} → {@link org.apache.auron.protobuf.PhysicalTryCastNode}
      * </ul>
      *
      * @throws IllegalArgumentException if the SqlKind is not supported
@@ -152,7 +142,8 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         RexNode right = call.getOperands().get(1);
         RelDataType outputType = call.getType();
 
-        RelDataType compatibleType = getCommonTypeForComparison(left.getType(), right.getType(), TYPE_FACTORY);
+        RelDataType compatibleType =
+                TypeCastUtils.getCommonTypeForComparison(left.getType(), right.getType(), TypeCastUtils.TYPE_FACTORY);
         if (compatibleType == null) {
             throw new IllegalStateException("Incompatible types: "
                     + left.getType().getSqlTypeName()
@@ -160,8 +151,10 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                     + right.getType().getSqlTypeName());
         }
 
-        PhysicalExprNode leftExpr = castIfNecessary(left, compatibleType, context);
-        PhysicalExprNode rightExpr = castIfNecessary(right, compatibleType, context);
+        PhysicalExprNode leftExpr =
+                TypeCastUtils.castIfNecessary(convertOperand(left, context), left.getType(), compatibleType);
+        PhysicalExprNode rightExpr =
+                TypeCastUtils.castIfNecessary(convertOperand(right, context), right.getType(), compatibleType);
 
         PhysicalExprNode binaryExpr = PhysicalExprNode.newBuilder()
                 .setBinaryExpr(PhysicalBinaryExprNode.newBuilder()
@@ -171,65 +164,9 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                 .build();
 
         if (!outputType.getSqlTypeName().equals(compatibleType.getSqlTypeName())) {
-            return wrapInTryCast(binaryExpr, outputType);
+            return TypeCastUtils.wrapInTryCast(binaryExpr, outputType);
         }
         return binaryExpr;
-    }
-
-    /**
-     * Computes the common type for two operand types during arithmetic
-     * promotion.
-     *
-     * <p>Rules:
-     * <ul>
-     *   <li>Same type → return as-is
-     *   <li>Both numeric: DECIMAL wins; BIGINT wins over smaller integers
-     *       (when neither is approximate); otherwise DOUBLE
-     *   <li>Both character → VARCHAR
-     *   <li>Otherwise → {@code null} (incompatible)
-     * </ul>
-     *
-     * @param type1 left operand type
-     * @param type2 right operand type
-     * @param typeFactory factory for creating result types
-     * @return the common type, or {@code null} if incompatible
-     */
-    static RelDataType getCommonTypeForComparison(
-            RelDataType type1, RelDataType type2, RelDataTypeFactory typeFactory) {
-        if (type1.getSqlTypeName().equals(type2.getSqlTypeName())) {
-            return type1;
-        }
-        if (SqlTypeUtil.isNumeric(type1) && SqlTypeUtil.isNumeric(type2)) {
-            SqlTypeName t1 = type1.getSqlTypeName();
-            SqlTypeName t2 = type2.getSqlTypeName();
-            if (t1 == SqlTypeName.DECIMAL || t2 == SqlTypeName.DECIMAL) {
-                return typeFactory.createSqlType(SqlTypeName.DECIMAL);
-            }
-            if (notApproxType(t1) && notApproxType(t2)) {
-                return typeFactory.createSqlType(SqlTypeName.BIGINT);
-            }
-            return typeFactory.createSqlType(SqlTypeName.DOUBLE);
-        }
-        if (SqlTypeUtil.inCharFamily(type1) && SqlTypeUtil.inCharFamily(type2)) {
-            return typeFactory.createSqlType(SqlTypeName.VARCHAR);
-        }
-        return null;
-    }
-
-    private static boolean notApproxType(SqlTypeName typeName) {
-        return typeName != SqlTypeName.FLOAT && typeName != SqlTypeName.DOUBLE;
-    }
-
-    /**
-     * Wraps the converted operand in a TryCast if its type differs from the
-     * target type.
-     */
-    private PhysicalExprNode castIfNecessary(RexNode expr, RelDataType targetType, ConverterContext context) {
-        PhysicalExprNode converted = convertOperand(expr, context);
-        if (expr.getType().getSqlTypeName().equals(targetType.getSqlTypeName())) {
-            return converted;
-        }
-        return wrapInTryCast(converted, targetType);
     }
 
     /**
@@ -246,14 +183,6 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         return result.get();
     }
 
-    private static PhysicalExprNode wrapInTryCast(PhysicalExprNode expr, RelDataType targetType) {
-        LogicalType logicalType = FlinkTypeFactory.toLogicalType(targetType);
-        org.apache.auron.protobuf.ArrowType arrowType = SchemaConverters.convertToAuronArrowType(logicalType);
-        return PhysicalExprNode.newBuilder()
-                .setTryCast(PhysicalTryCastNode.newBuilder().setExpr(expr).setArrowType(arrowType))
-                .build();
-    }
-
     private PhysicalExprNode buildNegative(RexCall call, ConverterContext context) {
         PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
         return PhysicalExprNode.newBuilder()
@@ -263,6 +192,6 @@ public class RexCallConverter implements FlinkRexNodeConverter {
 
     private PhysicalExprNode buildTryCast(RexCall call, ConverterContext context) {
         PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
-        return wrapInTryCast(operand, call.getType());
+        return TypeCastUtils.wrapInTryCast(operand, call.getType());
     }
 }

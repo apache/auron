@@ -20,40 +20,42 @@ import com.google.protobuf.ByteString;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Set;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.BigIntVector;
-import org.apache.arrow.vector.BitVector;
-import org.apache.arrow.vector.DecimalVector;
-import org.apache.arrow.vector.FieldVector;
-import org.apache.arrow.vector.Float4Vector;
-import org.apache.arrow.vector.Float8Vector;
-import org.apache.arrow.vector.IntVector;
-import org.apache.arrow.vector.SmallIntVector;
-import org.apache.arrow.vector.TinyIntVector;
-import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowStreamWriter;
-import org.apache.arrow.vector.types.FloatingPointPrecision;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.Schema;
+import org.apache.auron.flink.arrow.FlinkArrowUtils;
+import org.apache.auron.flink.arrow.FlinkArrowWriter;
 import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.ScalarValue;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
+import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.BooleanType;
+import org.apache.flink.table.types.logical.CharType;
+import org.apache.flink.table.types.logical.DecimalType;
+import org.apache.flink.table.types.logical.DoubleType;
+import org.apache.flink.table.types.logical.FloatType;
+import org.apache.flink.table.types.logical.IntType;
+import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.table.types.logical.SmallIntType;
+import org.apache.flink.table.types.logical.TinyIntType;
+import org.apache.flink.table.types.logical.VarCharType;
 
 /**
  * Converts a Calcite {@link RexLiteral} to an Auron native {@link PhysicalExprNode}
  * containing a {@link ScalarValue} with Arrow IPC bytes.
  *
- * <p>The literal value is serialized as a single-element Arrow vector in IPC stream format,
- * following the same pattern as the Spark implementation in {@code NativeConverters}.
+ * <p>The literal value is serialized as a single-element Arrow record batch in IPC stream
+ * format, using Flink's {@link GenericRowData} and {@link FlinkArrowWriter} to perform
+ * type-aware conversion via the project's shared {@link FlinkArrowUtils} infrastructure.
  *
  * <p>Supported types: {@code TINYINT}, {@code SMALLINT}, {@code INTEGER}, {@code BIGINT},
  * {@code FLOAT}, {@code DOUBLE}, {@code DECIMAL}, {@code BOOLEAN}, {@code CHAR},
@@ -111,26 +113,25 @@ public class RexLiteralConverter implements FlinkRexNodeConverter {
     }
 
     /**
-     * Serializes the literal value as a single-element Arrow vector in IPC stream format.
+     * Serializes the literal value as a single-element Arrow record batch in IPC stream format.
+     *
+     * <p>Uses Flink's {@link GenericRowData} and {@link FlinkArrowWriter} for type-aware
+     * value conversion, delegating all type-to-Arrow mapping to {@link FlinkArrowUtils}.
      */
     private static byte[] serializeToIpc(RexLiteral literal) {
-        Field field = arrowFieldForType(literal);
-        Schema schema = new Schema(Collections.singletonList(field));
+        LogicalType logicalType = FlinkTypeFactory.toLogicalType(literal.getType());
+        RowType rowType = RowType.of(logicalType);
 
-        try (BufferAllocator allocator = new RootAllocator();
-                VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator)) {
+        try (BufferAllocator allocator =
+                        FlinkArrowUtils.getRootAllocator().newChildAllocator("literal", 0, Long.MAX_VALUE);
+                VectorSchemaRoot root = VectorSchemaRoot.create(FlinkArrowUtils.toArrowSchema(rowType), allocator)) {
 
-            root.allocateNew();
-            FieldVector vector = root.getVector(0);
+            GenericRowData rowData = new GenericRowData(1);
+            rowData.setField(0, toFlinkInternalValue(literal, logicalType));
 
-            if (literal.isNull()) {
-                vector.setNull(0);
-            } else {
-                setVectorValue(literal, vector);
-            }
-
-            vector.setValueCount(1);
-            root.setRowCount(1);
+            FlinkArrowWriter writer = FlinkArrowWriter.create(root, rowType);
+            writer.write(rowData);
+            writer.finish();
 
             return writeIpcBytes(root);
         } catch (IOException e) {
@@ -139,74 +140,50 @@ public class RexLiteralConverter implements FlinkRexNodeConverter {
     }
 
     /**
-     * Returns the Arrow {@link Field} corresponding to the literal's Calcite type.
+     * Converts a {@link RexLiteral} value to its Flink internal RowData representation.
+     *
+     * <p>Returns {@code null} for null literals. For DECIMAL, returns {@link DecimalData};
+     * for CHAR/VARCHAR, returns {@link StringData}. For numeric and boolean types, returns
+     * the correctly-typed boxed Java value that {@link FlinkArrowWriter} expects.
+     *
+     * @param literal the Calcite literal to convert
+     * @param logicalType the Flink logical type of the literal
+     * @return the Flink internal value, or {@code null} if the literal is null
+     * @throws IllegalArgumentException if the logical type is not supported
      */
-    private static Field arrowFieldForType(RexLiteral literal) {
-        SqlTypeName typeName = literal.getType().getSqlTypeName();
-        switch (typeName) {
-            case TINYINT:
-                return Field.nullable("v", new ArrowType.Int(8, true));
-            case SMALLINT:
-                return Field.nullable("v", new ArrowType.Int(16, true));
-            case INTEGER:
-                return Field.nullable("v", new ArrowType.Int(32, true));
-            case BIGINT:
-                return Field.nullable("v", new ArrowType.Int(64, true));
-            case FLOAT:
-                return Field.nullable("v", new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE));
-            case DOUBLE:
-                return Field.nullable("v", new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE));
-            case DECIMAL:
-                int precision = literal.getType().getPrecision();
-                int scale = literal.getType().getScale();
-                return Field.nullable("v", new ArrowType.Decimal(precision, scale, 128));
-            case BOOLEAN:
-                return Field.nullable("v", ArrowType.Bool.INSTANCE);
-            case CHAR:
-            case VARCHAR:
-                return Field.nullable("v", ArrowType.Utf8.INSTANCE);
-            default:
-                throw new IllegalArgumentException("Unsupported type: " + typeName);
+    private static Object toFlinkInternalValue(RexLiteral literal, LogicalType logicalType) {
+        if (literal.isNull()) {
+            return null;
         }
-    }
-
-    /**
-     * Sets the value at index 0 of the given vector based on the literal's type.
-     */
-    private static void setVectorValue(RexLiteral literal, FieldVector vector) {
-        SqlTypeName typeName = literal.getType().getSqlTypeName();
-        switch (typeName) {
-            case TINYINT:
-                ((TinyIntVector) vector).set(0, literal.getValueAs(Byte.class));
-                break;
-            case SMALLINT:
-                ((SmallIntVector) vector).set(0, literal.getValueAs(Short.class));
-                break;
-            case INTEGER:
-                ((IntVector) vector).set(0, literal.getValueAs(Integer.class));
-                break;
-            case BIGINT:
-                ((BigIntVector) vector).set(0, literal.getValueAs(Long.class));
-                break;
-            case FLOAT:
-                ((Float4Vector) vector).set(0, literal.getValueAs(Float.class));
-                break;
-            case DOUBLE:
-                ((Float8Vector) vector).set(0, literal.getValueAs(Double.class));
-                break;
-            case DECIMAL:
-                ((DecimalVector) vector).set(0, literal.getValueAs(BigDecimal.class));
-                break;
-            case BOOLEAN:
-                ((BitVector) vector).set(0, literal.getValueAs(Boolean.class) ? 1 : 0);
-                break;
-            case CHAR:
-            case VARCHAR:
-                ((VarCharVector) vector).set(0, literal.getValueAs(String.class).getBytes(StandardCharsets.UTF_8));
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported type: " + typeName);
+        if (logicalType instanceof TinyIntType) {
+            return literal.getValueAs(Byte.class);
         }
+        if (logicalType instanceof SmallIntType) {
+            return literal.getValueAs(Short.class);
+        }
+        if (logicalType instanceof IntType) {
+            return literal.getValueAs(Integer.class);
+        }
+        if (logicalType instanceof BigIntType) {
+            return literal.getValueAs(Long.class);
+        }
+        if (logicalType instanceof FloatType) {
+            return literal.getValueAs(Float.class);
+        }
+        if (logicalType instanceof DoubleType) {
+            return literal.getValueAs(Double.class);
+        }
+        if (logicalType instanceof BooleanType) {
+            return literal.getValueAs(Boolean.class);
+        }
+        if (logicalType instanceof DecimalType) {
+            DecimalType dt = (DecimalType) logicalType;
+            return DecimalData.fromBigDecimal(literal.getValueAs(BigDecimal.class), dt.getPrecision(), dt.getScale());
+        }
+        if (logicalType instanceof CharType || logicalType instanceof VarCharType) {
+            return StringData.fromString(literal.getValueAs(String.class));
+        }
+        throw new IllegalArgumentException("Unsupported logical type: " + logicalType.asSummaryString());
     }
 
     /**
