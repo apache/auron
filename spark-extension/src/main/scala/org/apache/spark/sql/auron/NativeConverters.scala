@@ -964,6 +964,8 @@ object NativeConverters extends Logging {
 
       case e: Levenshtein =>
         buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)
+      case e: StringInstr =>
+        buildExtScalarFunction("Spark_Instr", e.children, e.dataType)
 
       case e: Hour if datetimeExtractEnabled =>
         buildTimePartExt("Spark_Hour", e.children.head, isPruningExpr, fallback)
