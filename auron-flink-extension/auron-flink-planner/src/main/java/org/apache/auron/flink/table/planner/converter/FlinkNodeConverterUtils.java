@@ -29,18 +29,18 @@ import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.types.logical.LogicalType;
 
 /**
- * Utility class for type promotion and casting operations used during
- * {@link RexCallConverter} expression conversion.
+ * Shared utility helpers for Flink {@code RelNode} / {@code RexNode} converters.
  *
- * <p>Provides helpers to compute a common numeric type for binary arithmetic
- * operands and to wrap native expressions in {@code TryCast} nodes.
+ * <p>Currently hosts type-promotion and cast-wrapping helpers used during
+ * {@link RexCallConverter} expression conversion. New helpers shared across
+ * Flink node converters should be added here.
  */
-public final class TypeCastUtils {
+public final class FlinkNodeConverterUtils {
 
     /** Shared type factory used for creating common SQL types. */
     public static final RelDataTypeFactory TYPE_FACTORY = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
 
-    private TypeCastUtils() {
+    private FlinkNodeConverterUtils() {
         // utility class
     }
 

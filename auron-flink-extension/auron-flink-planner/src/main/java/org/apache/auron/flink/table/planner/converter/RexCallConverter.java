@@ -142,8 +142,8 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         RexNode right = call.getOperands().get(1);
         RelDataType outputType = call.getType();
 
-        RelDataType compatibleType =
-                TypeCastUtils.getCommonTypeForComparison(left.getType(), right.getType(), TypeCastUtils.TYPE_FACTORY);
+        RelDataType compatibleType = FlinkNodeConverterUtils.getCommonTypeForComparison(
+                left.getType(), right.getType(), FlinkNodeConverterUtils.TYPE_FACTORY);
         if (compatibleType == null) {
             throw new IllegalStateException("Incompatible types: "
                     + left.getType().getSqlTypeName()
@@ -152,9 +152,9 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         }
 
         PhysicalExprNode leftExpr =
-                TypeCastUtils.castIfNecessary(convertOperand(left, context), left.getType(), compatibleType);
-        PhysicalExprNode rightExpr =
-                TypeCastUtils.castIfNecessary(convertOperand(right, context), right.getType(), compatibleType);
+                FlinkNodeConverterUtils.castIfNecessary(convertOperand(left, context), left.getType(), compatibleType);
+        PhysicalExprNode rightExpr = FlinkNodeConverterUtils.castIfNecessary(
+                convertOperand(right, context), right.getType(), compatibleType);
 
         PhysicalExprNode binaryExpr = PhysicalExprNode.newBuilder()
                 .setBinaryExpr(PhysicalBinaryExprNode.newBuilder()
@@ -164,7 +164,7 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                 .build();
 
         if (!outputType.getSqlTypeName().equals(compatibleType.getSqlTypeName())) {
-            return TypeCastUtils.wrapInTryCast(binaryExpr, outputType);
+            return FlinkNodeConverterUtils.wrapInTryCast(binaryExpr, outputType);
         }
         return binaryExpr;
     }
@@ -192,6 +192,6 @@ public class RexCallConverter implements FlinkRexNodeConverter {
 
     private PhysicalExprNode buildTryCast(RexCall call, ConverterContext context) {
         PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
-        return TypeCastUtils.wrapInTryCast(operand, call.getType());
+        return FlinkNodeConverterUtils.wrapInTryCast(operand, call.getType());
     }
 }

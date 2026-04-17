@@ -28,8 +28,8 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.Test;
 
-/** Tests for {@link TypeCastUtils}. */
-class TypeCastUtilsTest {
+/** Tests for {@link FlinkNodeConverterUtils}. */
+class FlinkNodeConverterUtilsTest {
 
     private static final RelDataTypeFactory TYPE_FACTORY = new JavaTypeFactoryImpl();
 
@@ -37,7 +37,7 @@ class TypeCastUtilsTest {
     void testCommonTypeDecimalWins() {
         RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
         RelDataType decType = TYPE_FACTORY.createSqlType(SqlTypeName.DECIMAL, 10, 2);
-        RelDataType result = TypeCastUtils.getCommonTypeForComparison(intType, decType, TYPE_FACTORY);
+        RelDataType result = FlinkNodeConverterUtils.getCommonTypeForComparison(intType, decType, TYPE_FACTORY);
 
         assertEquals(SqlTypeName.DECIMAL, result.getSqlTypeName());
     }
@@ -47,7 +47,7 @@ class TypeCastUtilsTest {
         // TINYINT + INTEGER → BIGINT (both exact, promoted to widest exact type)
         RelDataType tinyintType = TYPE_FACTORY.createSqlType(SqlTypeName.TINYINT);
         RelDataType integerType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
-        RelDataType result = TypeCastUtils.getCommonTypeForComparison(tinyintType, integerType, TYPE_FACTORY);
+        RelDataType result = FlinkNodeConverterUtils.getCommonTypeForComparison(tinyintType, integerType, TYPE_FACTORY);
 
         assertEquals(SqlTypeName.BIGINT, result.getSqlTypeName());
     }
@@ -57,7 +57,7 @@ class TypeCastUtilsTest {
         // INT + FLOAT → DOUBLE (FLOAT is approx, so exact integer rule skipped)
         RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
         RelDataType floatType = TYPE_FACTORY.createSqlType(SqlTypeName.FLOAT);
-        RelDataType result = TypeCastUtils.getCommonTypeForComparison(intType, floatType, TYPE_FACTORY);
+        RelDataType result = FlinkNodeConverterUtils.getCommonTypeForComparison(intType, floatType, TYPE_FACTORY);
 
         assertEquals(SqlTypeName.DOUBLE, result.getSqlTypeName());
     }
@@ -67,7 +67,7 @@ class TypeCastUtilsTest {
         // BOOLEAN + INTEGER → null (incompatible)
         RelDataType boolType = TYPE_FACTORY.createSqlType(SqlTypeName.BOOLEAN);
         RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
-        RelDataType result = TypeCastUtils.getCommonTypeForComparison(boolType, intType, TYPE_FACTORY);
+        RelDataType result = FlinkNodeConverterUtils.getCommonTypeForComparison(boolType, intType, TYPE_FACTORY);
 
         assertNull(result, "Incompatible types should return null");
     }
@@ -75,7 +75,7 @@ class TypeCastUtilsTest {
     @Test
     void testCommonTypeSameTypeReturnsAsIs() {
         RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
-        RelDataType result = TypeCastUtils.getCommonTypeForComparison(intType, intType, TYPE_FACTORY);
+        RelDataType result = FlinkNodeConverterUtils.getCommonTypeForComparison(intType, intType, TYPE_FACTORY);
 
         assertSame(intType, result, "Same type should return the first operand's type");
     }
@@ -84,7 +84,7 @@ class TypeCastUtilsTest {
     void testCommonTypeCharFamilyProducesVarchar() {
         RelDataType charType = TYPE_FACTORY.createSqlType(SqlTypeName.CHAR, 10);
         RelDataType varcharType = TYPE_FACTORY.createSqlType(SqlTypeName.VARCHAR, 20);
-        RelDataType result = TypeCastUtils.getCommonTypeForComparison(charType, varcharType, TYPE_FACTORY);
+        RelDataType result = FlinkNodeConverterUtils.getCommonTypeForComparison(charType, varcharType, TYPE_FACTORY);
 
         assertEquals(SqlTypeName.VARCHAR, result.getSqlTypeName());
     }
@@ -94,7 +94,7 @@ class TypeCastUtilsTest {
         PhysicalExprNode expr = PhysicalExprNode.getDefaultInstance();
         RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
 
-        PhysicalExprNode result = TypeCastUtils.castIfNecessary(expr, intType, intType);
+        PhysicalExprNode result = FlinkNodeConverterUtils.castIfNecessary(expr, intType, intType);
 
         assertSame(expr, result, "Same type should return the original expression unchanged");
     }
@@ -105,7 +105,7 @@ class TypeCastUtilsTest {
         RelDataType intType = TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER);
         RelDataType bigintType = TYPE_FACTORY.createSqlType(SqlTypeName.BIGINT);
 
-        PhysicalExprNode result = TypeCastUtils.castIfNecessary(expr, intType, bigintType);
+        PhysicalExprNode result = FlinkNodeConverterUtils.castIfNecessary(expr, intType, bigintType);
 
         assertTrue(result.hasTryCast(), "Different types should wrap in TryCast");
     }
@@ -115,7 +115,7 @@ class TypeCastUtilsTest {
         PhysicalExprNode expr = PhysicalExprNode.getDefaultInstance();
         RelDataType bigintType = TYPE_FACTORY.createSqlType(SqlTypeName.BIGINT);
 
-        PhysicalExprNode result = TypeCastUtils.wrapInTryCast(expr, bigintType);
+        PhysicalExprNode result = FlinkNodeConverterUtils.wrapInTryCast(expr, bigintType);
 
         assertTrue(result.hasTryCast(), "Should produce a TryCast node");
         assertTrue(result.getTryCast().hasArrowType(), "TryCast should have an ArrowType");
