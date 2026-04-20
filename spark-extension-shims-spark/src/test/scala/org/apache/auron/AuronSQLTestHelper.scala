@@ -45,9 +45,9 @@ trait AuronSQLTestHelper {
   }
 
   def withSparkConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val confs = Seq(spark.sparkContext.getConf, SparkEnv.get.conf)
+    val confs = Seq(spark.sparkContext.getConf, SparkEnv.get.conf).distinct
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(spark.sparkContext.getConf.getOption)
+    val currentValuesByConf = confs.map(conf => conf -> keys.map(conf.getOption))
 
     confs.foreach { conf =>
       (keys, values).zipped.foreach { (k, v) =>
@@ -57,7 +57,7 @@ trait AuronSQLTestHelper {
 
     try f
     finally {
-      confs.foreach { conf =>
+      currentValuesByConf.foreach { case (conf, currentValues) =>
         keys.zip(currentValues).foreach {
           case (key, Some(value)) => conf.set(key, value)
           case (key, None) => conf.remove(key)
