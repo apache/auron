@@ -960,15 +960,18 @@ object NativeConverters extends Logging {
       case e: Nvl =>
         buildScalarFunction(pb.ScalarFunction.Nvl, e.children, e.dataType)
 
-      case Year(child) => buildExtScalarFunction("Spark_Year", child :: Nil, IntegerType)
-      case Month(child) => buildExtScalarFunction("Spark_Month", child :: Nil, IntegerType)
-      case DayOfMonth(child) => buildExtScalarFunction("Spark_Day", child :: Nil, IntegerType)
+      case Year(child) =>
+        buildTimePartExt("Spark_Year", child, isPruningExpr, fallback)
+      case Month(child) =>
+        buildTimePartExt("Spark_Month", child, isPruningExpr, fallback)
+      case DayOfMonth(child) =>
+        buildTimePartExt("Spark_Day", child, isPruningExpr, fallback)
       case DayOfWeek(child) =>
-        buildExtScalarFunction("Spark_DayOfWeek", child :: Nil, IntegerType)
+        buildTimePartExt("Spark_DayOfWeek", child, isPruningExpr, fallback)
       case WeekOfYear(child) =>
         buildTimePartExt("Spark_WeekOfYear", child, isPruningExpr, fallback)
-
-      case Quarter(child) => buildExtScalarFunction("Spark_Quarter", child :: Nil, IntegerType)
+      case Quarter(child) =>
+        buildTimePartExt("Spark_Quarter", child, isPruningExpr, fallback)
 
       case e: Levenshtein =>
         buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)

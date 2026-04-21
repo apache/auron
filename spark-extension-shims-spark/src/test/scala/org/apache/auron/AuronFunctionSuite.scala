@@ -144,6 +144,30 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("date-part functions with non-UTC timezone") {
+    withTable("t1") {
+      sql("create table t1(c1 timestamp) using parquet")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        sql("insert into t1 values(timestamp'2021-01-04 04:30:00')")
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/New_York") {
+        checkSparkAnswerAndOperator(
+          "select year(c1), month(c1), dayofmonth(c1), dayofweek(c1), quarter(c1) from t1")
+      }
+    }
+  }
+
+  test("date-part functions with date input unchanged across timezones") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Shanghai") {
+      withTable("t1") {
+        sql("create table t1(c1 date) using parquet")
+        sql("insert into t1 values(date'2021-01-04')")
+        checkSparkAnswerAndOperator(
+          "select year(c1), month(c1), dayofmonth(c1), dayofweek(c1), quarter(c1) from t1")
+      }
+    }
+  }
+
   test("stddev_samp function with UDAF fallback") {
     withSQLConf("spark.auron.udafFallback.enable" -> "true") {
       withTable("t1") {
