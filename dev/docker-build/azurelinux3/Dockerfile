@@ -62,22 +62,51 @@ RUN curl https://sh.rustup.rs -sSf -o rustup-init && \
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # ---------------------------------------------------------------------
-# Install Java (Microsoft OpenJDK 17 - matches Azure Synapse Spark pools)
+# Install Java (multiple Temurin OpenJDK versions)
+# NOTE: JDK 8 and JDK 11 are EOL. Prefer JDK 17+ for new usage.
 # ---------------------------------------------------------------------
-RUN tdnf -y install msopenjdk-17 && \
-    tdnf clean all && \
-    rm -rf /var/cache/tdnf
-
-# Set JAVA_HOME for Microsoft OpenJDK 17 on Azure Linux
-ENV JAVA_HOME="/usr/lib/jvm/msopenjdk-17"
+ARG JDK_VERSIONS="8 11 17 21"
+ARG DEFAULT_JDK="8"
+ENV JAVA_INSTALL_BASE="/opt/java"
+RUN set -eux; \
+    mkdir -p "${JAVA_INSTALL_BASE}"; \
+    for v in ${JDK_VERSIONS}; do \
+      url="https://github.com/adoptium/temurin${v}-binaries/releases/latest/download/OpenJDK${v}U-jdk_x64_linux_hotspot.tar.gz"; \
+      curl -fsSL "$url" -o /tmp/temurin.tar.gz || { echo "Failed to download JDK ${v}"; exit 1; }; \
+      mkdir -p "${JAVA_INSTALL_BASE}/temurin-${v}"; \
+      tar -xzf /tmp/temurin.tar.gz -C "${JAVA_INSTALL_BASE}/temurin-${v}" --strip-components=1; \
+    done; \
+    rm -f /tmp/temurin.tar.gz; \
+    alt="$(command -v update-alternatives || command -v alternatives)"; \
+    for v in ${JDK_VERSIONS}; do \
+      "$alt" --install /usr/bin/java java "${JAVA_INSTALL_BASE}/temurin-${v}/bin/java" $((100 + v)); \
+      "$alt" --install /usr/bin/javac javac "${JAVA_INSTALL_BASE}/temurin-${v}/bin/javac" $((100 + v)); \
+    done; \
+    "$alt" --set java "${JAVA_INSTALL_BASE}/temurin-${DEFAULT_JDK}/bin/java"; \
+    "$alt" --set javac "${JAVA_INSTALL_BASE}/temurin-${DEFAULT_JDK}/bin/javac"
+# Default JAVA_HOME is set at build time; run `source /etc/profile.d/java.sh` after set-java to update.
+ENV JAVA_HOME="${JAVA_INSTALL_BASE}/temurin-${DEFAULT_JDK}"
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# ---------------------------------------------------------------------
-# Create .bashrc with necessary environment variables
-# ---------------------------------------------------------------------
-RUN echo 'export PATH="/root/.cargo/bin:${PATH}"' > /root/.bashrc && \
-    echo 'export JAVA_HOME="/usr/lib/jvm/msopenjdk-17"' >> /root/.bashrc && \
-    echo 'export PATH="${JAVA_HOME}/bin:${PATH}"' >> /root/.bashrc
+# Helper to switch JDK at runtime (e.g., set-java 11)
+RUN printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    'ver="${1:-}"' \
+    'if [ -z "$ver" ]; then echo "usage: set-java <version>"; exit 2; fi' \
+    'base="/opt/java/temurin-${ver}"' \
+    'if [ ! -x "${base}/bin/java" ]; then echo "JDK ${ver} not installed"; exit 1; fi' \
+    'alt="$(command -v update-alternatives || command -v alternatives)"' \
+    '"$alt" --set java "${base}/bin/java"' \
+    '"$alt" --set javac "${base}/bin/javac"' \
+    'echo "Java switched to version ${ver}. Run '\''source /etc/profile.d/java.sh'\'' to update JAVA_HOME."' \
+    > /usr/local/bin/set-java && chmod +x /usr/local/bin/set-java
+
+# Dynamic JAVA_HOME for interactive shells
+RUN printf '%s\n' \
+    'export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"' \
+    'export PATH="${JAVA_HOME}/bin:${PATH}"' \
+    > /etc/profile.d/java.sh
 
 # ---------------------------------------------------------------------
 # Set working directory
