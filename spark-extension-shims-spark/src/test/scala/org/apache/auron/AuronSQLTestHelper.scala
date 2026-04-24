@@ -32,7 +32,7 @@ trait AuronSQLTestHelper {
         None
       }
     }
-    (keys, values).zipped.foreach { (k, v) =>
+    keys.zip(values).foreach { case (k, v) =>
       conf.setConfString(k, v)
     }
     try f
@@ -50,7 +50,7 @@ trait AuronSQLTestHelper {
     val currentValuesByConf = confs.map(conf => conf -> keys.map(conf.getOption))
 
     confs.foreach { conf =>
-      (keys, values).zipped.foreach { (k, v) =>
+      keys.zip(values).foreach { case (k, v) =>
         conf.set(k, v)
       }
     }
