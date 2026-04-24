@@ -66,7 +66,7 @@ jobs:
             javaver: '21'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -76,11 +76,11 @@ jobs:
         run: |
           raw="${{ matrix.sparkver }}"
           ver="${raw#spark-}"
-          echo "sparkver_short=$ver" >> $GITHUB_ENV          
+          echo "sparkver_short=$ver" >> $GITHUB_ENV
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
-          distribution: zulu
+          distribution: 'adopt-hotspot'
           java-version: ${{ matrix.javaver }}
           cache: 'maven'
 
@@ -114,7 +114,7 @@ jobs:
           --scalaver ${{ matrix.scalaver }}
 
       - name: Upload auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: auron-${{matrix.sparkver}}_${{ matrix.scalaver }}-${{ matrix.javaver }}-release-${{ env.osclassfier }}-${{ matrix.auronver }}-${{ matrix.runner }}-${{ steps.commit.outputs.short }}.jar
           path: target/auron-${{matrix.sparkver}}_${{ matrix.scalaver }}-release-${{ env.osclassfier }}-${{ matrix.auronver }}.jar
