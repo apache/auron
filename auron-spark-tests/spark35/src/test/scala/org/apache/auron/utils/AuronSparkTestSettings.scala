@@ -33,6 +33,12 @@ class AuronSparkTestSettings extends SparkTestSettings {
       "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it")
     .exclude(
       "SPARK-24788: RelationalGroupedDataset.toString with unresolved exprs should not fail")
+    // Auron's SparkUDAFWrapper surfaces UDAF errors as RuntimeException, so the negative-path
+    // assertion that the thrown error is a SparkThrowable fails under native execution.
+    .exclude("SPARK-16484: hll_*_agg + hll_union negative tests")
+    // The fast-hashmap test asserts on WholeStageCodegen output, but Auron replaces the
+    // HashAggregate with a native aggregate so no Spark-generated class is emitted.
+    .exclude("SPARK-43876: Enable fast hashmap for distinct queries")
 
   enableSuite[AuronDatasetAggregatorSuite]
 

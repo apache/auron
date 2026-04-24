@@ -33,6 +33,9 @@ class AuronSparkTestSettings extends SparkTestSettings {
       "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it")
     .exclude(
       "SPARK-24788: RelationalGroupedDataset.toString with unresolved exprs should not fail")
+    // Spark 3.2's avg(ANSI interval) codegen emits invalid Java when Auron's native project
+    // feeds the HashAggregate; later Spark versions don't hit this path.
+    .exclude("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`")
 
   enableSuite[AuronDatasetAggregatorSuite]
 
