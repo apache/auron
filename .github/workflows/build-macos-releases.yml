@@ -80,7 +80,7 @@ jobs:
 
       - uses: actions/setup-java@v5
         with:
-          distribution: 'adopt-hotspot'
+          distribution: 'zulu'
           java-version: ${{ matrix.javaver }}
           cache: 'maven'
 
