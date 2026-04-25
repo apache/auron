@@ -98,7 +98,7 @@ fn xxh64_merge_round(mut hash: u64, acc: u64) -> u64 {
 
 #[inline]
 fn xxh_rotl64(value: u64, amt: i32) -> u64 {
-    (value << (amt % 64)) | (value >> (64 - amt % 64))
+    value.rotate_left((amt as u32) % 64)
 }
 
 #[inline]

@@ -90,6 +90,34 @@ pub fn spark_weekofyear(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }
 }
 
+/// `spark_quarter(date/timestamp/compatible-string)`
+///
+/// Simulates Spark's `quarter()` function.
+/// Converts the input to `Date32`, extracts the month (1–12),
+/// and computes the quarter as `((month - 1) / 3) + 1`.
+/// Null values are propagated transparently.
+pub fn spark_quarter(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    // Cast input to Date32 for compatibility with date_part()
+    let input = cast(&args[0].clone().into_array(1)?, &DataType::Date32)?;
+
+    // Extract month (1–12) using Arrow's date_part
+    let month_arr: ArrayRef = date_part(&input, DatePart::Month)?;
+    let month_arr = month_arr
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .expect("date_part(Month) must return Int32Array");
+
+    // Compute quarter: ((month - 1) / 3) + 1, preserving NULLs
+    let quarter =
+        Int32Array::from_iter(month_arr.iter().map(|opt_m| opt_m.map(|m| (m - 1) / 3 + 1)));
+
+    Ok(ColumnarValue::Array(Arc::new(quarter)))
+}
+
+// ---- timezone handling (custom, Spark-like)
+// ---------------------------------------------------
+
+/// Parse optional timezone (2nd argument) into `Option<Tz>`.
 fn parse_tz(args: &[ColumnarValue]) -> Option<Tz> {
     parse_tz_value(args.get(1))
 }

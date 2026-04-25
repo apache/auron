@@ -467,7 +467,7 @@ mod tests {
         ])) as ArrayRef;
 
         // generated with Murmur3Hash(Seq(Literal(1L)), 42).eval() since Spark is tested
-        let hashes = create_murmur3_hashes(5, &[i.clone()], 42);
+        let hashes = create_murmur3_hashes(5, std::slice::from_ref(&i), 42);
         let expected: Vec<i32> = [
             0x99f0149d_u32,
             0x9c67b85d,
@@ -482,7 +482,7 @@ mod tests {
 
         // generated with XxHash64(Seq(Literal(1L)), 42).eval() since Spark is tested
         // against this as well
-        let hashes = create_xxhash64_hashes(5, &[i.clone()], 42);
+        let hashes = create_xxhash64_hashes(5, std::slice::from_ref(&i), 42);
         let expected = vec![
             -7001672635703045582,
             -5252525462095825812,
@@ -495,11 +495,11 @@ mod tests {
 
     #[test]
     fn test_str() {
-        let i = Arc::new(StringArray::from(vec!["hello", "bar", "", "😁", "天地"]));
+        let i = Arc::new(StringArray::from(vec!["hello", "bar", "", "😁", "天地"])) as ArrayRef;
 
         // generated with Murmur3Hash(Seq(Literal("")), 42).eval() since Spark is tested
         // against this as well
-        let hashes = create_murmur3_hashes(5, &[i.clone()], 42);
+        let hashes = create_murmur3_hashes(5, std::slice::from_ref(&i), 42);
         let expected: Vec<i32> = [3286402344_u32, 2486176763, 142593372, 885025535, 2395000894]
             .into_iter()
             .map(|v| v as i32)
@@ -508,7 +508,7 @@ mod tests {
 
         // generated with XxHash64(Seq(Literal("")), 42).eval() since Spark is tested
         // against this as well
-        let hashes = create_xxhash64_hashes(5, &[i.clone()], 42);
+        let hashes = create_xxhash64_hashes(5, std::slice::from_ref(&i), 42);
         let expected = vec![
             -4367754540140381902,
             -1798770879548125814,
@@ -541,7 +541,7 @@ mod tests {
         let array_ref = Arc::new(list_array) as ArrayRef;
 
         // Test Murmur3 hash
-        let hashes = create_murmur3_hashes(3, &[array_ref.clone()], 42);
+        let hashes = create_murmur3_hashes(3, std::slice::from_ref(&array_ref), 42);
         assert_eq!(hashes, vec![-222940379, -374492525, -331964951]);
         Ok(())
     }

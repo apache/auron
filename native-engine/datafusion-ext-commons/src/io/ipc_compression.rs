@@ -336,8 +336,8 @@ mod tests {
         let test_array2: ArrayRef = Arc::new(StringArray::from(vec![Some("foo"), Some("bar")]));
         let schema = Arc::new(Schema::new(vec![Field::new("", DataType::Utf8, false)]));
 
-        writer.write_batch(2, &[test_array1.clone()])?;
-        writer.write_batch(2, &[test_array2.clone()])?;
+        writer.write_batch(2, std::slice::from_ref(&test_array1))?;
+        writer.write_batch(2, std::slice::from_ref(&test_array2))?;
         writer.finish_current_buf()?;
 
         let mut reader = IpcCompressionReader::new(Cursor::new(buf));

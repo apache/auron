@@ -456,10 +456,10 @@ impl AccBytesColumn {
     fn refresh_heap_mem_used(&mut self) {
         self.heap_mem_used = 0;
         for item in &self.items {
-            if let Some(v) = item {
-                if v.spilled() {
-                    self.heap_mem_used += v.capacity();
-                }
+            if let Some(v) = item
+                && v.spilled()
+            {
+                self.heap_mem_used += v.capacity();
             }
         }
     }
