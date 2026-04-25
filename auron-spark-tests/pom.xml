@@ -83,9 +83,45 @@
 
   <profiles>
     <profile>
+      <id>spark-3.1</id>
+      <modules>
+        <module>spark31</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-3.2</id>
+      <modules>
+        <module>spark32</module>
+      </modules>
+    </profile>
+    <profile>
       <id>spark-3.3</id>
       <modules>
         <module>spark33</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-3.4</id>
+      <modules>
+        <module>spark34</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-3.5</id>
+      <modules>
+        <module>spark35</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-4.0</id>
+      <modules>
+        <module>spark40</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-4.1</id>
+      <modules>
+        <module>spark41</module>
       </modules>
     </profile>
   </profiles>

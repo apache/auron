@@ -24,7 +24,7 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileSystem
-import org.apache.iceberg.{FileFormat, FileScanTask}
+import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -33,13 +33,14 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.auron.{EmptyNativeRDD, NativeConverters, NativeHelper, NativeRDD, NativeSupports, Shims}
 import org.apache.spark.sql.auron.iceberg.IcebergScanPlan
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 import org.apache.auron.{protobuf => pb}
@@ -57,31 +58,37 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
   override val output = basedScan.output
   override val outputPartitioning = basedScan.outputPartitioning
 
-  private lazy val readSchema: StructType = plan.readSchema
+  private lazy val fileSchema: StructType = plan.fileSchema
+  private lazy val partitionSchema: StructType = plan.partitionSchema
+  private lazy val projectableSchema: StructType =
+    StructType(fileSchema.fields ++ partitionSchema.fields)
   private lazy val fileTasks: Seq[FileScanTask] = plan.fileTasks
+  private lazy val pruningPredicates: Seq[pb.PhysicalExprNode] = plan.pruningPredicates
 
   private lazy val partitions: Array[FilePartition] = buildFilePartitions()
   private lazy val fileSizes: Map[String, Long] = buildFileSizes()
 
-  private lazy val nativeFileSchema: pb.Schema = NativeConverters.convertSchema(readSchema)
+  private lazy val nativeFileSchema: pb.Schema = NativeConverters.convertSchema(fileSchema)
   private lazy val nativePartitionSchema: pb.Schema =
-    NativeConverters.convertSchema(StructType(Nil))
+    NativeConverters.convertSchema(partitionSchema)
 
   private lazy val caseSensitive: Boolean = SQLConf.get.caseSensitiveAnalysis
 
   private lazy val fieldIndexByName: Map[String, Int] = {
     if (caseSensitive) {
-      readSchema.fieldNames.zipWithIndex.toMap
+      projectableSchema.fieldNames.zipWithIndex.toMap
     } else {
-      readSchema.fieldNames.map(_.toLowerCase(Locale.ROOT)).zipWithIndex.toMap
+      projectableSchema.fieldNames.map(_.toLowerCase(Locale.ROOT)).zipWithIndex.toMap
     }
   }
 
   private def fieldIndexFor(name: String): Int = {
     if (caseSensitive) {
-      fieldIndexByName.getOrElse(name, readSchema.fieldIndex(name))
+      fieldIndexByName.getOrElse(name, projectableSchema.fieldIndex(name))
     } else {
-      fieldIndexByName.getOrElse(name.toLowerCase(Locale.ROOT), readSchema.fieldIndex(name))
+      fieldIndexByName.getOrElse(
+        name.toLowerCase(Locale.ROOT),
+        projectableSchema.fieldIndex(name))
     }
   }
 
@@ -98,6 +105,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
           .setPath(filePath)
           .setSize(size)
           .setLastModifiedNs(0)
+          .addAllPartitionValues(metadataPartitionValues(filePath).asJava)
           .setRange(
             pb.FileRange
               .newBuilder()
@@ -110,6 +118,17 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
         .newBuilder()
         .addAllFiles(partition.files.map(nativePartitionedFile).toList.asJava)
         .build()
+    }
+
+  private def metadataPartitionValues(filePath: String): Seq[pb.ScalarValue] =
+    partitionSchema.fields.map { field =>
+      field.name match {
+        case name if name == MetadataColumns.FILE_PATH.name() =>
+          NativeConverters.convertExpr(Literal.create(filePath, StringType)).getLiteral
+        case name =>
+          throw new IllegalStateException(
+            s"unsupported Iceberg metadata column in native scan: $name")
+      }
     }
 
   override def doExecuteNative(): NativeRDD = {
@@ -166,8 +185,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
             .newBuilder()
             .setBaseConf(nativeFileScanConf)
             .setFsResourceId(resourceId)
-            // No pruning predicates are pushed down in the native scan yet.
-            .addAllPruningPredicates(new java.util.ArrayList())
+            .addAllPruningPredicates(pruningPredicates.asJava)
 
           pb.PhysicalPlanNode
             .newBuilder()
@@ -178,8 +196,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
             .newBuilder()
             .setBaseConf(nativeFileScanConf)
             .setFsResourceId(resourceId)
-            // No pruning predicates are pushed down in the native scan yet.
-            .addAllPruningPredicates(new java.util.ArrayList())
+            .addAllPruningPredicates(pruningPredicates.asJava)
 
           pb.PhysicalPlanNode
             .newBuilder()

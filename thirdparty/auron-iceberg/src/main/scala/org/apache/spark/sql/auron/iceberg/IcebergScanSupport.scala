@@ -20,17 +20,26 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
-import org.apache.iceberg.expressions.Expressions
+import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
+import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BinaryType, DataType, DecimalType, StringType, StructField, StructType}
 
+import org.apache.auron.{protobuf => pb}
+
+// fileSchema is read from the data files. partitionSchema carries supported metadata columns
+// (for example _file) that are materialized as per-file constant values in the native scan.
 final case class IcebergScanPlan(
     fileTasks: Seq[FileScanTask],
     fileFormat: FileFormat,
-    readSchema: StructType)
+    readSchema: StructType,
+    fileSchema: StructType,
+    partitionSchema: StructType,
+    pruningPredicates: Seq[pb.PhysicalExprNode])
 
 object IcebergScanSupport extends Logging {
 
@@ -48,12 +57,24 @@ object IcebergScanSupport extends Logging {
     }
 
     val readSchema = scan.readSchema
-    // Native scan does not support Iceberg metadata columns (e.g. _file, _pos).
-    if (hasMetadataColumns(readSchema)) {
+    val unsupportedMetadataColumns = collectUnsupportedMetadataColumns(readSchema)
+    // Native scan can project file-level metadata columns such as _file via partition values.
+    // Metadata columns that require per-row materialization (for example _pos) still fallback.
+    if (unsupportedMetadataColumns.nonEmpty) {
       return None
     }
 
-    if (!readSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType))) {
+    val fileSchema = StructType(readSchema.fields.filterNot(isSupportedMetadataColumn))
+    // Supported metadata columns are materialized via per-file constant values rather than
+    // read from the Iceberg data file payload.
+    val partitionSchema = StructType(readSchema.fields.filter(isSupportedMetadataColumn))
+
+    if (!fileSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType))) {
+      return None
+    }
+
+    if (!partitionSchema.fields.forall(field =>
+        NativeConverters.isTypeSupported(field.dataType))) {
       return None
     }
 
@@ -61,7 +82,14 @@ object IcebergScanSupport extends Logging {
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
     if (partitions.isEmpty) {
       logWarning(s"Native Iceberg scan planned with empty partitions for $scanClassName.")
-      return Some(IcebergScanPlan(Seq.empty, FileFormat.PARQUET, readSchema))
+      return Some(
+        IcebergScanPlan(
+          Seq.empty,
+          FileFormat.PARQUET,
+          readSchema,
+          fileSchema,
+          partitionSchema,
+          Seq.empty))
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
@@ -77,11 +105,6 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    // Residual filters require row-level evaluation, not supported in native scan.
-    if (!fileTasks.forall(task => Expressions.alwaysTrue().equals(task.residual()))) {
-      return None
-    }
-
     // Native scan handles a single file format; mixed formats must fallback.
     val formats = fileTasks.map(_.file().format()).distinct
     if (formats.size > 1) {
@@ -93,11 +116,27 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    Some(IcebergScanPlan(fileTasks, format, readSchema))
+    val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
+    Some(
+      IcebergScanPlan(
+        fileTasks,
+        format,
+        readSchema,
+        fileSchema,
+        partitionSchema,
+        pruningPredicates))
   }
 
-  private def hasMetadataColumns(schema: StructType): Boolean =
-    schema.fields.exists(field => MetadataColumns.isMetadataColumn(field.name))
+  private def collectUnsupportedMetadataColumns(schema: StructType): Seq[String] =
+    schema.fields.collect {
+      case field
+          if MetadataColumns.isMetadataColumn(field.name) &&
+            !isSupportedMetadataColumn(field) =>
+        field.name
+    }
+
+  private def isSupportedMetadataColumn(field: org.apache.spark.sql.types.StructField): Boolean =
+    field.name == MetadataColumns.FILE_PATH.name()
 
   private def inputPartitions(exec: BatchScanExec): Seq[InputPartition] = {
     // Prefer DataSource V2 batch API; if not available, fallback to exec methods via reflection.
@@ -187,5 +226,241 @@ object IcebergScanSupport extends Logging {
         logDebug(s"Failed to read Iceberg SparkInputPartition via reflection for $className.", t)
         None
     }
+  }
+
+  private def collectPruningPredicates(
+      scan: AnyRef,
+      readSchema: StructType): Seq[pb.PhysicalExprNode] = {
+    scanFilterExpressions(scan).flatMap { expr =>
+      convertIcebergFilterExpression(expr, readSchema) match {
+        case Some(converted) =>
+          Some(NativeConverters.convertScanPruningExpr(converted))
+        case None =>
+          logDebug(s"Skip unsupported Iceberg pruning expression: $expr")
+          None
+      }
+    }
+  }
+
+  private def scanFilterExpressions(scan: AnyRef): Seq[IcebergExpression] = {
+    invokeDeclaredMethod(scan, "filterExpressions") match {
+      case Some(values: java.util.Collection[_]) =>
+        values.asScala.collect { case expr: IcebergExpression => expr }.toSeq
+      case Some(values: Seq[_]) =>
+        values.collect { case expr: IcebergExpression => expr }
+      case _ =>
+        Seq.empty
+    }
+  }
+
+  private def invokeDeclaredMethod(target: AnyRef, methodName: String): Option[Any] = {
+    try {
+      var cls: Class[_] = target.getClass
+      while (cls != null) {
+        cls.getDeclaredMethods.find(_.getName == methodName) match {
+          case Some(method) =>
+            method.setAccessible(true)
+            return Some(method.invoke(target))
+          case None =>
+            cls = cls.getSuperclass
+        }
+      }
+      None
+    } catch {
+      case NonFatal(t) =>
+        logDebug(s"Failed to invoke $methodName on ${target.getClass.getName}.", t)
+        None
+    }
+  }
+
+  private def convertIcebergFilterExpression(
+      expr: IcebergExpression,
+      readSchema: StructType): Option[SparkExpression] = {
+    expr match {
+      case and: IcebergAnd =>
+        for {
+          left <- convertIcebergFilterExpression(and.left(), readSchema)
+          right <- convertIcebergFilterExpression(and.right(), readSchema)
+        } yield SparkAnd(left, right)
+      case or: IcebergOr =>
+        for {
+          left <- convertIcebergFilterExpression(or.left(), readSchema)
+          right <- convertIcebergFilterExpression(or.right(), readSchema)
+        } yield SparkOr(left, right)
+      case not: IcebergNot =>
+        convertIcebergFilterExpression(not.child(), readSchema).map(SparkNot)
+      case predicate: UnboundPredicate[_] =>
+        convertUnboundPredicate(predicate, readSchema)
+      case predicate: BoundPredicate[_] =>
+        convertBoundPredicate(predicate, readSchema)
+      case _ =>
+        expr.op() match {
+          case org.apache.iceberg.expressions.Expression.Operation.TRUE =>
+            Some(Literal(true))
+          case org.apache.iceberg.expressions.Expression.Operation.FALSE =>
+            Some(Literal(false))
+          case _ =>
+            None
+        }
+    }
+  }
+
+  private def convertUnboundPredicate(
+      predicate: UnboundPredicate[_],
+      readSchema: StructType): Option[SparkExpression] = {
+    findField(predicate.ref().name(), readSchema).flatMap { field =>
+      val attr = toAttribute(field)
+      val op = predicate.op()
+
+      op match {
+        case org.apache.iceberg.expressions.Expression.Operation.IS_NULL =>
+          Some(IsNull(attr))
+        case org.apache.iceberg.expressions.Expression.Operation.NOT_NULL =>
+          Some(IsNotNull(attr))
+        case org.apache.iceberg.expressions.Expression.Operation.IS_NAN =>
+          Some(IsNaN(attr))
+        case org.apache.iceberg.expressions.Expression.Operation.NOT_NAN =>
+          Some(SparkNot(IsNaN(attr)))
+        case org.apache.iceberg.expressions.Expression.Operation.IN =>
+          convertInPredicate(
+            attr,
+            field.dataType,
+            predicate.literals().asScala.map(_.value()).toSeq)
+        case org.apache.iceberg.expressions.Expression.Operation.NOT_IN =>
+          convertInPredicate(
+            attr,
+            field.dataType,
+            predicate.literals().asScala.map(_.value()).toSeq).map(SparkNot)
+        case _ =>
+          convertBinaryPredicate(attr, field.dataType, op, predicate.literal().value())
+      }
+    }
+  }
+
+  private def convertBoundPredicate(
+      predicate: BoundPredicate[_],
+      readSchema: StructType): Option[SparkExpression] = {
+    findField(predicate.ref().name(), readSchema).flatMap { field =>
+      val attr = toAttribute(field)
+      val op = predicate.op()
+
+      if (predicate.isUnaryPredicate()) {
+        op match {
+          case org.apache.iceberg.expressions.Expression.Operation.IS_NULL =>
+            Some(IsNull(attr))
+          case org.apache.iceberg.expressions.Expression.Operation.NOT_NULL =>
+            Some(IsNotNull(attr))
+          case org.apache.iceberg.expressions.Expression.Operation.IS_NAN =>
+            Some(IsNaN(attr))
+          case org.apache.iceberg.expressions.Expression.Operation.NOT_NAN =>
+            Some(SparkNot(IsNaN(attr)))
+          case _ =>
+            None
+        }
+      } else if (predicate.isLiteralPredicate()) {
+        val literalValue = predicate.asLiteralPredicate().literal().value()
+        op match {
+          case _ =>
+            convertBinaryPredicate(attr, field.dataType, op, literalValue)
+        }
+      } else if (predicate.isSetPredicate()) {
+        val values = predicate.asSetPredicate().literalSet().asScala.toSeq
+        op match {
+          case org.apache.iceberg.expressions.Expression.Operation.IN =>
+            convertInPredicate(attr, field.dataType, values)
+          case org.apache.iceberg.expressions.Expression.Operation.NOT_IN =>
+            convertInPredicate(attr, field.dataType, values).map(SparkNot)
+          case _ =>
+            None
+        }
+      } else {
+        None
+      }
+    }
+  }
+
+  private def convertBinaryPredicate(
+      attr: AttributeReference,
+      dataType: DataType,
+      op: org.apache.iceberg.expressions.Expression.Operation,
+      literalValue: Any): Option[SparkExpression] = {
+    if (!supportsScanPruningLiteralType(dataType)) {
+      return None
+    }
+    toLiteral(literalValue, dataType).flatMap { literal =>
+      op match {
+        case org.apache.iceberg.expressions.Expression.Operation.EQ =>
+          Some(EqualTo(attr, literal))
+        case org.apache.iceberg.expressions.Expression.Operation.NOT_EQ =>
+          Some(SparkNot(EqualTo(attr, literal)))
+        case org.apache.iceberg.expressions.Expression.Operation.LT =>
+          Some(LessThan(attr, literal))
+        case org.apache.iceberg.expressions.Expression.Operation.LT_EQ =>
+          Some(LessThanOrEqual(attr, literal))
+        case org.apache.iceberg.expressions.Expression.Operation.GT =>
+          Some(GreaterThan(attr, literal))
+        case org.apache.iceberg.expressions.Expression.Operation.GT_EQ =>
+          Some(GreaterThanOrEqual(attr, literal))
+        case _ =>
+          None
+      }
+    }
+  }
+
+  private def convertInPredicate(
+      attr: AttributeReference,
+      dataType: DataType,
+      values: Seq[Any]): Option[SparkExpression] = {
+    if (!supportsScanPruningLiteralType(dataType)) {
+      return None
+    }
+    val literals = values.map(toLiteral(_, dataType))
+    if (literals.forall(_.nonEmpty)) {
+      Some(In(attr, literals.flatten))
+    } else {
+      None
+    }
+  }
+
+  private def supportsScanPruningLiteralType(dataType: DataType): Boolean = {
+    dataType match {
+      case StringType | BinaryType => false
+      case _: DecimalType => false
+      case _ => true
+    }
+  }
+
+  private def toLiteral(value: Any, dataType: DataType): Option[Literal] = {
+    if (value == null) {
+      return Some(Literal.create(null, dataType))
+    }
+    dataType match {
+      case _: DecimalType =>
+        None
+      case BinaryType =>
+        value match {
+          case bytes: Array[Byte] =>
+            Some(Literal(bytes, BinaryType))
+          case byteBuffer: java.nio.ByteBuffer =>
+            val duplicated = byteBuffer.duplicate()
+            val bytes = new Array[Byte](duplicated.remaining())
+            duplicated.get(bytes)
+            Some(Literal(bytes, BinaryType))
+          case _ =>
+            None
+        }
+      case StringType =>
+        Some(Literal.create(value.toString, StringType))
+      case _ =>
+        Some(Literal.create(value, dataType))
+    }
+  }
+
+  private def toAttribute(field: StructField): AttributeReference =
+    AttributeReference(field.name, field.dataType, nullable = true)()
+
+  private def findField(name: String, readSchema: StructType): Option[StructField] = {
+    val resolver = SQLConf.get.resolver
+    readSchema.fields.find(field => resolver(field.name, name))
   }
 }

@@ -144,6 +144,30 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("date-part functions with non-UTC timezone") {
+    withTable("t1") {
+      sql("create table t1(c1 timestamp) using parquet")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        sql("insert into t1 values(timestamp'2021-01-04 04:30:00')")
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/New_York") {
+        checkSparkAnswerAndOperator(
+          "select year(c1), month(c1), dayofmonth(c1), dayofweek(c1), quarter(c1) from t1")
+      }
+    }
+  }
+
+  test("date-part functions with date input unchanged across timezones") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Shanghai") {
+      withTable("t1") {
+        sql("create table t1(c1 date) using parquet")
+        sql("insert into t1 values(date'2021-01-04')")
+        checkSparkAnswerAndOperator(
+          "select year(c1), month(c1), dayofmonth(c1), dayofweek(c1), quarter(c1) from t1")
+      }
+    }
+  }
+
   test("stddev_samp function with UDAF fallback") {
     withSQLConf("spark.auron.udafFallback.enable" -> "true") {
       withTable("t1") {
@@ -333,6 +357,192 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |  (null, map('x', 10), map('f', 20))
           |""".stripMargin)
       checkSparkAnswerAndOperator("select map_concat(c1, c2, c3) from t1")
+    }
+  }
+
+  test("map_from_arrays function") {
+    withTable("t1") {
+      sql("create table t1(c1 array<string>, c2 array<int>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array('a', 'b'), array(1, 2)),
+          |  (array('x'), array(10)),
+          |  (null, array(20)),
+          |  (array('m', 'n'), array(null, 30))
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select map_from_arrays(c1, c2) from t1")
+    }
+  }
+
+  test("map_from_arrays rejects null keys") {
+    withTable("t1") {
+      sql("create table t1(c1 array<string>, c2 array<int>) using parquet")
+      sql("insert into t1 values (array('a', cast(null as string)), array(1, 2))")
+      val df = sql("select map_from_arrays(c1, c2) from t1")
+      val err = intercept[Exception] {
+        df.collect()
+      }
+      assert(allCauseMessages(err).toLowerCase.contains("null map keys"))
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan:
+               |${plan}""".stripMargin)
+        }
+    }
+  }
+
+  test("map_from_entries function") {
+    withTable("t1") {
+      sql("create table t1(c1 array<struct<k:string,v:int>>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(named_struct('k', 'a', 'v', 1), named_struct('k', 'b', 'v', 2))),
+          |  (array(named_struct('k', 'x', 'v', 10))),
+          |  (cast(null as array<struct<k:string,v:int>>)),
+          |  (array(cast(null as struct<k:string,v:int>), named_struct('k', 'z', 'v', 30))),
+          |  (array(named_struct('k', 'm', 'v', cast(null as int))))
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select map_from_entries(c1) from t1")
+    }
+  }
+
+  test("map_from_entries rejects null keys") {
+    withTable("t1") {
+      sql("create table t1(c1 array<struct<k:string,v:int>>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(named_struct('k', 'a', 'v', 1), named_struct('k', cast(null as string), 'v', 2)))
+          |""".stripMargin)
+      val df = sql("select map_from_entries(c1) from t1")
+      val err = intercept[Exception] {
+        df.collect()
+      }
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan:
+               |${plan}""".stripMargin)
+        }
+      assert(allCauseMessages(err).toLowerCase.contains("null map key"))
+    }
+  }
+
+  test("map_from_entries duplicate keys") {
+    withTable("t1") {
+      sql("create table t1(c1 array<struct<k:string,v:int>>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(named_struct('k', 'a', 'v', 1), named_struct('k', 'a', 'v', 2)))
+          |""".stripMargin)
+      val df = sql("select map_from_entries(c1) from t1")
+      val err = intercept[Exception] {
+        df.collect()
+      }
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan:
+               |${plan}""".stripMargin)
+        }
+      assert(allCauseMessages(err).toLowerCase.contains("duplicate key"))
+    }
+  }
+
+  private def allCauseMessages(err: Throwable): String = {
+    val messages = scala.collection.mutable.ArrayBuffer.empty[String]
+    var current = err
+    while (current != null) {
+      Option(current.getMessage).foreach(messages += _)
+      current = current.getCause
+    }
+    messages.mkString(" | caused by: ")
+  }
+
+  test("map_from_entries last win dedup policy") {
+    withTable("t1") {
+      sql("create table t1(c1 array<struct<k:string,v:int>>) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(
+          |    named_struct('k', 'a', 'v', 1),
+          |    named_struct('k', 'b', 'v', 2),
+          |    named_struct('k', 'a', 'v', 3)))
+          |""".stripMargin)
+      withSQLConf(
+        SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkSparkAnswerAndOperator("select map_from_entries(c1) from t1")
+      }
+    }
+  }
+
+  test("str_to_map function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("""
+          |insert into t1 values
+          |  ('a:1,b:2'),
+          |  ('a:1:2,b'),
+          |  (null)
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select str_to_map(c1) from t1")
+    }
+  }
+
+  test("str_to_map regex delimiters") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values ('a::1,,b:::2')")
+      checkSparkAnswerAndOperator("select str_to_map(c1, ',+', ':+') from t1")
+    }
+  }
+
+  test("str_to_map Java regex delimiters") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values ('a:1,b:2,c:3')")
+      checkSparkAnswerAndOperator("select str_to_map(c1, ',(?=b:|c:)', ':') from t1")
+    }
+  }
+
+  test("str_to_map duplicate keys") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values ('a:1,a:2')")
+      val df = sql("select str_to_map(c1) from t1")
+      val err = intercept[Exception] {
+        df.collect()
+      }
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      plan
+        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+        .foreach { op =>
+          fail(s"""
+               |Found non-native operator: ${op.nodeName}
+               |plan:
+               |${plan}""".stripMargin)
+        }
+      assert(allCauseMessages(err).toLowerCase.contains("duplicate key"))
+    }
+  }
+
+  test("str_to_map last win dedup policy") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values ('a:1,b:2,a:3')")
+      withSQLConf(
+        SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkSparkAnswerAndOperator("select str_to_map(c1) from t1")
+      }
     }
   }
 
@@ -725,6 +935,64 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       scales.foreach { scale =>
         val df = sql(s"SELECT bround(c1, $scale) FROM t1")
         checkAnswer(df, Seq(Row(null)))
+      }
+    }
+  }
+
+  test("ascii function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('A'), ('abc'), (''), (null)")
+      checkSparkAnswerAndOperator("select ascii(c1) from t1")
+    }
+  }
+
+  test("bit_length function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('hello'), (''), (null), ('caf\\u00e9')")
+      checkSparkAnswerAndOperator("select bit_length(c1) from t1")
+    }
+  }
+
+  test("chr function") {
+    withTable("t1") {
+      sql("create table t1(c1 bigint) using parquet")
+      sql("insert into t1 values(65), (97), (48), (null)")
+      checkSparkAnswerAndOperator("select chr(c1) from t1")
+    }
+  }
+
+  test("translate function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('AaBbCc'), ('hello'), (''), (null)")
+      checkSparkAnswerAndOperator("select translate(c1, 'ABC', 'xyz') from t1")
+    }
+  }
+
+  test("replace function") {
+    withTable("t1") {
+      sql("create table t1(c1 string) using parquet")
+      sql("insert into t1 values('hello world'), ('aaa'), (''), (null)")
+      checkSparkAnswerAndOperator("select replace(c1, 'world', 'spark') from t1")
+      checkSparkAnswerAndOperator("select replace(c1, 'a', '') from t1")
+    }
+  }
+
+  test("date_trunc function") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTable("t1") {
+        sql("create table t1(c1 timestamp) using parquet")
+        sql("""insert into t1 values
+            |  (timestamp'2024-03-15 14:30:45'),
+            |  (timestamp'2024-12-31 23:59:59'),
+            |  (null)
+            |""".stripMargin)
+        checkSparkAnswerAndOperator("select date_trunc('year', c1) from t1")
+        checkSparkAnswerAndOperator("select date_trunc('month', c1) from t1")
+        checkSparkAnswerAndOperator("select date_trunc('day', c1) from t1")
+        checkSparkAnswerAndOperator("select date_trunc('hour', c1) from t1")
       }
     }
   }

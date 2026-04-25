@@ -303,6 +303,7 @@
         <configuration>
           <includes>
             <include>**/*ITCase.java</include>
+            <include>**/*Test.java</include>
           </includes>
         </configuration>
       </plugin>

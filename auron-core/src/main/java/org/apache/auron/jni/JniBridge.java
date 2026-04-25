@@ -23,6 +23,8 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import org.apache.auron.configuration.AuronConfiguration;
 import org.apache.auron.configuration.ConfigOption;
 import org.apache.auron.functions.AuronUDFWrapperContext;
@@ -39,6 +41,7 @@ import org.apache.hadoop.fs.Path;
 @SuppressWarnings("unused")
 public class JniBridge {
     private static final ConcurrentHashMap<String, Object> resourcesMap = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Pattern> regexCache = new ConcurrentHashMap<>();
 
     private static final List<BufferPoolMXBean> directMXBeans =
             ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class);
@@ -132,6 +135,38 @@ public class JniBridge {
 
     public static String getEngineName() {
         return AuronAdaptor.getInstance().getEngineName();
+    }
+
+    public static String[] strToMapSplit(String text, String pairDelim, String keyValueDelim) {
+        Pattern pairPattern = getCachedPattern(pairDelim, "pairDelim");
+        Pattern keyValuePattern = getCachedPattern(keyValueDelim, "keyValueDelim");
+
+        String[] entries = pairPattern.split(text, -1);
+        String[] flattened = new String[entries.length * 2];
+        for (int i = 0; i < entries.length; i++) {
+            String[] kv = keyValuePattern.split(entries[i], 2);
+            flattened[i * 2] = kv[0];
+            flattened[i * 2 + 1] = kv.length > 1 ? kv[1] : null;
+        }
+        return flattened;
+    }
+
+    private static Pattern getCachedPattern(String pattern, String argName) {
+        Pattern cached = regexCache.get(pattern);
+        if (cached != null) {
+            return cached;
+        }
+
+        final Pattern compiled;
+        try {
+            compiled = Pattern.compile(pattern);
+        } catch (PatternSyntaxException e) {
+            throw new RuntimeException(
+                    "str_to_map " + argName + " arg must be a valid Java regex: " + e.getMessage(), e);
+        }
+
+        Pattern existing = regexCache.putIfAbsent(pattern, compiled);
+        return existing != null ? existing : compiled;
     }
 
     static <T> T getConfValue(String confKey) {

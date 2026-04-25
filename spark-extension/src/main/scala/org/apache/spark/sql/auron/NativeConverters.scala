@@ -469,6 +469,9 @@ object NativeConverters extends Logging {
               .setReturnNullable(subquery.nullable))
         }
 
+      case expr if isNoOpAnsiCast(expr) =>
+        convertExprWithFallback(expr.children.head, isPruningExpr, fallback)
+
       // cast
       case cast: Cast =>
         val involvesDateOrTimestamp =
@@ -891,6 +894,17 @@ object NativeConverters extends Logging {
         buildScalarFunction(pb.ScalarFunction.FindInSet, e.children, e.dataType)
       case e: Abs if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
         buildScalarFunction(pb.ScalarFunction.Abs, e.children, e.dataType)
+      case e: Ascii => buildScalarFunction(pb.ScalarFunction.Ascii, e.children, e.dataType)
+      case e: BitLength =>
+        buildScalarFunction(pb.ScalarFunction.BitLength, e.children, e.dataType)
+      case e: Chr => buildScalarFunction(pb.ScalarFunction.Chr, e.children, e.dataType)
+      case e: StringTranslate =>
+        buildScalarFunction(pb.ScalarFunction.Translate, e.children, e.dataType)
+      case e: StringReplace =>
+        buildScalarFunction(pb.ScalarFunction.Replace, e.children, e.dataType)
+      case e: TruncTimestamp =>
+        buildScalarFunction(pb.ScalarFunction.DateTrunc, e.children, e.dataType)
+
       case e: OctetLength =>
         buildScalarFunction(pb.ScalarFunction.OctetLength, e.children, e.dataType)
       case Length(arg) if arg.dataType == StringType =>
@@ -929,6 +943,16 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_Murmur3Hash", children, IntegerType)
       case XxHash64(children, 42L) =>
         buildExtScalarFunction("Spark_XxHash64", children, LongType)
+      case e: MapFromArrays =>
+        buildExtScalarFunction("Spark_MapFromArrays", e.children, e.dataType)
+      case e: StringToMap =>
+        buildExtScalarFunction(
+          "Spark_StrToMap",
+          e.text :: e.pairDelim :: e.keyValueDelim :: Literal
+            .create(
+              SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY).toString,
+              StringType) :: Nil,
+          e.dataType)
       case e: Greatest =>
         buildScalarFunction(pb.ScalarFunction.Greatest, e.children, e.dataType)
       case e: Pow =>
@@ -936,15 +960,18 @@ object NativeConverters extends Logging {
       case e: Nvl =>
         buildScalarFunction(pb.ScalarFunction.Nvl, e.children, e.dataType)
 
-      case Year(child) => buildExtScalarFunction("Spark_Year", child :: Nil, IntegerType)
-      case Month(child) => buildExtScalarFunction("Spark_Month", child :: Nil, IntegerType)
-      case DayOfMonth(child) => buildExtScalarFunction("Spark_Day", child :: Nil, IntegerType)
+      case Year(child) =>
+        buildTimePartExt("Spark_Year", child, isPruningExpr, fallback)
+      case Month(child) =>
+        buildTimePartExt("Spark_Month", child, isPruningExpr, fallback)
+      case DayOfMonth(child) =>
+        buildTimePartExt("Spark_Day", child, isPruningExpr, fallback)
       case DayOfWeek(child) =>
-        buildExtScalarFunction("Spark_DayOfWeek", child :: Nil, IntegerType)
+        buildTimePartExt("Spark_DayOfWeek", child, isPruningExpr, fallback)
       case WeekOfYear(child) =>
         buildTimePartExt("Spark_WeekOfYear", child, isPruningExpr, fallback)
-
-      case Quarter(child) => buildExtScalarFunction("Spark_Quarter", child :: Nil, IntegerType)
+      case Quarter(child) =>
+        buildTimePartExt("Spark_Quarter", child, isPruningExpr, fallback)
 
       case e: Levenshtein =>
         buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)
@@ -1094,6 +1121,14 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_NormalizeNanAndZero", e.children, e.dataType)
 
       case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
+      case e: MapFromEntries =>
+        buildExtScalarFunction(
+          "Spark_MapFromEntries",
+          e.child :: Literal
+            .create(
+              SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY).toString,
+              StringType) :: Nil,
+          e.dataType)
       case e: MapConcat => buildExtScalarFunction("Spark_MapConcat", e.children, e.dataType)
 
       case e: CreateNamedStruct =>
@@ -1417,6 +1452,11 @@ object NativeConverters extends Logging {
     }
     Cast(expr, dataType)
   }
+
+  private def isNoOpAnsiCast(expr: Expression): Boolean =
+    expr.getClass.getSimpleName == "AnsiCast" &&
+      expr.children.size == 1 &&
+      expr.children.head.dataType == expr.dataType
 
   def unpackBinaryTypeCast(expr: Expression): Expression =
     expr match {

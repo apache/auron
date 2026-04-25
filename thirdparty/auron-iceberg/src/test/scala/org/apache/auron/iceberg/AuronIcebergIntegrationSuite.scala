@@ -24,7 +24,9 @@ import org.apache.iceberg.{FileFormat, FileScanTask}
 import org.apache.iceberg.data.{GenericAppenderFactory, Record}
 import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 
 class AuronIcebergIntegrationSuite
     extends org.apache.spark.sql.QueryTest
@@ -132,24 +134,109 @@ class AuronIcebergIntegrationSuite
     }
   }
 
-  test("iceberg scan falls back for residual filters on data columns") {
+  test("iceberg scan pushes residual filters into native scan pruning predicates") {
     withTable("local.db.t_residual") {
       sql("create table local.db.t_residual (id int, v string) using iceberg")
       sql("insert into local.db.t_residual values (1, 'a'), (2, 'b')")
-      val df = sql("select * from local.db.t_residual where v = 'a'")
+      val df = sql("select * from local.db.t_residual where id = 1")
       checkAnswer(df, Seq(Row(1, "a")))
+      val nativeScanPlan = icebergScanPlan(df)
+      assert(nativeScanPlan.nonEmpty)
+      assert(nativeScanPlan.get.pruningPredicates.nonEmpty)
       val plan = df.queryExecution.executedPlan.toString()
-      assert(!plan.contains("NativeIcebergTableScan"))
+      assert(plan.contains("NativeIcebergTableScan"))
+      assert(plan.contains("NativeFilter"))
     }
   }
 
-  test("iceberg scan falls back when reading metadata columns") {
+  test("iceberg scan pushes supported IN filters into native scan pruning predicates") {
+    withTable("local.db.t_residual_supported") {
+      sql("create table local.db.t_residual_supported (id int, v string) using iceberg")
+      sql(
+        "insert into local.db.t_residual_supported values (1, 'alpha'), (2, 'beta'), (3, 'atom')")
+      val df = sql("""
+          |select * from local.db.t_residual_supported
+          |where id in (1, 3)
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "alpha"), Row(3, "atom")))
+      val nativeScanPlan = icebergScanPlan(df)
+      assert(nativeScanPlan.nonEmpty)
+      assert(nativeScanPlan.get.pruningPredicates.nonEmpty)
+      val plan = df.queryExecution.executedPlan.toString()
+      assert(plan.contains("NativeIcebergTableScan"))
+      assert(plan.contains("NativeFilter"))
+    }
+  }
+
+  test("iceberg scan keeps native post-scan filter when only part of the predicate is pushed") {
+    withTable("local.db.t_residual_partial_pushdown") {
+      sql("create table local.db.t_residual_partial_pushdown (id int, v string) using iceberg")
+      sql(
+        "insert into local.db.t_residual_partial_pushdown values (1, 'alpha'), (2, 'beta'), (3, 'atom'), (4, 'delta')")
+      val df = sql("""
+          |select * from local.db.t_residual_partial_pushdown
+          |where id in (1, 2, 3) and id % 2 = 1
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "alpha"), Row(3, "atom")))
+      val nativeScanPlan = icebergScanPlan(df)
+      assert(nativeScanPlan.nonEmpty)
+      assert(nativeScanPlan.get.pruningPredicates.nonEmpty)
+      val plan = df.queryExecution.executedPlan.toString()
+      assert(plan.contains("NativeIcebergTableScan"))
+      assert(plan.contains("NativeFilter"))
+    }
+  }
+
+  test("iceberg scan keeps native string filter outside scan pruning") {
+    withTable("local.db.t_residual_string") {
+      sql("create table local.db.t_residual_string (id int, v string) using iceberg")
+      sql("insert into local.db.t_residual_string values (1, 'a'), (2, 'b'), (3, null)")
+      val df = sql("""
+          |select * from local.db.t_residual_string
+          |where v = 'a'
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "a")))
+      val nativeScanPlan = icebergScanPlan(df)
+      assert(nativeScanPlan.nonEmpty)
+      assert(nativeScanPlan.get.pruningPredicates.nonEmpty)
+      val plan = df.queryExecution.executedPlan.toString()
+      assert(plan.contains("NativeIcebergTableScan"))
+      assert(
+        plan.contains("NativeFilter"),
+        "string equality should remain on the post-scan native filter path")
+    }
+  }
+
+  test("iceberg native scan supports _file metadata column") {
     withTable("local.db.t4") {
       sql("create table local.db.t4 using iceberg as select 1 as id, 'a' as v")
-      val df = sql("select _file from local.db.t4")
-      df.collect()
-      val plan = df.queryExecution.executedPlan.toString()
-      assert(!plan.contains("NativeIcebergTableScan"))
+      checkSparkAnswerAndOperator("select _file from local.db.t4")
+    }
+  }
+
+  test("iceberg native scan supports data columns with _file metadata column") {
+    withTable("local.db.t4_mixed") {
+      sql("create table local.db.t4_mixed using iceberg as select 1 as id, 'a' as v")
+      checkSparkAnswerAndOperator("select id, _file from local.db.t4_mixed")
+    }
+  }
+
+  test("iceberg native scan preserves projected order for _file metadata column") {
+    withTable("local.db.t4_metadata_first") {
+      sql("create table local.db.t4_metadata_first using iceberg as select 1 as id, 'a' as v")
+      checkSparkAnswerAndOperator("select _file, id from local.db.t4_metadata_first")
+    }
+  }
+
+  test("iceberg scan falls back when reading unsupported metadata columns") {
+    withTable("local.db.t4_pos") {
+      sql("create table local.db.t4_pos using iceberg as select 1 as id, 'a' as v")
+      withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+        val df = sql("select _pos from local.db.t4_pos")
+        df.collect()
+        val plan = df.queryExecution.executedPlan.toString()
+        assert(!plan.contains("NativeIcebergTableScan"))
+      }
     }
   }
 
@@ -238,4 +325,24 @@ class AuronIcebergIntegrationSuite
       taskIterable.close()
     }
   }
+
+  private def checkSparkAnswerAndOperator(sqlText: String): DataFrame = {
+    var expected: Seq[Row] = Nil
+    withSQLConf("spark.auron.enable" -> "false") {
+      expected = sql(sqlText).collect().toSeq
+    }
+
+    var df: DataFrame = null
+    withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+      df = sql(sqlText)
+      checkAnswer(df, expected)
+      val plan = df.queryExecution.executedPlan.toString()
+      assert(plan.contains("NativeIcebergTableScan"))
+    }
+    df
+  }
+  private def icebergScanPlan(df: DataFrame) =
+    df.queryExecution.sparkPlan.collectFirst { case scan: BatchScanExec =>
+      IcebergScanSupport.plan(scan)
+    }.flatten
 }
