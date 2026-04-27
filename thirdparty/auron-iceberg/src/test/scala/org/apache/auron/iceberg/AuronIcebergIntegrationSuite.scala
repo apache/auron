@@ -26,6 +26,7 @@ import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
+import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 
 class AuronIcebergIntegrationSuite
@@ -48,6 +49,21 @@ class AuronIcebergIntegrationSuite
       df.collect()
       val plan = df.queryExecution.executedPlan.toString()
       assert(plan.contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg native scan exposes file scan driver metrics") {
+    withTable("local.db.t_metrics") {
+      sql("create table local.db.t_metrics using iceberg as select 1 as id, 'a' as v")
+      val df = sql("select * from local.db.t_metrics")
+      checkAnswer(df, Seq(Row(1, "a")))
+      val nativeScan = nativeIcebergTableScanExec(df)
+      nativeScan.doExecuteNative()
+      val metrics = nativeScan.metrics.map { case (name, metric) => name -> metric.value }
+      assert(metrics.contains("numPartitions"))
+      assert(metrics.contains("numFiles"))
+      assert(metrics("numPartitions") > 0)
+      assert(metrics("numFiles") > 0)
     }
   }
 
@@ -345,4 +361,14 @@ class AuronIcebergIntegrationSuite
     df.queryExecution.sparkPlan.collectFirst { case scan: BatchScanExec =>
       IcebergScanSupport.plan(scan)
     }.flatten
+
+  private def nativeIcebergTableScanExec(df: DataFrame): NativeIcebergTableScanExec = {
+    val batchScan = df.queryExecution.sparkPlan.collectFirst { case scan: BatchScanExec =>
+      scan
+    }
+    assert(batchScan.nonEmpty)
+    val scanPlan = IcebergScanSupport.plan(batchScan.get)
+    assert(scanPlan.nonEmpty)
+    NativeIcebergTableScanExec(batchScan.get, scanPlan.get)
+  }
 }
