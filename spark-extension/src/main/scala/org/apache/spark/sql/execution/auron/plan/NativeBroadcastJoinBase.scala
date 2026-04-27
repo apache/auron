@@ -125,8 +125,8 @@ abstract class NativeBroadcastJoinBase(
     val rightRDD = NativeHelper.executeNative(right)
 
     val (probedRDD, builtRDD) = broadcastSide match {
-      case BroadcastLeft => (rightRDD, leftRDD)
-      case BroadcastRight => (leftRDD, rightRDD)
+      case JoinBuildLeft => (rightRDD, leftRDD)
+      case JoinBuildRight => (leftRDD, rightRDD)
     }
 
     // Handle the edge case when probed side is empty (no partitions)
@@ -152,10 +152,6 @@ abstract class NativeBroadcastJoinBase(
     val nativeJoinType = this.nativeJoinType
     val nativeJoinOn = this.nativeJoinOn
 
-val (probedRDD, builtRDD) = broadcastSide match {
-  case JoinBuildLeft => (rightRDD, leftRDD)
-  case JoinBuildRight => (leftRDD, rightRDD)
-}
     val probedShuffleReadFull = probedRDD.isShuffleReadFull && (broadcastSide match {
       case JoinBuildLeft =>
         Seq(FullOuter, RightOuter).contains(joinType)
@@ -186,8 +182,8 @@ val (probedRDD, builtRDD) = broadcastSide match {
         val (leftChild, rightChild) =
           if (probedRDD.partitions.isEmpty && joinType.isInstanceOf[ExistenceJoin]) {
             val probedSchema = broadcastSide match {
-              case BroadcastLeft => Util.getNativeSchema(right.output)
-              case BroadcastRight => Util.getNativeSchema(left.output)
+              case JoinBuildLeft => Util.getNativeSchema(right.output)
+              case JoinBuildRight => Util.getNativeSchema(left.output)
             }
             val emptyProbedPlan = PhysicalPlanNode
               .newBuilder()
@@ -199,11 +195,11 @@ val (probedRDD, builtRDD) = broadcastSide match {
                   .build())
               .build()
             broadcastSide match {
-              case BroadcastLeft =>
+              case JoinBuildLeft =>
                 (
                   leftRDD.nativePlan(leftRDD.partitions(partition.index), context),
                   emptyProbedPlan)
-              case BroadcastRight =>
+              case JoinBuildRight =>
                 (
                   emptyProbedPlan,
                   rightRDD.nativePlan(rightRDD.partitions(partition.index), context))
