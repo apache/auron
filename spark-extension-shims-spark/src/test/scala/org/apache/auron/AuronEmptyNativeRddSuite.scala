@@ -35,8 +35,8 @@ class AuronEmptyNativeRddSuite
         .asInstanceOf[AdaptiveSparkPlanExec]
       val emptyNativeParquetScanExec =
         AuronConverters.convertSparkPlan(emptyExecutePlan.executedPlan).collectFirst {
-          case nativeParquetScanExec: NativeParquetScanExec =>
-            nativeParquetScanExec
+          case scan: NativeParquetScanExec =>
+            scan
         }
       val emptyNativeRDD = emptyNativeParquetScanExec.get.doExecuteNative()
       assert(emptyNativeRDD.isInstanceOf[EmptyNativeRDD])
@@ -63,8 +63,8 @@ class AuronEmptyNativeRddSuite
         .asInstanceOf[AdaptiveSparkPlanExec]
       val emptyNativeOrcScanExec =
         AuronConverters.convertSparkPlan(emptyExecutePlan.executedPlan).collectFirst {
-          case nativeOrcScanExec: NativeOrcScanExec =>
-            nativeOrcScanExec
+          case scan: NativeOrcScanExec =>
+            scan
         }
       val emptyNativeRDD = emptyNativeOrcScanExec.get.doExecuteNative()
       assert(emptyNativeRDD.isInstanceOf[EmptyNativeRDD])

@@ -87,11 +87,11 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
     NativeHelper
       .getDefaultNativeMetrics(sparkContext)
       .toSeq :+
-      ("dataSize", SQLMetrics.createSizeMetric(sparkContext, "data size")) :+
-      ("numOutputRows", SQLMetrics.createMetric(sparkContext, "number of output rows")) :+
-      ("collectTime", SQLMetrics.createTimingMetric(sparkContext, "time to collect")) :+
-      ("buildTime", SQLMetrics.createTimingMetric(sparkContext, "time to build")) :+
-      ("broadcastTime", SQLMetrics.createTimingMetric(sparkContext, "time to broadcast")): _*)
+      ("dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")) :+
+      ("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) :+
+      ("collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect")) :+
+      ("buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build")) :+
+      ("broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast")): _*)
 
   override protected def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException(
