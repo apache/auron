@@ -139,6 +139,8 @@ abstract class Shims {
       offset: Int,
       child: SparkPlan): NativeCollectLimitBase
 
+  def createNativeCoalesceExec(numPartitions: Int, child: SparkPlan): NativeCoalesceBase
+
   def createNativeParquetInsertIntoHiveTableExec(
       cmd: InsertIntoHiveTable,
       child: SparkPlan): NativeParquetInsertIntoHiveTableBase

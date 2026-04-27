@@ -283,6 +283,9 @@ class ShimsImpl extends Shims with Logging {
   override def createNativeFilterExec(condition: Expression, child: SparkPlan): NativeFilterBase =
     NativeFilterExec(condition, child)
 
+  def createNativeCoalesceExec(numPartitions: Int, child: SparkPlan): NativeCoalesceBase =
+    NativeCoalesceExec(numPartitions, child)
+
   override def createNativeGenerateExec(
       generator: Generator,
       requiredChildOutput: Seq[Attribute],

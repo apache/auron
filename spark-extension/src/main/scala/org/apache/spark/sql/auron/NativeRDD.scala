@@ -26,7 +26,7 @@ import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{CoalescedRDDPartition, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 
 import org.apache.auron.metric.SparkMetricNode
@@ -74,6 +74,33 @@ class NativeRDD(
       Iterator.empty
     } else {
       NativeHelper.executeNativePlan(computingNativePlan, metrics, split, Some(context))
+    }
+  }
+}
+
+class CoalesceNativeRDD(
+    @transient private val rddSparkContext: SparkContext,
+    rddDependencies: Seq[Dependency[_]],
+    partitions: Array[Partition],
+    @transient private val nativePlan: (Partition, TaskContext) => PhysicalPlanNode,
+    friendlyName: String)
+    extends NativeRDD(
+      rddSparkContext,
+      metrics = SparkMetricNode(Map.empty, Seq(), None),
+      rddPartitions = partitions,
+      rddPartitioner = None,
+      rddDependencies,
+      rddShuffleReadFull = false,
+      nativePlan,
+      friendlyName)
+    with Logging
+    with Serializable {
+
+  override protected def getPartitions: Array[Partition] = partitions
+
+  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+    split.asInstanceOf[CoalescedRDDPartition].parents.iterator.flatMap { parentPartition =>
+      firstParent[InternalRow].iterator(parentPartition, context)
     }
   }
 }
