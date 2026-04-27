@@ -72,6 +72,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
     filePartitions
   }
   private lazy val fileSizes: Map[String, Long] = buildFileSizes()
+  private lazy val fileSpecIds: Map[String, Int] = buildFileSpecIds()
 
   private lazy val nativeFileSchema: pb.Schema = NativeConverters.convertSchema(fileSchema)
   private lazy val nativePartitionSchema: pb.Schema =
@@ -130,6 +131,10 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
       field.name match {
         case name if name == MetadataColumns.FILE_PATH.name() =>
           NativeConverters.convertExpr(Literal.create(filePath, StringType)).getLiteral
+        case name if name == MetadataColumns.SPEC_ID.name() =>
+          NativeConverters
+            .convertExpr(Literal.create(fileSpecIds(filePath), field.dataType))
+            .getLiteral
         case name =>
           throw new IllegalStateException(
             s"unsupported Iceberg metadata column in native scan: $name")
@@ -236,6 +241,25 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
       sparkContext,
       executionId,
       Seq(metrics("numPartitions"), metrics("numFiles")))
+  }
+
+  private def buildFileSpecIds(): Map[String, Int] = {
+    // Map file path to Iceberg partition spec id; tasks may split a file into multiple ranges.
+    val specIds = scala.collection.mutable.HashMap.empty[String, Int]
+    fileTasks.foreach { task =>
+      val filePath = task.file().location()
+      val specId = task.file().specId()
+      specIds.get(filePath) match {
+        case Some(existingSpecId) if existingSpecId != specId =>
+          throw new IllegalStateException(
+            s"Inconsistent Iceberg partition spec id for file $filePath: " +
+              s"$existingSpecId != $specId")
+        case Some(_) =>
+        case None =>
+          specIds.put(filePath, specId)
+      }
+    }
+    specIds.toMap
   }
 
   private def buildFilePartitions(): Array[FilePartition] = {
