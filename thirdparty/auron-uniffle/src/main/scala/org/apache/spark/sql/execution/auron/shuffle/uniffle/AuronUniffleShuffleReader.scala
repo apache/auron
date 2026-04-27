@@ -219,7 +219,7 @@ class AuronUniffleShuffleReader[K, C](
 
   @nowarn("cat=unused") // Some params temporarily unused
   private class UniffleInputStream(
-      iterator: MultiPartitionIterator[_, _],
+      iterator: MultiPartitionIterator,
       shuffleId: Int,
       startPartition: Int,
       endPartition: Int)
