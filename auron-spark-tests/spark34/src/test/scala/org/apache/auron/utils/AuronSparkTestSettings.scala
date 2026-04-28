@@ -16,7 +16,28 @@
  */
 package org.apache.auron.utils
 
+import org.apache.spark.sql._
+
 class AuronSparkTestSettings extends SparkTestSettings {
+  {
+    // Use Arrow's unsafe implementation.
+    System.setProperty("arrow.allocation.manager.type", "Unsafe")
+  }
+
+  enableSuite[AuronDataFrameAggregateSuite]
+    // See https://github.com/apache/auron/issues/1840
+    .excludeByPrefix("collect functions")
+    // A custom version of the SPARK-19471 test has been added to AuronDataFrameAggregateSuite
+    // with modified plan checks for Auron's native aggregates, so we exclude the original here.
+    .exclude(
+      "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it")
+    .exclude(
+      "SPARK-24788: RelationalGroupedDataset.toString with unresolved exprs should not fail")
+
+  enableSuite[AuronDatasetAggregatorSuite]
+
+  enableSuite[AuronTypedImperativeAggregateSuite]
+
   override def getSQLQueryTestSettings: SQLQueryTestSettings = new SQLQueryTestSettings {
     override def getResourceFilePath: String = ""
     override def getSupportedSQLQueryTests: Set[String] = Set.empty

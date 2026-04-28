@@ -16,7 +16,52 @@
  */
 package org.apache.auron.utils
 
+import org.apache.spark.sql._
+
 class AuronSparkTestSettings extends SparkTestSettings {
+  {
+    // Use Arrow's unsafe implementation.
+    System.setProperty("arrow.allocation.manager.type", "Unsafe")
+  }
+
+  enableSuite[AuronDataFrameAggregateSuite]
+    // See https://github.com/apache/auron/issues/1840
+    .excludeByPrefix("collect functions")
+    // A custom version of the SPARK-19471 test has been added to AuronDataFrameAggregateSuite
+    // with modified plan checks for Auron's native aggregates, so we exclude the original here.
+    .exclude(
+      "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it")
+    .exclude(
+      "SPARK-24788: RelationalGroupedDataset.toString with unresolved exprs should not fail")
+    // The fast-hashmap test asserts on WholeStageCodegen output, but Auron replaces the
+    // HashAggregate with a native aggregate so no Spark-generated class is emitted.
+    .exclude("SPARK-43876: Enable fast hashmap for distinct queries")
+    // In vanilla Spark, HllSketchAgg.lgConfigK is a lazy val accessed during driver-side
+    // analysis, so SparkRuntimeException(HLL_INVALID_LG_K) propagates to the test directly.
+    // Auron defers HLL UDAF evaluation to the native executor via SparkUDAFWrapper, so the
+    // same exception is thrown inside a task and Spark's TaskRunner wraps it in SparkException
+    // before it reaches the test. intercept[SparkRuntimeException] no longer matches.
+    .exclude("SPARK-16484: hll_*_agg + hll_union negative tests")
+    // MapType isn't a supported shuffle key in Auron's shuffle writer, so grouping by a
+    // MapType column fails when writing the shuffle index file.
+    .exclude("SPARK-47430 Support GROUP BY MapType")
+    // Auron's native sum/avg use wrapping arithmetic on decimals and don't honor
+    // spark.sql.ansi.enabled, so the ArithmeticException these tests expect is never
+    // raised. Same exclusion is in place for Spark 3.3-3.5 (under AuronDataFrameSuite there).
+    .exclude("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow")
+    .exclude("SPARK-35955: Aggregate avg should not return wrong results for decimal overflow")
+
+  enableSuite[AuronDatasetAggregatorSuite]
+    // Dataset encoder fails to materialize tuple-of-struct results that round-trip through
+    // Auron's native execution; tracked as a follow-up.
+    .exclude("typed aggregation: complex result type")
+
+  enableSuite[AuronTypedImperativeAggregateSuite]
+    // ObjectHashAggregateExec without a grouping falls back to a JVM path whose closure
+    // can't be deserialized in the executor classloader (RemoteClassLoaderError on
+    // catalyst.expressions.Object). Investigating this fallback path is out of scope for #2170.
+    .exclude("dataframe aggregate with object aggregate buffer, no group by")
+
   override def getSQLQueryTestSettings: SQLQueryTestSettings = new SQLQueryTestSettings {
     override def getResourceFilePath: String = ""
     override def getSupportedSQLQueryTests: Set[String] = Set.empty

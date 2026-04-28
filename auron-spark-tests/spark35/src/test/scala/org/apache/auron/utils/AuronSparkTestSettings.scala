@@ -16,7 +16,37 @@
  */
 package org.apache.auron.utils
 
+import org.apache.spark.sql._
+
 class AuronSparkTestSettings extends SparkTestSettings {
+  {
+    // Use Arrow's unsafe implementation.
+    System.setProperty("arrow.allocation.manager.type", "Unsafe")
+  }
+
+  enableSuite[AuronDataFrameAggregateSuite]
+    // See https://github.com/apache/auron/issues/1840
+    .excludeByPrefix("collect functions")
+    // A custom version of the SPARK-19471 test has been added to AuronDataFrameAggregateSuite
+    // with modified plan checks for Auron's native aggregates, so we exclude the original here.
+    .exclude(
+      "SPARK-19471: AggregationIterator does not initialize the generated result projection before using it")
+    .exclude(
+      "SPARK-24788: RelationalGroupedDataset.toString with unresolved exprs should not fail")
+    // The fast-hashmap test asserts on WholeStageCodegen output, but Auron replaces the
+    // HashAggregate with a native aggregate so no Spark-generated class is emitted.
+    .exclude("SPARK-43876: Enable fast hashmap for distinct queries")
+    // In vanilla Spark, HllSketchAgg.lgConfigK is a lazy val accessed during driver-side
+    // analysis, so SparkRuntimeException(HLL_INVALID_LG_K) propagates to the test directly.
+    // Auron defers HLL UDAF evaluation to the native executor via SparkUDAFWrapper, so the
+    // same exception is thrown inside a task and Spark's TaskRunner wraps it in SparkException
+    // before it reaches the test. intercept[SparkRuntimeException] no longer matches.
+    .exclude("SPARK-16484: hll_*_agg + hll_union negative tests")
+
+  enableSuite[AuronDatasetAggregatorSuite]
+
+  enableSuite[AuronTypedImperativeAggregateSuite]
+
   override def getSQLQueryTestSettings: SQLQueryTestSettings = new SQLQueryTestSettings {
     override def getResourceFilePath: String = ""
     override def getSupportedSQLQueryTests: Set[String] = Set.empty
