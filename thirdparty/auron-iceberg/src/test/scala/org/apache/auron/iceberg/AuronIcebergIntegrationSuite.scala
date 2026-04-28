@@ -214,6 +214,20 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native scan supports _spec_id metadata column") {
+    withTable("local.db.t4_spec_id") {
+      sql("create table local.db.t4_spec_id using iceberg as select 1 as id, 'a' as v")
+      checkSparkAnswerAndOperator("select _spec_id from local.db.t4_spec_id")
+    }
+  }
+
+  test("iceberg native scan supports data columns with _file and _spec_id metadata columns") {
+    withTable("local.db.t4_metadata_mixed") {
+      sql("create table local.db.t4_metadata_mixed using iceberg as select 1 as id, 'a' as v")
+      checkSparkAnswerAndOperator("select id, _file, _spec_id from local.db.t4_metadata_mixed")
+    }
+  }
+
   test("iceberg native scan supports data columns with _file metadata column") {
     withTable("local.db.t4_mixed") {
       sql("create table local.db.t4_mixed using iceberg as select 1 as id, 'a' as v")

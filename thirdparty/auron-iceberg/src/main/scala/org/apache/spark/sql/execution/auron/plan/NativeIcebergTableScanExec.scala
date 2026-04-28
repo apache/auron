@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFil
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 import org.apache.auron.{protobuf => pb}
@@ -67,6 +67,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
 
   private lazy val partitions: Array[FilePartition] = buildFilePartitions()
   private lazy val fileSizes: Map[String, Long] = buildFileSizes()
+  private lazy val fileSpecIds: Map[String, Int] = buildFileSpecIds()
 
   private lazy val nativeFileSchema: pb.Schema = NativeConverters.convertSchema(fileSchema)
   private lazy val nativePartitionSchema: pb.Schema =
@@ -125,6 +126,10 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
       field.name match {
         case name if name == MetadataColumns.FILE_PATH.name() =>
           NativeConverters.convertExpr(Literal.create(filePath, StringType)).getLiteral
+        case name if name == MetadataColumns.SPEC_ID.name() =>
+          NativeConverters
+            .convertExpr(Literal.create(fileSpecIds(filePath), IntegerType))
+            .getLiteral
         case name =>
           throw new IllegalStateException(
             s"unsupported Iceberg metadata column in native scan: $name")
@@ -216,6 +221,15 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
     // Map file path to full file size; tasks may split a file into multiple ranges.
     fileTasks
       .map(task => task.file().location() -> task.file().fileSizeInBytes())
+      .groupBy(_._1)
+      .mapValues(_.head._2)
+      .toMap
+  }
+
+  private def buildFileSpecIds(): Map[String, Int] = {
+    // Map file path to Iceberg partition spec id; tasks may split a file into multiple ranges.
+    fileTasks
+      .map(task => task.file().location() -> task.file().specId())
       .groupBy(_._1)
       .mapValues(_.head._2)
       .toMap

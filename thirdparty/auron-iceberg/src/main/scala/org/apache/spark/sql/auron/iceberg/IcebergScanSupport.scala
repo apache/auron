@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.{BinaryType, DataType, DecimalType, StringType
 import org.apache.auron.{protobuf => pb}
 
 // fileSchema is read from the data files. partitionSchema carries supported metadata columns
-// (for example _file) that are materialized as per-file constant values in the native scan.
+// (for example _file and _spec_id) that are materialized as per-file constant values in
+// the native scan.
 final case class IcebergScanPlan(
     fileTasks: Seq[FileScanTask],
     fileFormat: FileFormat,
@@ -58,7 +59,8 @@ object IcebergScanSupport extends Logging {
 
     val readSchema = scan.readSchema
     val unsupportedMetadataColumns = collectUnsupportedMetadataColumns(readSchema)
-    // Native scan can project file-level metadata columns such as _file via partition values.
+    // Native scan can project file-level metadata columns such as _file and _spec_id
+    // via partition values.
     // Metadata columns that require per-row materialization (for example _pos) still fallback.
     if (unsupportedMetadataColumns.nonEmpty) {
       return None
@@ -136,7 +138,8 @@ object IcebergScanSupport extends Logging {
     }
 
   private def isSupportedMetadataColumn(field: org.apache.spark.sql.types.StructField): Boolean =
-    field.name == MetadataColumns.FILE_PATH.name()
+    field.name == MetadataColumns.FILE_PATH.name() ||
+      field.name == MetadataColumns.SPEC_ID.name()
 
   private def inputPartitions(exec: BatchScanExec): Seq[InputPartition] = {
     // Prefer DataSource V2 batch API; if not available, fallback to exec methods via reflection.
