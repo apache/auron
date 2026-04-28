@@ -79,6 +79,7 @@ use datafusion_ext_plans::{
     ipc_writer_exec::IpcWriterExec,
     limit_exec::LimitExec,
     orc_exec::OrcExec,
+    orc_sink_exec::OrcSinkExec,
     parquet_exec::ParquetExec,
     parquet_sink_exec::ParquetSinkExec,
     project_exec::ProjectExec,
@@ -811,6 +812,19 @@ impl PhysicalPlanner {
                     convert_box_required!(self, parquet_sink.input)?,
                     parquet_sink.fs_resource_id.clone(),
                     parquet_sink.num_dyn_parts as usize,
+                    props,
+                )))
+            }
+            PhysicalPlanType::OrcSink(orc_sink) => {
+                let mut props: Vec<(String, String)> = vec![];
+                for prop in &orc_sink.prop {
+                    props.push((prop.key.clone(), prop.value.clone()));
+                }
+                Ok(Arc::new(OrcSinkExec::new(
+                    convert_box_required!(self, orc_sink.input)?,
+                    orc_sink.fs_resource_id.clone(),
+                    orc_sink.num_dyn_parts as usize,
+                    Arc::new(convert_required!(orc_sink.schema)?),
                     props,
                 )))
             }
