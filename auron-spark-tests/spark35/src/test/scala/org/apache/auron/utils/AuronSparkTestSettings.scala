@@ -36,6 +36,12 @@ class AuronSparkTestSettings extends SparkTestSettings {
     // The fast-hashmap test asserts on WholeStageCodegen output, but Auron replaces the
     // HashAggregate with a native aggregate so no Spark-generated class is emitted.
     .exclude("SPARK-43876: Enable fast hashmap for distinct queries")
+    // In vanilla Spark, HllSketchAgg.lgConfigK is a lazy val accessed during driver-side
+    // analysis, so SparkRuntimeException(HLL_INVALID_LG_K) propagates to the test directly.
+    // Auron defers HLL UDAF evaluation to the native executor via SparkUDAFWrapper, so the
+    // same exception is thrown inside a task and Spark's TaskRunner wraps it in SparkException
+    // before it reaches the test. intercept[SparkRuntimeException] no longer matches.
+    .exclude("SPARK-16484: hll_*_agg + hll_union negative tests")
 
   enableSuite[AuronDatasetAggregatorSuite]
 

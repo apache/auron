@@ -163,15 +163,6 @@ public class AuronCallNativeWrapper {
         Throwable throwable = error.getAndSet(null);
         if (throwable != null) {
             close();
-            // Rethrow RuntimeException / Error subtypes directly so callers can match on
-            // specific types like SparkThrowable. The native side already wraps the cause
-            // in a RuntimeException, so the previous unconditional wrap discarded type info.
-            if (throwable instanceof RuntimeException) {
-                throw (RuntimeException) throwable;
-            }
-            if (throwable instanceof Error) {
-                throw (Error) throwable;
-            }
             throw new RuntimeException(throwable);
         }
     }
