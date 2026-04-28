@@ -748,4 +748,12 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       }.isDefined)
     }
   }
+
+  test("test not null filter for orc table") {
+    withTable("orc_string_filter") {
+      sql("create table orc_string_filter(id int, b string) using orc")
+      sql("insert into orc_string_filter values (1, 'abc'), (2, null), (3, 'def')")
+      checkSparkAnswerAndOperator("select * from orc_string_filter where b is not null")
+    }
+  }
 }
