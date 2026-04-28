@@ -26,6 +26,7 @@ import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.CumeDist
 import org.apache.spark.sql.catalyst.expressions.DenseRank
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.Lead
@@ -186,6 +187,13 @@ abstract class NativeWindowBase(
             windowExprBuilder.addChildren(NativeConverters.convertExpr(e.input))
             windowExprBuilder.addChildren(NativeConverters.convertExpr(e.offset))
             windowExprBuilder.addChildren(NativeConverters.convertExpr(e.default))
+
+          case e: CumeDist =>
+            assert(
+              spec.frameSpecification == e.frame,
+              s"window frame not supported: ${spec.frameSpecification}")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(pb.WindowFunction.CUME_DIST)
 
           case e: Sum =>
             assert(

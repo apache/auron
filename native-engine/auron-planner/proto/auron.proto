@@ -133,6 +133,7 @@ enum WindowFunction {
   NTH_VALUE = 4;
   NTH_VALUE_IGNORE_NULLS = 5;
   PERCENT_RANK = 6;
+  CUME_DIST = 7;
 }
 
 enum AggFunction {

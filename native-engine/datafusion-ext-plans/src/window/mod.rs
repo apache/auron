@@ -23,9 +23,10 @@ use crate::{
     agg::{AggFunction, agg::create_agg},
     window::{
         processors::{
-            agg_processor::AggProcessor, lead_processor::LeadProcessor,
-            nth_value_processor::NthValueProcessor, percent_rank_processor::PercentRankProcessor,
-            rank_processor::RankProcessor, row_number_processor::RowNumberProcessor,
+            agg_processor::AggProcessor, cume_dist_processor::CumeDistProcessor,
+            lead_processor::LeadProcessor, nth_value_processor::NthValueProcessor,
+            percent_rank_processor::PercentRankProcessor, rank_processor::RankProcessor,
+            row_number_processor::RowNumberProcessor,
         },
         window_context::WindowContext,
     },
@@ -40,6 +41,7 @@ pub enum WindowFunction {
     PercentRank,
     NthValue { ignore_nulls: bool },
     Lead,
+    CumeDist,
     Agg(AggFunction),
 }
 
@@ -97,6 +99,7 @@ impl WindowExpr {
                 self.children.clone(),
                 ignore_nulls,
             )?)),
+            WindowFunction::CumeDist => Ok(Box::new(CumeDistProcessor::new())),
             WindowFunction::Agg(agg_func) => {
                 let agg = create_agg(
                     agg_func.clone(),
@@ -112,7 +115,7 @@ impl WindowExpr {
     pub fn requires_full_partition(&self) -> bool {
         matches!(
             self.func,
-            WindowFunction::PercentRank | WindowFunction::Lead
+            WindowFunction::PercentRank | WindowFunction::Lead | WindowFunction::CumeDist
         )
     }
 }
