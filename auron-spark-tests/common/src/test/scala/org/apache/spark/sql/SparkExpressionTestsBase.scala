@@ -381,6 +381,7 @@ trait SparkExpressionTestsBase
       spark: SparkSession,
       rdd: RDD[InternalRow],
       schema: StructType): DataFrame =
-    spark.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+    spark
+      .asInstanceOf[org.apache.spark.sql.classic.SparkSession]
       .internalCreateDataFrame(rdd, schema, isStreaming = false)
 }

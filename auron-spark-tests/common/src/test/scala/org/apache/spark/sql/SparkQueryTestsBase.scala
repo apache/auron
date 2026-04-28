@@ -179,12 +179,12 @@ object AuronQueryTestUtil extends Assertions {
     s"""
        |== Results ==
        |${sideBySide(
-      s"== Correct Answer - ${expectedAnswer.size} ==" +:
-        getRowType(expectedAnswer.headOption) +:
-        prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
-      s"== Auron Answer - ${sparkAnswer.size} ==" +:
-        getRowType(sparkAnswer.headOption) +:
-        prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
+        s"== Correct Answer - ${expectedAnswer.size} ==" +:
+          getRowType(expectedAnswer.headOption) +:
+          prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
+        s"== Auron Answer - ${sparkAnswer.size} ==" +:
+          getRowType(sparkAnswer.headOption) +:
+          prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
     """.stripMargin
   }
 
