@@ -410,7 +410,7 @@ dependencies = [
  "datafusion-ext-functions",
  "datafusion-ext-plans",
  "datafusion-spark",
- "object_store",
+ "object_store 0.13.2",
  "parking_lot",
  "prost 0.14.3",
  "tonic-build",
@@ -861,7 +861,7 @@ dependencies = [
  "hex",
  "itertools",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "parquet",
  "rand",
@@ -895,7 +895,7 @@ dependencies = [
  "futures",
  "itertools",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "tokio",
 ]
@@ -918,7 +918,7 @@ dependencies = [
  "datafusion-session",
  "futures",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "tokio",
 ]
 
@@ -938,7 +938,7 @@ dependencies = [
  "indexmap",
  "libc",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parquet",
  "paste",
  "recursive",
@@ -981,7 +981,7 @@ dependencies = [
  "glob",
  "itertools",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parquet",
  "rand",
  "tempfile",
@@ -1011,7 +1011,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures",
- "object_store",
+ "object_store 0.12.5",
  "regex",
  "tokio",
 ]
@@ -1035,7 +1035,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures",
- "object_store",
+ "object_store 0.12.5",
  "serde_json",
  "tokio",
 ]
@@ -1065,7 +1065,7 @@ dependencies = [
  "hex",
  "itertools",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "parquet",
  "rand",
@@ -1088,7 +1088,7 @@ dependencies = [
  "datafusion-expr",
  "futures",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "rand",
  "tempfile",
@@ -1218,7 +1218,7 @@ dependencies = [
  "jni",
  "log",
  "num",
- "object_store",
+ "object_store 0.13.2",
  "once_cell",
  "orc-rust",
  "panic-message",
@@ -1507,7 +1507,7 @@ dependencies = [
  "futures",
  "itertools",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "tokio",
 ]
@@ -2719,14 +2719,40 @@ dependencies = [
 
 [[package]]
 name = "object_store"
-version = "0.12.4"
+version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c1be0c6c22ec0817cdc77d3842f721a17fd30ab6965001415b5402a74e6b740"
+checksum = "fbfbfff40aeccab00ec8a910b57ca8ecf4319b335c542f2edcd19dd25a1e2a00"
 dependencies = [
  "async-trait",
  "bytes 1.11.1",
  "chrono",
  "futures",
+ "http",
+ "humantime",
+ "itertools",
+ "parking_lot",
+ "percent-encoding",
+ "thiserror 2.0.14",
+ "tokio",
+ "tracing",
+ "url",
+ "walkdir",
+ "wasm-bindgen-futures",
+ "web-time",
+]
+
+[[package]]
+name = "object_store"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622acbc9100d3c10e2ee15804b0caa40e55c933d5aa53814cd520805b7958a49"
+dependencies = [
+ "async-trait",
+ "bytes 1.11.1",
+ "chrono",
+ "futures-channel",
+ "futures-core",
+ "futures-util",
  "http",
  "humantime",
  "itertools",
@@ -2836,7 +2862,7 @@ dependencies = [
  "lz4_flex 0.11.5",
  "num",
  "num-bigint",
- "object_store",
+ "object_store 0.12.5",
  "paste",
  "ring",
  "seq-macro",
