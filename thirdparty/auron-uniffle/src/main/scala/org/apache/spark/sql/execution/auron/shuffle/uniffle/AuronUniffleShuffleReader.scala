@@ -104,14 +104,14 @@ class AuronUniffleShuffleReader[K, C](
 
     val inputStream =
       new UniffleInputStream(
-        new MultiPartitionIterator[K, C](),
+        new MultiPartitionIterator(),
         shuffleId,
         startPartition,
         endPartition)
     Iterator.single(inputStream)
   }
 
-  private class MultiPartitionIterator[K, C] extends AbstractIterator[Product2[K, C]] {
+  private class MultiPartitionIterator extends AbstractIterator[Product2[K, C]] {
     private var iterators: util.Iterator[RssShuffleDataIterator[K, C]] = null
     private var currentIterator: RssShuffleDataIterator[K, C] = null
 
@@ -219,7 +219,7 @@ class AuronUniffleShuffleReader[K, C](
 
   @nowarn("cat=unused") // Some params temporarily unused
   private class UniffleInputStream(
-      iterator: MultiPartitionIterator[_, _],
+      iterator: MultiPartitionIterator,
       shuffleId: Int,
       startPartition: Int,
       endPartition: Int)

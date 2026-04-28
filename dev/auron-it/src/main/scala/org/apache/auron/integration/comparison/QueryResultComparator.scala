@@ -101,15 +101,17 @@ class QueryResultComparator extends QueryComparator {
       test: Array[Row],
       tolerance: Double = 1e-6): Boolean = {
 
-    baseline.zipWithIndex.foreach { case (actualRow, rowIdx) =>
+    baseline.zipWithIndex.forall { case (actualRow, rowIdx) =>
       val expectedRow: Row = test(rowIdx)
-      actualRow.schema.zipWithIndex.foreach { case (field, colIdx) =>
+      actualRow.schema.zipWithIndex.forall { case (field, colIdx) =>
         if (actualRow.isNullAt(colIdx) || expectedRow.isNullAt(colIdx)) {
           if (actualRow.isNullAt(colIdx) != expectedRow.isNullAt(colIdx)) {
             println(
               s"Mismatch in $queryId row $rowIdx col $colIdx: " +
                 s"expected null, got ${expectedRow(colIdx)}")
-            return false
+            false
+          } else {
+            true
           }
         } else {
           field.dataType match {
@@ -121,7 +123,9 @@ class QueryResultComparator extends QueryComparator {
                 println(
                   s"Floating-point mismatch in $queryId row $rowIdx col $colIdx: " +
                     s"expected ${expectedValue}, got ${actualValue} (diff=$diff)")
-                return false
+                false
+              } else {
+                true
               }
             case _ =>
               val actualValue = actualRow.get(colIdx).toString
@@ -130,13 +134,14 @@ class QueryResultComparator extends QueryComparator {
                 println(
                   s"Mismatch in $queryId row $rowIdx col $colIdx: " +
                     s"expected $expectedValue, got $actualValue")
-                return false
+                false
+              } else {
+                true
               }
           }
         }
       }
     }
-    true
   }
   // scalastyle:on
 }

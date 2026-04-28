@@ -55,7 +55,7 @@ abstract class ConvertToNativeBase(override val child: SparkPlan)
       .getDefaultNativeMetrics(sparkContext)
       .filterKeys(Set("stage_id", "output_rows", "elapsed_compute"))
       .toSeq :+
-      ("size", SQLMetrics.createSizeMetric(sparkContext, "Native.batch_bytes_size")): _*)
+      ("size" -> SQLMetrics.createSizeMetric(sparkContext, "Native.batch_bytes_size")): _*)
 
   val renamedSchema: StructType = Util.getSchema(child.output)
   val nativeSchema: Schema = NativeConverters.convertSchema(renamedSchema)

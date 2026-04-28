@@ -416,10 +416,15 @@
             <arg>-deprecation</arg>
             <arg>-feature</arg>
             <arg>-Ywarn-unused</arg>
+            <arg>-Xlint:_</arg>
             <arg>-Xfatal-warnings</arg>
 
             <arg>-Wconf:msg=method newInstance in class Class is deprecated:s</arg>
             <arg>-Wconf:msg=class ThreadDeath in package lang is deprecated:s</arg>
+            <!-- Auron implements Spark plugin SPIs whose contracts use `private[spark]` types
+                 (e.g. ElementTrackingStore, SparkUI, IndexShuffleBlockResolver,
+                 ShuffleWriteMetricsReporter). Exposing them is required by Spark, not a defect. -->
+            <arg>-Wconf:cat=lint-inaccessible:s</arg>
           </args>
         </configuration>
         <dependencies>
@@ -1250,6 +1255,7 @@
                 <!-- In Scala 2.13, the plugin's functionality has been included in the compiler -->
                 <!-- directly under the -Ymacro-annotations flag.  -->
                 <arg>-Ymacro-annotations</arg>
+                <arg>-Xlint:_</arg>
                 <arg>-Xfatal-warnings</arg>
 
                 <arg>-Wconf:cat=deprecation:wv,any:e</arg>
@@ -1265,6 +1271,8 @@
                 <arg>-Wconf:msg=early initializers are deprecated:s</arg>
                 <arg>-Wconf:cat=other-match-analysis:s</arg>
                 <arg>-Wconf:cat=feature-existentials:s</arg>
+                <!-- See note in base profile: Spark plugin SPIs require exposing `private[spark]` types. -->
+                <arg>-Wconf:cat=lint-inaccessible:s</arg>
               </args>
               <compilerPlugins>
                 <compilerPlugin>
