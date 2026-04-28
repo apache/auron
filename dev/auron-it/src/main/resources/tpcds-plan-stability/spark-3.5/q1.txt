@@ -11,9 +11,9 @@ AdaptiveSparkPlan (151)
          :           +- NativeShuffleExchange (81)
          :              +- NativeProject (80)
          :                 +- NativeSortMergeJoin Inner (79)
-         :                    :- ConvertToNative (69)
-         :                    :  +- * Project (68)
-         :                    :     +- * SortMergeJoin Inner (67)
+         :                    :- NativeProject (69)
+         :                    :  +- NativeFilter (68)
+         :                    :     +- NativeSortMergeJoin Inner (67)
          :                    :        :- NativeSort (33)
          :                    :        :  +- InputAdapter (32)
          :                    :        :     +- AQEShuffleRead (31)
@@ -440,18 +440,19 @@ Condition : isnotnull((avg(ctr_total_return) * 1.2)#27)
 Input [2]: [(avg(ctr_total_return) * 1.2)#27, ctr_store_sk#21]
 Arguments: [ctr_store_sk#21 ASC NULLS FIRST], false
 
-(67) SortMergeJoin [codegen id : X]
+(67) NativeSortMergeJoin
 Left keys [1]: [ctr_store_sk#12]
 Right keys [1]: [ctr_store_sk#21]
 Join type: Inner
-Join condition: (cast(ctr_total_return#13 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#27)
+Join condition: None
 
-(68) Project [codegen id : X]
+(68) NativeFilter
+Input [5]: [ctr_customer_sk#11, ctr_store_sk#12, ctr_total_return#13, (avg(ctr_total_return) * 1.2)#27, ctr_store_sk#21]
+Condition : (cast(ctr_total_return#13 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#27)
+
+(69) NativeProject
 Output [2]: [ctr_customer_sk#11, ctr_store_sk#12]
 Input [5]: [ctr_customer_sk#11, ctr_store_sk#12, ctr_total_return#13, (avg(ctr_total_return) * 1.2)#27, ctr_store_sk#21]
-
-(69) ConvertToNative
-Input [2]: [ctr_customer_sk#11, ctr_store_sk#12]
 
 (135) Scan parquet
 Output [2]: [s_store_sk#28, s_state#29]

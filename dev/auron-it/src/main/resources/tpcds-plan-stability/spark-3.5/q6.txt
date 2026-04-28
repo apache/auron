@@ -72,9 +72,9 @@ AdaptiveSparkPlan (147)
                                           +- AQEShuffleRead (81)
                                              +- ShuffleQueryStage (80), Statistics(X)
                                                 +- NativeShuffleExchange (79)
-                                                   +- ConvertToNative (78)
-                                                      +- * Project (77)
-                                                         +- * SortMergeJoin Inner (76)
+                                                   +- NativeProject (78)
+                                                      +- NativeFilter (77)
+                                                         +- NativeSortMergeJoin Inner (76)
                                                             :- NativeSort (62)
                                                             :  +- InputAdapter (61)
                                                             :     +- AQEShuffleRead (60)
@@ -471,18 +471,19 @@ Condition : isnotnull(avg(i_current_price)#23)
 Input [2]: [avg(i_current_price)#23, i_category#16]
 Arguments: [i_category#16 ASC NULLS FIRST], false
 
-(76) SortMergeJoin [codegen id : X]
+(76) NativeSortMergeJoin
 Left keys [1]: [i_category#14]
 Right keys [1]: [i_category#16]
 Join type: Inner
-Join condition: (cast(i_current_price#13 as decimal(14,7)) > (1.2 * avg(i_current_price)#23))
+Join condition: None
 
-(77) Project [codegen id : X]
+(77) NativeFilter
+Input [5]: [#12#12, #13#13, #14#14, avg(i_current_price)#23, i_category#16]
+Condition : (cast(i_current_price#13 as decimal(14,7)) > (1.2 * avg(i_current_price)#23))
+
+(78) NativeProject
 Output [1]: [i_item_sk#12]
 Input [5]: [#12#12, #13#13, #14#14, avg(i_current_price)#23, i_category#16]
-
-(78) ConvertToNative
-Input [1]: [i_item_sk#12]
 
 (79) NativeShuffleExchange
 Input [1]: [i_item_sk#12]

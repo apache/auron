@@ -46,6 +46,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
+import org.apache.spark.sql.catalyst.plans.InnerLike
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -506,7 +508,6 @@ object AuronConverters extends Logging {
           "rightKeys" -> rightKeys,
           "joinType" -> joinType,
           "condition" -> condition))
-      assert(condition.isEmpty, "join condition is not supported")
 
       val buildSide = exec
         .getTagValue(joinSmallerSideTag)
@@ -516,14 +517,17 @@ object AuronConverters extends Logging {
           JoinBuildRight
         }
 
-      return Shims.get.createNativeShuffledHashJoinExec(
-        addRenameColumnsExec(convertToNative(left.children(0))),
-        addRenameColumnsExec(convertToNative(right.children(0))),
-        leftKeys,
-        rightKeys,
+      return wrapInnerResidualJoinCondition(
         joinType,
-        buildSide,
-        isSkewJoin)
+        condition,
+        Shims.get.createNativeShuffledHashJoinExec(
+          addRenameColumnsExec(convertToNative(left.children(0))),
+          addRenameColumnsExec(convertToNative(right.children(0))),
+          leftKeys,
+          rightKeys,
+          joinType,
+          buildSide,
+          isSkewJoin))
     }
 
     val (leftKeys, rightKeys, joinType, condition, left, right, isSkewJoin) =
@@ -542,15 +546,17 @@ object AuronConverters extends Logging {
         "rightKeys" -> rightKeys,
         "joinType" -> joinType,
         "condition" -> condition))
-    assert(condition.isEmpty, "join condition is not supported")
 
-    Shims.get.createNativeSortMergeJoinExec(
-      addRenameColumnsExec(convertToNative(left)),
-      addRenameColumnsExec(convertToNative(right)),
-      leftKeys,
-      rightKeys,
+    wrapInnerResidualJoinCondition(
       joinType,
-      isSkewJoin)
+      condition,
+      Shims.get.createNativeSortMergeJoinExec(
+        addRenameColumnsExec(convertToNative(left)),
+        addRenameColumnsExec(convertToNative(right)),
+        leftKeys,
+        rightKeys,
+        joinType,
+        isSkewJoin))
   }
 
   def convertShuffledHashJoinExec(exec: ShuffledHashJoinExec): SparkPlan = {
@@ -566,15 +572,17 @@ object AuronConverters extends Logging {
         "condition" -> condition,
         "buildSide" -> buildSide))
     try {
-      assert(condition.isEmpty, "join condition is not supported")
-      Shims.get.createNativeShuffledHashJoinExec(
-        addRenameColumnsExec(convertToNative(left)),
-        addRenameColumnsExec(convertToNative(right)),
-        leftKeys,
-        rightKeys,
+      wrapInnerResidualJoinCondition(
         joinType,
-        buildSide,
-        Shims.get.getIsSkewJoinFromSHJ(exec))
+        condition,
+        Shims.get.createNativeShuffledHashJoinExec(
+          addRenameColumnsExec(convertToNative(left)),
+          addRenameColumnsExec(convertToNative(right)),
+          leftKeys,
+          rightKeys,
+          joinType,
+          buildSide,
+          Shims.get.getIsSkewJoinFromSHJ(exec)))
     } catch {
       case _ if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN) =>
         logWarning(
@@ -610,6 +618,19 @@ object AuronConverters extends Logging {
           SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, leftSorted, rightSorted)
         smj.setTagValue(convertToNonNativeTag, true)
         smj
+    }
+  }
+
+  private def wrapInnerResidualJoinCondition(
+      joinType: JoinType,
+      condition: Option[Expression],
+      joined: SparkPlan): SparkPlan = {
+    condition match {
+      case Some(residualCondition) =>
+        assert(joinType.isInstanceOf[InnerLike], "join condition is not supported")
+        convertFilterExec(FilterExec(residualCondition, joined))
+      case None =>
+        joined
     }
   }
 
