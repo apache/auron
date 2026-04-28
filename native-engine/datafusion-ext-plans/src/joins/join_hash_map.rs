@@ -253,15 +253,23 @@ impl Table {
             let mut e = entries![i] as usize;
             loop {
                 let hash_matched = self.map[e].hashes.simd_eq(Simd::splat(hashes[i]));
-                let empty = self.map[e].hashes.simd_eq(Simd::splat(0));
 
-                if let Some(pos) = (hash_matched | empty).first_set() {
+                // Fast path: check hash match first (common case)
+                if let Some(pos) = hash_matched.first_set() {
                     hashes[i] = unsafe {
                         // safety: transmute MapValue(u32) to u32
                         std::mem::transmute(self.map[e].values[pos])
                     };
                     break;
                 }
+
+                // Slow path: check empty slot only when no match
+                let empty = self.map[e].hashes.simd_eq(Simd::splat(0));
+                if empty.any() {
+                    hashes[i] = MapValue::EMPTY.0;
+                    break;
+                }
+
                 e += 1;
                 e %= 1 << self.map_mod_bits;
             }
