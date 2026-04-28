@@ -34,11 +34,10 @@ import org.apache.spark.sql.auron.{EmptyNativeRDD, NativeConverters, NativeHelpe
 import org.apache.spark.sql.auron.iceberg.IcebergScanPlan
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -53,7 +52,9 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
     with Logging {
 
   override lazy val metrics: Map[String, SQLMetric] =
-    NativeHelper.getNativeFileScanMetrics(sparkContext)
+    NativeHelper.getNativeFileScanMetrics(sparkContext) ++ Seq(
+      "numPartitions" -> SQLMetrics.createMetric(sparkContext, "Native.partitions_read"),
+      "numFiles" -> SQLMetrics.createMetric(sparkContext, "Native.files_read"))
 
   override val output = basedScan.output
   override val outputPartitioning = basedScan.outputPartitioning
@@ -65,7 +66,11 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
   private lazy val fileTasks: Seq[FileScanTask] = plan.fileTasks
   private lazy val pruningPredicates: Seq[pb.PhysicalExprNode] = plan.pruningPredicates
 
-  private lazy val partitions: Array[FilePartition] = buildFilePartitions()
+  private lazy val partitions: Array[FilePartition] = {
+    val filePartitions = buildFilePartitions()
+    postDriverMetrics(filePartitions)
+    filePartitions
+  }
   private lazy val fileSizes: Map[String, Long] = buildFileSizes()
 
   private lazy val nativeFileSchema: pb.Schema = NativeConverters.convertSchema(fileSchema)
@@ -219,6 +224,18 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
       .groupBy(_._1)
       .mapValues(_.head._2)
       .toMap
+  }
+
+  private def postDriverMetrics(filePartitions: Array[FilePartition]): Unit = {
+    val numPartitions = filePartitions.length
+    metrics("numPartitions").add(numPartitions)
+    val numFiles = filePartitions.foldLeft(0L)(_ + _.files.length)
+    metrics("numFiles").add(numFiles)
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(
+      sparkContext,
+      executionId,
+      Seq(metrics("numPartitions"), metrics("numFiles")))
   }
 
   private def buildFilePartitions(): Array[FilePartition] = {
