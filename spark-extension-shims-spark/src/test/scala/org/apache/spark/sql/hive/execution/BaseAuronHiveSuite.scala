@@ -16,21 +16,21 @@
  */
 package org.apache.spark.sql.hive.execution
 
-import org.apache.auron.sparkver
-
 import java.io.File
+
 import org.apache.commons.io.FileUtils
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.scalatest.BeforeAndAfterAll
 
-trait BaseAuronHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
+import org.apache.auron.sparkver
 
+trait BaseAuronHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   lazy val spark = getAuronSparkSession()
 
-  protected val suiteWorkspace: String = classOf[BaseAuronHiveSuite].
-    getResource("/").getPath + "auron-tests-workdir"
+  protected val suiteWorkspace: String =
+    classOf[BaseAuronHiveSuite].getResource("/").getPath + "auron-tests-workdir"
   protected val warehouseDir: String = suiteWorkspace + "/spark-warehouse"
   protected val metastoreDir: String = suiteWorkspace + "/meta"
 
@@ -45,7 +45,7 @@ trait BaseAuronHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   @sparkver("3.0 / 3.1 / 3.2 / 3.3/ 3.4/ 3.5")
-  def getAuronSparkSession():  org.apache.spark.sql.SparkSession = {
+  def getAuronSparkSession(): org.apache.spark.sql.SparkSession = {
     TestAuronHive.sparkSession
   }
 
@@ -79,7 +79,9 @@ object TestAuronHive
           .set("spark.ui.enabled", "false")
           .set(
             "spark.sql.warehouse.dir",
-            classOf[BaseAuronHiveSuite].getResource("/").getPath + "auron-tests-workdir/spark-warehouse")
+            classOf[BaseAuronHiveSuite]
+              .getResource("/")
+              .getPath + "auron-tests-workdir/spark-warehouse")
           .set("spark.auron.udf.singleChildFallback.enabled", "false")
           .set("spark.auron.enable.parquetHiveTableScanExec", "true")
           .set("spark.sql.hive.convertMetastoreParquet", "false"))) {}

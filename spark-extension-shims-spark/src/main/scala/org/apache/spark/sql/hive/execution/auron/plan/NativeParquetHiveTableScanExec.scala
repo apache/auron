@@ -44,7 +44,7 @@ import org.apache.spark.sql.hive.{HadoopTableReader, HiveShim}
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 
-import org.apache.auron.{protobuf => pb}
+import org.apache.auron.{protobuf => pb, sparkver}
 import org.apache.auron.metric.SparkMetricNode
 
 case class NativeParquetHiveTableScanExec(basedHiveScan: HiveTableScanExec)
@@ -163,11 +163,21 @@ case class NativeParquetHiveTableScanExec(basedHiveScan: HiveTableScanExec)
       friendlyName = "NativeRDD.ParquetHiveTableScan")
   }
 
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  private def getPrunedPartitions(): Seq[org.apache.hadoop.hive.ql.metadata.Partition] = {
+    basedHiveScan.prunedPartitions
+  }
+
+  @sparkver("3.0")
+  private def getPrunedPartitions(): Seq[org.apache.hadoop.hive.ql.metadata.Partition] = {
+    basedHiveScan.rawPartitions
+  }
+
   override def getFilePartitions(): Array[FilePartition] = {
     val newJobConf = new JobConf(nativeHadoopConf)
     val arrayFilePartition = ArrayBuffer[FilePartition]()
     val partitionedFiles = if (relation.isPartitioned) {
-      val partitions = basedHiveScan.prunedPartitions
+      val partitions = getPrunedPartitions
       val arrayPartitionedFile = ArrayBuffer[PartitionedFile]()
       partitions.foreach { partition =>
         val partDesc = Utilities.getPartitionDescFromTableDesc(nativeTableDesc, partition, true)
