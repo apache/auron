@@ -57,8 +57,24 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-catalyst_${scalaVersion}</artifactId>
+      <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.arrow</groupId>
+          <artifactId>arrow-memory-netty</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-hive_${scalaVersion}</artifactId>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-api</artifactId>
+      <version>${hadoopVersion}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -104,14 +120,41 @@
       <type>test-jar</type>
     </dependency>
     <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-memory-core</artifactId>
+      <version>${arrowVersion}</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-catalyst_${scalaVersion}</artifactId>
       <type>test-jar</type>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.arrow</groupId>
+          <artifactId>arrow-memory-netty</artifactId>
+        </exclusion>
+      </exclusions>
+
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scalaVersion}</artifactId>
       <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-hive_${scalaVersion}</artifactId>
+      <type>test-jar</type>
+      <!--      <exclusions>-->
+      <!--        <exclusion>-->
+      <!--          <groupId>org.apache.hive.shims</groupId>-->
+      <!--          <artifactId>hive-shims-common</artifactId>-->
+      <!--        </exclusion>-->
+      <!--        <exclusion>-->
+      <!--          <groupId>org.apache.hive.shims</groupId>-->
+      <!--          <artifactId>hive-shims-0.23</artifactId>-->
+      <!--        </exclusion>-->
+      <!--      </exclusions>-->
     </dependency>
   </dependencies>
 </project>

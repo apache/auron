@@ -85,7 +85,8 @@ abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
     val nativePartitionedFile = (file: PartitionedFile) => {
       val nativePartitionValues = partitionSchema.zipWithIndex.map { case (field, index) =>
         NativeConverters
-          .convertExpr(Literal(file.partitionValues.get(index, field.dataType), field.dataType))
+          .convertExpr(
+            Literal.create(file.partitionValues.get(index, field.dataType), field.dataType))
           .getLiteral
       }
       pb.PartitionedFile
