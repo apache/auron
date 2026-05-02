@@ -669,4 +669,21 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       checkSparkAnswerAndOperator(query)
     }
   }
+
+  test("randn function with foldable seed expression") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(id INT) USING parquet")
+      sql("INSERT INTO t1 VALUES(1), (2), (3)")
+
+      val query =
+        """
+          |SELECT
+          |  id,
+          |  randn(cast(42 as bigint)) AS randn_cast_seed
+          |FROM t1
+          |""".stripMargin
+
+      checkSparkAnswerAndOperator(query)
+    }
+  }
 }
