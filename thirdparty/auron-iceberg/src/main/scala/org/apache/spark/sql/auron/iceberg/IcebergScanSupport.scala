@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
 import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
+import org.apache.iceberg.spark.source.IcebergResolveFileFormatUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
@@ -79,13 +80,15 @@ object IcebergScanSupport extends Logging {
     }
 
     val partitions = inputPartitions(exec)
+
+    val fileFormat = IcebergResolveFileFormatUtil.resolveFileFormat(exec.scan)
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
     if (partitions.isEmpty) {
       logWarning(s"Native Iceberg scan planned with empty partitions for $scanClassName.")
       return Some(
         IcebergScanPlan(
           Seq.empty,
-          FileFormat.PARQUET,
+          fileFormat,
           readSchema,
           fileSchema,
           partitionSchema,

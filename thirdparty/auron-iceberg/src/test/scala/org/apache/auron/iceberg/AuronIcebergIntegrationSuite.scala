@@ -24,6 +24,7 @@ import org.apache.iceberg.{FileFormat, FileScanTask}
 import org.apache.iceberg.data.{GenericAppenderFactory, Record}
 import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
+import org.apache.iceberg.spark.source.IcebergResolveFileFormatUtil.resolveFileFormat
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -31,6 +32,36 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 class AuronIcebergIntegrationSuite
     extends org.apache.spark.sql.QueryTest
     with BaseAuronIcebergSuite {
+
+  test("empty iceberg table should still resolve correct format") {
+    withTable("local.db.t1") {
+      sql(
+        "create table local.db.t1(id int) using iceberg TBLPROPERTIES ('write.format.default'='orc')")
+      val df = spark.sql("SELECT * FROM local.db.t1")
+
+      val scanExec = df.queryExecution.executedPlan.collectFirst { case e: BatchScanExec =>
+        e
+      }.get
+
+      val format = resolveFileFormat(scanExec.scan)
+      assert(format == FileFormat.ORC)
+    }
+  }
+
+  test("empty iceberg scan should preserve ORC file format") {
+    withTable("local.db.t1") {
+      sql(
+        "CREATE TABLE local.db.t1 (id INT) USING iceberg TBLPROPERTIES ('write.format.default'='orc')")
+      sql("INSERT INTO local.db.t1 VALUES (1), (2)")
+      val df = spark.sql("SELECT * FROM iceberg_orc_table WHERE id > 100")
+      val executedPlan = df.queryExecution.executedPlan
+      val scanExec = executedPlan.collectFirst { case e: BatchScanExec =>
+        e
+      }.get
+      val format = resolveFileFormat(scanExec.scan)
+      assert(format == FileFormat.ORC)
+    }
+  }
 
   test("test iceberg integrate ") {
     withTable("local.db.t1") {
