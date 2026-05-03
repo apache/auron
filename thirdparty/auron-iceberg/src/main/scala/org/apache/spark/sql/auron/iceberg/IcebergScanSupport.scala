@@ -18,17 +18,19 @@ package org.apache.spark.sql.auron.iceberg
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
+
 import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
-import org.apache.iceberg.expressions.{BoundPredicate, UnboundPredicate, And => IcebergAnd, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr}
+import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
+import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, And => SparkAnd, Expression => SparkExpression, Not => SparkNot, Or => SparkOr}
+import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, DecimalType, StringType, StructField, StructType}
+
 import org.apache.auron.{protobuf => pb}
-import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 
 // fileSchema is read from the data files. partitionSchema carries supported metadata columns
 // (for example _file) that are materialized as per-file constant values in the native scan.
