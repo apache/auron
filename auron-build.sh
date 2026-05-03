@@ -572,6 +572,10 @@ if [[ "$USE_DOCKER" == true ]]; then
     exec docker-compose -f dev/docker-build/docker-compose.yml up --abort-on-container-exit
 else
     echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} ${MAVEN_OPTS} $@"
-    "$MVN_CMD" "${MVN_ARGS[@]}" "${MAVEN_OPTS}" "$@"
+    if [[ -n "$MAVEN_OPTS" ]]; then
+        "$MVN_CMD" "${MVN_ARGS[@]}" "${MAVEN_OPTS}" "$@"
+    else
+        "$MVN_CMD" "${MVN_ARGS[@]}" "$@"
+    fi
 fi
 
