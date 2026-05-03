@@ -190,7 +190,10 @@ object IcebergScanSupport extends Logging {
         logWarning(
           s"Failed to obtain input partitions via reflection for ${exec.getClass.getName}.",
           t)
-        Seq.empty
+        throw new IllegalStateException(
+          s"Cannot resolve input partitions for ${exec.getClass.getName}",
+          t
+        )
     }
   }
 
