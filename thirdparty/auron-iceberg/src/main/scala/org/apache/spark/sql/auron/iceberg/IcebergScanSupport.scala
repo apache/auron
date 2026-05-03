@@ -195,7 +195,8 @@ object IcebergScanSupport extends Logging {
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
     // Only accept Iceberg SparkInputPartition to access task groups.
-    if (className != AuronIcebergSourceUtil.getClassOfSparkInputPartition()) {
+    if (partition.getClass
+        != AuronIcebergSourceUtil.getClassOfSparkInputPartition()) {
       return None
     }
 
