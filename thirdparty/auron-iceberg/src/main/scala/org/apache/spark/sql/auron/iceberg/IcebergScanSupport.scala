@@ -192,8 +192,7 @@ object IcebergScanSupport extends Logging {
           t)
         throw new IllegalStateException(
           s"Cannot resolve input partitions for ${exec.getClass.getName}",
-          t
-        )
+          t)
     }
   }
 
