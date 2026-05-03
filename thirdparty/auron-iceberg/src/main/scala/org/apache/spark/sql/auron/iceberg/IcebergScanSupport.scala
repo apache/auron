@@ -18,18 +18,17 @@ package org.apache.spark.sql.auron.iceberg
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
-
 import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
-import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
+import org.apache.iceberg.expressions.{BoundPredicate, UnboundPredicate, And => IcebergAnd, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, And => SparkAnd, Expression => SparkExpression, Not => SparkNot, Or => SparkOr}
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, DecimalType, StringType, StructField, StructType}
-
 import org.apache.auron.{protobuf => pb}
+import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 
 // fileSchema is read from the data files. partitionSchema carries supported metadata columns
 // (for example _file) that are materialized as per-file constant values in the native scan.
@@ -47,12 +46,7 @@ object IcebergScanSupport extends Logging {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
-    if (!scanClassName.startsWith("org.apache.iceberg.spark.source.")) {
-      return None
-    }
-
-    // Changelog scan carries row-level changes; not supported by native COW-only path.
-    if (scanClassName == "org.apache.iceberg.spark.source.SparkChangelogScan") {
+    if (!(scan.getClass == AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan)) {
       return None
     }
 
@@ -199,7 +193,7 @@ object IcebergScanSupport extends Logging {
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
     // Only accept Iceberg SparkInputPartition to access task groups.
-    if (className != "org.apache.iceberg.spark.source.SparkInputPartition") {
+    if (className != AuronIcebergSourceUtil.getClassOfSparkInputPartition()) {
       return None
     }
 
