@@ -139,6 +139,7 @@ UNIFFLE_VER=""
 PAIMON_VER=""
 ICEBERG_VER=""
 HUDI_VER=""
+MAVEN_OPTS=""
 
 # -----------------------------------------------------------------------------
 # Section: Argument Parsing
@@ -212,6 +213,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --sparktests)
             if [[ -n "$2" && "$2" =~ ^(true|false)$ ]]; then
+
                 SPARK_TESTS="$2"
                 shift 2
             else
@@ -348,7 +350,14 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         -*)
-            break
+            if [[ "$1" == -D* ]]; then
+                # Maven system property，继续解析
+                MAVEN_OPTS="$MAVEN_OPTS $1"
+                shift
+            else
+                # 其他短参数：停止解析
+                break
+            fi
             ;;
         *)
             echo "ERROR: $1 is not supported" >&2
@@ -562,6 +571,7 @@ if [[ "$USE_DOCKER" == true ]]; then
     export BUILD_CONTEXT="./${IMAGE_NAME}"
     exec docker-compose -f dev/docker-build/docker-compose.yml up --abort-on-container-exit
 else
-    echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} $@"
-    "$MVN_CMD" "${MVN_ARGS[@]}" "$@"
+    echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} ${MAVEN_OPTS} $@"
+    "$MVN_CMD" "${MVN_ARGS[@]}" "${MAVEN_OPTS}" "$@"
 fi
+
