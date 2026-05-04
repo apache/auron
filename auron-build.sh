@@ -351,11 +351,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         -*)
             if [[ "$1" == -D* ]]; then
-                # Maven system property，继续解析
                 MAVEN_OPTS="$MAVEN_OPTS $1"
                 shift
             else
-                # 其他短参数：停止解析
                 break
             fi
             ;;
