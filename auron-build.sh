@@ -139,7 +139,7 @@ UNIFFLE_VER=""
 PAIMON_VER=""
 ICEBERG_VER=""
 HUDI_VER=""
-MAVEN_OPTS=""
+MVN_D_ARGS=""
 
 # -----------------------------------------------------------------------------
 # Section: Argument Parsing
@@ -351,7 +351,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -*)
             if [[ "$1" == -D* ]]; then
-                MAVEN_OPTS="$MAVEN_OPTS $1"
+                MVN_D_ARGS="$MVN_D_ARGS $1"
                 shift
             else
                 break
@@ -569,9 +569,9 @@ if [[ "$USE_DOCKER" == true ]]; then
     export BUILD_CONTEXT="./${IMAGE_NAME}"
     exec docker-compose -f dev/docker-build/docker-compose.yml up --abort-on-container-exit
 else
-    echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} ${MAVEN_OPTS} $@"
-    if [[ -n "$MAVEN_OPTS" ]]; then
-        "$MVN_CMD" "${MVN_ARGS[@]}" "${MAVEN_OPTS}" "$@"
+    echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} ${MVN_D_ARGS} $@"
+    if [[ -n "$MVN_D_ARGS" ]]; then
+        "$MVN_CMD" "${MVN_ARGS[@]}" "${MVN_D_ARGS}" "$@"
     else
         "$MVN_CMD" "${MVN_ARGS[@]}" "$@"
     fi
