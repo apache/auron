@@ -226,6 +226,22 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
         options))
   }
 
+  test("hudi scan options are case-insensitive") {
+    val options = Map(
+      "Hoodie.DataSource.Write.Table.Type" -> "MERGE_ON_READ",
+      "Hoodie.Table.Base.File.Format" -> "ORC")
+    val timeTravelOptions = Map("Hoodie.DataSource.Read.As.Of.Instant" -> "20240101010101")
+    assert(
+      !HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options))
+    assert(
+      !HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        timeTravelOptions))
+    assert(HudiScanSupport.baseFileFormatFromOptions(options).contains("ORC"))
+  }
+
   test("hudi isSupported allows default COW") {
     assert(
       HudiScanSupport.isSupported(
