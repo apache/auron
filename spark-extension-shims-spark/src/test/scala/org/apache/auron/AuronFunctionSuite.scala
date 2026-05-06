@@ -997,6 +997,23 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("test function make_date") {
+    withTable("t1") {
+      sql(
+        "create table t1 using parquet as select '2025'" +
+          " as year, '03' as month, '01' as day")
+      val functions =
+        """
+          |select
+          |  make_date(year, month, day)
+          |from t1
+         """.stripMargin
+
+      val df = sql(functions)
+      checkAnswer(df, Seq(Row("2025-03-01")))
+    }
+  }
+
   test("months_between function") {
     withSQLConf("spark.sql.session.timeZone" -> "UTC") {
       withTable("t1") {
