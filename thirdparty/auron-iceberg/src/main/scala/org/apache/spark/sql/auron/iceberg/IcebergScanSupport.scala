@@ -83,7 +83,7 @@ object IcebergScanSupport extends Logging {
         inputPartitions(exec)
       } catch {
         case e: IllegalStateException =>
-          logWarning(s"get Partition error: ${e.getMessage}")
+          logWarning(s"Get Partition error: ${e.getMessage}")
           return None
       }
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
