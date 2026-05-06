@@ -169,6 +169,10 @@ impl<const P: JoinerParams> FullJoiner<P> {
             if P.probe_side_outer || P.build_side_outer {
                 df_execution_err!("join filter is only supported for inner shuffled hash join")?;
             }
+            // Materialize candidate pairs from the hash lookup before
+            // evaluating the residual condition. This keeps the filter inside
+            // the join operator and avoids emitting rows that a parent filter
+            // would immediately discard.
             let pcols = if probe_indices.len() == probed_batch.num_rows()
                 && probe_indices
                     .iter()

@@ -79,6 +79,9 @@ impl<const L_OUTER: bool, const R_OUTER: bool> FullJoiner<L_OUTER, R_OUTER> {
         let rcols = rbatch_interleaver(&rindices)?;
         let (output_cols, num_rows): (Vec<ArrayRef>, usize) =
             if let Some(join_filter) = &self.join_params.join_filter {
+                // lindices/rindices already represent key-equal candidate
+                // pairs. Evaluate the residual condition here so SMJ applies
+                // Spark's join condition before output projection.
                 let selected = join_filter.evaluate(lcols.columns(), rcols.columns(), num_rows)?;
                 let lcols = lcols
                     .columns()

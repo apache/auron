@@ -159,6 +159,9 @@ impl SortMergeJoinExec {
         let poll_time = Time::new();
         let left_projection;
         let right_projection;
+        // The residual join condition may reference columns that are not part
+        // of the final projection. Keep full child rows while matching, then
+        // apply the output projection after the filter has selected rows.
         let (left_output_projection, right_output_projection) = if join_params.join_filter.is_some()
         {
             left_projection = (0..join_params.left_schema.fields().len()).collect::<Vec<_>>();

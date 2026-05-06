@@ -98,6 +98,9 @@ impl JoinFilter {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        // Join filters are compiled against a compact schema containing only
+        // columns referenced by the residual condition. Build a temporary
+        // batch with those columns in the same order before evaluating it.
         let batch = RecordBatch::try_new_with_options(
             self.schema.clone(),
             cols,
@@ -110,6 +113,7 @@ impl JoinFilter {
             ColumnarValue::Scalar(_) => Ok(BooleanArray::from(vec![false; num_rows])),
             ColumnarValue::Array(selected) => {
                 let mut selected = as_boolean_array(&selected)?.clone();
+                // Spark treats a NULL residual predicate as not matched.
                 if selected.null_count() > 0 {
                     selected = prep_null_mask_filter(&selected);
                 }

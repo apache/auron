@@ -107,6 +107,10 @@ impl BroadcastJoinExec {
         is_null_aware_anti_join: bool,
         join_filter: Option<JoinFilter>,
     ) -> Result<Self> {
+        // A broadcast hash join may reuse a prebuilt hash map whose stored
+        // rows are not laid out for evaluating Spark's residual join condition.
+        // Only the shuffled hash join path builds both sides in-process and
+        // can filter candidate pairs before projection today.
         if join_filter.is_some() && (is_built || join_type != JoinType::Inner) {
             df_execution_err!("join filter is only supported for inner shuffled hash join")?;
         }
