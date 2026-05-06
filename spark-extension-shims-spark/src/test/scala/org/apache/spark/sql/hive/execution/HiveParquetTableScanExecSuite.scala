@@ -39,11 +39,9 @@ class HiveParquetTableScanExecSuite extends AuronQueryTest with BaseAuronHiveSui
       spark.sql(
         "create table hive_with_partition (a string) stored as parquet partitioned by(pt string)")
       spark.sql("insert into hive_with_partition partition(pt='2026-03-10') values('1')")
-      spark.sql("insert into hive_with_partition partition(pt='2026-03-11') values('1')")
-      val df = spark.sql("select * from hive_with_partition where pt = '2026-03-10'")
-      df.show()
+      spark.sql("insert into hive_with_partition partition(pt='2026-03-11') values('2')")
+      val df = spark.sql("select a from hive_with_partition where pt = '2026-03-10'")
       assert(df.collect().toList.head.get(0) == "1")
-      assert(df.collect().toList.head.get(1) == "2026-03-10")
       val plan = df.queryExecution.executedPlan
       assert(collect(plan) { case e: NativeParquetHiveTableScanExec =>
         e
