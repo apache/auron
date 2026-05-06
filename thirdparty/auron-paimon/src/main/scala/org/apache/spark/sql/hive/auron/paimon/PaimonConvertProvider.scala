@@ -28,7 +28,14 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class PaimonConvertProvider extends AuronConvertProvider with Logging {
 
-  override def isEnabled: Boolean = SparkAuronConfiguration.ENABLE_PAIMON_SCAN.get()
+  override def isEnabled(exec: SparkPlan): Boolean = {
+    exec match {
+      case _: HiveTableScanExec =>
+        SparkAuronConfiguration.ENABLE_PAIMON_SCAN.get()
+      case _ => false
+    }
+
+  }
 
   override def isSupported(exec: SparkPlan): Boolean = {
     exec match {

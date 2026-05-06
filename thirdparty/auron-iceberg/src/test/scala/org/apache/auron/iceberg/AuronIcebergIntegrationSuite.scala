@@ -26,11 +26,42 @@ import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.ExplainUtils.collectFirst
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 
 class AuronIcebergIntegrationSuite
     extends org.apache.spark.sql.QueryTest
     with BaseAuronIcebergSuite {
+
+  test("iceberg native scan with auron.enable.iceberg.scan=false") {
+    withTable("local.db.t2") {
+      withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "false") {
+        sql("create table local.db.t2 using iceberg as select 1 as id, 'a' as v")
+        val df = sql("select * from local.db.t2")
+        df.collect()
+        val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
+        assert(collectFirst(df.queryExecution.executedPlan) { case batchScanExec: BatchScanExec =>
+          batchScanExec.getTagValue(neverConvertReasonTag)
+        }.get.get.equals("Conversion disabled: auron.enable.iceberg.scan=false."))
+      }
+    }
+  }
+
+  test(
+    "iceberg scan falls back when reading unsupported metadata columns and check never convert reason") {
+    withTable("local.db.t4_pos") {
+      sql("create table local.db.t4_pos using iceberg as select 1 as id, 'a' as v")
+      withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+        val df = sql("select _pos from local.db.t4_pos")
+        df.collect()
+        val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
+        assert(collectFirst(df.queryExecution.executedPlan) { case batchScanExec: BatchScanExec =>
+          batchScanExec.getTagValue(neverConvertReasonTag)
+        }.get.get.equals("Has per-row materialization (for example _pos)."))
+      }
+    }
+  }
 
   test("test iceberg integrate ") {
     withTable("local.db.t1") {
