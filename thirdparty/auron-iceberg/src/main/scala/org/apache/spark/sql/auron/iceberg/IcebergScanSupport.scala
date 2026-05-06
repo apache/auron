@@ -78,7 +78,14 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    val partitions = inputPartitions(exec)
+    val partitions =
+      try {
+        inputPartitions(exec)
+      } catch {
+        case e: IllegalStateException =>
+          logWarning(s"get Partition error: ${e.getMessage}")
+          return None
+      }
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
     if (partitions.isEmpty) {
       logWarning(s"Native Iceberg scan planned with empty partitions for $scanClassName.")
