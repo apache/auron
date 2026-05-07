@@ -69,9 +69,8 @@ class NativeRDD(
 
     // SPARK-44605: Spark 4+ refines ShuffleWriteProcessor API (early execution of NativeRDD.ShuffleWrite iterator)
     // Adaptation for Spark 4.x: Defer NativeRDD.ShuffleWrite execution to ShuffleWriteProcessor.write() to align with Spark 3.x logic
-    if (SparkVersionUtil.isSparkV40OrGreater &&
-      computingNativePlan.getPhysicalPlanTypeCase == PhysicalPlanNode.PhysicalPlanTypeCase.SHUFFLE_WRITER
-      ||  computingNativePlan.getPhysicalPlanTypeCase == PhysicalPlanNode.PhysicalPlanTypeCase.RSS_SHUFFLE_WRITER) {
+    if (SparkVersionUtil.isSparkV40OrGreater && (computingNativePlan.getPhysicalPlanTypeCase == PhysicalPlanNode.PhysicalPlanTypeCase.SHUFFLE_WRITER
+        || computingNativePlan.getPhysicalPlanTypeCase == PhysicalPlanNode.PhysicalPlanTypeCase.RSS_SHUFFLE_WRITER)) {
       Iterator.empty
     } else {
       NativeHelper.executeNativePlan(computingNativePlan, metrics, split, Some(context))
