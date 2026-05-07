@@ -145,16 +145,6 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-hive_${scalaVersion}</artifactId>
       <type>test-jar</type>
-      <!--      <exclusions>-->
-      <!--        <exclusion>-->
-      <!--          <groupId>org.apache.hive.shims</groupId>-->
-      <!--          <artifactId>hive-shims-common</artifactId>-->
-      <!--        </exclusion>-->
-      <!--        <exclusion>-->
-      <!--          <groupId>org.apache.hive.shims</groupId>-->
-      <!--          <artifactId>hive-shims-0.23</artifactId>-->
-      <!--        </exclusion>-->
-      <!--      </exclusions>-->
     </dependency>
   </dependencies>
 </project>
