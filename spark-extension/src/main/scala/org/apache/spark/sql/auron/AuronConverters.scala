@@ -65,6 +65,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeSortBase
 import org.apache.spark.sql.execution.auron.plan.NativeUnionBase
 import org.apache.spark.sql.execution.auron.plan.Util
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins._
@@ -415,6 +416,8 @@ object AuronConverters extends Logging {
                 } else {
                   s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}"
                 }
+              case _: BatchScanExec =>
+                s"${e.getMessage.replaceFirst("^assertion failed: ?", "")}"
               case _ =>
                 s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}"
             }

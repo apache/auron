@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
-import org.apache.iceberg.{FileFormat, FileScanTask}
+import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
 import org.apache.iceberg.data.{GenericAppenderFactory, Record}
 import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
@@ -325,6 +325,76 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native scan supports insert-only changelog scan") {
+    withTable("local.db.t_changelog_insert") {
+      withTempView("t_changelog_insert_changes") {
+        sql("""
+              |create table local.db.t_changelog_insert (id int, v string)
+              |using iceberg
+              |tblproperties ('format-version' = '2')
+              |""".stripMargin)
+        sql("insert into local.db.t_changelog_insert values (1, 'a')")
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_insert")
+        sql("insert into local.db.t_changelog_insert values (2, 'b'), (3, 'c')")
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_insert")
+        createChangelogView(
+          "local.db.t_changelog_insert",
+          "t_changelog_insert_changes",
+          startSnapshotId,
+          endSnapshotId)
+
+        val df = checkSparkAnswerAndOperator("""
+            |select id, v, _change_type, _change_ordinal, _commit_snapshot_id
+            |from t_changelog_insert_changes
+            |order by id
+            |""".stripMargin)
+        val nativeScanPlan = icebergScanPlan(df)
+        assert(nativeScanPlan.nonEmpty)
+        assert(
+          nativeScanPlan.get.partitionSchema.fieldNames
+            .contains(MetadataColumns.CHANGE_TYPE.name()))
+      }
+    }
+  }
+
+  test("iceberg changelog scan falls back when delete changes exist") {
+    withTable("local.db.t_changelog_delete") {
+      withTempView("t_changelog_delete_changes") {
+        sql("""
+              |create table local.db.t_changelog_delete (id int, v string)
+              |using iceberg
+              |tblproperties ('format-version' = '2')
+              |""".stripMargin)
+        sql("insert into local.db.t_changelog_delete values (1, 'a'), (2, 'b')")
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_delete")
+        sql("delete from local.db.t_changelog_delete where id = 1")
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_delete")
+        createChangelogView(
+          "local.db.t_changelog_delete",
+          "t_changelog_delete_changes",
+          startSnapshotId,
+          endSnapshotId)
+
+        val query =
+          """
+            |select id, v, _change_type, _change_ordinal, _commit_snapshot_id
+            |from t_changelog_delete_changes
+            |order by id, _change_type
+            |""".stripMargin
+        var expected: Seq[Row] = Nil
+        withSQLConf("spark.auron.enable" -> "false") {
+          expected = sql(query).collect().toSeq
+        }
+        withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+          val df = sql(query)
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan.toString()
+          assert(!plan.contains("NativeIcebergTableScan"))
+        }
+      }
+    }
+  }
+
   test("iceberg scan falls back when reading unsupported metadata columns") {
     withTable("local.db.t4_pos") {
       sql("create table local.db.t4_pos using iceberg as select 1 as id, 'a' as v")
@@ -422,6 +492,27 @@ class AuronIcebergIntegrationSuite
       taskIterable.close()
     }
   }
+
+  private def createChangelogView(
+      tableName: String,
+      viewName: String,
+      startSnapshotId: Long,
+      endSnapshotId: Long): Unit = {
+    val tableIdent = tableName.stripPrefix("local.")
+    sql(s"""
+         |CALL local.system.create_changelog_view(
+         |  table => '$tableIdent',
+         |  changelog_view => '$viewName',
+         |  options => map(
+         |    'start-snapshot-id', '$startSnapshotId',
+         |    'end-snapshot-id', '$endSnapshotId'
+         |  )
+         |)
+         |""".stripMargin)
+  }
+
+  private def currentSnapshotId(tableName: String): Long =
+    Spark3Util.loadIcebergTable(spark, tableName).currentSnapshot().snapshotId()
 
   private def checkSparkAnswerAndOperator(sqlText: String): DataFrame = {
     var expected: Seq[Row] = Nil

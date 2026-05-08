@@ -44,7 +44,8 @@ class IcebergConvertProvider extends AuronConvertProvider with Logging {
 
   override def isSupported(exec: SparkPlan): Boolean = {
     exec match {
-      case e: BatchScanExec => IcebergScanSupport.plan(e).nonEmpty
+      case e: BatchScanExec if IcebergScanSupport.isIcebergScan(e.scan) =>
+        IcebergScanSupport.plan(e).nonEmpty || IcebergScanSupport.fallbackReason(e).nonEmpty
       case _ => false
     }
   }
@@ -56,7 +57,10 @@ class IcebergConvertProvider extends AuronConvertProvider with Logging {
           case Some(plan) =>
             AuronConverters.addRenameColumnsExec(NativeIcebergTableScanExec(e, plan))
           case None =>
-            exec
+            IcebergScanSupport.fallbackReason(e) match {
+              case Some(reason) => throw new AssertionError(reason)
+              case None => exec
+            }
         }
       case _ => exec
     }
