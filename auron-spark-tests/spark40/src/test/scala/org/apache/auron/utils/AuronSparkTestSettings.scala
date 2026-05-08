@@ -16,7 +16,55 @@
  */
 package org.apache.auron.utils
 
+import org.apache.spark.sql._
+
 class AuronSparkTestSettings extends SparkTestSettings {
+  {
+    // Use Arrow's unsafe implementation.
+    System.setProperty("arrow.allocation.manager.type", "Unsafe")
+  }
+
+  enableSuite[AuronDataFrameFunctionsSuite]
+    // Native execution wraps SparkRuntimeException from validation failures in SparkException.
+    .exclude("map with arrays")
+    .exclude("map_concat function")
+    .exclude("SPARK-24734: Fix containsNull of Concat for array type")
+    .exclude("array_insert functions")
+    .exclude("transform keys function - Invalid lambda functions and exceptions")
+    // Native reverse only supports string inputs; array inputs fail with unsupported List type.
+    .exclude("reverse function - array for primitive type not containing null")
+    .exclude("reverse function - array for primitive type containing null")
+    .exclude("reverse function - array for non-primitive type")
+    // Native flatten can panic when child arrays have different containsNull metadata.
+    .exclude("flatten function")
+
+  enableSuite[AuronDateFunctionsSuite]
+    // Native execution wraps Spark parsing/format validation exceptions in SparkException.
+    .exclude("function to_date")
+    .exclude("unix_timestamp")
+    .exclude("to_unix_timestamp")
+    // Native date_trunc does not support all Spark aliases such as "yy".
+    .exclude("function date_trunc")
+    // Native date_trunc throws for unsupported fields instead of returning NULL as Spark does.
+    .exclude("unsupported fmt fields for trunc/date_trunc results null")
+    // Native date_trunc may produce incorrect results for historical timestamps with
+    // non-UTC timezones due to timezone handling differences in the DataFusion engine.
+    .exclude("SPARK-30766: date_trunc of old timestamps to hours and days")
+
+  enableSuite[AuronMathFunctionsSuite]
+    // Native acosh uses a different floating-point formula than Spark's StrictMath.log,
+    // producing results that differ at the last ULP for certain edge-case inputs.
+    .exclude("acosh")
+
+  enableSuite[AuronMiscFunctionsSuite]
+
+  enableSuite[AuronStringFunctionsSuite]
+    // Spark 4 adds the threshold argument, but native levenshtein currently supports only
+    // two arguments.
+    .exclude("string Levenshtein distance")
+    // Native substr does not support BinaryType inputs.
+    .exclude("string / binary substring function")
+
   override def getSQLQueryTestSettings: SQLQueryTestSettings = new SQLQueryTestSettings {
     override def getResourceFilePath: String = ""
     override def getSupportedSQLQueryTests: Set[String] = Set.empty
