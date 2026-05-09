@@ -750,7 +750,7 @@ mod test {
                 "| [6, 7]    | [6, 7]    |",
                 "+-----------+-----------+"
             ],
-            &[batch.clone()]
+            std::slice::from_ref(&batch)
         );
 
         // test read after write
