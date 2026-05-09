@@ -44,15 +44,15 @@ class HudiConvertProvider extends AuronConvertProvider with Logging {
     exec match {
       case scan: FileSourceScanExec =>
         // Only handle Hudi-backed file scans; other scans fall through.
-        HudiScanSupport.isSupported(scan)
+        HudiScanSupport.supportedFileFormat(scan).nonEmpty
       case _ => false
     }
   }
 
   override def convert(exec: SparkPlan): SparkPlan = {
     exec match {
-      case scan: FileSourceScanExec if HudiScanSupport.isSupported(scan) =>
-        HudiScanSupport.fileFormat(scan) match {
+      case scan: FileSourceScanExec =>
+        HudiScanSupport.supportedFileFormat(scan) match {
           case Some(HudiScanSupport.ParquetFormat) =>
             if (!SparkAuronConfiguration.ENABLE_SCAN_PARQUET.get()) {
               return exec
