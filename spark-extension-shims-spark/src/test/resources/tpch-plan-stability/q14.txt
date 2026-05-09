@@ -1,0 +1,231 @@
+== Physical Plan ==
+AdaptiveSparkPlan (40)
++- == Final Plan ==
+   NativeProject (25)
+   +- NativeHashAggregate (24)
+      +- ShuffleQueryStage (23), Statistics(sizeInBytes=424.0 B, rowCount=1)
+         +- NativeShuffleExchange (22)
+            +- NativeHashAggregate (21)
+               +- NativeProject (20)
+                  +- NativeProject (19)
+                     +- NativeSortMergeJoin Inner (18)
+                        :- NativeSort (9)
+                        :  +- InputAdapter (8)
+                        :     +- AQEShuffleRead (7)
+                        :        +- ShuffleQueryStage (6), Statistics(sizeInBytes=28.9 KiB, rowCount=722)
+                        :           +- NativeShuffleExchange (5)
+                        :              +- NativeProject (4)
+                        :                 +- NativeFilter (3)
+                        :                    +- InputAdapter (2)
+                        :                       +- NativeParquetScan  (1)
+                        +- NativeSort (17)
+                           +- InputAdapter (16)
+                              +- AQEShuffleRead (15)
+                                 +- ShuffleQueryStage (14), Statistics(sizeInBytes=68.0 KiB, rowCount=2.00E+3)
+                                    +- NativeShuffleExchange (13)
+                                       +- NativeFilter (12)
+                                          +- InputAdapter (11)
+                                             +- NativeParquetScan  (10)
++- == Initial Plan ==
+   HashAggregate (39)
+   +- Exchange (38)
+      +- HashAggregate (37)
+         +- Project (36)
+            +- SortMergeJoin Inner (35)
+               :- Sort (30)
+               :  +- Exchange (29)
+               :     +- Project (28)
+               :        +- Filter (27)
+               :           +- Scan parquet  (26)
+               +- Sort (34)
+                  +- Exchange (33)
+                     +- Filter (32)
+                        +- Scan parquet  (31)
+
+
+(26) Scan parquet 
+Output [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(l_shipdate), GreaterThanOrEqual(l_shipdate,1995-09-01), LessThan(l_shipdate,1995-10-01), IsNotNull(l_partkey)]
+ReadSchema: struct<l_partkey:bigint,l_extendedprice:decimal(12,2),l_discount:decimal(12,2),l_shipdate:date>
+
+(2) InputAdapter
+Input [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
+Arguments: [#5, #2, #3, #4]
+
+(3) NativeFilter
+Input [4]: [#5#1, #2#2, #3#3, #4#4]
+Condition : (((isnotnull(l_shipdate#4) AND (l_shipdate#4 >= 1995-09-01)) AND (l_shipdate#4 < 1995-10-01)) AND isnotnull(l_partkey#1))
+
+(4) NativeProject
+Output [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Input [4]: [#5#1, #2#2, #3#3, #4#4]
+
+(5) NativeShuffleExchange
+Input [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Arguments: hashpartitioning(l_partkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(6) ShuffleQueryStage
+Output [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Arguments: X
+
+(7) AQEShuffleRead
+Input [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Arguments: coalesced
+
+(8) InputAdapter
+Input [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+
+(9) NativeSort
+Input [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Arguments: [l_partkey#1 ASC NULLS FIRST], false
+
+(31) Scan parquet 
+Output [2]: [p_partkey#6, p_type#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(p_partkey)]
+ReadSchema: struct<p_partkey:bigint,p_type:string>
+
+(11) InputAdapter
+Input [2]: [p_partkey#6, p_type#7]
+Arguments: [#8, #7]
+
+(12) NativeFilter
+Input [2]: [#8#6, #7#7]
+Condition : isnotnull(p_partkey#6)
+
+(13) NativeShuffleExchange
+Input [2]: [#8#6, #7#7]
+Arguments: hashpartitioning(p_partkey#6, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(14) ShuffleQueryStage
+Output [2]: [#8#6, #7#7]
+Arguments: X
+
+(15) AQEShuffleRead
+Input [2]: [#8#6, #7#7]
+Arguments: coalesced
+
+(16) InputAdapter
+Input [2]: [#8#6, #7#7]
+
+(17) NativeSort
+Input [2]: [#8#6, #7#7]
+Arguments: [p_partkey#6 ASC NULLS FIRST], false
+
+(18) NativeSortMergeJoin
+Left keys [1]: [l_partkey#1]
+Right keys [1]: [p_partkey#6]
+Join type: Inner
+Join condition: None
+
+(19) NativeProject
+Output [3]: [l_extendedprice#2, l_discount#3, p_type#7]
+Input [5]: [l_partkey#1, l_extendedprice#2, l_discount#3, #8#6, #7#7]
+
+(20) NativeProject
+Output [2]: [CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END AS _c0#9, (l_extendedprice#2 * (1 - l_discount#3)) AS _c1#10]
+Input [3]: [l_extendedprice#2, l_discount#3, p_type#7]
+
+(21) NativeHashAggregate
+Input [2]: [_c0#9, _c1#10]
+Keys: []
+Functions [2]: [partial_sum(_c0#9), partial_sum(_c1#10)]
+Aggregate Attributes [4]: [sum#11, isEmpty#12, sum#13, isEmpty#14]
+Results [2]: [#15, #15]
+
+(22) NativeShuffleExchange
+Input [2]: [#15, #15]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=3]
+
+(23) ShuffleQueryStage
+Output [2]: [#15, #15]
+Arguments: X
+
+(24) NativeHashAggregate
+Input [2]: [#15, #15]
+Keys: []
+Functions [2]: [sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END), sum((l_extendedprice#2 * (1 - l_discount#3)))]
+Aggregate Attributes [2]: [sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END)#16, sum((l_extendedprice#2 * (1 - l_discount#3)))#17]
+Results [2]: [sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END)#16, sum((l_extendedprice#2 * (1 - l_discount#3)))#17]
+
+(25) NativeProject
+Output [1]: [((100.00 * sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END)#16) / sum((l_extendedprice#2 * (1 - l_discount#3)))#17) AS promo_revenue#18]
+Input [2]: [sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END)#16, sum((l_extendedprice#2 * (1 - l_discount#3)))#17]
+
+(26) Scan parquet 
+Output [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(l_shipdate), GreaterThanOrEqual(l_shipdate,1995-09-01), LessThan(l_shipdate,1995-10-01), IsNotNull(l_partkey)]
+ReadSchema: struct<l_partkey:bigint,l_extendedprice:decimal(12,2),l_discount:decimal(12,2),l_shipdate:date>
+
+(27) Filter
+Input [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
+Condition : (((isnotnull(l_shipdate#4) AND (l_shipdate#4 >= 1995-09-01)) AND (l_shipdate#4 < 1995-10-01)) AND isnotnull(l_partkey#1))
+
+(28) Project
+Output [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Input [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
+
+(29) Exchange
+Input [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Arguments: hashpartitioning(l_partkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(30) Sort
+Input [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Arguments: [l_partkey#1 ASC NULLS FIRST], false, 0
+
+(31) Scan parquet 
+Output [2]: [p_partkey#6, p_type#7]
+Batched: true
+Location: InMemoryFileIndex [file:/<warehouse_dir>]
+PushedFilters: [IsNotNull(p_partkey)]
+ReadSchema: struct<p_partkey:bigint,p_type:string>
+
+(32) Filter
+Input [2]: [p_partkey#6, p_type#7]
+Condition : isnotnull(p_partkey#6)
+
+(33) Exchange
+Input [2]: [p_partkey#6, p_type#7]
+Arguments: hashpartitioning(p_partkey#6, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(34) Sort
+Input [2]: [p_partkey#6, p_type#7]
+Arguments: [p_partkey#6 ASC NULLS FIRST], false, 0
+
+(35) SortMergeJoin
+Left keys [1]: [l_partkey#1]
+Right keys [1]: [p_partkey#6]
+Join type: Inner
+Join condition: None
+
+(36) Project
+Output [3]: [l_extendedprice#2, l_discount#3, p_type#7]
+Input [5]: [l_partkey#1, l_extendedprice#2, l_discount#3, p_partkey#6, p_type#7]
+
+(37) HashAggregate
+Input [3]: [l_extendedprice#2, l_discount#3, p_type#7]
+Keys: []
+Functions [2]: [partial_sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END), partial_sum((l_extendedprice#2 * (1 - l_discount#3)))]
+Aggregate Attributes [4]: [sum#11, isEmpty#12, sum#13, isEmpty#14]
+Results [4]: [sum#19, isEmpty#20, sum#21, isEmpty#22]
+
+(38) Exchange
+Input [4]: [sum#19, isEmpty#20, sum#21, isEmpty#22]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
+
+(39) HashAggregate
+Input [4]: [sum#19, isEmpty#20, sum#21, isEmpty#22]
+Keys: []
+Functions [2]: [sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END), sum((l_extendedprice#2 * (1 - l_discount#3)))]
+Aggregate Attributes [2]: [sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END)#16, sum((l_extendedprice#2 * (1 - l_discount#3)))#17]
+Results [1]: [((100.00 * sum(CASE WHEN StartsWith(p_type#7, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0.0000 END)#16) / sum((l_extendedprice#2 * (1 - l_discount#3)))#17) AS promo_revenue#18]
+
+(40) AdaptiveSparkPlan
+Output [1]: [promo_revenue#18]
+Arguments: isFinalPlan=true
+

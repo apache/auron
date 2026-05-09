@@ -35,3 +35,7 @@ build/apache-maven-*/**
 src/main/resources/auron-build-info.properties
 **/tpcds-plan-stability/**
 **/tpcds-queries/**
+**/tpch-data-parquet/**
+**/tpch-plan-stability/**
+**/tpch-queries/**
+**/tpch-query-results/**
