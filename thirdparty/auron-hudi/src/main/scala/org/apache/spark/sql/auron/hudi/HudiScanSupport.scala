@@ -38,10 +38,13 @@ object HudiScanSupport extends Logging {
   private val hudiOrcFileFormatSuffix = "HoodieOrcFileFormat"
   private val newHudiOrcFileFormatSuffix = "NewHoodieOrcFileFormat"
   private val morTableTypes = Set("merge_on_read", "mor")
+  private val readOptimizedQueryTypes = Set("read_optimized")
   private val hudiTableTypeKeys = Seq(
     "hoodie.datasource.write.table.type",
     "hoodie.datasource.read.table.type",
     "hoodie.table.type")
+  private val hudiQueryTypeKeys =
+    Seq("hoodie.datasource.query.type", "hoodie.datasource.view.type")
   private val hudiBaseFileFormatKeys = Seq(
     "hoodie.table.base.file.format",
     "hoodie.datasource.write.base.file.format",
@@ -95,15 +98,29 @@ object HudiScanSupport extends Logging {
       .orElse(tableTypeFromCatalog(catalogTable))
       .orElse(tableTypeFromMeta(options))
       .map(_.toLowerCase(Locale.ROOT))
+    val queryType = queryTypeFromOptions(options).map(_.toLowerCase(Locale.ROOT))
 
     logDebug(s"Hudi tableType resolved to: ${tableType.getOrElse("unknown")}")
 
-    // Only support basic COW tables for the base version.
-    !tableType.exists(morTableTypes.contains)
+    val isMor = tableType.exists(morTableTypes.contains)
+    queryType match {
+      case Some(query) if readOptimizedQueryTypes.contains(query) => true
+      case Some("snapshot") => !isMor
+      case Some("incremental" | "realtime") => false
+      case Some(_) => false
+      case None =>
+        // MOR snapshot reads may need log-file merging. Native scan is safe only
+        // when the query explicitly requests read-optimized base-file reads.
+        !isMor
+    }
   }
 
   private def tableTypeFromOptions(options: Map[String, String]): Option[String] = {
     caseInsensitiveValue(options, hudiTableTypeKeys)
+  }
+
+  private def queryTypeFromOptions(options: Map[String, String]): Option[String] = {
+    caseInsensitiveValue(options, hudiQueryTypeKeys)
   }
 
   private[hudi] def baseFileFormatFromOptions(options: Map[String, String]): Option[String] = {

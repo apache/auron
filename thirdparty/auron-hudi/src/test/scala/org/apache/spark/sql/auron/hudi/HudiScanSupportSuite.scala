@@ -186,6 +186,10 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
     Option(props.getProperty("hoodie.table.base.file.format"))
   }
 
+  private def hudiTablePath(tableName: String): String = {
+    new File(warehouseDir, tableName).getAbsolutePath
+  }
+
   private def assumeSparkAtLeast(version: String): Unit = {
     val current = SparkVersionUtil.SPARK_RUNTIME_VERSION
     assume(current >= version, s"Requires Spark >= $version, current Spark $current")
@@ -218,23 +222,48 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
         .isEmpty)
   }
 
-  test("hudi isSupported rejects MOR table types") {
+  test("hudi isSupported rejects MOR table types unless read optimized") {
     val options = Map("hoodie.datasource.write.table.type" -> "MERGE_ON_READ")
     assert(
       !HudiScanSupport.isSupported(
         "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
         options))
+    assert(
+      HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("hoodie.datasource.query.type" -> "read_optimized")))
+    assert(
+      HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("Hoodie.DataSource.View.Type" -> "READ_OPTIMIZED")))
+    assert(
+      !HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("hoodie.datasource.query.type" -> "snapshot")))
+    assert(
+      !HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("Hoodie.DataSource.View.Type" -> "REALTIME")))
+    assert(
+      !HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("hoodie.datasource.query.type" -> "incremental")))
   }
 
   test("hudi scan options are case-insensitive") {
     val options = Map(
       "Hoodie.DataSource.Write.Table.Type" -> "MERGE_ON_READ",
       "Hoodie.Table.Base.File.Format" -> "ORC")
+    val readOptimizedOptions = options + ("Hoodie.DataSource.Query.Type" -> "READ_OPTIMIZED")
     val timeTravelOptions = Map("Hoodie.DataSource.Read.As.Of.Instant" -> "20240101010101")
     assert(
       !HudiScanSupport.isSupported(
         "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
         options))
+    assert(
+      HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        readOptimizedOptions))
     assert(
       !HudiScanSupport.isSupported(
         "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
@@ -247,6 +276,12 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
       HudiScanSupport.isSupported(
         "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
         Map.empty))
+    assert(
+      HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        Map(
+          "hoodie.datasource.write.table.type" -> "COPY_ON_WRITE",
+          "hoodie.datasource.query.type" -> "snapshot")))
   }
 
   test("hudi isSupported rejects non-Hudi formats") {
@@ -337,6 +372,36 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
       val df = spark.sql("select id, name from hudi_native_simple order by id")
       df.explain(true)
       // Validate provider conversion and correctness for the common COW parquet path.
+      logFileFormats(df)
+      val rows = df.collect().toSeq
+      assert(rows == Seq(Row(1, "v1"), Row(2, "v2")))
+      val scan = df.queryExecution.sparkPlan.collectFirst {
+        case s: org.apache.spark.sql.execution.FileSourceScanExec => s
+      }
+      assert(scan.isDefined)
+      val provider = new HudiConvertProvider
+      assert(provider.isSupported(scan.get))
+      val converted = provider.convert(scan.get)
+      assertHasNativeParquetScan(converted)
+    }
+  }
+
+  test("hudi: MOR read-optimized table scan converts to native") {
+    withTable("hudi_mor_read_optimized") {
+      spark.sql("""create table hudi_mor_read_optimized (id int, name string)
+          |using hudi
+          |tblproperties (
+          |  'hoodie.datasource.write.table.type' = 'MERGE_ON_READ'
+          |)""".stripMargin)
+      spark.sql("insert into hudi_mor_read_optimized values (1, 'v1'), (2, 'v2')")
+
+      val df = spark.read
+        .format("hudi")
+        .option("hoodie.datasource.query.type", "read_optimized")
+        .load(hudiTablePath("hudi_mor_read_optimized"))
+        .select("id", "name")
+        .orderBy("id")
+
       logFileFormats(df)
       val rows = df.collect().toSeq
       assert(rows == Seq(Row(1, "v1"), Row(2, "v2")))
