@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.math3.util.Precision
-import org.apache.auron.sparkver
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
@@ -35,6 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.scalactic.TripleEqualsSupport.Spread
+
+import org.apache.auron.sparkver
 
 /**
  * Base trait for all Spark expression tests.
@@ -372,7 +373,8 @@ trait SparkExpressionTestsBase
   private def internalCreateDataFrame(
       rows: org.apache.spark.rdd.RDD[InternalRow],
       schema: StructType): org.apache.spark.sql.classic.DataFrame = {
-    _spark.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+    _spark
+      .asInstanceOf[org.apache.spark.sql.classic.SparkSession]
       .internalCreateDataFrame(rows, schema)
   }
 }
