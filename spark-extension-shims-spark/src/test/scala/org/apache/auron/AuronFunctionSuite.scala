@@ -17,11 +17,11 @@
 package org.apache.auron
 
 import java.text.SimpleDateFormat
-
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
-
 import org.apache.auron.util.AuronTestUtils
+
+import java.sql.Date
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
@@ -1010,7 +1010,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
          """.stripMargin
 
       val df = sql(functions)
-      checkAnswer(df, Seq(Row("2025-03-01")))
+      checkAnswer(df, Seq(Row(Date.valueOf("2025-03-01"))))
     }
   }
 
