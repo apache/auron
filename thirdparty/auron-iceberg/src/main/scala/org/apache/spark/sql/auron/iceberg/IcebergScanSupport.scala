@@ -82,7 +82,7 @@ object IcebergScanSupport extends Logging {
       try {
         inputPartitions(exec)
       } catch {
-        case e: IllegalStateException =>
+        case e: Throwable =>
           logWarning(s"Get Partition error: ${e.getMessage}")
           return None
       }
