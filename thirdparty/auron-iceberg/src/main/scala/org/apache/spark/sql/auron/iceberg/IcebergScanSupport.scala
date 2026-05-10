@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
 import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
+import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
@@ -47,12 +48,7 @@ object IcebergScanSupport extends Logging {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
-    assert(scanClassName.startsWith("org.apache.iceberg.spark.source."), "Not iceberg scans.")
-
-    // Changelog scan carries row-level changes; not supported by native COW-only path.
-    assert(
-      !(scanClassName == "org.apache.iceberg.spark.source.SparkChangelogScan"),
-      "Not iceberg cow table.")
+    assert(!AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan), "Not iceberg scans.")
 
     val readSchema = scan.readSchema
     val unsupportedMetadataColumns = collectUnsupportedMetadataColumns(readSchema)
@@ -194,7 +190,7 @@ object IcebergScanSupport extends Logging {
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
     // Only accept Iceberg SparkInputPartition to access task groups.
-    if (className != "org.apache.iceberg.spark.source.SparkInputPartition") {
+    if (!AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan)) {
       return None
     }
 

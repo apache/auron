@@ -46,6 +46,7 @@ class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
     val listeners = spark.sparkContext.listenerBus.findListenersByClass[AuronSQLAppStatusListener]
     assert(listeners.size === 1)
     val listener = listeners(0)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
     assert(listener.getAuronBuildInfo() == 1)
   }
 

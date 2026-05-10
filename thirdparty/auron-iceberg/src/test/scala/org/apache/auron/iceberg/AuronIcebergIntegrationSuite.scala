@@ -17,6 +17,9 @@
 package org.apache.auron.iceberg
 
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
@@ -24,11 +27,14 @@ import org.apache.iceberg.{FileFormat, FileScanTask}
 import org.apache.iceberg.data.{GenericAppenderFactory, Record}
 import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
+import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.ExplainUtils.collectFirst
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 
 class AuronIcebergIntegrationSuite
     extends org.apache.spark.sql.QueryTest
@@ -79,6 +85,52 @@ class AuronIcebergIntegrationSuite
       df.collect()
       val plan = df.queryExecution.executedPlan.toString()
       assert(plan.contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg native scan exposes file scan driver metrics") {
+    withTable("local.db.t_metrics") {
+      sql("create table local.db.t_metrics using iceberg as select 1 as id, 'a' as v")
+      withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+        val df = sql("select * from local.db.t_metrics")
+        val nativeScan = executedNativeIcebergTableScanExec(df)
+        val metricIds = Map(
+          "numPartitions" -> nativeScan.metrics("numPartitions").id,
+          "numFiles" -> nativeScan.metrics("numFiles").id)
+        val driverMetricUpdates = new ConcurrentLinkedQueue[(Long, Long)]()
+        val driverMetricUpdatesPosted = new CountDownLatch(1)
+        val listener = new SparkListener {
+          override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+            case SparkListenerDriverAccumUpdates(_, updates) =>
+              updates.foreach { case (metricId, value) =>
+                driverMetricUpdates.add(metricId -> value)
+              }
+              val updatedMetricIds = driverMetricUpdates.iterator().asScala.map(_._1).toSet
+              if (metricIds.values.forall(updatedMetricIds.contains)) {
+                driverMetricUpdatesPosted.countDown()
+              }
+            case _ =>
+          }
+        }
+
+        spark.sparkContext.addSparkListener(listener)
+        try {
+          checkAnswer(df, Seq(Row(1, "a")))
+          assert(driverMetricUpdatesPosted.await(30, TimeUnit.SECONDS))
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
+
+        val driverMetricValues = driverMetricUpdates
+          .iterator()
+          .asScala
+          .toSeq
+          .groupBy(_._1)
+          .mapValues(_.map(_._2).sum)
+          .toMap
+        assert(driverMetricValues.getOrElse(metricIds("numPartitions"), 0L) > 0)
+        assert(driverMetricValues.getOrElse(metricIds("numFiles"), 0L) > 0)
+      }
     }
   }
 
@@ -376,4 +428,12 @@ class AuronIcebergIntegrationSuite
     df.queryExecution.sparkPlan.collectFirst { case scan: BatchScanExec =>
       IcebergScanSupport.plan(scan)
     }.flatten
+
+  private def executedNativeIcebergTableScanExec(df: DataFrame): NativeIcebergTableScanExec = {
+    val nativeScan = df.queryExecution.executedPlan.collectFirst {
+      case scan: NativeIcebergTableScanExec => scan
+    }
+    assert(nativeScan.nonEmpty)
+    nativeScan.get
+  }
 }
