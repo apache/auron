@@ -16,12 +16,13 @@
  */
 package org.apache.auron
 
+import java.sql.Date
 import java.text.SimpleDateFormat
+
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.auron.util.AuronTestUtils
 
-import java.sql.Date
+import org.apache.auron.util.AuronTestUtils
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
