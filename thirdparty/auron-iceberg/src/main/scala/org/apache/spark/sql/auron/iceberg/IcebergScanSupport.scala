@@ -48,7 +48,9 @@ object IcebergScanSupport extends Logging {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
-    assert(!AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan), "Not iceberg scans.")
+    assert(
+      AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan),
+      "Not iceberg scans.")
 
     val readSchema = scan.readSchema
     val unsupportedMetadataColumns = collectUnsupportedMetadataColumns(readSchema)
@@ -190,9 +192,9 @@ object IcebergScanSupport extends Logging {
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
     // Only accept Iceberg SparkInputPartition to access task groups.
-    if (!AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan)) {
-      return None
-    }
+    assert(
+      AuronIcebergSourceUtil.getClassOfSparkInputPartition().isInstance(partition),
+      "Not iceberg scans.")
 
     try {
       // SparkInputPartition is package-private; use reflection to read its task group.
