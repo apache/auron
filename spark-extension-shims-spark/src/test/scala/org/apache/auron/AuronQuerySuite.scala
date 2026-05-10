@@ -666,6 +666,49 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("native residual join condition can be disabled") {
+    withSparkConf("spark.auron.forceShuffledHashJoin" -> "false") {
+      withSQLConf(
+        "spark.auron.enable.native.join.condition" -> "false",
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.join.preferSortMergeJoin" -> "true") {
+        withTable("smj_disabled_left", "smj_disabled_right") {
+          sql("""
+                |CREATE TABLE smj_disabled_left USING parquet AS
+                |SELECT * FROM VALUES
+                |  (1, 1),
+                |  (2, 5),
+                |  (3, 7)
+                |AS t(id, lv)
+                |""".stripMargin)
+
+          sql("""
+                |CREATE TABLE smj_disabled_right USING parquet AS
+                |SELECT * FROM VALUES
+                |  (1, 2),
+                |  (2, 4),
+                |  (3, 8)
+                |AS t(id, rv)
+                |""".stripMargin)
+
+          val df = checkSparkAnswer("""
+                |SELECT /*+ MERGE(l, r) */ l.id, l.lv, r.rv
+                |FROM smj_disabled_left l
+                |JOIN smj_disabled_right r
+                |  ON l.id = r.id AND l.lv < r.rv
+                |ORDER BY l.id
+                |""".stripMargin)
+
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(
+            plan.collectFirst { case _: NativeSortMergeJoinBase => true }.isEmpty,
+            s"expected native residual join condition to be disabled, but got:\n$plan")
+        }
+      }
+    }
+  }
+
   test(
     "native shuffled hash join supports inner residual condition in forceShuffledHashJoin mode") {
     withSparkConf("spark.auron.forceShuffledHashJoin" -> "true") {

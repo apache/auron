@@ -622,6 +622,9 @@ object AuronConverters extends Logging {
       joinType: JoinType,
       condition: Option[Expression]): Unit = {
     condition.foreach { expr =>
+      assert(
+        SparkAuronConfiguration.ENABLE_NATIVE_JOIN_CONDITION.get(),
+        "native join condition is disabled")
       assert(joinType.isInstanceOf[InnerLike], "join condition is not supported")
       validateNativeInnerJoinConditionExpr(expr)
     }
