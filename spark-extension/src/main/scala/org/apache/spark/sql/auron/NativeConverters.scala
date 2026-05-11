@@ -1024,10 +1024,10 @@ object NativeConverters extends Logging {
           if pos.asInstanceOf[Int] > 0 && len.asInstanceOf[Int] >= 0 =>
         val longPos = pos.asInstanceOf[Int].toLong
         val longLen = len.asInstanceOf[Int].toLong
-        buildScalarFunction(
-          pb.ScalarFunction.Substr,
+        buildExtScalarFunction(
+          "Spark_Substring",
           str :: Literal(longPos) :: Literal(longLen) :: Nil,
-          StringType)
+          str.dataType)
 
       case StringSpace(n) =>
         buildExtScalarFunction("Spark_StringSpace", n :: Nil, StringType)
