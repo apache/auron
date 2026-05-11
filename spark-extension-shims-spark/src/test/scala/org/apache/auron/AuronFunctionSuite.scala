@@ -16,6 +16,7 @@
  */
 package org.apache.auron
 
+import java.sql.Date
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
@@ -994,6 +995,23 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         checkSparkAnswerAndOperator("select date_trunc('day', c1) from t1")
         checkSparkAnswerAndOperator("select date_trunc('hour', c1) from t1")
       }
+    }
+  }
+
+  test("test function make_date") {
+    withTable("t1") {
+      sql(
+        "create table t1 using parquet as select '2025'" +
+          " as year, '03' as month, '01' as day")
+      val functions =
+        """
+          |select
+          |  make_date(year, month, day)
+          |from t1
+         """.stripMargin
+
+      val df = sql(functions)
+      checkAnswer(df, Seq(Row(Date.valueOf("2025-03-01"))))
     }
   }
 

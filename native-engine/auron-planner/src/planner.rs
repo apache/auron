@@ -1301,6 +1301,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::ToTimestampMicros => f::datetime::to_timestamp_micros(),
             ScalarFunction::ToTimestampSeconds => f::datetime::to_timestamp_seconds(),
             ScalarFunction::Now => f::datetime::now(),
+            ScalarFunction::MakeDate => f::datetime::make_date(),
             ScalarFunction::Translate => f::unicode::translate(),
             ScalarFunction::RegexpMatch => f::regex::regexp_match(),
             ScalarFunction::Greatest => f::core::greatest(),
