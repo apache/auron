@@ -43,7 +43,7 @@ jobs:
         auronver: [8.0.0-SNAPSHOT]
         runner: [ ubuntu-24.04 ]
         exclude:
-          # Only build on scala-2.13 for spark-3.5
+          # Only build on scala-2.13 for spark-3.5+
           - sparkver: spark-3.0
             scalaver: '2.13'
           - sparkver: spark-3.1
@@ -73,6 +73,20 @@ jobs:
             javaver: '8'
           - sparkver: spark-4.1
             javaver: '8'
+        include:
+          # Spark 4.x uses rockylinux8 image (with JDK 21)
+          - sparkver: spark-4.0
+            scalaver: '2.13'
+            javaver: '21'
+            auronver: 8.0.0-SNAPSHOT
+            runner: ubuntu-24.04
+            image: rockylinux8
+          - sparkver: spark-4.1
+            scalaver: '2.13'
+            javaver: '21'
+            auronver: 8.0.0-SNAPSHOT
+            runner: ubuntu-24.04
+            image: rockylinux8
 
     steps:
       - uses: actions/checkout@v6
@@ -106,11 +120,13 @@ jobs:
           key: auron-${{matrix.sparkver}}_${{matrix.scalaver}}-release-${{ env.osclassfier }}-${{ matrix.auronver }}.jar
 
       - name: Build auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
+        env:
+          JAVA_VERSION: ${{ matrix.javaver }}
         run: |
           sed -i 's/docker-compose -f/docker compose -f/g' ./auron-build.sh
           ./auron-build.sh \
           --docker true \
-          --image centos7 \
+          --image ${{ matrix.image || 'centos7' }} \
           --release \
           --sparkver ${{ env.sparkver_short }} \
           --scalaver ${{ matrix.scalaver }}

@@ -32,6 +32,7 @@ services:
     environment:
       RUSTFLAGS: "-C target-cpu=skylake"
       AURON_BUILD_ARGS: "${AURON_BUILD_ARGS}"
+      JAVA_VERSION: "${JAVA_VERSION:-8}"
     command: >
       bash -c '
         source ~/.bashrc &&

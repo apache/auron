@@ -63,13 +63,23 @@ RUN curl https://sh.rustup.rs -sSf -o rustup-init && \
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # ---------------------------------------------------------------------
-# Install Java (OpenJDK 8)
+# Install Java (OpenJDK 8 and OpenJDK 21)
 # ---------------------------------------------------------------------
-RUN dnf -y install java-1.8.0-openjdk java-1.8.0-openjdk-devel && \
+RUN dnf -y install java-1.8.0-openjdk java-1.8.0-openjdk-devel \
+                   java-21-openjdk java-21-openjdk-devel && \
     dnf clean all && \
     rm -rf /var/cache/dnf
-ENV JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"
+
+# Default to JDK 8; override at runtime via JAVA_VERSION env var
+ENV JAVA_8_HOME="/usr/lib/jvm/java-1.8.0-openjdk"
+ENV JAVA_21_HOME="/usr/lib/jvm/java-21-openjdk"
+ENV JAVA_HOME="${JAVA_8_HOME}"
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+RUN echo 'export JAVA_8_HOME="/usr/lib/jvm/java-1.8.0-openjdk"' >> /root/.bashrc && \
+    echo 'export JAVA_21_HOME="/usr/lib/jvm/java-21-openjdk"' >> /root/.bashrc && \
+    echo 'if [ "$JAVA_VERSION" = "21" ]; then export JAVA_HOME="$JAVA_21_HOME"; else export JAVA_HOME="$JAVA_8_HOME"; fi' >> /root/.bashrc && \
+    echo 'export PATH="$JAVA_HOME/bin:$PATH"' >> /root/.bashrc
 
 # ---------------------------------------------------------------------
 # Set working directory
