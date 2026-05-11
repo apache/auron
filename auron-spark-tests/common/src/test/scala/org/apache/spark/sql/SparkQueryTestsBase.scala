@@ -91,9 +91,12 @@ object AuronQueryTestUtil extends Assertions {
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
-    val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    val isSorted = df.queryExecution.logical.collect { case s: logical.Sort => s }.nonEmpty
     if (checkToRDD) {
-      SQLExecution.withSQLConfPropagated(df.sparkSession) {
+      // df.queryExecution.sparkSession returns the concrete session type in every Spark
+      // version we support (SparkSession pre-4.0, classic.SparkSession since 4.0), matching
+      // the overload resolved by SQLExecution.withSQLConfPropagated.
+      SQLExecution.withSQLConfPropagated(df.queryExecution.sparkSession) {
         df.rdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
       }
     }
@@ -176,12 +179,12 @@ object AuronQueryTestUtil extends Assertions {
     s"""
        |== Results ==
        |${sideBySide(
-      s"== Correct Answer - ${expectedAnswer.size} ==" +:
-        getRowType(expectedAnswer.headOption) +:
-        prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
-      s"== Auron Answer - ${sparkAnswer.size} ==" +:
-        getRowType(sparkAnswer.headOption) +:
-        prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
+        s"== Correct Answer - ${expectedAnswer.size} ==" +:
+          getRowType(expectedAnswer.headOption) +:
+          prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
+        s"== Auron Answer - ${sparkAnswer.size} ==" +:
+          getRowType(sparkAnswer.headOption) +:
+          prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
     """.stripMargin
   }
 

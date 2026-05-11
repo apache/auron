@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.io.FileUtils
 import org.apache.commons.math3.util.Precision
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,6 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.scalactic.TripleEqualsSupport.Spread
+
+import org.apache.auron.sparkver
 
 /**
  * Base trait for all Spark expression tests.
@@ -143,7 +146,7 @@ trait SparkExpressionTestsBase
       val empData = Seq(Row(1))
       _spark.createDataFrame(_spark.sparkContext.parallelize(empData), schema)
     }
-    val resultDF = df.select(Column(expression))
+    val resultDF = df.select(exprToColumn(expression))
     val result = resultDF.collect()
 
     if (checkDataTypeSupported(expression) &&
@@ -350,8 +353,35 @@ trait SparkExpressionTestsBase
         structFieldSeq.append(StructField("n", IntegerType, nullable = true))
     }
 
-    _spark.internalCreateDataFrame(
+    internalCreateDF(
+      _spark,
       _spark.sparkContext.parallelize(Seq(inputRow)),
       StructType(structFieldSeq.toSeq))
   }
+
+  // Wrap Column construction from an Expression. Spark 4 removed
+  // `Column.apply(Expression)`; the classic module exposes it via ExpressionUtils.
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  private def exprToColumn(expr: Expression): Column = Column(expr)
+
+  @sparkver("4.0 / 4.1")
+  private def exprToColumn(expr: Expression): Column =
+    org.apache.spark.sql.classic.ExpressionUtils.column(expr)
+
+  // Wrap SparkSession.internalCreateDataFrame; in Spark 4+ it lives on classic.SparkSession.
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  private def internalCreateDF(
+      spark: SparkSession,
+      rdd: RDD[InternalRow],
+      schema: StructType): DataFrame =
+    spark.internalCreateDataFrame(rdd, schema)
+
+  @sparkver("4.0 / 4.1")
+  private def internalCreateDF(
+      spark: SparkSession,
+      rdd: RDD[InternalRow],
+      schema: StructType): DataFrame =
+    spark
+      .asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+      .internalCreateDataFrame(rdd, schema, isStreaming = false)
 }
