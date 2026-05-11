@@ -49,7 +49,7 @@ object IcebergScanSupport extends Logging {
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
     assert(
-      !AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan),
+      AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan),
       "Not iceberg scans.")
 
     val readSchema = scan.readSchema
