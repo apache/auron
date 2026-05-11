@@ -70,16 +70,22 @@ RUN dnf -y install java-1.8.0-openjdk java-1.8.0-openjdk-devel \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
-# Default to JDK 8; override at runtime via JAVA_VERSION env var
-ENV JAVA_8_HOME="/usr/lib/jvm/java-1.8.0-openjdk"
-ENV JAVA_21_HOME="/usr/lib/jvm/java-21-openjdk"
-ENV JAVA_HOME="${JAVA_8_HOME}"
+# Default to JDK 8; runtime switching handled via JAVA_VERSION env var in docker-compose
+ENV JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-RUN echo 'export JAVA_8_HOME="/usr/lib/jvm/java-1.8.0-openjdk"' >> /root/.bashrc && \
-    echo 'export JAVA_21_HOME="/usr/lib/jvm/java-21-openjdk"' >> /root/.bashrc && \
-    echo 'if [ "$JAVA_VERSION" = "21" ]; then export JAVA_HOME="$JAVA_21_HOME"; else export JAVA_HOME="$JAVA_8_HOME"; fi' >> /root/.bashrc && \
-    echo 'export PATH="$JAVA_HOME/bin:$PATH"' >> /root/.bashrc
+# Entrypoint script to switch JDK at runtime
+RUN printf '#!/bin/bash\n\
+if [ "$JAVA_VERSION" = "21" ]; then\n\
+  export JAVA_HOME="/usr/lib/jvm/java-21-openjdk"\n\
+else\n\
+  export JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"\n\
+fi\n\
+export PATH="$JAVA_HOME/bin:$PATH"\n\
+exec "$@"\n' > /usr/local/bin/entrypoint.sh && \
+    chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # ---------------------------------------------------------------------
 # Set working directory
