@@ -85,14 +85,10 @@ jobs:
           - sparkver: spark-4.0
             scalaver: '2.13'
             javaver: '21'
-            auronver: 8.0.0-SNAPSHOT
-            runner: ubuntu-24.04
             image: rockylinux8
           - sparkver: spark-4.1
             scalaver: '2.13'
             javaver: '21'
-            auronver: 8.0.0-SNAPSHOT
-            runner: ubuntu-24.04
             image: rockylinux8
 
     steps:
