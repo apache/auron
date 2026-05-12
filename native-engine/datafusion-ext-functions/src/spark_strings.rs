@@ -491,126 +491,6 @@ mod test {
     }
 
     #[test]
-    fn test_spark_substring_string_array_with_zero_and_negative_pos() -> Result<()> {
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some("abcdef".to_string()),
-                Some("数据fusion".to_string()),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(0_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(3_i64)),
-        ])?;
-        let s = r.into_array(3)?;
-        assert_eq!(
-            as_string_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some("abc"), Some("数据f"), None]
-        );
-
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some("abcdef".to_string()),
-                Some("数据fusion".to_string()),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(-3_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(2_i64)),
-        ])?;
-        let s = r.into_array(3)?;
-        assert_eq!(
-            as_string_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some("de"), Some("io"), None]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_spark_substring_string_array_with_non_positive_len() -> Result<()> {
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some("abcdef".to_string()),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(2_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(0_i64)),
-        ])?;
-        let s = r.into_array(2)?;
-        assert_eq!(
-            as_string_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some(""), None]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_spark_substring_string_array_with_clamped_ranges() -> Result<()> {
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some("abcdef".to_string()),
-                Some("".to_string()),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(10_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(3_i64)),
-        ])?;
-        let s = r.into_array(3)?;
-        assert_eq!(
-            as_string_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some(""), Some(""), None]
-        );
-
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some("abcdef".to_string()),
-                Some("".to_string()),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(2_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(100_i64)),
-        ])?;
-        let s = r.into_array(3)?;
-        assert_eq!(
-            as_string_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some("bcdef"), Some(""), None]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_spark_substring_string_array_with_extreme_args() -> Result<()> {
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some("abcdef".to_string()),
-                Some("".to_string()),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(i64::MIN)),
-            ColumnarValue::Scalar(ScalarValue::from(3_i64)),
-        ])?;
-        let s = r.into_array(3)?;
-        assert_eq!(
-            as_string_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some("abc"), Some(""), None]
-        );
-
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
-                Some("abcdef".to_string()),
-                Some("".to_string()),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(2_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(i64::MAX)),
-        ])?;
-        let s = r.into_array(3)?;
-        assert_eq!(
-            as_string_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some("bcdef"), Some(""), None]
-        );
-        Ok(())
-    }
-
-    #[test]
     fn test_spark_substring_binary_array() -> Result<()> {
         let r = spark_substring(&vec![
             ColumnarValue::Array(Arc::new(BinaryArray::from_iter(vec![
@@ -630,59 +510,115 @@ mod test {
     }
 
     #[test]
-    fn test_spark_substring_binary_array_with_clamped_ranges() -> Result<()> {
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(BinaryArray::from_iter(vec![
-                Some(&[1_u8, 2, 3, 4, 5][..]),
-                Some(&[][..]),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(10_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(3_i64)),
-        ])?;
-        let b = r.into_array(3)?;
-        assert_eq!(
-            as_binary_array(&b)?.iter().collect::<Vec<_>>(),
-            vec![Some(&[][..]), Some(&[][..]), None]
-        );
-
-        let r = spark_substring(&vec![
-            ColumnarValue::Array(Arc::new(BinaryArray::from_iter(vec![
-                Some(&[1_u8, 2, 3, 4, 5][..]),
-                Some(&[][..]),
-                None,
-            ]))),
-            ColumnarValue::Scalar(ScalarValue::from(2_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(i64::MAX)),
-        ])?;
-        let b = r.into_array(3)?;
-        assert_eq!(
-            as_binary_array(&b)?.iter().collect::<Vec<_>>(),
-            vec![Some(&[2_u8, 3, 4, 5][..]), Some(&[][..]), None]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_spark_substring_scalar_with_edge_cases() -> Result<()> {
-        let r = spark_substring(&vec![
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some("abcdef".to_string()))),
-            ColumnarValue::Scalar(ScalarValue::from(i64::MIN)),
-            ColumnarValue::Scalar(ScalarValue::from(2_i64)),
-        ])?;
-        match r {
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some(value))) => assert_eq!(value, "ab"),
-            other => df_execution_err!("Expected scalar Utf8 substring, got: {:?}", other)?,
+    fn test_spark_substring_edge_cases() -> Result<()> {
+        for (name, pos, len, expected) in [
+            (
+                "zero pos",
+                0_i64,
+                3_i64,
+                vec![Some("abc"), Some("数据f"), None],
+            ),
+            (
+                "negative pos",
+                -3_i64,
+                2_i64,
+                vec![Some("de"), Some("io"), None],
+            ),
+            ("zero len", 2_i64, 0_i64, vec![Some(""), Some(""), None]),
+            (
+                "pos past end",
+                10_i64,
+                3_i64,
+                vec![Some(""), Some(""), None],
+            ),
+            (
+                "len past end",
+                2_i64,
+                100_i64,
+                vec![Some("bcdef"), Some("据fusion"), None],
+            ),
+            (
+                "i64 min pos",
+                i64::MIN,
+                3_i64,
+                vec![Some("abc"), Some("数据f"), None],
+            ),
+            (
+                "i64 max len",
+                2_i64,
+                i64::MAX,
+                vec![Some("bcdef"), Some("据fusion"), None],
+            ),
+        ] {
+            let r = spark_substring(&vec![
+                ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                    Some("abcdef".to_string()),
+                    Some("数据fusion".to_string()),
+                    None,
+                ]))),
+                ColumnarValue::Scalar(ScalarValue::from(pos)),
+                ColumnarValue::Scalar(ScalarValue::from(len)),
+            ])?;
+            let s = r.into_array(3)?;
+            assert_eq!(
+                as_string_array(&s)?.into_iter().collect::<Vec<_>>(),
+                expected,
+                "string array case: {name}"
+            );
         }
 
-        let r = spark_substring(&vec![
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some("".to_string()))),
-            ColumnarValue::Scalar(ScalarValue::from(2_i64)),
-            ColumnarValue::Scalar(ScalarValue::from(i64::MAX)),
-        ])?;
-        match r {
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some(value))) => assert_eq!(value, ""),
-            other => df_execution_err!("Expected empty scalar Utf8 substring, got: {:?}", other)?,
+        for (name, pos, len, expected) in [
+            (
+                "zero len",
+                2_i64,
+                0_i64,
+                vec![Some(&[][..]), Some(&[][..]), None],
+            ),
+            (
+                "pos past end",
+                10_i64,
+                3_i64,
+                vec![Some(&[][..]), Some(&[][..]), None],
+            ),
+            (
+                "i64 max len",
+                2_i64,
+                i64::MAX,
+                vec![Some(&[2_u8, 3, 4, 5][..]), Some(&[][..]), None],
+            ),
+        ] {
+            let r = spark_substring(&vec![
+                ColumnarValue::Array(Arc::new(BinaryArray::from_iter(vec![
+                    Some(&[1_u8, 2, 3, 4, 5][..]),
+                    Some(&[][..]),
+                    None,
+                ]))),
+                ColumnarValue::Scalar(ScalarValue::from(pos)),
+                ColumnarValue::Scalar(ScalarValue::from(len)),
+            ])?;
+            let b = r.into_array(3)?;
+            assert_eq!(
+                as_binary_array(&b)?.iter().collect::<Vec<_>>(),
+                expected,
+                "binary array case: {name}"
+            );
+        }
+
+        for (name, input, pos, len, expected) in [
+            ("i64 min pos", "abcdef", i64::MIN, 2_i64, "ab"),
+            ("empty string", "", 2_i64, i64::MAX, ""),
+        ] {
+            let r = spark_substring(&vec![
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some(input.to_string()))),
+                ColumnarValue::Scalar(ScalarValue::from(pos)),
+                ColumnarValue::Scalar(ScalarValue::from(len)),
+            ])?;
+            match r {
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some(value))) => {
+                    assert_eq!(value, expected, "scalar string case: {name}")
+                }
+                other => df_execution_err!("Expected scalar Utf8 substring, got: {:?}", other)?,
+            }
         }
 
         let r = spark_substring(&vec![
@@ -692,7 +628,7 @@ mod test {
         ])?;
         match r {
             ColumnarValue::Scalar(ScalarValue::Binary(Some(value))) => {
-                assert_eq!(value, vec![2_u8, 3, 4, 5])
+                assert_eq!(value, vec![2_u8, 3, 4, 5], "scalar binary case")
             }
             other => df_execution_err!("Expected scalar Binary substring, got: {:?}", other)?,
         }
