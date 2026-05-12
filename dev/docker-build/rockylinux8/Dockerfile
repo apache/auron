@@ -77,10 +77,10 @@ RUN ln -sfn /usr/lib/jvm/java-1.8.0-openjdk /usr/lib/jvm/java-8 && \
 ENV JAVA_HOME="/usr/lib/jvm/java-8"
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# Entrypoint script to switch JDK at runtime based on JAVA_VERSION env var
+# Entrypoint script to switch JDK at runtime based on AURON_JAVA_VERSION env var
 RUN echo '#!/bin/bash'                                          > /usr/local/bin/entrypoint.sh && \
     echo 'source ~/.bashrc 2>/dev/null || true'                >> /usr/local/bin/entrypoint.sh && \
-    echo 'if [ "$JAVA_VERSION" = "21" ]; then'                 >> /usr/local/bin/entrypoint.sh && \
+    echo 'if [ "$AURON_JAVA_VERSION" = "21" ]; then'           >> /usr/local/bin/entrypoint.sh && \
     echo '  export JAVA_HOME="/usr/lib/jvm/java-21"'           >> /usr/local/bin/entrypoint.sh && \
     echo 'else'                                                >> /usr/local/bin/entrypoint.sh && \
     echo '  export JAVA_HOME="/usr/lib/jvm/java-8"'            >> /usr/local/bin/entrypoint.sh && \
