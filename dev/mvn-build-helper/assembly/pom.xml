@@ -121,10 +121,6 @@
                   </excludes>
                 </relocation>
                 <relocation>
-                  <pattern>io.netty</pattern>
-                  <shadedPattern>${auron.shade.packageName}.io.netty</shadedPattern>
-                </relocation>
-                <relocation>
                   <pattern>javax.annotation</pattern>
                   <shadedPattern>${auron.shade.packageName}.javax.annotation</shadedPattern>
                 </relocation>
