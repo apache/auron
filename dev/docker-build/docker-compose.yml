@@ -35,9 +35,7 @@ services:
       JAVA_VERSION: "${JAVA_VERSION:-8}"
     command: >
       bash -c '
-        source ~/.bashrc &&
         cd /auron &&
-        echo "[DOCKER] Using JAVA_HOME=$JAVA_HOME ($(java -version 2>&1 | head -1))" &&
         echo "[DOCKER] Running: ./build/mvn $AURON_BUILD_ARGS" &&
         ./build/mvn $AURON_BUILD_ARGS
       '

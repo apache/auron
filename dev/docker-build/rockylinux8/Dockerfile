@@ -70,19 +70,23 @@ RUN dnf -y install java-1.8.0-openjdk java-1.8.0-openjdk-devel \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
-# Default to JDK 8; runtime switching handled via JAVA_VERSION env var in docker-compose
-ENV JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"
+# Create stable symlinks (Rocky 8 installs to versioned directories)
+RUN ln -sfn /usr/lib/jvm/java-1.8.0-openjdk /usr/lib/jvm/java-8 && \
+    ln -sfn $(rpm -ql java-21-openjdk-devel | grep '/bin/javac$' | sed 's|/bin/javac||') /usr/lib/jvm/java-21
+
+ENV JAVA_HOME="/usr/lib/jvm/java-8"
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# Entrypoint script to switch JDK at runtime
-RUN printf '#!/bin/bash\n\
-if [ "$JAVA_VERSION" = "21" ]; then\n\
-  export JAVA_HOME="/usr/lib/jvm/java-21-openjdk"\n\
-else\n\
-  export JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"\n\
-fi\n\
-export PATH="$JAVA_HOME/bin:$PATH"\n\
-exec "$@"\n' > /usr/local/bin/entrypoint.sh && \
+# Entrypoint script to switch JDK at runtime based on JAVA_VERSION env var
+RUN echo '#!/bin/bash'                                          > /usr/local/bin/entrypoint.sh && \
+    echo 'source ~/.bashrc 2>/dev/null || true'                >> /usr/local/bin/entrypoint.sh && \
+    echo 'if [ "$JAVA_VERSION" = "21" ]; then'                 >> /usr/local/bin/entrypoint.sh && \
+    echo '  export JAVA_HOME="/usr/lib/jvm/java-21"'           >> /usr/local/bin/entrypoint.sh && \
+    echo 'else'                                                >> /usr/local/bin/entrypoint.sh && \
+    echo '  export JAVA_HOME="/usr/lib/jvm/java-8"'            >> /usr/local/bin/entrypoint.sh && \
+    echo 'fi'                                                  >> /usr/local/bin/entrypoint.sh && \
+    echo 'export PATH="$JAVA_HOME/bin:$PATH"'                  >> /usr/local/bin/entrypoint.sh && \
+    echo 'exec "$@"'                                           >> /usr/local/bin/entrypoint.sh && \
     chmod +x /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
