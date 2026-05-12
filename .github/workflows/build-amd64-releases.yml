@@ -73,6 +73,13 @@ jobs:
             javaver: '8'
           - sparkver: spark-4.1
             javaver: '8'
+          # Spark 4.x JDK 21 builds are handled by explicit rockylinux8 include entries below.
+          - sparkver: spark-4.0
+            scalaver: '2.13'
+            javaver: '21'
+          - sparkver: spark-4.1
+            scalaver: '2.13'
+            javaver: '21'
         include:
           # Spark 4.x uses rockylinux8 image (with JDK 21)
           - sparkver: spark-4.0

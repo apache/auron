@@ -44,3 +44,11 @@ RUN /rustup-init -y --default-toolchain nightly-2025-05-09-x86_64-unknown-linux-
 # install java
 RUN yum install -y java-1.8.0-openjdk java-1.8.0-openjdk-devel
 RUN echo 'export JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"' >> ~/.bashrc
+
+# Entrypoint script: source bashrc (for devtoolset-11, rust, java) then exec command
+RUN echo '#!/bin/bash'                                          > /usr/local/bin/entrypoint.sh && \
+    echo 'source ~/.bashrc 2>/dev/null || true'                >> /usr/local/bin/entrypoint.sh && \
+    echo 'exec "$@"'                                           >> /usr/local/bin/entrypoint.sh && \
+    chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
