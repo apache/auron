@@ -128,7 +128,7 @@ jobs:
 
       - name: Build auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
         env:
-          JAVA_VERSION: ${{ matrix.javaver }}
+          AURON_JAVA_VERSION: ${{ matrix.javaver }}
         run: |
           sed -i 's/docker-compose -f/docker compose -f/g' ./auron-build.sh
           ./auron-build.sh \
