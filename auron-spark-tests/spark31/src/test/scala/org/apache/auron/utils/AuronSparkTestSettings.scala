@@ -23,3 +23,4 @@ class AuronSparkTestSettings extends SparkTestSettings {
     override def getOverwriteSQLQueryTests: Set[String] = Set.empty
   }
 }
+
