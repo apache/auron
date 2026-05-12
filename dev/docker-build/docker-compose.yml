@@ -35,7 +35,7 @@ services:
       AURON_JAVA_VERSION: "${AURON_JAVA_VERSION:-8}"
     command: >
       bash -c '
-        source ~/.bashrc 2>/dev/null || true &&
+        source ~/.bashrc &&
         cd /auron &&
         echo "[DOCKER] Running: ./build/mvn $AURON_BUILD_ARGS" &&
         ./build/mvn $AURON_BUILD_ARGS
