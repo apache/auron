@@ -521,10 +521,8 @@ fn parse_records(
         let local_pb_desc_file =
             env::var("PWD").expect("PWD env var is not set") + "/" + &pb_desc_file;
         log::info!("load desc from {local_pb_desc_file}");
-        let file_descriptor_bytes =
-            fs::read(local_pb_desc_file).expect("Failed to read file");
-        let skip_fields_vec: Vec<String> =
-            skip_fields.split(",").map(|s| s.to_string()).collect();
+        let file_descriptor_bytes = fs::read(local_pb_desc_file).expect("Failed to read file");
+        let skip_fields_vec: Vec<String> = skip_fields.split(",").map(|s| s.to_string()).collect();
         (file_descriptor_bytes, root_message_name, skip_fields_vec)
     } else {
         (vec![], String::new(), vec![])
