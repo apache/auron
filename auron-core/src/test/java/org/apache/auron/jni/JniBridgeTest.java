@@ -42,6 +42,23 @@ public class JniBridgeTest {
         assertPathPreservesHash(cfs.createdPath);
     }
 
+    @Test
+    public void testFileWrappersHandleReadUriAndWriteRawPercentPaths() throws Exception {
+        String readPath = "file:/tmp/t1/part=test%2520test/part-00000.parquet";
+        String writePath = "file:/tmp/t1/part=test%20test/part-00001.parquet";
+        CapturingFileSystem cfs = new CapturingFileSystem();
+
+        JniBridge.openFileAsDataInputWrapper(cfs, readPath).close();
+        JniBridge.createFileAsDataOutputWrapper(cfs, writePath).close();
+
+        assertEquals(
+                "/tmp/t1/part=test%20test/part-00000.parquet",
+                cfs.openedPath.toUri().getPath());
+        assertEquals(
+                "/tmp/t1/part=test%20test/part-00001.parquet",
+                cfs.createdPath.toUri().getPath());
+    }
+
     private static void assertPathPreservesHash(Path path) {
         assertEquals(
                 "/tmp/channel=wx_repro#mini/spark-submit-123/part-00000.json",
