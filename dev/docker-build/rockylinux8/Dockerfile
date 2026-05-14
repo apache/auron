@@ -63,31 +63,25 @@ RUN curl https://sh.rustup.rs -sSf -o rustup-init && \
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # ---------------------------------------------------------------------
-# Install Java (OpenJDK 8 and OpenJDK 21)
+# Install Java (OpenJDK 8, 17, and 21)
 # ---------------------------------------------------------------------
 RUN dnf -y install java-1.8.0-openjdk java-1.8.0-openjdk-devel \
+                   java-17-openjdk java-17-openjdk-devel \
                    java-21-openjdk java-21-openjdk-devel && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
-# Create stable symlinks (Rocky 8 installs to versioned directories)
+# Create stable symlinks for JDK paths
 RUN ln -sfn /usr/lib/jvm/java-1.8.0-openjdk /usr/lib/jvm/java-8 && \
-    ln -sfn $(rpm -ql java-21-openjdk-devel | grep '/bin/javac$' | sed 's|/bin/javac||') /usr/lib/jvm/java-21
+    ln -sfn /usr/lib/jvm/java-17-openjdk /usr/lib/jvm/java-17 && \
+    ln -sfn /usr/lib/jvm/java-21-openjdk /usr/lib/jvm/java-21
 
 ENV JAVA_HOME="/usr/lib/jvm/java-8"
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Entrypoint script to switch JDK at runtime based on AURON_JAVA_VERSION env var
-RUN echo '#!/bin/bash'                                          > /usr/local/bin/entrypoint.sh && \
-    echo 'source ~/.bashrc 2>/dev/null || true'                >> /usr/local/bin/entrypoint.sh && \
-    echo 'if [ "$AURON_JAVA_VERSION" = "21" ]; then'           >> /usr/local/bin/entrypoint.sh && \
-    echo '  export JAVA_HOME="/usr/lib/jvm/java-21"'           >> /usr/local/bin/entrypoint.sh && \
-    echo 'else'                                                >> /usr/local/bin/entrypoint.sh && \
-    echo '  export JAVA_HOME="/usr/lib/jvm/java-8"'            >> /usr/local/bin/entrypoint.sh && \
-    echo 'fi'                                                  >> /usr/local/bin/entrypoint.sh && \
-    echo 'export PATH="$JAVA_HOME/bin:$PATH"'                  >> /usr/local/bin/entrypoint.sh && \
-    echo 'exec "$@"'                                           >> /usr/local/bin/entrypoint.sh && \
-    chmod +x /usr/local/bin/entrypoint.sh
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
