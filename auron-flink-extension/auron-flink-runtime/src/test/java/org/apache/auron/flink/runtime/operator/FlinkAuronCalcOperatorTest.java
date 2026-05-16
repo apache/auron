@@ -81,13 +81,13 @@ import org.junit.jupiter.api.Test;
  * and {@link FlinkAuronCalcOperator#getMetricGroup()}; the inherited protected {@code output}
  * field is set through reflection.
  *
- * <p>SPEC-derived test contracts (TDD Step A — written before production code exists):
+ * <p>Contracts verified by this class:
  *
  * <ol>
  *   <li>{@code open()} must register the exporter into {@link JniBridge} resources under a
  *       runtime-bound resource ID.
- *   <li>The resource ID must encode the Flink operator unique ID and subtask index (operator
- *       quality OQ1 = per-subtask uniqueness).
+ *   <li>The resource ID must encode the Flink operator unique ID and subtask index so
+ *       registrations from concurrent subtasks of the same operator never collide.
  *   <li>{@code processElement} must buffer rows into the exporter without prematurely draining.
  *   <li>When the exporter signals batch-full, the operator must drain the native runtime in the
  *       same {@code processElement} invocation.
@@ -148,7 +148,7 @@ public class FlinkAuronCalcOperatorTest {
      */
     @Test
     public void testOpenRegistersExporterViaPutResource() throws Exception {
-        TestableOperator op = newOperator();
+        TestFlinkAuronCalcOperator op = newOperator();
         op.open();
 
         String key = findOnlyNewResourceKey();
@@ -165,7 +165,7 @@ public class FlinkAuronCalcOperatorTest {
     }
 
     // ---------------------------------------------------------------------
-    // 2) Resource ID encodes Flink operator unique ID + subtask (OQ1)
+    // 2) Resource ID encodes Flink operator unique ID + subtask
     // ---------------------------------------------------------------------
 
     /**
@@ -173,12 +173,12 @@ public class FlinkAuronCalcOperatorTest {
      * unique ID and subtask index. Non-FFI fields ({@code num_partitions}, {@code schema}) must
      * be preserved unchanged. The {@link FFIReaderExecNode} proto has no
      * {@code auron_operator_id} field (only {@code KafkaScanExecNode} does); the resource ID is
-     * the only place where the Flink operator identity is propagated to native code (OQ1).
+     * the only place where the Flink operator identity is propagated to native code.
      */
     @Test
     public void testResourceIdEmbedsFlinkOperatorIdAndSubtask() throws Exception {
         PhysicalPlanNode plan = buildProjectFilterFfiReaderPlan(4);
-        TestableOperator op = newOperator(plan);
+        TestFlinkAuronCalcOperator op = newOperator(plan);
         op.open();
 
         PhysicalPlanNode runtime = readRuntimePlan(op);
@@ -196,7 +196,7 @@ public class FlinkAuronCalcOperatorTest {
         assertEquals(originalLeaf.getNumPartitions(), leaf.getNumPartitions());
         assertEquals(originalLeaf.getSchema(), leaf.getSchema());
 
-        // OQ1 reminder: FFIReaderExecNode proto has only 3 fields; no auron_operator_id.
+        // FFIReaderExecNode proto has only 3 fields; no auron_operator_id.
         assertEquals(3, FFIReaderExecNode.getDescriptor().getFields().size());
 
         op.close();
@@ -244,6 +244,74 @@ public class FlinkAuronCalcOperatorTest {
             assertTrue(
                     op.fakeRuntime.loadNextBatchInvocations >= 1,
                     "Drain should be triggered when exporter.isBatchFull() returns true");
+        } finally {
+            op.close();
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // 4b) Multi-cycle drain — operator must reinit after each drain cycle
+    // ---------------------------------------------------------------------
+
+    /**
+     * Contract: the real {@link org.apache.auron.jni.AuronCallNativeWrapper#loadNextBatch}
+     * auto-closes its native runtime when {@code JniBridge.nextBatch} returns false, and the
+     * native FFI Reader's drop calls Java {@code close()} on the exporter. The operator
+     * therefore must reinitialize both {@link FlinkArrowFFIExporter} and the
+     * {@link FlinkAuronCalcOperator.NativeRuntime} after every drain cycle so subsequent
+     * {@code processElement} calls work correctly. Three consecutive batch-full triggers must
+     * produce no exception; the factory must be invoked once for {@code open()} plus once per
+     * drain cycle (= 4 total); the exporter must be re-registered under the same
+     * {@code resourceId} after each cycle; and the operator must still accept offers after the
+     * reinit cycles.
+     */
+    @Test
+    public void testProcessElementMultiCycleDrainReinitializesWrapper() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger factoryCalls = new java.util.concurrent.atomic.AtomicInteger();
+        FlinkAuronCalcOperator.NativeRuntimeFactory factory = (a, p, m, mem) -> {
+            factoryCalls.incrementAndGet();
+            return new OneShotNativeRuntime();
+        };
+        PhysicalPlanNode plan = buildProjectFilterFfiReaderPlan(1);
+        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        FakeExporterTrackingOperator op =
+                new FakeExporterTrackingOperator(plan, rowType, rowType, "auron-op-id", factory, /* fullAfterRows */ 1);
+        op.open();
+        String resourceId = findOnlyNewResourceKey(); // captured after open()'s putResource
+        try {
+            for (int cycle = 1; cycle <= 3; cycle++) {
+                op.processElement(new StreamRecord<>(GenericRowData.of(cycle)));
+
+                // After each drain cycle the operator must have re-registered the exporter
+                // under the same resourceId; otherwise the next native runtime would fail to
+                // look up the FFI exporter.
+                assertNotNull(
+                        peekResource(resourceId),
+                        "Cycle " + cycle + ": exporter must be re-registered under resourceId "
+                                + "after drainNative reinit");
+                assertSame(
+                        op.tracker,
+                        peekResource(resourceId),
+                        "Cycle " + cycle + ": the re-registered exporter must be the same "
+                                + "tracker instance (per-cycle reinit reuses the operator-owned exporter)");
+            }
+
+            assertEquals(
+                    4,
+                    factoryCalls.get(),
+                    "Native runtime must be reinitialized after each batch-full drain cycle "
+                            + "(1 for open() + 3 reinit)");
+
+            // After three reinit cycles, the operator must still accept input. Offer one more
+            // row and verify the tracker (re-registered each cycle, never closed by our fake)
+            // still records it.
+            int offerCountBefore = op.tracker.offerCount;
+            op.processElement(new StreamRecord<>(GenericRowData.of(99)));
+            assertEquals(
+                    offerCountBefore + 1,
+                    op.tracker.offerCount,
+                    "After three drain reinit cycles the operator must still accept offers "
+                            + "(verifies the exporter is in a usable state post-reinit)");
         } finally {
             op.close();
         }
@@ -312,9 +380,9 @@ public class FlinkAuronCalcOperatorTest {
     // ---------------------------------------------------------------------
 
     /**
-     * Contract: {@code close()} must flush in-flight rows by setting {@code noMoreInput} on the
-     * exporter and draining, then release native runtime, exporter, and child allocator in
-     * order. Calling {@code close()} twice must not throw and must not double-close.
+     * Contract: {@code close()} must flush in-flight rows by draining, then release the native
+     * runtime, exporter, and child allocator in order. Calling {@code close()} twice must not
+     * throw and must not double-close.
      */
     @Test
     public void testCloseDrainsResidueAndIsIdempotent() throws Exception {
@@ -326,7 +394,6 @@ public class FlinkAuronCalcOperatorTest {
 
         op.close();
 
-        assertTrue(op.tracker.noMoreInputCalled, "close() must invoke exporter.noMoreInput()");
         assertTrue(op.tracker.closeCount >= 1, "close() must close the exporter");
         assertEquals(1, op.fakeRuntime.closeInvocations, "close() must close native runtime");
         assertEquals(0L, op.openedChildAllocator.getAllocatedMemory(), "Child allocator must be drained after close");
@@ -348,7 +415,7 @@ public class FlinkAuronCalcOperatorTest {
     @Test
     public void testGetPhysicalPlanNodesReturnsConstructorPlan() {
         PhysicalPlanNode plan = buildProjectFilterFfiReaderPlan(2);
-        TestableOperator op = newOperator(plan);
+        TestFlinkAuronCalcOperator op = newOperator(plan);
         List<PhysicalPlanNode> nodes = op.getPhysicalPlanNodes();
         assertEquals(1, nodes.size(), "Should return exactly one plan node");
         assertSame(plan, nodes.get(0), "Should return the constructor-passed instance");
@@ -365,7 +432,7 @@ public class FlinkAuronCalcOperatorTest {
      */
     @Test
     public void testGetAuronOperatorIdReturnsUnsuffixed() throws Exception {
-        TestableOperator op = newOperator("my-calc-op");
+        TestFlinkAuronCalcOperator op = newOperator("my-calc-op");
         op.open();
         try {
             assertEquals("my-calc-op", op.getAuronOperatorId());
@@ -491,22 +558,23 @@ public class FlinkAuronCalcOperatorTest {
     // Construction helpers
     // =====================================================================
 
-    private TestableOperator newOperator() {
+    private TestFlinkAuronCalcOperator newOperator() {
         return newOperator(buildProjectFilterFfiReaderPlan(2), "auron-op-id");
     }
 
-    private TestableOperator newOperator(String auronOperatorId) {
+    private TestFlinkAuronCalcOperator newOperator(String auronOperatorId) {
         return newOperator(buildProjectFilterFfiReaderPlan(2), auronOperatorId);
     }
 
-    private TestableOperator newOperator(PhysicalPlanNode plan) {
+    private TestFlinkAuronCalcOperator newOperator(PhysicalPlanNode plan) {
         return newOperator(plan, "auron-op-id");
     }
 
-    private TestableOperator newOperator(PhysicalPlanNode plan, String auronOperatorId) {
+    private TestFlinkAuronCalcOperator newOperator(PhysicalPlanNode plan, String auronOperatorId) {
         RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
         FakeNativeRuntime runtime = new FakeNativeRuntime();
-        TestableOperator op = new TestableOperator(plan, rowType, rowType, auronOperatorId, (a, p, m, mem) -> runtime);
+        TestFlinkAuronCalcOperator op =
+                new TestFlinkAuronCalcOperator(plan, rowType, rowType, auronOperatorId, (a, p, m, mem) -> runtime);
         op.fakeRuntime = runtime;
         return op;
     }
@@ -593,17 +661,20 @@ public class FlinkAuronCalcOperatorTest {
     // =====================================================================
 
     /**
-     * Operator subclass that stubs out the Flink runtime context. Uses
-     * {@link sun.misc.Unsafe#allocateInstance} to build a {@link StreamingRuntimeContext}
-     * without invoking its heavy real constructor; overrides only the methods we exercise.
+     * Test seam: a subclass of {@link FlinkAuronCalcOperator} that stubs out the Flink runtime
+     * context dependencies the operator under test consumes (operator unique ID, subtask index,
+     * metric group, processing-time service, and the inherited {@code output} field).
+     * {@link StreamingRuntimeContext} is built via {@link sun.misc.Unsafe#allocateInstance} to
+     * skip its heavy real constructor; only the methods the operator actually calls are
+     * overridden.
      */
-    static class TestableOperator extends FlinkAuronCalcOperator {
+    static class TestFlinkAuronCalcOperator extends FlinkAuronCalcOperator {
         FakeNativeRuntime fakeRuntime; // set by factory closure after construction
         final StubMetricGroup metricGroup = new StubMetricGroup();
         final FakeOutput fakeOutput = new FakeOutput();
         BufferAllocator openedChildAllocator;
 
-        TestableOperator(
+        TestFlinkAuronCalcOperator(
                 PhysicalPlanNode plan,
                 RowType inputRowType,
                 RowType outputRowType,
@@ -643,9 +714,9 @@ public class FlinkAuronCalcOperatorTest {
 
     /**
      * Subclass that swaps the real exporter for a {@link TrackingExporter} so tests can observe
-     * offer/isBatchFull/noMoreInput/close calls deterministically.
+     * offer/isBatchFull/close calls deterministically.
      */
-    static class FakeExporterTrackingOperator extends TestableOperator {
+    static class FakeExporterTrackingOperator extends TestFlinkAuronCalcOperator {
         final int fullAfterRows;
         TrackingExporter tracker;
         final List<String> events = new ArrayList<>();
@@ -706,6 +777,35 @@ public class FlinkAuronCalcOperatorTest {
     }
 
     /**
+     * Fake {@link FlinkAuronCalcOperator.NativeRuntime} mirroring the production close-on-false
+     * semantic of {@link org.apache.auron.jni.AuronCallNativeWrapper#loadNextBatch}
+     * (auron-core/.../AuronCallNativeWrapper.java:127): the first {@code loadNextBatch} call
+     * returns false and closes itself; subsequent calls would indicate the operator failed to
+     * reinitialize per drain cycle (asserted as a test failure).
+     */
+    static final class OneShotNativeRuntime implements FlinkAuronCalcOperator.NativeRuntime {
+        int loadNextBatchInvocations;
+        int closeInvocations;
+        boolean closedByDrain;
+
+        @Override
+        public boolean loadNextBatch(Consumer<VectorSchemaRoot> consumer) {
+            if (closedByDrain) {
+                throw new IllegalStateException(
+                        "loadNextBatch called on a closed OneShotNativeRuntime — operator did not reinit");
+            }
+            loadNextBatchInvocations++;
+            closedByDrain = true; // production wrapper auto-closes on false return
+            return false;
+        }
+
+        @Override
+        public void close() {
+            closeInvocations++;
+        }
+    }
+
+    /**
      * Tracking subclass of {@link FlinkArrowFFIExporter} that records call counts. The Arrow
      * allocations are still set up by the parent constructor; {@code offer} is intercepted so
      * tests can observe rows without committing them to the writer (avoids row-type/schema
@@ -714,7 +814,6 @@ public class FlinkAuronCalcOperatorTest {
     static final class TrackingExporter extends FlinkArrowFFIExporter {
         int offerCount;
         int closeCount;
-        boolean noMoreInputCalled;
         RowData lastOffered;
         final int fullAfterRows;
 
@@ -734,9 +833,15 @@ public class FlinkAuronCalcOperatorTest {
             return offerCount >= fullAfterRows;
         }
 
+        /**
+         * Bypasses the parent's writer in {@link #offer(RowData)}, so the parent's
+         * {@code rowCount} stays at zero. Without this override, the operator's empty-drain
+         * short-circuit would skip every drain in tests that rely on {@code offerCount}-based
+         * fullness.
+         */
         @Override
-        public void noMoreInput() {
-            noMoreInputCalled = true;
+        public boolean isEmpty() {
+            return offerCount == 0;
         }
 
         @Override

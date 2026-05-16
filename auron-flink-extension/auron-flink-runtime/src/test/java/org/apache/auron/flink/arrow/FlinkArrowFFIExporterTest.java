@@ -134,57 +134,21 @@ public class FlinkArrowFFIExporterTest {
     }
 
     /**
-     * Contract: a freshly constructed exporter that has received {@code noMoreInput()} without any
-     * offered rows must report end-of-stream by returning {@code false} from
-     * {@code exportNextBatch}.
+     * Contract: {@link FlinkArrowFFIExporter#exportNextBatch(long)} returns {@code false}
+     * whenever the buffer is empty. Without this contract, mid-stream empty pulls would
+     * return {@code true} with a 0-row batch and the native FFI Reader's loop would spin on
+     * empty batches in steady state.
      */
     @Test
-    public void testExportNextBatch_returnsFalseAfterNoMoreInput() {
+    public void testExportNextBatchReturnsFalseOnEmpty() {
         try (BufferAllocator allocator =
-                FlinkArrowUtils.ROOT_ALLOCATOR.newChildAllocator("testEoiEmpty", 0, Long.MAX_VALUE)) {
+                FlinkArrowUtils.ROOT_ALLOCATOR.newChildAllocator("testEmptyReturnsFalse", 0, Long.MAX_VALUE)) {
             RowType rowType = simpleRowType();
             try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(allocator, rowType, 100);
                     ArrowArray ffiArray = ArrowArray.allocateNew(allocator)) {
-                exporter.noMoreInput();
-                assertFalse(exporter.exportNextBatch(ffiArray.memoryAddress()));
-            }
-        }
-    }
-
-    /**
-     * Contract: when end-of-input arrives after offering a partial batch (below the limit), the
-     * exporter must still flush the buffered rows on the next {@code exportNextBatch} call (returns
-     * {@code true}) and only then signal end-of-stream on the subsequent call ({@code false}).
-     */
-    @Test
-    public void testExportNextBatch_returnsTrueOnPartialBatchAfterNoMoreInput() {
-        try (BufferAllocator allocator =
-                FlinkArrowUtils.ROOT_ALLOCATOR.newChildAllocator("testPartialFlush", 0, Long.MAX_VALUE)) {
-            RowType rowType = simpleRowType();
-            try (FlinkArrowFFIExporter exporter = new FlinkArrowFFIExporter(allocator, rowType, 100)) {
-                exporter.offer(makeRow(0));
-                exporter.offer(makeRow(1));
-                exporter.offer(makeRow(2));
-                exporter.noMoreInput();
-
-                try (ArrowArray ffiArray = ArrowArray.allocateNew(allocator);
-                        ArrowSchema ffiSchema = ArrowSchema.allocateNew(allocator);
-                        CDataDictionaryProvider dictProvider = new CDataDictionaryProvider()) {
-                    exporter.exportSchema(ffiSchema.memoryAddress());
-                    Schema schema = Data.importSchema(allocator, ffiSchema, dictProvider);
-
-                    assertTrue(exporter.exportNextBatch(ffiArray.memoryAddress()));
-
-                    try (VectorSchemaRoot importRoot = VectorSchemaRoot.create(schema, allocator)) {
-                        Data.importIntoVectorSchemaRoot(allocator, ffiArray, importRoot, dictProvider);
-                        assertEquals(3, importRoot.getRowCount());
-                    }
-                }
-
-                // Second call: buffer drained, must signal end-of-stream.
-                try (ArrowArray ffiArray2 = ArrowArray.allocateNew(allocator)) {
-                    assertFalse(exporter.exportNextBatch(ffiArray2.memoryAddress()));
-                }
+                assertFalse(
+                        exporter.exportNextBatch(ffiArray.memoryAddress()),
+                        "exportNextBatch must return false on an empty buffer");
             }
         }
     }

@@ -48,7 +48,7 @@ import org.apache.flink.table.types.logical.RowType;
  * Filter} above an {@code FFIReader} leaf) by streaming {@link RowData} through Auron's native
  * engine.
  *
- * <p>Architecture (Phase 1, Scenario B — standalone Calc):
+ * <p>Architecture:
  *
  * <ul>
  *   <li>Input bridge: {@link FlinkArrowFFIExporter} buffers JVM {@link RowData} into an Arrow
@@ -61,10 +61,10 @@ import org.apache.flink.table.types.logical.RowType;
  * </ul>
  *
  * <p>Resource ID convention: {@code FlinkAuronCalc-<flinkOpUniqueId>-<subtaskIndex>:<UUID>}. The
- * Flink operator unique ID and subtask index propagate operator identity to native code (OQ1 =
- * per-subtask uniqueness); the UUID disambiguates re-runs after operator restart. The
- * {@link FFIReaderExecNode} proto has no {@code auron_operator_id} field, so identity lives
- * exclusively in the resource ID.
+ * Flink operator unique ID and subtask index keep the key unique per subtask so native-side
+ * registrations from concurrent subtasks of the same operator do not collide; the UUID
+ * disambiguates re-runs after operator restart. The {@link FFIReaderExecNode} proto has no
+ * {@code auron_operator_id} field, so identity lives exclusively in the resource ID.
  *
  * <p>Lifecycle and drain semantics:
  *
@@ -81,9 +81,8 @@ import org.apache.flink.table.types.logical.RowType;
  *       releases resources. Idempotent: fields are nulled after close.
  * </ul>
  *
- * <p>This operator is constructed by the future ExecNodeGraphProcessor / Calc rewriter (sub-task
- * AURON #1853); valid construction is the caller's responsibility — no defensive null checks
- * are performed.
+ * <p>Valid construction (well-formed plan tree, matching row types, non-null operator ID) is
+ * the caller's responsibility — no defensive null checks are performed.
  */
 public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         implements OneInputStreamOperator<RowData, RowData>, FlinkAuronOperator {
@@ -94,9 +93,7 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
      * Soft row-count threshold above which the exporter reports {@link
      * FlinkArrowFFIExporter#isBatchFull()} and the operator eagerly drains the pipeline. 8192 is
      * the conventional batch size for vectorized engines (matches the Spark integration's
-     * batch-size default of ~10000 and DataFusion's typical batch size). Hard-coded here so the
-     * operator has no external configuration dependency; future PRs can wire this through
-     * {@link FlinkAuronConfiguration} once a config option exists.
+     * batch-size default of ~10000 and DataFusion's typical batch size).
      */
     private static final int BATCH_ROW_LIMIT = 8192;
 
@@ -114,6 +111,10 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
     private transient NativeRuntime nativeRuntime;
     private transient PhysicalPlanNode runtimePlan;
     private transient StreamRecord<RowData> outputRecord;
+    // Cached so reinitExporterAndRuntime() can reuse the value resolved once in open().
+    private transient long nativeMemory;
+    // Set in close() before the final drain so drainNative() skips its post-loop reinit.
+    private transient boolean closing;
 
     /**
      * Production constructor: uses the default factory that creates an
@@ -155,13 +156,13 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         this.metricNode = new FlinkMetricNode(getMetricGroup(), Collections.emptyList());
         this.exporter = new FlinkArrowFFIExporter(childAllocator, inputRowType, BATCH_ROW_LIMIT);
         // UUID disambiguates re-runs after operator restart so a stale registration cannot
-        // collide with the new one (OQ1).
+        // collide with the new one.
         this.resourceId = "FlinkAuronCalc-" + opIdWithSubtask + ":" + UUID.randomUUID();
         JniBridge.putResource(resourceId, exporter);
 
         this.runtimePlan = injectFfiReaderLeaf(plan, resourceId);
 
-        long nativeMemory =
+        this.nativeMemory =
                 AuronAdaptor.getInstance().getAuronConfiguration().getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE);
         this.nativeRuntime =
                 nativeRuntimeFactory.create(FlinkArrowUtils.getRootAllocator(), runtimePlan, metricNode, nativeMemory);
@@ -191,13 +192,15 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
 
     @Override
     public void close() throws Exception {
+        // Set first so the final drainNative() below skips its post-loop reinit; otherwise
+        // we'd allocate a new wrapper + exporter root only to tear them down immediately.
+        closing = true;
         try {
             // Both exporter and nativeRuntime must be initialized before draining: if open()
             // failed between exporter creation and nativeRuntime creation, drainNative() would
             // NPE on nativeRuntime.loadNextBatch(...). Each resource is null-guarded
             // individually in the nested finally so partial-init still releases what exists.
             if (exporter != null && nativeRuntime != null) {
-                exporter.noMoreInput();
                 drainNative();
             }
         } finally {
@@ -227,14 +230,48 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
     }
 
     /**
-     * Drains the native pipeline by repeatedly invoking {@link NativeRuntime#loadNextBatch}
-     * until it returns {@code false} (no more output). Each batch is emitted via
-     * {@link #emitArrowBatch(VectorSchemaRoot)}.
+     * Drains all output of the current cycle, then rebuilds the exporter + native runtime for
+     * the next cycle. Each batch is emitted via {@link #emitArrowBatch(VectorSchemaRoot)}.
+     *
+     * <p>Early-returns when the exporter has no buffered rows: a drain on an empty exporter
+     * would produce zero output and still tear down the wrapper (because
+     * {@link FlinkArrowFFIExporter#exportNextBatch(long)} returns false on empty, and
+     * {@link org.apache.auron.jni.AuronCallNativeWrapper#loadNextBatch} auto-closes the
+     * native runtime on a false return). Skipping the round trip keeps the wrapper alive
+     * across no-op watermark/checkpoint drains.
+     *
+     * <p>After a non-empty drain, the underlying {@code AuronCallNativeWrapper} has auto-closed
+     * itself, and the native FFI Reader's drop has already called
+     * {@link FlinkArrowFFIExporter#close()} on the Java exporter. Without per-cycle reinit, the
+     * next {@code processElement} would either silently drop rows (the wrapper's invalid native
+     * pointer fast-fails {@code loadNextBatch}) or NPE on {@code exporter.offer(row)} (writer
+     * nulled by the FFI Reader's drop). Reinit is suppressed during operator {@link #close()}
+     * via the {@link #closing} guard so the final drain does not allocate replacement resources
+     * only to tear them down.
      */
     private void drainNative() {
+        if (exporter.isEmpty()) {
+            return;
+        }
         while (nativeRuntime.loadNextBatch(this::emitArrowBatch)) {
             // loop
         }
+        if (!closing) {
+            reinitExporterAndRuntime();
+        }
+    }
+
+    /**
+     * Re-prepares the exporter, re-registers it under {@link #resourceId}, and builds a fresh
+     * {@link NativeRuntime} via the factory. {@link #resourceId}, {@link #runtimePlan},
+     * {@link #metricNode}, and {@link #nativeMemory} are all set once in {@link #open()} and
+     * reused across every reinit, so per-subtask operator identity is preserved.
+     */
+    private void reinitExporterAndRuntime() {
+        exporter.reset();
+        JniBridge.putResource(resourceId, exporter);
+        this.nativeRuntime =
+                nativeRuntimeFactory.create(FlinkArrowUtils.getRootAllocator(), runtimePlan, metricNode, nativeMemory);
     }
 
     /**

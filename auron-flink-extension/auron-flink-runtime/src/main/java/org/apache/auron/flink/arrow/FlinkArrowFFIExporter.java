@@ -44,17 +44,17 @@ import org.apache.flink.table.types.logical.RowType;
  *   <li>{@link #offer(RowData)} appends one row to the current batch.
  *   <li>{@link #exportNextBatch(long)} finalizes the current root, exports it via Arrow C-Data,
  *       then rotates to a fresh root for the next batch (the previous root is closed before the
- *       new one is allocated).
- *   <li>{@link #noMoreInput()} signals end-of-input; a subsequent {@code exportNextBatch} flushes
- *       any remaining buffered rows (returns {@code true}) and only then reports end-of-stream
- *       (returns {@code false}).
- *   <li>{@link #close()} releases the current root back to the supplied allocator.
+ *       new one is allocated). Returns {@code false} whenever the buffered row count is zero,
+ *       signaling end-of-current-cycle to the native FFI Reader's read loop.
+ *   <li>{@link #close()} releases the current root back to the supplied allocator. Also invoked
+ *       by the native FFI Reader's {@code AutoCloseableExporter} drop at the end of each drain
+ *       cycle; the owning operator subsequently calls {@link #reset()} to re-prepare the
+ *       exporter for the next cycle.
  * </ul>
  *
  * <p>Row count is tracked on the exporter itself rather than queried from {@link FlinkArrowWriter}
  * because the writer does not expose its internal count before {@link FlinkArrowWriter#finish()};
- * tracking here is exact (incremented per {@code offer}, reset per rotation) and avoids touching
- * unrelated code in this commit.
+ * tracking here is exact (incremented per {@code offer}, reset per rotation).
  */
 public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
 
@@ -66,7 +66,6 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
     private VectorSchemaRoot currentRoot;
     private FlinkArrowWriter writer;
     private int rowCount;
-    private boolean noMoreInput;
 
     /**
      * Creates a new exporter bound to the supplied allocator and Flink row type.
@@ -82,7 +81,6 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
         this.inputRowType = inputRowType;
         this.arrowSchema = FlinkArrowUtils.toArrowSchema(inputRowType);
         this.batchRowsLimit = batchRowsLimit;
-        this.noMoreInput = false;
         rotateRoot();
     }
 
@@ -108,12 +106,14 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
     }
 
     /**
-     * Signals that no further rows will be offered. The next {@link #exportNextBatch(long)} call
-     * will flush any remaining buffered rows (if non-empty), and subsequent calls will return
-     * {@code false}.
+     * Returns {@code true} when this exporter has no buffered rows. Used by the owning
+     * operator to short-circuit no-op drains, which would otherwise tear down and recreate
+     * the native wrapper for no useful work.
+     *
+     * @return true if the buffered row count is zero
      */
-    public void noMoreInput() {
-        this.noMoreInput = true;
+    public boolean isEmpty() {
+        return rowCount == 0;
     }
 
     /**
@@ -134,16 +134,23 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
 
     /**
      * Exports the current batch into the FFI struct addressed by {@code arrowArrayPtr} and rotates
-     * to a fresh batch. Returns {@code false} once the exporter has been signaled
-     * {@link #noMoreInput()} and the buffer is empty.
+     * to a fresh batch. Returns {@code false} whenever the buffered row count is zero, signaling
+     * end-of-current-cycle to the native FFI Reader's read loop; the reader exits and its drop
+     * invokes {@link #close()} on this exporter, and the owning operator calls {@link #reset()}
+     * to re-prepare before the next drain cycle.
+     *
+     * <p>Without the empty-buffer false return, mid-stream empty pulls (no rows yet but more
+     * expected) would cause the native FFI Reader to send 0-row batches downstream and
+     * {@link org.apache.auron.jni.AuronCallNativeWrapper#loadNextBatch} would spin indefinitely
+     * on empty output.
      *
      * @param arrowArrayPtr native address of an Arrow {@link ArrowArray} FFI struct
      * @return {@code true} if a batch was written into {@code arrowArrayPtr}; {@code false} if the
-     *     stream is exhausted
+     *     buffer is empty (end-of-current-cycle)
      */
     @Override
     public boolean exportNextBatch(long arrowArrayPtr) {
-        if (rowCount == 0 && noMoreInput) {
+        if (rowCount == 0) {
             return false;
         }
         writer.finish();
@@ -166,6 +173,22 @@ public class FlinkArrowFFIExporter extends AuronArrowFFIExporter {
         }
         writer = null;
         rowCount = 0;
+    }
+
+    /**
+     * Re-prepares this exporter for the next drain cycle after {@link #close()} ran.
+     * Re-allocates {@link VectorSchemaRoot} + binds a fresh {@link FlinkArrowWriter} only when
+     * {@code currentRoot == null}; no-op when the root is still open. Zeroes {@code rowCount}.
+     *
+     * <p>Public because the owning operator lives in a different package; not part of the
+     * abstract {@link AuronArrowFFIExporter} contract.
+     */
+    public void reset() {
+        if (currentRoot == null) {
+            this.currentRoot = VectorSchemaRoot.create(arrowSchema, allocator);
+            this.writer = FlinkArrowWriter.create(currentRoot, inputRowType);
+        }
+        this.rowCount = 0;
     }
 
     /**
