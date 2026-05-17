@@ -447,6 +447,18 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable DataWritingExec operation conversion to native Auron implementations.")
             .withDefaultValue(false);
 
+    public static final ConfigOption<Boolean> ENABLE_DATA_WRITING_PARQUET = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.data.writing.parquet")
+            .withCategory("Operator Supports")
+            .withDescription("Enable Parquet DataWritingExec operation conversion to native Auron implementations.")
+            .withDefaultValue(true);
+
+    public static final ConfigOption<Boolean> ENABLE_DATA_WRITING_ORC = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.data.writing.orc")
+            .withCategory("Operator Supports")
+            .withDescription("Enable ORC DataWritingExec operation conversion to native Auron implementations.")
+            .withDefaultValue(true);
+
     public static final ConfigOption<Boolean> ENABLE_SCAN_PARQUET = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.scan.parquet")
             .withCategory("Data Sources")

@@ -46,6 +46,7 @@ use datafusion_ext_commons::{df_execution_err, downcast_any};
 use datafusion_ext_plans::{
     common::execution_context::{ExecutionContext, cancel_all_tasks},
     ipc_writer_exec::IpcWriterExec,
+    orc_sink_exec::OrcSinkExec,
     parquet_sink_exec::ParquetSinkExec,
     shuffle_writer_exec::ShuffleWriterExec,
 };
@@ -156,6 +157,7 @@ impl NativeExecutionRuntime {
 
             // coalesce output stream if necessary
             if downcast_any!(execution_plan_cloned, EmptyExec).is_err()
+                && downcast_any!(execution_plan_cloned, OrcSinkExec).is_err()
                 && downcast_any!(execution_plan_cloned, ParquetSinkExec).is_err()
                 && downcast_any!(execution_plan_cloned, IpcWriterExec).is_err()
                 && downcast_any!(execution_plan_cloned, ShuffleWriterExec).is_err()

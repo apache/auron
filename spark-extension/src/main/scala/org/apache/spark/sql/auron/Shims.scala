@@ -143,6 +143,10 @@ abstract class Shims {
       cmd: InsertIntoHiveTable,
       child: SparkPlan): NativeParquetInsertIntoHiveTableBase
 
+  def createNativeOrcInsertIntoHiveTableExec(
+      cmd: InsertIntoHiveTable,
+      child: SparkPlan): NativeOrcInsertIntoHiveTableBase
+
   def createNativeParquetScanExec(basedFileScan: FileSourceScanExec): NativeParquetScanBase
 
   def createNativeOrcScanExec(basedFileScan: FileSourceScanExec): NativeOrcScanBase
@@ -195,6 +199,13 @@ abstract class Shims {
       partition: Map[String, Option[String]],
       child: SparkPlan,
       metrics: Map[String, SQLMetric]): NativeParquetSinkBase
+
+  def createNativeOrcSinkExec(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      partition: Map[String, Option[String]],
+      child: SparkPlan,
+      metrics: Map[String, SQLMetric]): NativeOrcSinkBase
 
   def isNative(plan: SparkPlan): Boolean
 
