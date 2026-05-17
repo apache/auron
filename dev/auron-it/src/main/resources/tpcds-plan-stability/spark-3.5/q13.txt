@@ -1,92 +1,92 @@
 == Physical Plan ==
 AdaptiveSparkPlan (134)
 +- == Final Plan ==
-   * HashAggregate (86)
-   +- ShuffleQueryStage (85), Statistics(X)
-      +- Exchange (84)
-         +- * HashAggregate (83)
-            +- * Project (82)
-               +- * SortMergeJoin Inner (81)
-                  :- NativeSort (72)
-                  :  +- InputAdapter (71)
-                  :     +- AQEShuffleRead (70)
-                  :        +- ShuffleQueryStage (69), Statistics(X)
-                  :           +- NativeShuffleExchange (68)
-                  :              +- ConvertToNative (67)
-                  :                 +- * Project (66)
-                  :                    +- * SortMergeJoin Inner (65)
-                  :                       :- NativeSort (56)
-                  :                       :  +- InputAdapter (55)
-                  :                       :     +- AQEShuffleRead (54)
-                  :                       :        +- ShuffleQueryStage (53), Statistics(X)
-                  :                       :           +- NativeShuffleExchange (52)
-                  :                       :              +- NativeProject (51)
-                  :                       :                 +- NativeSortMergeJoin Inner (50)
-                  :                       :                    :- NativeSort (40)
-                  :                       :                    :  +- InputAdapter (39)
-                  :                       :                    :     +- AQEShuffleRead (38)
-                  :                       :                    :        +- ShuffleQueryStage (37), Statistics(X)
-                  :                       :                    :           +- NativeShuffleExchange (36)
-                  :                       :                    :              +- ConvertToNative (35)
-                  :                       :                    :                 +- * Project (34)
-                  :                       :                    :                    +- * SortMergeJoin Inner (33)
-                  :                       :                    :                       :- NativeSort (23)
-                  :                       :                    :                       :  +- InputAdapter (22)
-                  :                       :                    :                       :     +- AQEShuffleRead (21)
-                  :                       :                    :                       :        +- ShuffleQueryStage (20), Statistics(X)
-                  :                       :                    :                       :           +- NativeShuffleExchange (19)
-                  :                       :                    :                       :              +- NativeProject (18)
-                  :                       :                    :                       :                 +- NativeSortMergeJoin Inner (17)
-                  :                       :                    :                       :                    :- NativeSort (8)
-                  :                       :                    :                       :                    :  +- InputAdapter (7)
-                  :                       :                    :                       :                    :     +- AQEShuffleRead (6)
-                  :                       :                    :                       :                    :        +- ShuffleQueryStage (5), Statistics(X)
-                  :                       :                    :                       :                    :           +- NativeShuffleExchange (4)
-                  :                       :                    :                       :                    :              +- NativeFilter (3)
-                  :                       :                    :                       :                    :                 +- InputAdapter (2)
-                  :                       :                    :                       :                    :                    +- NativeParquetScan  (1)
-                  :                       :                    :                       :                    +- NativeSort (16)
-                  :                       :                    :                       :                       +- InputAdapter (15)
-                  :                       :                    :                       :                          +- AQEShuffleRead (14)
-                  :                       :                    :                       :                             +- ShuffleQueryStage (13), Statistics(X)
-                  :                       :                    :                       :                                +- NativeShuffleExchange (12)
-                  :                       :                    :                       :                                   +- NativeFilter (11)
-                  :                       :                    :                       :                                      +- InputAdapter (10)
-                  :                       :                    :                       :                                         +- NativeParquetScan  (9)
-                  :                       :                    :                       +- NativeSort (32)
-                  :                       :                    :                          +- InputAdapter (31)
-                  :                       :                    :                             +- AQEShuffleRead (30)
-                  :                       :                    :                                +- ShuffleQueryStage (29), Statistics(X)
-                  :                       :                    :                                   +- NativeShuffleExchange (28)
-                  :                       :                    :                                      +- NativeProject (27)
-                  :                       :                    :                                         +- NativeFilter (26)
-                  :                       :                    :                                            +- InputAdapter (25)
-                  :                       :                    :                                               +- NativeParquetScan  (24)
-                  :                       :                    +- NativeSort (49)
-                  :                       :                       +- InputAdapter (48)
-                  :                       :                          +- AQEShuffleRead (47)
-                  :                       :                             +- ShuffleQueryStage (46), Statistics(X)
-                  :                       :                                +- NativeShuffleExchange (45)
-                  :                       :                                   +- NativeProject (44)
-                  :                       :                                      +- NativeFilter (43)
-                  :                       :                                         +- InputAdapter (42)
-                  :                       :                                            +- NativeParquetScan  (41)
-                  :                       +- NativeSort (64)
-                  :                          +- InputAdapter (63)
-                  :                             +- AQEShuffleRead (62)
-                  :                                +- ShuffleQueryStage (61), Statistics(X)
-                  :                                   +- NativeShuffleExchange (60)
-                  :                                      +- NativeFilter (59)
-                  :                                         +- InputAdapter (58)
-                  :                                            +- NativeParquetScan  (57)
-                  +- NativeSort (80)
-                     +- InputAdapter (79)
-                        +- AQEShuffleRead (78)
-                           +- ShuffleQueryStage (77), Statistics(X)
-                              +- NativeShuffleExchange (76)
-                                 +- NativeFilter (75)
-                                    +- InputAdapter (74)
-                                       +- NativeParquetScan  (73)
+   NativeProject (86)
+   +- NativeHashAggregate (85)
+      +- ShuffleQueryStage (84), Statistics(X)
+         +- NativeShuffleExchange (83)
+            +- NativeHashAggregate (82)
+               +- NativeProject (81)
+                  +- NativeProject (80)
+                     +- NativeSortMergeJoin Inner (79)
+                        :- NativeSort (70)
+                        :  +- InputAdapter (69)
+                        :     +- AQEShuffleRead (68)
+                        :        +- ShuffleQueryStage (67), Statistics(X)
+                        :           +- NativeShuffleExchange (66)
+                        :              +- NativeProject (65)
+                        :                 +- NativeSortMergeJoin Inner (64)
+                        :                    :- NativeSort (55)
+                        :                    :  +- InputAdapter (54)
+                        :                    :     +- AQEShuffleRead (53)
+                        :                    :        +- ShuffleQueryStage (52), Statistics(X)
+                        :                    :           +- NativeShuffleExchange (51)
+                        :                    :              +- NativeProject (50)
+                        :                    :                 +- NativeSortMergeJoin Inner (49)
+                        :                    :                    :- NativeSort (39)
+                        :                    :                    :  +- InputAdapter (38)
+                        :                    :                    :     +- AQEShuffleRead (37)
+                        :                    :                    :        +- ShuffleQueryStage (36), Statistics(X)
+                        :                    :                    :           +- NativeShuffleExchange (35)
+                        :                    :                    :              +- NativeProject (34)
+                        :                    :                    :                 +- NativeSortMergeJoin Inner (33)
+                        :                    :                    :                    :- NativeSort (23)
+                        :                    :                    :                    :  +- InputAdapter (22)
+                        :                    :                    :                    :     +- AQEShuffleRead (21)
+                        :                    :                    :                    :        +- ShuffleQueryStage (20), Statistics(X)
+                        :                    :                    :                    :           +- NativeShuffleExchange (19)
+                        :                    :                    :                    :              +- NativeProject (18)
+                        :                    :                    :                    :                 +- NativeSortMergeJoin Inner (17)
+                        :                    :                    :                    :                    :- NativeSort (8)
+                        :                    :                    :                    :                    :  +- InputAdapter (7)
+                        :                    :                    :                    :                    :     +- AQEShuffleRead (6)
+                        :                    :                    :                    :                    :        +- ShuffleQueryStage (5), Statistics(X)
+                        :                    :                    :                    :                    :           +- NativeShuffleExchange (4)
+                        :                    :                    :                    :                    :              +- NativeFilter (3)
+                        :                    :                    :                    :                    :                 +- InputAdapter (2)
+                        :                    :                    :                    :                    :                    +- NativeParquetScan  (1)
+                        :                    :                    :                    :                    +- NativeSort (16)
+                        :                    :                    :                    :                       +- InputAdapter (15)
+                        :                    :                    :                    :                          +- AQEShuffleRead (14)
+                        :                    :                    :                    :                             +- ShuffleQueryStage (13), Statistics(X)
+                        :                    :                    :                    :                                +- NativeShuffleExchange (12)
+                        :                    :                    :                    :                                   +- NativeFilter (11)
+                        :                    :                    :                    :                                      +- InputAdapter (10)
+                        :                    :                    :                    :                                         +- NativeParquetScan  (9)
+                        :                    :                    :                    +- NativeSort (32)
+                        :                    :                    :                       +- InputAdapter (31)
+                        :                    :                    :                          +- AQEShuffleRead (30)
+                        :                    :                    :                             +- ShuffleQueryStage (29), Statistics(X)
+                        :                    :                    :                                +- NativeShuffleExchange (28)
+                        :                    :                    :                                   +- NativeProject (27)
+                        :                    :                    :                                      +- NativeFilter (26)
+                        :                    :                    :                                         +- InputAdapter (25)
+                        :                    :                    :                                            +- NativeParquetScan  (24)
+                        :                    :                    +- NativeSort (48)
+                        :                    :                       +- InputAdapter (47)
+                        :                    :                          +- AQEShuffleRead (46)
+                        :                    :                             +- ShuffleQueryStage (45), Statistics(X)
+                        :                    :                                +- NativeShuffleExchange (44)
+                        :                    :                                   +- NativeProject (43)
+                        :                    :                                      +- NativeFilter (42)
+                        :                    :                                         +- InputAdapter (41)
+                        :                    :                                            +- NativeParquetScan  (40)
+                        :                    +- NativeSort (63)
+                        :                       +- InputAdapter (62)
+                        :                          +- AQEShuffleRead (61)
+                        :                             +- ShuffleQueryStage (60), Statistics(X)
+                        :                                +- NativeShuffleExchange (59)
+                        :                                   +- NativeFilter (58)
+                        :                                      +- InputAdapter (57)
+                        :                                         +- NativeParquetScan  (56)
+                        +- NativeSort (78)
+                           +- InputAdapter (77)
+                              +- AQEShuffleRead (76)
+                                 +- ShuffleQueryStage (75), Statistics(X)
+                                    +- NativeShuffleExchange (74)
+                                       +- NativeFilter (73)
+                                          +- InputAdapter (72)
+                                             +- NativeParquetScan  (71)
 +- == Initial Plan ==
    HashAggregate (133)
    +- Exchange (132)
@@ -272,35 +272,32 @@ Input [2]: [ca_address_sk#12, ca_state#13]
 Input [2]: [ca_address_sk#12, ca_state#13]
 Arguments: [ca_address_sk#12 ASC NULLS FIRST], false
 
-(33) SortMergeJoin [codegen id : X]
+(33) NativeSortMergeJoin
 Left keys [1]: [ss_addr_sk#4]
 Right keys [1]: [ca_address_sk#12]
 Join type: Inner
 Join condition: ((((ca_state#13 IN (TX,OH) AND (ss_net_profit#10 >= 100.00)) AND (ss_net_profit#10 <= 200.00)) OR ((ca_state#13 IN (OR,NM,KY) AND (ss_net_profit#10 >= 150.00)) AND (ss_net_profit#10 <= 300.00))) OR ((ca_state#13 IN (VA,TX,MS) AND (ss_net_profit#10 >= 50.00)) AND (ss_net_profit#10 <= 250.00)))
 
-(34) Project [codegen id : X]
+(34) NativeProject
 Output [7]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Input [11]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_addr_sk#4, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, ss_net_profit#10, ca_address_sk#12, ca_state#13]
 
-(35) ConvertToNative
-Input [7]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
-
-(36) NativeShuffleExchange
+(35) NativeShuffleExchange
 Input [7]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Arguments: hashpartitioning(ss_sold_date_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=5]
 
-(37) ShuffleQueryStage
+(36) ShuffleQueryStage
 Output [7]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Arguments: X
 
-(38) AQEShuffleRead
+(37) AQEShuffleRead
 Input [7]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Arguments: coalesced
 
-(39) InputAdapter
+(38) InputAdapter
 Input [7]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 
-(40) NativeSort
+(39) NativeSort
 Input [7]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Arguments: [ss_sold_date_sk#1 ASC NULLS FIRST], false
 
@@ -311,63 +308,63 @@ Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
-(42) InputAdapter
+(41) InputAdapter
 Input [2]: [d_date_sk#15, d_year#16]
 Arguments: [#15, #16]
 
-(43) NativeFilter
+(42) NativeFilter
 Input [2]: [#15#15, #16#16]
 Condition : ((isnotnull(d_year#16) AND (d_year#16 = 2001)) AND isnotnull(d_date_sk#15))
 
-(44) NativeProject
+(43) NativeProject
 Output [1]: [d_date_sk#15]
 Input [2]: [#15#15, #16#16]
 
-(45) NativeShuffleExchange
+(44) NativeShuffleExchange
 Input [1]: [d_date_sk#15]
 Arguments: hashpartitioning(d_date_sk#15, 100), ENSURE_REQUIREMENTS, [plan_id=6]
 
-(46) ShuffleQueryStage
+(45) ShuffleQueryStage
 Output [1]: [d_date_sk#15]
 Arguments: X
 
-(47) AQEShuffleRead
+(46) AQEShuffleRead
 Input [1]: [d_date_sk#15]
 Arguments: coalesced
 
-(48) InputAdapter
+(47) InputAdapter
 Input [1]: [d_date_sk#15]
 
-(49) NativeSort
+(48) NativeSort
 Input [1]: [d_date_sk#15]
 Arguments: [d_date_sk#15 ASC NULLS FIRST], false
 
-(50) NativeSortMergeJoin
+(49) NativeSortMergeJoin
 Left keys [1]: [ss_sold_date_sk#1]
 Right keys [1]: [d_date_sk#15]
 Join type: Inner
 Join condition: None
 
-(51) NativeProject
+(50) NativeProject
 Output [6]: [ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Input [8]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, d_date_sk#15]
 
-(52) NativeShuffleExchange
+(51) NativeShuffleExchange
 Input [6]: [ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Arguments: hashpartitioning(ss_cdemo_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=7]
 
-(53) ShuffleQueryStage
+(52) ShuffleQueryStage
 Output [6]: [ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Arguments: X
 
-(54) AQEShuffleRead
+(53) AQEShuffleRead
 Input [6]: [ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Arguments: coalesced
 
-(55) InputAdapter
+(54) InputAdapter
 Input [6]: [ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 
-(56) NativeSort
+(55) NativeSort
 Input [6]: [ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Arguments: [ss_cdemo_sk#2 ASC NULLS FIRST], false
 
@@ -378,62 +375,59 @@ Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(cd_demo_sk), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Advanced Degree)),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College))),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,2 yr Degree)))]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
-(58) InputAdapter
+(57) InputAdapter
 Input [3]: [cd_demo_sk#17, cd_marital_status#18, cd_education_status#19]
 Arguments: [#17, #18, #19]
 
-(59) NativeFilter
+(58) NativeFilter
 Input [3]: [#17#17, #18#18, #19#19]
 Condition : (isnotnull(cd_demo_sk#17) AND ((((cd_marital_status#18 = M) AND (cd_education_status#19 = Advanced Degree)) OR ((cd_marital_status#18 = S) AND (cd_education_status#19 = College))) OR ((cd_marital_status#18 = W) AND (cd_education_status#19 = 2 yr Degree))))
 
-(60) NativeShuffleExchange
+(59) NativeShuffleExchange
 Input [3]: [#17#17, #18#18, #19#19]
 Arguments: hashpartitioning(cd_demo_sk#17, 100), ENSURE_REQUIREMENTS, [plan_id=8]
 
-(61) ShuffleQueryStage
+(60) ShuffleQueryStage
 Output [3]: [#17#17, #18#18, #19#19]
 Arguments: X
 
-(62) AQEShuffleRead
+(61) AQEShuffleRead
 Input [3]: [#17#17, #18#18, #19#19]
 Arguments: coalesced
 
-(63) InputAdapter
+(62) InputAdapter
 Input [3]: [#17#17, #18#18, #19#19]
 
-(64) NativeSort
+(63) NativeSort
 Input [3]: [#17#17, #18#18, #19#19]
 Arguments: [cd_demo_sk#17 ASC NULLS FIRST], false
 
-(65) SortMergeJoin [codegen id : X]
+(64) NativeSortMergeJoin
 Left keys [1]: [ss_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#17]
 Join type: Inner
 Join condition: ((((((cd_marital_status#18 = M) AND (cd_education_status#19 = Advanced Degree)) AND (ss_sales_price#7 >= 100.00)) AND (ss_sales_price#7 <= 150.00)) OR ((((cd_marital_status#18 = S) AND (cd_education_status#19 = College)) AND (ss_sales_price#7 >= 50.00)) AND (ss_sales_price#7 <= 100.00))) OR ((((cd_marital_status#18 = W) AND (cd_education_status#19 = 2 yr Degree)) AND (ss_sales_price#7 >= 150.00)) AND (ss_sales_price#7 <= 200.00)))
 
-(66) Project [codegen id : X]
+(65) NativeProject
 Output [7]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19]
 Input [9]: [ss_cdemo_sk#2, ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, #17#17, #18#18, #19#19]
 
-(67) ConvertToNative
-Input [7]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19]
-
-(68) NativeShuffleExchange
+(66) NativeShuffleExchange
 Input [7]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19]
 Arguments: hashpartitioning(ss_hdemo_sk#3, 100), ENSURE_REQUIREMENTS, [plan_id=9]
 
-(69) ShuffleQueryStage
+(67) ShuffleQueryStage
 Output [7]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19]
 Arguments: X
 
-(70) AQEShuffleRead
+(68) AQEShuffleRead
 Input [7]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19]
 Arguments: coalesced
 
-(71) InputAdapter
+(69) InputAdapter
 Input [7]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19]
 
-(72) NativeSort
+(70) NativeSort
 Input [7]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19]
 Arguments: [ss_hdemo_sk#3 ASC NULLS FIRST], false
 
@@ -444,64 +438,72 @@ Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(hd_demo_sk), Or(EqualTo(hd_dep_count,3),EqualTo(hd_dep_count,1))]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
-(74) InputAdapter
+(72) InputAdapter
 Input [2]: [hd_demo_sk#20, hd_dep_count#21]
 Arguments: [#20, #21]
 
-(75) NativeFilter
+(73) NativeFilter
 Input [2]: [#20#20, #21#21]
 Condition : (isnotnull(hd_demo_sk#20) AND ((hd_dep_count#21 = 3) OR (hd_dep_count#21 = 1)))
 
-(76) NativeShuffleExchange
+(74) NativeShuffleExchange
 Input [2]: [#20#20, #21#21]
 Arguments: hashpartitioning(hd_demo_sk#20, 100), ENSURE_REQUIREMENTS, [plan_id=10]
 
-(77) ShuffleQueryStage
+(75) ShuffleQueryStage
 Output [2]: [#20#20, #21#21]
 Arguments: X
 
-(78) AQEShuffleRead
+(76) AQEShuffleRead
 Input [2]: [#20#20, #21#21]
 Arguments: coalesced
 
-(79) InputAdapter
+(77) InputAdapter
 Input [2]: [#20#20, #21#21]
 
-(80) NativeSort
+(78) NativeSort
 Input [2]: [#20#20, #21#21]
 Arguments: [hd_demo_sk#20 ASC NULLS FIRST], false
 
-(81) SortMergeJoin [codegen id : X]
+(79) NativeSortMergeJoin
 Left keys [1]: [ss_hdemo_sk#3]
 Right keys [1]: [hd_demo_sk#20]
 Join type: Inner
 Join condition: (((((((cd_marital_status#18 = M) AND (cd_education_status#19 = Advanced Degree)) AND (ss_sales_price#7 >= 100.00)) AND (ss_sales_price#7 <= 150.00)) AND (hd_dep_count#21 = 3)) OR (((((cd_marital_status#18 = S) AND (cd_education_status#19 = College)) AND (ss_sales_price#7 >= 50.00)) AND (ss_sales_price#7 <= 100.00)) AND (hd_dep_count#21 = 1))) OR (((((cd_marital_status#18 = W) AND (cd_education_status#19 = 2 yr Degree)) AND (ss_sales_price#7 >= 150.00)) AND (ss_sales_price#7 <= 200.00)) AND (hd_dep_count#21 = 1)))
 
-(82) Project [codegen id : X]
+(80) NativeProject
 Output [3]: [ss_quantity#6, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Input [9]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, cd_marital_status#18, cd_education_status#19, #20#20, #21#21]
 
-(83) HashAggregate [codegen id : X]
+(81) NativeProject
+Output [3]: [ss_quantity#6 AS _c0#22, UnscaledValue(ss_ext_sales_price#8) AS _c1#23, UnscaledValue(ss_ext_wholesale_cost#9) AS _c2#24]
 Input [3]: [ss_quantity#6, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
-Keys: []
-Functions [4]: [partial_avg(ss_quantity#6), partial_avg(UnscaledValue(ss_ext_sales_price#8)), partial_avg(UnscaledValue(ss_ext_wholesale_cost#9)), partial_sum(UnscaledValue(ss_ext_wholesale_cost#9))]
-Aggregate Attributes [7]: [sum#22, count#23, sum#24, count#25, sum#26, count#27, sum#28]
-Results [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
 
-(84) Exchange
-Input [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
+(82) NativeHashAggregate
+Input [3]: [_c0#22, _c1#23, _c2#24]
+Keys: []
+Functions [4]: [partial_avg(_c0#22), partial_avg(_c1#23), partial_avg(_c2#24), partial_sum(_c2#24)]
+Aggregate Attributes [7]: [sum#25, count#26, sum#27, count#28, sum#29, count#30, sum#31]
+Results [7]: [#32, #33, #32, #33, #32, #33, #33]
+
+(83) NativeShuffleExchange
+Input [7]: [#32, #33, #32, #33, #32, #33, #33]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
 
-(85) ShuffleQueryStage
-Output [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
+(84) ShuffleQueryStage
+Output [7]: [#32, #33, #32, #33, #32, #33, #33]
 Arguments: X
 
-(86) HashAggregate [codegen id : X]
-Input [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
+(85) NativeHashAggregate
+Input [7]: [#32, #33, #32, #33, #32, #33, #33]
 Keys: []
 Functions [4]: [avg(ss_quantity#6), avg(UnscaledValue(ss_ext_sales_price#8)), avg(UnscaledValue(ss_ext_wholesale_cost#9)), sum(UnscaledValue(ss_ext_wholesale_cost#9))]
-Aggregate Attributes [4]: [avg(ss_quantity#6)#36, avg(UnscaledValue(ss_ext_sales_price#8))#37, avg(UnscaledValue(ss_ext_wholesale_cost#9))#38, sum(UnscaledValue(ss_ext_wholesale_cost#9))#39]
-Results [4]: [avg(ss_quantity#6)#36 AS avg(ss_quantity)#40, cast((avg(UnscaledValue(ss_ext_sales_price#8))#37 / 100.0) as decimal(11,6)) AS avg(ss_ext_sales_price)#41, cast((avg(UnscaledValue(ss_ext_wholesale_cost#9))#38 / 100.0) as decimal(11,6)) AS avg(ss_ext_wholesale_cost)#42, MakeDecimal(sum(UnscaledValue(ss_ext_wholesale_cost#9))#39,17,2) AS sum(ss_ext_wholesale_cost)#43]
+Aggregate Attributes [4]: [avg(ss_quantity#6)#34, avg(UnscaledValue(ss_ext_sales_price#8))#35, avg(UnscaledValue(ss_ext_wholesale_cost#9))#36, sum(UnscaledValue(ss_ext_wholesale_cost#9))#37]
+Results [4]: [avg(ss_quantity#6)#34, avg(UnscaledValue(ss_ext_sales_price#8))#35, avg(UnscaledValue(ss_ext_wholesale_cost#9))#36, sum(UnscaledValue(ss_ext_wholesale_cost#9))#37]
+
+(86) NativeProject
+Output [4]: [avg(ss_quantity#6)#34 AS avg(ss_quantity)#38, cast((avg(UnscaledValue(ss_ext_sales_price#8))#35 / 100.0) as decimal(11,6)) AS avg(ss_ext_sales_price)#39, cast((avg(UnscaledValue(ss_ext_wholesale_cost#9))#36 / 100.0) as decimal(11,6)) AS avg(ss_ext_wholesale_cost)#40, MakeDecimal(sum(UnscaledValue(ss_ext_wholesale_cost#9))#37,17,2) AS sum(ss_ext_wholesale_cost)#41]
+Input [4]: [avg(ss_quantity#6)#34, avg(UnscaledValue(ss_ext_sales_price#8))#35, avg(UnscaledValue(ss_ext_wholesale_cost#9))#36, sum(UnscaledValue(ss_ext_wholesale_cost#9))#37]
 
 (87) Scan parquet
 Output [10]: [ss_sold_date_sk#1, ss_cdemo_sk#2, ss_hdemo_sk#3, ss_addr_sk#4, ss_store_sk#5, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8, ss_ext_wholesale_cost#9, ss_net_profit#10]
@@ -711,21 +713,21 @@ Input [9]: [ss_hdemo_sk#3, ss_quantity#6, ss_sales_price#7, ss_ext_sales_price#8
 Input [3]: [ss_quantity#6, ss_ext_sales_price#8, ss_ext_wholesale_cost#9]
 Keys: []
 Functions [4]: [partial_avg(ss_quantity#6), partial_avg(UnscaledValue(ss_ext_sales_price#8)), partial_avg(UnscaledValue(ss_ext_wholesale_cost#9)), partial_sum(UnscaledValue(ss_ext_wholesale_cost#9))]
-Aggregate Attributes [7]: [sum#22, count#23, sum#24, count#25, sum#26, count#27, sum#28]
-Results [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
+Aggregate Attributes [7]: [sum#25, count#26, sum#27, count#28, sum#29, count#30, sum#31]
+Results [7]: [sum#42, count#43, sum#44, count#45, sum#46, count#47, sum#48]
 
 (132) Exchange
-Input [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
+Input [7]: [sum#42, count#43, sum#44, count#45, sum#46, count#47, sum#48]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=22]
 
 (133) HashAggregate
-Input [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
+Input [7]: [sum#42, count#43, sum#44, count#45, sum#46, count#47, sum#48]
 Keys: []
 Functions [4]: [avg(ss_quantity#6), avg(UnscaledValue(ss_ext_sales_price#8)), avg(UnscaledValue(ss_ext_wholesale_cost#9)), sum(UnscaledValue(ss_ext_wholesale_cost#9))]
-Aggregate Attributes [4]: [avg(ss_quantity#6)#36, avg(UnscaledValue(ss_ext_sales_price#8))#37, avg(UnscaledValue(ss_ext_wholesale_cost#9))#38, sum(UnscaledValue(ss_ext_wholesale_cost#9))#39]
-Results [4]: [avg(ss_quantity#6)#36 AS avg(ss_quantity)#40, cast((avg(UnscaledValue(ss_ext_sales_price#8))#37 / 100.0) as decimal(11,6)) AS avg(ss_ext_sales_price)#41, cast((avg(UnscaledValue(ss_ext_wholesale_cost#9))#38 / 100.0) as decimal(11,6)) AS avg(ss_ext_wholesale_cost)#42, MakeDecimal(sum(UnscaledValue(ss_ext_wholesale_cost#9))#39,17,2) AS sum(ss_ext_wholesale_cost)#43]
+Aggregate Attributes [4]: [avg(ss_quantity#6)#34, avg(UnscaledValue(ss_ext_sales_price#8))#35, avg(UnscaledValue(ss_ext_wholesale_cost#9))#36, sum(UnscaledValue(ss_ext_wholesale_cost#9))#37]
+Results [4]: [avg(ss_quantity#6)#34 AS avg(ss_quantity)#38, cast((avg(UnscaledValue(ss_ext_sales_price#8))#35 / 100.0) as decimal(11,6)) AS avg(ss_ext_sales_price)#39, cast((avg(UnscaledValue(ss_ext_wholesale_cost#9))#36 / 100.0) as decimal(11,6)) AS avg(ss_ext_wholesale_cost)#40, MakeDecimal(sum(UnscaledValue(ss_ext_wholesale_cost#9))#37,17,2) AS sum(ss_ext_wholesale_cost)#41]
 
 (134) AdaptiveSparkPlan
-Output [4]: [avg(ss_quantity)#40, avg(ss_ext_sales_price)#41, avg(ss_ext_wholesale_cost)#42, sum(ss_ext_wholesale_cost)#43]
+Output [4]: [avg(ss_quantity)#38, avg(ss_ext_sales_price)#39, avg(ss_ext_wholesale_cost)#40, sum(ss_ext_wholesale_cost)#41]
 Arguments: isFinalPlan=true
 

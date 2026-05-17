@@ -464,6 +464,7 @@ message SortMergeJoinExecNode {
   repeated JoinOn on = 4;
   repeated SortOptions sort_options = 5;
   JoinType join_type = 6;
+  JoinFilter filter = 7;
 }
 
 message HashJoinExecNode {
@@ -473,6 +474,7 @@ message HashJoinExecNode {
   repeated JoinOn on = 4;
   JoinType join_type = 5;
   JoinSide build_side = 6;
+  JoinFilter filter = 7;
 }
 
 message BroadcastJoinBuildHashMapExecNode {

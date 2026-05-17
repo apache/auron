@@ -1,9 +1,9 @@
 == Physical Plan ==
 AdaptiveSparkPlan (155)
 +- == Final Plan ==
-   TakeOrderedAndProject (99)
-   +- * Project (98)
-      +- * SortMergeJoin Inner (97)
+   NativeTakeOrdered (99)
+   +- NativeProject (98)
+      +- NativeSortMergeJoin Inner (97)
          :- NativeSort (63)
          :  +- InputAdapter (62)
          :     +- AQEShuffleRead (61)
@@ -570,19 +570,19 @@ Condition : isnotnull(ave#32)
 Input [2]: [ss_store_sk#21, ave#32]
 Arguments: [ss_store_sk#21 ASC NULLS FIRST], false
 
-(97) SortMergeJoin [codegen id : X]
+(97) NativeSortMergeJoin
 Left keys [1]: [ss_store_sk#5]
 Right keys [1]: [ss_store_sk#21]
 Join type: Inner
 Join condition: (cast(revenue#13 as decimal(23,7)) <= (0.1 * ave#32))
 
-(98) Project [codegen id : X]
+(98) NativeProject
 Output [6]: [s_store_name#2, i_item_desc#15, revenue#13, i_current_price#16, i_wholesale_cost#17, i_brand#18]
 Input [9]: [s_store_name#2, ss_store_sk#5, revenue#13, i_item_desc#15, i_current_price#16, i_wholesale_cost#17, i_brand#18, ss_store_sk#21, ave#32]
 
-(99) TakeOrderedAndProject
+(99) NativeTakeOrdered
 Input [6]: [s_store_name#2, i_item_desc#15, revenue#13, i_current_price#16, i_wholesale_cost#17, i_brand#18]
-Arguments: X, [s_store_name#2 ASC NULLS FIRST, i_item_desc#15 ASC NULLS FIRST], [s_store_name#2, i_item_desc#15, revenue#13, i_current_price#16, i_wholesale_cost#17, i_brand#18]
+Arguments: X, X, [s_store_name#2 ASC NULLS FIRST, i_item_desc#15 ASC NULLS FIRST]
 
 (100) Scan parquet
 Output [2]: [s_store_sk#1, s_store_name#2]

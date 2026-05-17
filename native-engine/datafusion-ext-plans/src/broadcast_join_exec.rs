@@ -58,7 +58,7 @@ use crate::{
         timer_helper::TimerHelper,
     },
     joins::{
-        JoinParams, JoinProjection,
+        JoinFilter, JoinParams, JoinProjection,
         bhj::{
             full_join::{
                 LProbedFullOuterJoiner, LProbedInnerJoiner, LProbedLeftJoiner, LProbedRightJoiner,
@@ -89,6 +89,7 @@ pub struct BroadcastJoinExec {
     is_built: bool, // true for BroadcastHashJoin, false for ShuffledHashJoin
     cached_build_hash_map_id: Option<String>,
     is_null_aware_anti_join: bool,
+    join_filter: Option<JoinFilter>,
     metrics: ExecutionPlanMetricsSet,
     props: OnceCell<PlanProperties>,
 }
@@ -104,7 +105,15 @@ impl BroadcastJoinExec {
         is_built: bool,
         cached_build_hash_map_id: Option<String>,
         is_null_aware_anti_join: bool,
+        join_filter: Option<JoinFilter>,
     ) -> Result<Self> {
+        // A broadcast hash join may reuse a prebuilt hash map whose stored
+        // rows are not laid out for evaluating Spark's residual join condition.
+        // Only the shuffled hash join path builds both sides in-process and
+        // can filter candidate pairs before projection today.
+        if join_filter.is_some() && (is_built || join_type != JoinType::Inner) {
+            df_execution_err!("join filter is only supported for inner shuffled hash join")?;
+        }
         Ok(Self {
             left,
             right,
@@ -115,6 +124,7 @@ impl BroadcastJoinExec {
             is_built,
             cached_build_hash_map_id,
             is_null_aware_anti_join,
+            join_filter,
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
         })
@@ -178,6 +188,7 @@ impl BroadcastJoinExec {
             batch_size: batch_size(),
             sort_options: vec![SortOptions::default(); self.on.len()],
             projection,
+            join_filter: self.join_filter.clone(),
             key_data_types,
             is_null_aware_anti_join: self.is_null_aware_anti_join,
         })
@@ -284,6 +295,7 @@ impl ExecutionPlan for BroadcastJoinExec {
             self.is_built,
             None,
             self.is_null_aware_anti_join,
+            self.join_filter.clone(),
         )?))
     }
 
@@ -453,6 +465,7 @@ async fn execute_join_with_smj_fallback(
             .zip(join_params.right_keys.to_vec())
             .collect(),
         join_params.join_type,
+        join_params.join_filter.clone(),
         vec![SortOptions::default(); join_params.left_keys.len()],
     )?);
     let mut join_output = smj_exec.execute(exec_ctx.partition_id(), exec_ctx.task_ctx())?;

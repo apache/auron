@@ -32,6 +32,7 @@ case object NativeSortMergeJoinExecProvider {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       skewJoin: Boolean): NativeSortMergeJoinBase = {
 
     import org.apache.spark.rdd.RDD
@@ -44,11 +45,10 @@ case object NativeSortMergeJoinExecProvider {
         override val leftKeys: Seq[Expression],
         override val rightKeys: Seq[Expression],
         override val joinType: JoinType,
+        override val condition: Option[Expression],
         skewJoin: Boolean)
-        extends NativeSortMergeJoinBase(left, right, leftKeys, rightKeys, joinType)
+        extends NativeSortMergeJoinBase(left, right, leftKeys, rightKeys, joinType, condition)
         with org.apache.spark.sql.execution.joins.ShuffledJoin {
-
-      override def condition: Option[Expression] = None
 
       override def isSkewJoin: Boolean = false
 
@@ -70,7 +70,7 @@ case object NativeSortMergeJoinExecProvider {
       override def nodeName: String =
         "NativeSortMergeJoin" + (if (skewJoin) "(skew=true)" else "")
     }
-    NativeSortMergeJoinExec(left, right, leftKeys, rightKeys, joinType, skewJoin)
+    NativeSortMergeJoinExec(left, right, leftKeys, rightKeys, joinType, condition, skewJoin)
   }
 
   @sparkver("3.0 / 3.1")
@@ -80,6 +80,7 @@ case object NativeSortMergeJoinExecProvider {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       skewJoin: Boolean): NativeSortMergeJoinBase = {
 
     import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -91,11 +92,19 @@ case object NativeSortMergeJoinExecProvider {
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
         joinType: JoinType,
+        condition: Option[Expression],
         skewJoin: Boolean)
-        extends NativeSortMergeJoinBase(left, right, leftKeys, rightKeys, joinType) {
+        extends NativeSortMergeJoinBase(left, right, leftKeys, rightKeys, joinType, condition) {
 
       private def smj: SortMergeJoinExec =
-        SortMergeJoinExec(leftKeys, rightKeys, joinType, None, left, right, isSkewJoin = false)
+        SortMergeJoinExec(
+          leftKeys,
+          rightKeys,
+          joinType,
+          condition,
+          left,
+          right,
+          isSkewJoin = false)
 
       override def output: Seq[Attribute] = smj.output
 
@@ -108,6 +117,6 @@ case object NativeSortMergeJoinExecProvider {
       override def nodeName: String =
         "NativeSortMergeJoin" + (if (skewJoin) "(skew=true)" else "")
     }
-    NativeSortMergeJoinExec(left, right, leftKeys, rightKeys, joinType, skewJoin)
+    NativeSortMergeJoinExec(left, right, leftKeys, rightKeys, joinType, condition, skewJoin)
   }
 }

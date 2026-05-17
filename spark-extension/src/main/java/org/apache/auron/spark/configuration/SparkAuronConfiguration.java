@@ -369,6 +369,14 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable ShuffledHashJoinExec operation conversion to native Auron implementations.")
             .withDefaultValue(true);
 
+    public static final ConfigOption<Boolean> ENABLE_NATIVE_JOIN_CONDITION = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.native.join.condition")
+            .withCategory("Operator Supports")
+            .withDescription(
+                    "Enable native SMJ/SHJ residual join condition evaluation. Disable this to fall back to Spark "
+                            + "for joins with residual conditions when native evaluation is not desirable.")
+            .withDefaultValue(true);
+
     public static final ConfigOption<Boolean> ENABLE_BHJ = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.bhj")
             .withCategory("Operator Supports")
