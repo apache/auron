@@ -62,8 +62,6 @@ class AuronSparkTestSettings extends SparkTestSettings {
     // Spark 4 adds the threshold argument, but native levenshtein currently supports only
     // two arguments.
     .exclude("string Levenshtein distance")
-    // Native substr does not support BinaryType inputs.
-    .exclude("string / binary substring function")
 
   enableSuite[AuronDataFrameAggregateSuite]
     // See https://github.com/apache/auron/issues/1840
