@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -71,12 +72,16 @@ public class JniBridge {
     }
 
     public static FSDataInputWrapper openFileAsDataInputWrapper(FileSystem fs, String path) throws Exception {
-        // the path is a URI string, so we need to convert it to a URI object
-        return FSDataInputWrapper.wrap(fs.open(new Path(new URI(path))));
+        return FSDataInputWrapper.wrap(fs.open(toInputPath(path)));
     }
 
     public static FSDataOutputWrapper createFileAsDataOutputWrapper(FileSystem fs, String path) throws Exception {
-        return FSDataOutputWrapper.wrap(fs.create(new Path(new URI(path))));
+        return FSDataOutputWrapper.wrap(fs.create(new Path(path)));
+    }
+
+    private static Path toInputPath(String path) throws URISyntaxException {
+        String safePath = path.indexOf('#') >= 0 ? path.replace("#", "%23") : path;
+        return new Path(new URI(safePath));
     }
 
     public static long getDirectMemoryUsed() {
