@@ -24,22 +24,22 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileSystem
-import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
+import org.apache.iceberg.FileFormat
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.auron.{EmptyNativeRDD, NativeConverters, NativeHelper, NativeRDD, NativeSupports, Shims}
-import org.apache.spark.sql.auron.iceberg.IcebergScanPlan
+import org.apache.spark.sql.auron.iceberg.{IcebergNativeScanTask, IcebergScanPlan}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal}
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 import org.apache.auron.{protobuf => pb}
@@ -63,7 +63,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
   private lazy val partitionSchema: StructType = plan.partitionSchema
   private lazy val projectableSchema: StructType =
     StructType(fileSchema.fields ++ partitionSchema.fields)
-  private lazy val fileTasks: Seq[FileScanTask] = plan.fileTasks
+  private lazy val scanTasks: Seq[IcebergNativeScanTask] = plan.scanTasks
   private lazy val pruningPredicates: Seq[pb.PhysicalExprNode] = plan.pruningPredicates
 
   private lazy val partitions: Array[FilePartition] = {
@@ -72,7 +72,6 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
     filePartitions
   }
   private lazy val fileSizes: Map[String, Long] = buildFileSizes()
-  private lazy val fileSpecIds: Map[String, Int] = buildFileSpecIds()
 
   private lazy val nativeFileSchema: pb.Schema = NativeConverters.convertSchema(fileSchema)
   private lazy val nativePartitionSchema: pb.Schema =
@@ -111,7 +110,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
           .setPath(filePath)
           .setSize(size)
           .setLastModifiedNs(0)
-          .addAllPartitionValues(metadataPartitionValues(filePath).asJava)
+          .addAllPartitionValues(metadataPartitionValues(file).asJava)
           .setRange(
             pb.FileRange
               .newBuilder()
@@ -126,19 +125,12 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
         .build()
     }
 
-  private def metadataPartitionValues(filePath: String): Seq[pb.ScalarValue] =
-    partitionSchema.fields.map { field =>
-      field.name match {
-        case name if name == MetadataColumns.FILE_PATH.name() =>
-          NativeConverters.convertExpr(Literal.create(filePath, StringType)).getLiteral
-        case name if name == MetadataColumns.SPEC_ID.name() =>
-          NativeConverters
-            .convertExpr(Literal.create(fileSpecIds(filePath), field.dataType))
-            .getLiteral
-        case name =>
-          throw new IllegalStateException(
-            s"unsupported Iceberg metadata column in native scan: $name")
-      }
+  private def metadataPartitionValues(file: PartitionedFile): Seq[pb.ScalarValue] =
+    partitionSchema.fields.zipWithIndex.map { case (field, index) =>
+      NativeConverters
+        .convertExpr(
+          Literal.create(file.partitionValues.get(index, field.dataType), field.dataType))
+        .getLiteral
     }
 
   override def doExecuteNative(): NativeRDD = {
@@ -224,8 +216,8 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
 
   private def buildFileSizes(): Map[String, Long] = {
     // Map file path to full file size; tasks may split a file into multiple ranges.
-    fileTasks
-      .map(task => task.file().location() -> task.file().fileSizeInBytes())
+    scanTasks
+      .map(task => task.location -> task.fileSizeInBytes)
       .groupBy(_._1)
       .mapValues(_.head._2)
       .toMap
@@ -243,37 +235,21 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
       Seq(metrics("numPartitions"), metrics("numFiles")))
   }
 
-  private def buildFileSpecIds(): Map[String, Int] = {
-    // Map file path to Iceberg partition spec id; tasks may split a file into multiple ranges.
-    val specIds = scala.collection.mutable.HashMap.empty[String, Int]
-    fileTasks.foreach { task =>
-      val filePath = task.file().location()
-      val specId = task.file().specId()
-      specIds.get(filePath) match {
-        case Some(existingSpecId) if existingSpecId != specId =>
-          throw new IllegalStateException(
-            s"Inconsistent Iceberg partition spec id for file $filePath: " +
-              s"$existingSpecId != $specId")
-        case Some(_) =>
-        case None =>
-          specIds.put(filePath, specId)
-      }
-    }
-    specIds.toMap
-  }
-
   private def buildFilePartitions(): Array[FilePartition] = {
-    // Convert Iceberg file tasks into Spark FilePartition groups for execution.
-    if (fileTasks.isEmpty) {
+    // Convert Iceberg scan tasks into Spark FilePartition groups for execution.
+    if (scanTasks.isEmpty) {
       return Array.empty
     }
 
     val sparkSession = Shims.get.getSqlContext(basedScan).sparkSession
-    val maxSplitBytes = getMaxSplitBytes(sparkSession, fileTasks)
-    val partitionedFiles = fileTasks
+    val maxSplitBytes = getMaxSplitBytes(sparkSession, scanTasks)
+    val partitionedFiles = scanTasks
       .map { task =>
-        val filePath = task.file().location()
-        Shims.get.getPartitionedFile(InternalRow.empty, filePath, task.start(), task.length())
+        Shims.get.getPartitionedFile(
+          partitionValuesRow(task),
+          task.location,
+          task.start,
+          task.length)
       }
       .sortBy(_.length)(Ordering[Long].reverse)
       .toSeq
@@ -281,12 +257,21 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
     FilePartition.getFilePartitions(sparkSession, partitionedFiles, maxSplitBytes).toArray
   }
 
-  private def getMaxSplitBytes(sparkSession: SparkSession, tasks: Seq[FileScanTask]): Long = {
+  private def partitionValuesRow(task: IcebergNativeScanTask): InternalRow = {
+    val values = partitionSchema.fields.zip(task.partitionValues).map { case (field, value) =>
+      Literal.create(value, field.dataType).eval()
+    }
+    new GenericInternalRow(values.toArray)
+  }
+
+  private def getMaxSplitBytes(
+      sparkSession: SparkSession,
+      tasks: Seq[IcebergNativeScanTask]): Long = {
     val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
     val minPartitionNum = Shims.get.getMinPartitionNum(sparkSession)
     val totalBytes = tasks
-      .map(task => task.file().fileSizeInBytes() + openCostInBytes)
+      .map(task => task.fileSizeInBytes + openCostInBytes)
       .sum
     val bytesPerCore = if (minPartitionNum > 0) totalBytes / minPartitionNum else totalBytes
 
