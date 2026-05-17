@@ -20,6 +20,7 @@ import java.net.URI
 import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
+import scala.util.Using
 
 import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
@@ -38,16 +39,28 @@ object HudiScanSupport extends Logging {
   private val hudiOrcFileFormatSuffix = "HoodieOrcFileFormat"
   private val newHudiOrcFileFormatSuffix = "NewHoodieOrcFileFormat"
   private val morTableTypes = Set("merge_on_read", "mor")
+  private val readOptimizedQueryTypes = Set("read_optimized")
   private val hudiTableTypeKeys = Seq(
     "hoodie.datasource.write.table.type",
     "hoodie.datasource.read.table.type",
     "hoodie.table.type")
+  private val hudiQueryTypeKeys =
+    Seq("hoodie.datasource.query.type", "hoodie.datasource.view.type")
   private val hudiBaseFileFormatKeys = Seq(
     "hoodie.table.base.file.format",
     "hoodie.datasource.write.base.file.format",
     "hoodie.datasource.write.storage.type")
 
   def fileFormat(scan: FileSourceScanExec): Option[HudiFileFormat] = {
+    lazy val catalog = catalogTable(scan.relation)
+    lazy val tableProperties = hudiTablePropertiesFromMeta(scan.relation.options)
+    fileFormat(scan, catalog, tableProperties)
+  }
+
+  private def fileFormat(
+      scan: FileSourceScanExec,
+      catalogTable: => Option[CatalogTable],
+      tableProperties: => Option[Properties]): Option[HudiFileFormat] = {
     val fileFormatName = scan.relation.fileFormat.getClass.getName
     val fromClass = fileFormat(fileFormatName)
     if (fromClass.nonEmpty) {
@@ -55,7 +68,7 @@ object HudiScanSupport extends Logging {
     }
     // Spark may report generic Orc/Parquet formats for Hudi; use metadata fallback
     // only when the underlying file index indicates a Hudi table.
-    fileFormatFromMeta(scan, catalogTable(scan.relation), fileFormatName)
+    fileFormatFromMeta(scan, catalogTable, tableProperties, fileFormatName)
   }
 
   private[hudi] def fileFormat(fileFormatName: String): Option[HudiFileFormat] = {
@@ -74,16 +87,28 @@ object HudiScanSupport extends Logging {
   }
 
   def isSupported(scan: FileSourceScanExec): Boolean =
-    isSupported(fileFormat(scan), scan.relation.options, catalogTable(scan.relation))
+    supportedFileFormat(scan).nonEmpty
+
+  def supportedFileFormat(scan: FileSourceScanExec): Option[HudiFileFormat] = {
+    lazy val catalog = catalogTable(scan.relation)
+    lazy val tableProperties = hudiTablePropertiesFromMeta(scan.relation.options)
+    val resolvedFileFormat = fileFormat(scan, catalog, tableProperties)
+    if (isSupported(resolvedFileFormat, scan.relation.options, catalog, tableProperties)) {
+      resolvedFileFormat
+    } else {
+      None
+    }
+  }
 
   private[hudi] def isSupported(fileFormatName: String, options: Map[String, String]): Boolean = {
-    isSupported(fileFormat(fileFormatName), options, None)
+    isSupported(fileFormat(fileFormatName), options, None, None)
   }
 
   private[hudi] def isSupported(
       fileFormat: Option[HudiFileFormat],
       options: Map[String, String],
-      catalogTable: Option[CatalogTable]): Boolean = {
+      catalogTable: => Option[CatalogTable],
+      tableProperties: => Option[Properties]): Boolean = {
     if (fileFormat.isEmpty) {
       return false
     }
@@ -93,57 +118,46 @@ object HudiScanSupport extends Logging {
 
     val tableType = tableTypeFromOptions(options)
       .orElse(tableTypeFromCatalog(catalogTable))
-      .orElse(tableTypeFromMeta(options))
+      .orElse(tableTypeFromMeta(tableProperties))
       .map(_.toLowerCase(Locale.ROOT))
+    val queryType = queryTypeFromOptions(options).map(_.toLowerCase(Locale.ROOT))
 
     logDebug(s"Hudi tableType resolved to: ${tableType.getOrElse("unknown")}")
 
-    // Only support basic COW tables for the base version.
-    !tableType.exists(morTableTypes.contains)
+    val isMor = tableType.exists(morTableTypes.contains)
+    queryType match {
+      case Some(query) if readOptimizedQueryTypes.contains(query) => true
+      case Some("snapshot") => !isMor
+      case Some("incremental" | "realtime") => false
+      case Some(_) => false
+      case None =>
+        // MOR snapshot reads may need log-file merging. Native scan is safe only
+        // when the query explicitly requests read-optimized base-file reads.
+        !isMor
+    }
   }
 
   private def tableTypeFromOptions(options: Map[String, String]): Option[String] = {
     caseInsensitiveValue(options, hudiTableTypeKeys)
   }
 
+  private def queryTypeFromOptions(options: Map[String, String]): Option[String] = {
+    caseInsensitiveValue(options, hudiQueryTypeKeys)
+  }
+
   private[hudi] def baseFileFormatFromOptions(options: Map[String, String]): Option[String] = {
     caseInsensitiveValue(options, hudiBaseFileFormatKeys)
   }
 
-  private def tableTypeFromMeta(options: Map[String, String]): Option[String] = {
-    val basePath = caseInsensitiveValue(options, Seq("path")).map(normalizePath)
-    basePath.flatMap { path =>
-      try {
-        val hadoopConf = SparkSession.active.sessionState.newHadoopConf()
-        val base = new Path(path)
-        val fs = base.getFileSystem(hadoopConf)
-        val propsPath = new Path(base, ".hoodie/hoodie.properties")
-        if (!fs.exists(propsPath)) {
-          if (log.isDebugEnabled()) {
-            logDebug(s"Hudi table properties not found at: $propsPath")
-          }
-          None
-        } else {
-          val in = fs.open(propsPath)
-          try {
-            val props = new Properties()
-            props.load(in)
-            caseInsensitivePropertyValue(props, Seq("hoodie.table.type"))
-          } finally {
-            in.close()
-          }
-        }
-      } catch {
-        case t: Throwable =>
-          if (log.isDebugEnabled()) {
-            logDebug(s"Failed to load hudi table type from $path", t)
-          }
-          None
-      }
-    }
-  }
+  private def tableTypeFromMeta(tableProperties: Option[Properties]): Option[String] =
+    tableProperties.flatMap(props =>
+      caseInsensitivePropertyValue(props, Seq("hoodie.table.type")))
 
-  private def baseFileFormatFromMeta(options: Map[String, String]): Option[String] = {
+  private def baseFileFormatFromMeta(tableProperties: Option[Properties]): Option[String] =
+    tableProperties.flatMap(props =>
+      caseInsensitivePropertyValue(props, Seq("hoodie.table.base.file.format")))
+
+  private def hudiTablePropertiesFromMeta(options: Map[String, String]): Option[Properties] = {
     val basePath = caseInsensitiveValue(options, Seq("path")).map(normalizePath)
     basePath.flatMap { path =>
       try {
@@ -157,19 +171,16 @@ object HudiScanSupport extends Logging {
           }
           None
         } else {
-          val in = fs.open(propsPath)
-          try {
-            val props = new Properties()
+          val props = new Properties()
+          Using.resource(fs.open(propsPath)) { in =>
             props.load(in)
-            caseInsensitivePropertyValue(props, Seq("hoodie.table.base.file.format"))
-          } finally {
-            in.close()
           }
+          Some(props)
         }
       } catch {
         case t: Throwable =>
           if (log.isDebugEnabled()) {
-            logDebug(s"Failed to load hudi base file format from $path", t)
+            logDebug(s"Failed to load Hudi table properties from $path", t)
           }
           None
       }
@@ -185,7 +196,8 @@ object HudiScanSupport extends Logging {
 
   private def fileFormatFromMeta(
       scan: FileSourceScanExec,
-      catalogTable: Option[CatalogTable],
+      catalogTable: => Option[CatalogTable],
+      tableProperties: => Option[Properties],
       fileFormatName: String): Option[HudiFileFormat] = {
     // Avoid treating non-Hudi tables as Hudi when Spark reports generic formats.
     if (!isHudiFileIndex(scan.relation.location)) {
@@ -193,7 +205,7 @@ object HudiScanSupport extends Logging {
     }
     val baseFormat = baseFileFormatFromOptions(scan.relation.options)
       .orElse(baseFileFormatFromCatalog(catalogTable))
-      .orElse(baseFileFormatFromMeta(scan.relation.options))
+      .orElse(baseFileFormatFromMeta(tableProperties))
       .map(_.toLowerCase(Locale.ROOT))
     baseFormat.flatMap {
       case "orc" if fileFormatName.contains("OrcFileFormat") => Some(OrcFormat)

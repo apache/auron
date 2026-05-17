@@ -95,6 +95,7 @@ jobs:
           components:
             cargo
             rustfmt
+          cache-bin: false
 
       - name: Detect osclassfier
         id: detect-osclassfier

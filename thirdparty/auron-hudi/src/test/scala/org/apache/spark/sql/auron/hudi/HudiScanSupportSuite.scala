@@ -23,9 +23,12 @@ import java.util.Properties
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
+import org.apache.spark.sql.execution.auron.plan.NativeParquetScanExec
 import org.apache.spark.sql.test.SharedSparkSession
 
 import org.apache.auron.util.SparkVersionUtil
@@ -127,6 +130,41 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
     }.isEmpty)
   }
 
+  private def fileSourceScanFromPlan(
+      plan: org.apache.spark.sql.execution.SparkPlan): Option[FileSourceScanExec] =
+    plan.collectFirst {
+      case scan: FileSourceScanExec =>
+        scan
+      case nativeScan: NativeParquetScanExec =>
+        nativeScan.basedFileScan
+    }
+
+  private def assertProviderConvertsToNativeParquetScan(df: DataFrame): FileSourceScanExec = {
+    val plan = materializedPlan(df)
+    val preAqePlan = df.queryExecution.sparkPlan
+    val scan = fileSourceScanFromPlan(plan)
+      .orElse(fileSourceScanFromPlan(preAqePlan))
+      .getOrElse {
+        fail(
+          "Expected FileSourceScanExec or NativeParquetScanExec in Hudi scan plan.\n" +
+            s"Materialized plan:\n$plan\nPre-AQE plan:\n$preAqePlan")
+      }
+    val provider = new HudiConvertProvider
+    assert(provider.isSupported(scan))
+    val converted = provider.convert(scan)
+    assertHasNativeParquetScan(converted)
+    scan
+  }
+
+  private def assertFilterReferences(
+      filters: Seq[Expression],
+      attributeName: String,
+      filterType: String): Unit = {
+    assert(
+      filters.exists(_.references.exists(_.name == attributeName)),
+      s"Expected $filterType filters to reference $attributeName, but got: $filters")
+  }
+
   private def logFileFormats(df: org.apache.spark.sql.DataFrame): Unit = {
     val plan = materializedPlan(df)
     val nodes = plan.collect { case p => p }
@@ -186,6 +224,10 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
     Option(props.getProperty("hoodie.table.base.file.format"))
   }
 
+  private def hudiTablePath(tableName: String): String = {
+    new File(warehouseDir, tableName).getAbsolutePath
+  }
+
   private def assumeSparkAtLeast(version: String): Unit = {
     val current = SparkVersionUtil.SPARK_RUNTIME_VERSION
     assume(current >= version, s"Requires Spark >= $version, current Spark $current")
@@ -218,23 +260,48 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
         .isEmpty)
   }
 
-  test("hudi isSupported rejects MOR table types") {
+  test("hudi isSupported rejects MOR table types unless read optimized") {
     val options = Map("hoodie.datasource.write.table.type" -> "MERGE_ON_READ")
     assert(
       !HudiScanSupport.isSupported(
         "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
         options))
+    assert(
+      HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("hoodie.datasource.query.type" -> "read_optimized")))
+    assert(
+      HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("Hoodie.DataSource.View.Type" -> "READ_OPTIMIZED")))
+    assert(
+      !HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("hoodie.datasource.query.type" -> "snapshot")))
+    assert(
+      !HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("Hoodie.DataSource.View.Type" -> "REALTIME")))
+    assert(
+      !HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        options + ("hoodie.datasource.query.type" -> "incremental")))
   }
 
   test("hudi scan options are case-insensitive") {
     val options = Map(
       "Hoodie.DataSource.Write.Table.Type" -> "MERGE_ON_READ",
       "Hoodie.Table.Base.File.Format" -> "ORC")
+    val readOptimizedOptions = options + ("Hoodie.DataSource.Query.Type" -> "READ_OPTIMIZED")
     val timeTravelOptions = Map("Hoodie.DataSource.Read.As.Of.Instant" -> "20240101010101")
     assert(
       !HudiScanSupport.isSupported(
         "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
         options))
+    assert(
+      HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        readOptimizedOptions))
     assert(
       !HudiScanSupport.isSupported(
         "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
@@ -247,6 +314,12 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
       HudiScanSupport.isSupported(
         "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
         Map.empty))
+    assert(
+      HudiScanSupport.isSupported(
+        "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat",
+        Map(
+          "hoodie.datasource.write.table.type" -> "COPY_ON_WRITE",
+          "hoodie.datasource.query.type" -> "snapshot")))
   }
 
   test("hudi isSupported rejects non-Hudi formats") {
@@ -348,6 +421,86 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
       assert(provider.isSupported(scan.get))
       val converted = provider.convert(scan.get)
       assertHasNativeParquetScan(converted)
+    }
+  }
+
+  test("hudi: MOR read-optimized table scan converts to native") {
+    withTable("hudi_mor_read_optimized") {
+      spark.sql("""create table hudi_mor_read_optimized (id int, name string)
+          |using hudi
+          |tblproperties (
+          |  'hoodie.datasource.write.table.type' = 'MERGE_ON_READ'
+          |)""".stripMargin)
+      spark.sql("insert into hudi_mor_read_optimized values (1, 'v1'), (2, 'v2')")
+
+      val df = spark.read
+        .format("hudi")
+        .option("hoodie.datasource.query.type", "read_optimized")
+        .load(hudiTablePath("hudi_mor_read_optimized"))
+        .select("id", "name")
+        .orderBy("id")
+
+      logFileFormats(df)
+      val rows = df.collect().toSeq
+      assert(rows == Seq(Row(1, "v1"), Row(2, "v2")))
+      val scan = df.queryExecution.sparkPlan.collectFirst {
+        case s: org.apache.spark.sql.execution.FileSourceScanExec => s
+      }
+      assert(scan.isDefined)
+      val provider = new HudiConvertProvider
+      assert(provider.isSupported(scan.get))
+      val converted = provider.convert(scan.get)
+      assertHasNativeParquetScan(converted)
+    }
+  }
+
+  test("hudi: partitioned COW parquet scan converts to native with filters") {
+    withTable("hudi_partitioned_cow") {
+      spark.sql("""create table hudi_partitioned_cow (id int, name string, dt string)
+          |using hudi
+          |partitioned by (dt)
+          |tblproperties (
+          |  'hoodie.datasource.write.table.type' = 'cow'
+          |)""".stripMargin)
+      spark.sql("""insert into hudi_partitioned_cow values
+          |  (1, 'v1', '2026-05-01'),
+          |  (2, 'v2', '2026-05-01'),
+          |  (3, 'v3', '2026-05-02')
+          |""".stripMargin)
+
+      val fullScan = spark.sql("select id, name, dt from hudi_partitioned_cow order by id")
+      logFileFormats(fullScan)
+      assert(
+        fullScan.collect().toSeq == Seq(
+          Row(1, "v1", "2026-05-01"),
+          Row(2, "v2", "2026-05-01"),
+          Row(3, "v3", "2026-05-02")))
+      assertProviderConvertsToNativeParquetScan(fullScan)
+
+      val partitionPruned = spark.sql("""
+          |select id, name, dt
+          |from hudi_partitioned_cow
+          |where dt = '2026-05-01'
+          |order by id
+          |""".stripMargin)
+      logFileFormats(partitionPruned)
+      assert(
+        partitionPruned.collect().toSeq == Seq(
+          Row(1, "v1", "2026-05-01"),
+          Row(2, "v2", "2026-05-01")))
+      val partitionScan = assertProviderConvertsToNativeParquetScan(partitionPruned)
+      assertFilterReferences(partitionScan.partitionFilters, "dt", "partition")
+
+      val partitionAndDataFiltered = spark.sql("""
+          |select id, name, dt
+          |from hudi_partitioned_cow
+          |where dt = '2026-05-01' and id = 2
+          |""".stripMargin)
+      logFileFormats(partitionAndDataFiltered)
+      assert(partitionAndDataFiltered.collect().toSeq == Seq(Row(2, "v2", "2026-05-01")))
+      val filteredScan = assertProviderConvertsToNativeParquetScan(partitionAndDataFiltered)
+      assertFilterReferences(filteredScan.partitionFilters, "dt", "partition")
+      assertFilterReferences(filteredScan.dataFilters, "id", "data")
     }
   }
 }
