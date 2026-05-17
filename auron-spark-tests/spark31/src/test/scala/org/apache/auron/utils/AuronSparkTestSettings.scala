@@ -62,8 +62,6 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronMiscFunctionsSuite]
 
   enableSuite[AuronStringFunctionsSuite]
-    // See https://github.com/apache/auron/issues/1724
-    .exclude("string / binary substring function")
 
   enableSuite[AuronDataFrameAggregateSuite]
     // See https://github.com/apache/auron/issues/1840
