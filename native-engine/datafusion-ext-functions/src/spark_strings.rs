@@ -17,7 +17,8 @@ use std::sync::Arc;
 
 use arrow::{
     array::{
-        Array, ArrayRef, AsArray, BinaryArray, ListArray, ListBuilder, StringArray, StringBuilder,
+        Array, ArrayRef, AsArray, BinaryArray, Int32Array, ListArray, ListBuilder, StringArray,
+        StringBuilder,
     },
     datatypes::DataType,
 };
@@ -188,6 +189,141 @@ fn substring_range(total_len: usize, pos: i64, len: i64) -> (usize, usize) {
     let start = raw_start.clamp(0, total_len_i64) as usize;
     let end = (start as i64).saturating_add(len).clamp(0, total_len_i64) as usize;
     (start, end)
+}
+
+pub fn spark_levenshtein(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 2 && args.len() != 3 {
+        df_execution_err!(
+            "levenshtein was called with {} arguments. It requires 2 or 3.",
+            args.len(),
+        )?;
+    }
+
+    let return_array_len = args.iter().find_map(|arg| match arg {
+        ColumnarValue::Array(array) => Some(array.len()),
+        ColumnarValue::Scalar(_) => None,
+    });
+
+    if let Some(array_len) = return_array_len {
+        let left_array = args[0].clone().into_array(array_len)?;
+        let right_array = args[1].clone().into_array(array_len)?;
+        let threshold_array = args
+            .get(2)
+            .map(|threshold| threshold.clone().into_array(array_len))
+            .transpose()?;
+
+        for array in [&left_array, &right_array] {
+            if array.len() != array_len {
+                df_execution_err!(
+                    "levenshtein array arguments must have the same length, got {} and {}",
+                    array_len,
+                    array.len(),
+                )?;
+            }
+        }
+        if let Some(threshold_array) = &threshold_array
+            && threshold_array.len() != array_len
+        {
+            df_execution_err!(
+                "levenshtein array arguments must have the same length, got {} and {}",
+                array_len,
+                threshold_array.len(),
+            )?;
+        }
+
+        let left_strings = as_string_array(&left_array)?;
+        let right_strings = as_string_array(&right_array)?;
+        enum Thresholds<'a> {
+            Absent,
+            Int32(&'a Int32Array),
+            Null,
+        }
+        let thresholds = match &threshold_array {
+            Some(array) if array.data_type() == &DataType::Null => Thresholds::Null,
+            Some(array) => Thresholds::Int32(as_int32_array(array)?),
+            None => Thresholds::Absent,
+        };
+
+        let result = Int32Array::from_iter((0..array_len).map(|i| {
+            let threshold = match thresholds {
+                Thresholds::Absent => None,
+                Thresholds::Int32(array) => {
+                    Some(if array.is_valid(i) { array.value(i) } else { 0 })
+                }
+                Thresholds::Null => Some(0),
+            };
+            levenshtein_result(
+                left_strings.is_valid(i).then(|| left_strings.value(i)),
+                right_strings.is_valid(i).then(|| right_strings.value(i)),
+                threshold,
+            )
+        }));
+        return Ok(ColumnarValue::Array(Arc::new(result)));
+    }
+
+    let left = scalar_string_value(&args[0])?;
+    let right = scalar_string_value(&args[1])?;
+    let threshold = args.get(2).map(scalar_threshold_value).transpose()?;
+    Ok(ColumnarValue::Scalar(ScalarValue::Int32(
+        levenshtein_result(left, right, threshold),
+    )))
+}
+
+fn scalar_string_value(arg: &ColumnarValue) -> Result<Option<&str>> {
+    match arg {
+        ColumnarValue::Scalar(ScalarValue::Utf8(value)) => Ok(value.as_deref()),
+        _ => df_execution_err!("levenshtein only supports utf8 string arguments"),
+    }
+}
+
+fn scalar_threshold_value(arg: &ColumnarValue) -> Result<i32> {
+    match arg {
+        ColumnarValue::Scalar(ScalarValue::Int32(Some(value))) => Ok(*value),
+        ColumnarValue::Scalar(scalar) if scalar.is_null() => Ok(0),
+        _ => df_execution_err!("levenshtein threshold only supports int32"),
+    }
+}
+
+fn levenshtein_result(
+    left: Option<&str>,
+    right: Option<&str>,
+    threshold: Option<i32>,
+) -> Option<i32> {
+    let distance = levenshtein_distance(left?, right?);
+    Some(match threshold {
+        Some(threshold) if distance > threshold => -1,
+        _ => distance,
+    })
+}
+
+fn levenshtein_distance(left: &str, right: &str) -> i32 {
+    if left == right {
+        return 0;
+    }
+
+    let left_chars = left.chars().collect::<Vec<_>>();
+    let right_chars = right.chars().collect::<Vec<_>>();
+    if left_chars.is_empty() {
+        return right_chars.len() as i32;
+    }
+    if right_chars.is_empty() {
+        return left_chars.len() as i32;
+    }
+
+    let mut previous = (0..=right_chars.len()).collect::<Vec<_>>();
+    let mut current = vec![0; right_chars.len() + 1];
+
+    for (i, left_char) in left_chars.iter().enumerate() {
+        current[0] = i + 1;
+        for (j, right_char) in right_chars.iter().enumerate() {
+            let substitution_cost = usize::from(left_char != right_char);
+            current[j + 1] = (current[j] + 1)
+                .min(previous[j + 1] + 1)
+                .min(previous[j] + substitution_cost);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+    previous[right_chars.len()] as i32
 }
 
 /// concat() function compatible with spark (returns null if any param is null)
@@ -398,19 +534,21 @@ pub fn string_concat_ws(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 mod test {
     use std::sync::Arc;
 
-    use arrow::array::{BinaryArray, Int32Array, ListBuilder, StringArray, StringBuilder};
+    use arrow::array::{
+        BinaryArray, Int32Array, ListBuilder, NullArray, StringArray, StringBuilder,
+    };
     use datafusion::{
         common::{
             Result, ScalarValue,
-            cast::{as_binary_array, as_list_array, as_string_array},
+            cast::{as_binary_array, as_int32_array, as_list_array, as_string_array},
         },
         physical_plan::ColumnarValue,
     };
     use datafusion_ext_commons::df_execution_err;
 
     use crate::spark_strings::{
-        spark_substring, string_concat, string_concat_ws, string_lower, string_repeat,
-        string_space, string_split, string_upper,
+        spark_levenshtein, spark_substring, string_concat, string_concat_ws, string_lower,
+        string_repeat, string_space, string_split, string_upper,
     };
 
     #[test]
@@ -469,6 +607,124 @@ mod test {
             ColumnarValue::Scalar(ScalarValue::Utf8(None)) => Ok(()),
             other => df_execution_err!("Expected null Utf8 scalar, got: {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_spark_levenshtein_array() -> Result<()> {
+        let r = spark_levenshtein(&vec![
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("kitten".to_string()),
+                Some("frog".to_string()),
+                Some("千世".to_string()),
+                None,
+            ]))),
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("sitting".to_string()),
+                Some("fog".to_string()),
+                Some("世界千世".to_string()),
+                Some("abc".to_string()),
+            ]))),
+        ])?;
+        let s = r.into_array(4)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![Some(3), Some(1), Some(2), None]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_levenshtein_threshold() -> Result<()> {
+        let r = spark_levenshtein(&vec![
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("kitten".to_string()),
+                Some("kitten".to_string()),
+                Some("abc".to_string()),
+                Some("abc".to_string()),
+                Some("".to_string()),
+                Some("abc".to_string()),
+            ]))),
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("sitting".to_string()),
+                Some("sitting".to_string()),
+                Some("abc".to_string()),
+                Some("xyz".to_string()),
+                Some("abc".to_string()),
+                Some("abc".to_string()),
+            ]))),
+            ColumnarValue::Array(Arc::new(Int32Array::from_iter(vec![
+                Some(2),
+                Some(3),
+                Some(0),
+                None,
+                Some(3),
+                Some(-1),
+            ]))),
+        ])?;
+        let s = r.into_array(6)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![Some(-1), Some(3), Some(0), Some(-1), Some(3), Some(-1)]
+        );
+
+        let r = spark_levenshtein(&vec![
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![Some(
+                "abc".to_string(),
+            )]))),
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![Some(
+                "xyz".to_string(),
+            )]))),
+            ColumnarValue::Array(Arc::new(NullArray::new(1))),
+        ])?;
+        let s = r.into_array(1)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![Some(-1)]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_levenshtein_scalar() -> Result<()> {
+        let r = spark_levenshtein(&vec![
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("kitten".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("sitting".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(2))),
+        ])?;
+        match r {
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(-1))) => {}
+            other => df_execution_err!("Expected Int32(-1) scalar, got: {:?}", other)?,
+        }
+
+        let r = spark_levenshtein(&vec![
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("kitten".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("sitting".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(3))),
+        ])?;
+        match r {
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(3))) => {}
+            other => df_execution_err!("Expected Int32(3) scalar, got: {:?}", other)?,
+        }
+
+        let r = spark_levenshtein(&vec![
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("kitten".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("sitting".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Null),
+        ])?;
+        match r {
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(-1))) => {}
+            other => df_execution_err!("Expected Int32(-1) scalar, got: {:?}", other)?,
+        }
+
+        let r = spark_levenshtein(&vec![
+            ColumnarValue::Scalar(ScalarValue::Utf8(None)),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("sitting".to_string()))),
+        ])?;
+        match r {
+            ColumnarValue::Scalar(ScalarValue::Int32(None)) => {}
+            other => df_execution_err!("Expected null Int32 scalar, got: {:?}", other)?,
+        }
+        Ok(())
     }
 
     #[test]
