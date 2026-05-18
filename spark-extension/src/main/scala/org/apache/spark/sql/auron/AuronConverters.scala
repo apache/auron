@@ -161,7 +161,7 @@ object AuronConverters extends Logging {
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
-        extConvertProviders.find(p => p.isEnabled && p.isSupported(e)) match {
+        extConvertProviders.find(p => p.isEnabled(e) && p.isSupported(e)) match {
           case Some(provider) => tryConvert(e, provider.convert)
           case None => tryConvert(e, convertFileSourceScanExec)
         }
@@ -239,23 +239,34 @@ object AuronConverters extends Logging {
 
       case exec: ForceNativeExecutionWrapperBase => exec
       case exec =>
-        extConvertProviders.find(h => h.isEnabled && h.isSupported(exec)) match {
-          case Some(provider) => tryConvert(exec, provider.convert)
-          case None =>
-            Shims.get.convertMoreSparkPlan(exec) match {
-              case Some(exec) =>
-                exec.setTagValue(convertibleTag, true)
-                exec.setTagValue(convertStrategyTag, AlwaysConvert)
-                exec
-              case None =>
-                if (Shims.get.isNative(exec)) { // for QueryStageInput and CustomShuffleReader
+        try {
+          extConvertProviders.find(h => h.isEnabled(exec) && h.isSupported(exec)) match {
+            case Some(provider) => tryConvert(exec, provider.convert)
+            case None =>
+              Shims.get.convertMoreSparkPlan(exec) match {
+                case Some(exec) =>
                   exec.setTagValue(convertibleTag, true)
                   exec.setTagValue(convertStrategyTag, AlwaysConvert)
                   exec
-                } else {
-                  addNeverConvertReasonTag(exec)
-                }
-            }
+                case None =>
+                  if (Shims.get.isNative(exec)) { // for QueryStageInput and CustomShuffleReader
+                    exec.setTagValue(convertibleTag, true)
+                    exec.setTagValue(convertStrategyTag, AlwaysConvert)
+                    exec
+                  } else {
+                    addNeverConvertReasonTag(exec)
+                  }
+              }
+          }
+        } catch {
+          case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
+            exec.setTagValue(convertToNonNativeTag, true)
+            exec.setTagValue(convertibleTag, false)
+            exec.setTagValue(convertStrategyTag, NeverConvert)
+            exec.setTagValue(
+              neverConvertReasonTag,
+              s"${e.getMessage.replaceFirst("^assertion failed: ?", "")}")
+            exec
         }
     }
   }
