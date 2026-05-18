@@ -23,3 +23,11 @@ import org.apache.spark.scheduler.SparkListenerEvent
 sealed trait AuronEvent extends SparkListenerEvent {}
 
 case class AuronBuildInfoEvent(info: mutable.LinkedHashMap[String, String]) extends AuronEvent {}
+
+case class AuronPlanFallbackEvent(
+    executionId: Long,
+    numAuronNodes: Int,
+    numFallbackNodes: Int,
+    physicalPlanDescription: String,
+    fallbackNodeToReason: Map[String, String])
+    extends AuronEvent {}
