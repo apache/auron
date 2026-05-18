@@ -456,8 +456,10 @@ public class SparkAuronConfiguration extends AuronConfiguration {
     public static final ConfigOption<Boolean> ENABLE_DATA_WRITING_ORC = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.data.writing.orc")
             .withCategory("Operator Supports")
-            .withDescription("Enable ORC DataWritingExec operation conversion to native Auron implementations.")
-            .withDefaultValue(true);
+            .withDescription(
+                    "Enable ORC DataWritingExec operation conversion to native Auron implementations. "
+                            + "This is disabled by default because the native ORC writer currently does not support compression.")
+            .withDefaultValue(false);
 
     public static final ConfigOption<Boolean> ENABLE_SCAN_PARQUET = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.scan.parquet")

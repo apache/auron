@@ -118,7 +118,9 @@ class AuronHiveExecSuite extends AuronQueryTest with BaseAuronHiveSQLSuite {
   }
 
   test("convert ORC InsertIntoHiveTable to native ORC insert") {
-    withSQLConf("spark.auron.enable.data.writing" -> "true") {
+    withSQLConf(
+      "spark.auron.enable.data.writing" -> "true",
+      "spark.auron.enable.data.writing.orc" -> "true") {
       withTable("src_orc_insert") {
         sql("""
           |create table src_orc_insert using parquet as
@@ -139,6 +141,7 @@ class AuronHiveExecSuite extends AuronQueryTest with BaseAuronHiveSQLSuite {
   test("convert ORC InsertIntoHiveTable with dynamic partitions to native ORC insert") {
     withSQLConf(
       "spark.auron.enable.data.writing" -> "true",
+      "spark.auron.enable.data.writing.orc" -> "true",
       "hive.exec.dynamic.partition" -> "true",
       "hive.exec.dynamic.partition.mode" -> "nonstrict") {
       withTable("src_orc_insert_part") {
@@ -166,6 +169,7 @@ class AuronHiveExecSuite extends AuronQueryTest with BaseAuronHiveSQLSuite {
     "convert ORC InsertIntoHiveTable with static and dynamic partitions to native ORC insert") {
     withSQLConf(
       "spark.auron.enable.data.writing" -> "true",
+      "spark.auron.enable.data.writing.orc" -> "true",
       "hive.exec.dynamic.partition" -> "true") {
       withTable("src_orc_insert_mixed_part") {
         sql("""
@@ -192,7 +196,9 @@ class AuronHiveExecSuite extends AuronQueryTest with BaseAuronHiveSQLSuite {
   }
 
   test("execute native ORC InsertIntoHiveTable without partitions") {
-    withSQLConf("spark.auron.enable.data.writing" -> "true") {
+    withSQLConf(
+      "spark.auron.enable.data.writing" -> "true",
+      "spark.auron.enable.data.writing.orc" -> "true") {
       withTable("src_orc_insert_no_part_exec", "t_orc_native_no_part_exec") {
         sql("""
           |create table src_orc_insert_no_part_exec using parquet as
@@ -229,6 +235,7 @@ class AuronHiveExecSuite extends AuronQueryTest with BaseAuronHiveSQLSuite {
   test("execute native ORC InsertIntoHiveTable with static and dynamic partitions") {
     withSQLConf(
       "spark.auron.enable.data.writing" -> "true",
+      "spark.auron.enable.data.writing.orc" -> "true",
       "hive.exec.dynamic.partition" -> "true") {
       withTable("src_orc_insert_exec", "t_orc_native_exec") {
         sql("""
@@ -272,7 +279,9 @@ class AuronHiveExecSuite extends AuronQueryTest with BaseAuronHiveSQLSuite {
   }
 
   test("execute native ORC InsertIntoHiveTable preserves overwrite semantics") {
-    withSQLConf("spark.auron.enable.data.writing" -> "true") {
+    withSQLConf(
+      "spark.auron.enable.data.writing" -> "true",
+      "spark.auron.enable.data.writing.orc" -> "true") {
       withTable(
         "src_orc_insert_overwrite_initial",
         "src_orc_insert_overwrite_replacement",
@@ -327,7 +336,9 @@ class AuronHiveExecSuite extends AuronQueryTest with BaseAuronHiveSQLSuite {
   }
 
   test("keep unsupported ORC InsertIntoHiveTable schema on Spark path") {
-    withSQLConf("spark.auron.enable.data.writing" -> "true") {
+    withSQLConf(
+      "spark.auron.enable.data.writing" -> "true",
+      "spark.auron.enable.data.writing.orc" -> "true") {
       withTable("src_orc_insert_map") {
         sql("""
             |create table src_orc_insert_map using parquet as
