@@ -199,131 +199,127 @@ pub fn spark_levenshtein(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         )?;
     }
 
-    let return_array_len = args.iter().find_map(|arg| match arg {
-        ColumnarValue::Array(array) => Some(array.len()),
-        ColumnarValue::Scalar(_) => None,
-    });
+    if args
+        .iter()
+        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)))
+    {
+        let left = match &args[0] {
+            ColumnarValue::Scalar(ScalarValue::Utf8(value)) => value.as_deref(),
+            _ => df_execution_err!("levenshtein only supports utf8 string arguments")?,
+        };
+        let right = match &args[1] {
+            ColumnarValue::Scalar(ScalarValue::Utf8(value)) => value.as_deref(),
+            _ => df_execution_err!("levenshtein only supports utf8 string arguments")?,
+        };
+        let threshold = match args.get(2) {
+            Some(ColumnarValue::Scalar(ScalarValue::Int32(Some(value)))) => Some(*value),
+            Some(ColumnarValue::Scalar(scalar)) if scalar.is_null() => Some(0),
+            Some(_) => df_execution_err!("levenshtein threshold only supports int32")?,
+            None => None,
+        };
+        return Ok(ColumnarValue::Scalar(ScalarValue::Int32(
+            compute_levenshtein(left, right, threshold),
+        )));
+    }
 
-    if let Some(array_len) = return_array_len {
-        let left_array = args[0].clone().into_array(array_len)?;
-        let right_array = args[1].clone().into_array(array_len)?;
-        let threshold_array = args
-            .get(2)
-            .map(|threshold| threshold.clone().into_array(array_len))
-            .transpose()?;
+    let array_len = args
+        .iter()
+        .find_map(|arg| match arg {
+            ColumnarValue::Array(array) => Some(array.len()),
+            ColumnarValue::Scalar(_) => None,
+        })
+        .expect("levenshtein arguments include an array");
+    let left_array = args[0].clone().into_array(array_len)?;
+    let right_array = args[1].clone().into_array(array_len)?;
+    let threshold_array = args
+        .get(2)
+        .map(|threshold| threshold.clone().into_array(array_len))
+        .transpose()?;
 
-        for array in [&left_array, &right_array] {
-            if array.len() != array_len {
-                df_execution_err!(
-                    "levenshtein array arguments must have the same length, got {} and {}",
-                    array_len,
-                    array.len(),
-                )?;
-            }
-        }
-        if let Some(threshold_array) = &threshold_array
-            && threshold_array.len() != array_len
-        {
+    for array in [&left_array, &right_array] {
+        if array.len() != array_len {
             df_execution_err!(
                 "levenshtein array arguments must have the same length, got {} and {}",
                 array_len,
-                threshold_array.len(),
+                array.len(),
             )?;
         }
+    }
+    if let Some(threshold_array) = &threshold_array
+        && threshold_array.len() != array_len
+    {
+        df_execution_err!(
+            "levenshtein array arguments must have the same length, got {} and {}",
+            array_len,
+            threshold_array.len(),
+        )?;
+    }
 
-        let left_strings = as_string_array(&left_array)?;
-        let right_strings = as_string_array(&right_array)?;
-        enum Thresholds<'a> {
-            Absent,
-            Int32(&'a Int32Array),
-            Null,
-        }
-        let thresholds = match &threshold_array {
-            Some(array) if array.data_type() == &DataType::Null => Thresholds::Null,
-            Some(array) => Thresholds::Int32(as_int32_array(array)?),
-            None => Thresholds::Absent,
+    let left_strings = as_string_array(&left_array)?;
+    let right_strings = as_string_array(&right_array)?;
+    enum Thresholds<'a> {
+        Absent,
+        Int32(&'a Int32Array),
+        Null,
+    }
+    let thresholds = match &threshold_array {
+        Some(array) if array.data_type() == &DataType::Null => Thresholds::Null,
+        Some(array) => Thresholds::Int32(as_int32_array(array)?),
+        None => Thresholds::Absent,
+    };
+
+    let result = Int32Array::from_iter((0..array_len).map(|i| {
+        let threshold = match thresholds {
+            Thresholds::Absent => None,
+            Thresholds::Int32(array) => Some(if array.is_valid(i) { array.value(i) } else { 0 }),
+            Thresholds::Null => Some(0),
         };
-
-        let result = Int32Array::from_iter((0..array_len).map(|i| {
-            let threshold = match thresholds {
-                Thresholds::Absent => None,
-                Thresholds::Int32(array) => {
-                    Some(if array.is_valid(i) { array.value(i) } else { 0 })
-                }
-                Thresholds::Null => Some(0),
-            };
-            levenshtein_result(
-                left_strings.is_valid(i).then(|| left_strings.value(i)),
-                right_strings.is_valid(i).then(|| right_strings.value(i)),
-                threshold,
-            )
-        }));
-        return Ok(ColumnarValue::Array(Arc::new(result)));
-    }
-
-    let left = scalar_string_value(&args[0])?;
-    let right = scalar_string_value(&args[1])?;
-    let threshold = args.get(2).map(scalar_threshold_value).transpose()?;
-    Ok(ColumnarValue::Scalar(ScalarValue::Int32(
-        levenshtein_result(left, right, threshold),
-    )))
+        compute_levenshtein(
+            left_strings.is_valid(i).then(|| left_strings.value(i)),
+            right_strings.is_valid(i).then(|| right_strings.value(i)),
+            threshold,
+        )
+    }));
+    Ok(ColumnarValue::Array(Arc::new(result)))
 }
 
-fn scalar_string_value(arg: &ColumnarValue) -> Result<Option<&str>> {
-    match arg {
-        ColumnarValue::Scalar(ScalarValue::Utf8(value)) => Ok(value.as_deref()),
-        _ => df_execution_err!("levenshtein only supports utf8 string arguments"),
-    }
-}
-
-fn scalar_threshold_value(arg: &ColumnarValue) -> Result<i32> {
-    match arg {
-        ColumnarValue::Scalar(ScalarValue::Int32(Some(value))) => Ok(*value),
-        ColumnarValue::Scalar(scalar) if scalar.is_null() => Ok(0),
-        _ => df_execution_err!("levenshtein threshold only supports int32"),
-    }
-}
-
-fn levenshtein_result(
+fn compute_levenshtein(
     left: Option<&str>,
     right: Option<&str>,
     threshold: Option<i32>,
 ) -> Option<i32> {
-    let distance = levenshtein_distance(left?, right?);
+    let left = left?;
+    let right = right?;
+    let distance = if left == right {
+        0
+    } else {
+        let left_chars = left.chars().collect::<Vec<_>>();
+        let right_chars = right.chars().collect::<Vec<_>>();
+        if left_chars.is_empty() {
+            right_chars.len() as i32
+        } else if right_chars.is_empty() {
+            left_chars.len() as i32
+        } else {
+            let mut previous = (0..=right_chars.len()).collect::<Vec<_>>();
+            let mut current = vec![0; right_chars.len() + 1];
+
+            for (i, left_char) in left_chars.iter().enumerate() {
+                current[0] = i + 1;
+                for (j, right_char) in right_chars.iter().enumerate() {
+                    let substitution_cost = usize::from(left_char != right_char);
+                    current[j + 1] = (current[j] + 1)
+                        .min(previous[j + 1] + 1)
+                        .min(previous[j] + substitution_cost);
+                }
+                std::mem::swap(&mut previous, &mut current);
+            }
+            previous[right_chars.len()] as i32
+        }
+    };
     Some(match threshold {
         Some(threshold) if distance > threshold => -1,
         _ => distance,
     })
-}
-
-fn levenshtein_distance(left: &str, right: &str) -> i32 {
-    if left == right {
-        return 0;
-    }
-
-    let left_chars = left.chars().collect::<Vec<_>>();
-    let right_chars = right.chars().collect::<Vec<_>>();
-    if left_chars.is_empty() {
-        return right_chars.len() as i32;
-    }
-    if right_chars.is_empty() {
-        return left_chars.len() as i32;
-    }
-
-    let mut previous = (0..=right_chars.len()).collect::<Vec<_>>();
-    let mut current = vec![0; right_chars.len() + 1];
-
-    for (i, left_char) in left_chars.iter().enumerate() {
-        current[0] = i + 1;
-        for (j, right_char) in right_chars.iter().enumerate() {
-            let substitution_cost = usize::from(left_char != right_char);
-            current[j + 1] = (current[j] + 1)
-                .min(previous[j + 1] + 1)
-                .min(previous[j] + substitution_cost);
-        }
-        std::mem::swap(&mut previous, &mut current);
-    }
-    previous[right_chars.len()] as i32
 }
 
 /// concat() function compatible with spark (returns null if any param is null)
