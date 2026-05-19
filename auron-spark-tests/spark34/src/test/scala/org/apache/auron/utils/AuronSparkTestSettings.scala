@@ -17,6 +17,7 @@
 package org.apache.auron.utils
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.parquet._
 
 class AuronSparkTestSettings extends SparkTestSettings {
   {
@@ -91,6 +92,39 @@ class AuronSparkTestSettings extends SparkTestSettings {
     .exclude("SPARK-20897: cached self-join should not fail")
     .exclude("SPARK-22271: mean overflows and returns null for some decimal variables")
     .exclude("SPARK-32764: -0.0 and 0.0 should be equal")
+
+  enableSuite[AuronParquetAvroCompatibilitySuite]
+  enableSuite[AuronParquetColumnIndexSuite]
+  enableSuite[AuronParquetCompatibilityTest]
+  enableSuite[AuronParquetCompressionCodecPrecedenceSuite]
+  enableSuite[AuronParquetEncodingSuite]
+  enableSuite[AuronParquetFieldIdIOSuite]
+  enableSuite[AuronParquetFieldIdSchemaSuite]
+  enableSuite[AuronParquetFileFormatSuite]
+  enableSuite[AuronParquetFileFormatV1Suite]
+  enableSuite[AuronParquetFileFormatV2Suite]
+  enableSuite[AuronParquetIOSuite]
+  enableSuite[AuronParquetInteroperabilitySuite]
+  enableSuite[AuronParquetPartitionDiscoverySuite]
+  enableSuite[AuronParquetProtobufCompatibilitySuite]
+  enableSuite[AuronParquetQuerySuite]
+  enableSuite[AuronParquetRebaseDatetimeSuite]
+  enableSuite[AuronParquetRebaseDatetimeV1Suite]
+  enableSuite[AuronParquetRebaseDatetimeV2Suite]
+  enableSuite[AuronParquetSchemaInferenceSuite]
+  enableSuite[AuronParquetSchemaPruningSuite]
+  enableSuite[AuronParquetSchemaSuite]
+  enableSuite[AuronParquetTest]
+  enableSuite[AuronParquetThriftCompatibilitySuite]
+  enableSuite[AuronParquetV1FilterSuite]
+  enableSuite[AuronParquetV1PartitionDiscoverySuite]
+  enableSuite[AuronParquetV1QuerySuite]
+  enableSuite[AuronParquetV1SchemaPruningSuite]
+  enableSuite[AuronParquetV2FilterSuite]
+  enableSuite[AuronParquetV2PartitionDiscoverySuite]
+  enableSuite[AuronParquetV2QuerySuite]
+  enableSuite[AuronParquetV2SchemaPruningSuite]
+  enableSuite[AuronParquetVectorizedSuite]
 
   override def getSQLQueryTestSettings: SQLQueryTestSettings = new SQLQueryTestSettings {
     override def getResourceFilePath: String = ""
