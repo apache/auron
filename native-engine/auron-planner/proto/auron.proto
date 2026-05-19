@@ -283,7 +283,7 @@ enum ScalarFunction {
   Hex=66;
   Power=67;
   IsNaN=69;
-  Levenshtein=80;
+  // Levenshtein=80;
   FindInSet=81;
   Nvl=82;
   Nvl2=83;
