@@ -67,7 +67,7 @@ object IcebergScanSupport extends Logging {
 
     assert(
       fileSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
-      "Has iceberg data file payload.")
+      "Has unsupported Iceberg data-file schema type.")
 
     assert(
       partitionSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
