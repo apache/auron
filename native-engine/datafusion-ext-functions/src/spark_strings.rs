@@ -236,43 +236,19 @@ pub fn spark_levenshtein(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         .map(|threshold| threshold.clone().into_array(array_len))
         .transpose()?;
 
-    for array in [&left_array, &right_array] {
-        if array.len() != array_len {
-            df_execution_err!(
-                "levenshtein array arguments must have the same length, got {} and {}",
-                array_len,
-                array.len(),
-            )?;
-        }
-    }
-    if let Some(threshold_array) = &threshold_array
-        && threshold_array.len() != array_len
-    {
-        df_execution_err!(
-            "levenshtein array arguments must have the same length, got {} and {}",
-            array_len,
-            threshold_array.len(),
-        )?;
-    }
-
     let left_strings = as_string_array(&left_array)?;
     let right_strings = as_string_array(&right_array)?;
-    enum Thresholds<'a> {
-        Absent,
-        Int32(&'a Int32Array),
-        Null,
-    }
-    let thresholds = match &threshold_array {
-        Some(array) if array.data_type() == &DataType::Null => Thresholds::Null,
-        Some(array) => Thresholds::Int32(as_int32_array(array)?),
-        None => Thresholds::Absent,
-    };
+    let thresholds = threshold_array
+        .as_ref()
+        .filter(|array| array.data_type() != &DataType::Null)
+        .map(|array| as_int32_array(array))
+        .transpose()?;
 
     let result = Int32Array::from_iter((0..array_len).map(|i| {
-        let threshold = match thresholds {
-            Thresholds::Absent => None,
-            Thresholds::Int32(array) => Some(if array.is_valid(i) { array.value(i) } else { 0 }),
-            Thresholds::Null => Some(0),
+        let threshold = match &threshold_array {
+            Some(array) if array.data_type() == &DataType::Null => Some(0),
+            Some(_) => thresholds.map(|array| if array.is_valid(i) { array.value(i) } else { 0 }),
+            None => None,
         };
         compute_levenshtein(
             left_strings.is_valid(i).then(|| left_strings.value(i)),
