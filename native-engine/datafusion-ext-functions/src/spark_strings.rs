@@ -213,7 +213,9 @@ pub fn spark_levenshtein(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         };
         let threshold = match args.get(2) {
             Some(ColumnarValue::Scalar(ScalarValue::Int32(Some(value)))) => Some(*value),
-            Some(ColumnarValue::Scalar(scalar)) if scalar.is_null() => Some(0),
+            Some(ColumnarValue::Scalar(scalar)) if scalar.is_null() => {
+                return Ok(ColumnarValue::Scalar(ScalarValue::Int32(None)));
+            }
             Some(_) => df_execution_err!("levenshtein threshold only supports int32")?,
             None => None,
         };
@@ -246,8 +248,14 @@ pub fn spark_levenshtein(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
     let result = Int32Array::from_iter((0..array_len).map(|i| {
         let threshold = match &threshold_array {
-            Some(array) if array.data_type() == &DataType::Null => Some(0),
-            Some(_) => thresholds.map(|array| if array.is_valid(i) { array.value(i) } else { 0 }),
+            Some(array) if array.data_type() == &DataType::Null => return None,
+            Some(_) => {
+                let arr = thresholds.unwrap();
+                if !arr.is_valid(i) {
+                    return None;
+                }
+                Some(arr.value(i))
+            }
             None => None,
         };
         compute_levenshtein(
@@ -636,7 +644,7 @@ mod test {
         let s = r.into_array(6)?;
         assert_eq!(
             as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some(-1), Some(3), Some(0), Some(-1), Some(3), Some(-1)]
+            vec![Some(-1), Some(3), Some(0), None, Some(3), Some(-1)]
         );
 
         let r = spark_levenshtein(&vec![
@@ -651,7 +659,7 @@ mod test {
         let s = r.into_array(1)?;
         assert_eq!(
             as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
-            vec![Some(-1)]
+            vec![None]
         );
         Ok(())
     }
@@ -684,8 +692,8 @@ mod test {
             ColumnarValue::Scalar(ScalarValue::Null),
         ])?;
         match r {
-            ColumnarValue::Scalar(ScalarValue::Int32(Some(-1))) => {}
-            other => df_execution_err!("Expected Int32(-1) scalar, got: {:?}", other)?,
+            ColumnarValue::Scalar(ScalarValue::Int32(None)) => {}
+            other => df_execution_err!("Expected null Int32 scalar, got: {:?}", other)?,
         }
 
         let r = spark_levenshtein(&vec![
