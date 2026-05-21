@@ -46,6 +46,7 @@ jobs:
     with:
       sparkver: spark-3.1
       hadoop-profile: 'hadoop2.7'
+      sparktests: 'true'
 
   test-spark-32:
     name: Test spark-3.2
@@ -53,6 +54,7 @@ jobs:
     with:
       sparkver: spark-3.2
       hadoop-profile: 'hadoop2.7'
+      sparktests: 'true'
 
   test-spark-33:
     name: Test spark-3.3
@@ -60,7 +62,7 @@ jobs:
     with:
       sparkver: spark-3.3
       hadoop-profile: 'hadoop3'
-      sparktests: true
+      sparktests: 'true'
 
   test-spark-34-jdk11:
     name: Test spark-3.4
@@ -69,6 +71,7 @@ jobs:
       sparkver: spark-3.4
       javaver: '11'
       hadoop-profile: 'hadoop3'
+      sparktests: 'true'
 
   test-spark-35-jdk17-scala-2-13:
     name: Test spark-3.5 JDK17 Scala-2.13
@@ -78,6 +81,7 @@ jobs:
       javaver: '17'
       scalaver: '2.13'
       hadoop-profile: 'hadoop3'
+      sparktests: 'true'
 
   test-spark-35-jdk21-scala-2-13:
     name: Test spark-3.5 JDK21 Scala-2.13
@@ -87,6 +91,7 @@ jobs:
       javaver: '21'
       scalaver: '2.13'
       hadoop-profile: 'hadoop3'
+      sparktests: 'true'
 
   test-spark-40-jdk21-scala-2-13:
     name: Test spark-4.0 JDK21 Scala-2.13
@@ -96,6 +101,7 @@ jobs:
       javaver: '21'
       scalaver: '2.13'
       hadoop-profile: 'hadoop3'
+      sparktests: 'true'
 
   test-spark-41-jdk21-scala-2-13:
     name: Test spark-4.1 JDK21 Scala-2.13
@@ -105,3 +111,4 @@ jobs:
       javaver: '21'
       scalaver: '2.13'
       hadoop-profile: 'hadoop3'
+      sparktests: 'true'
