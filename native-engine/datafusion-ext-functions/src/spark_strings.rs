@@ -249,13 +249,10 @@ pub fn spark_levenshtein(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let result = Int32Array::from_iter((0..array_len).map(|i| {
         let threshold = match &threshold_array {
             Some(array) if array.data_type() == &DataType::Null => return None,
-            Some(_) => {
-                let arr = thresholds.unwrap();
-                if !arr.is_valid(i) {
-                    return None;
-                }
-                Some(arr.value(i))
-            }
+            Some(_) => match thresholds {
+                Some(arr) if arr.is_valid(i) => Some(arr.value(i)),
+                _ => return None,
+            },
             None => None,
         };
         compute_levenshtein(
