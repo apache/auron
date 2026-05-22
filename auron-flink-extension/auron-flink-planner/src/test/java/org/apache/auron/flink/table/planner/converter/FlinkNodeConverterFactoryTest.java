@@ -27,6 +27,8 @@ import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -141,6 +143,22 @@ class FlinkNodeConverterFactoryTest {
     void testGetConverterAbsent() {
         Optional<FlinkNodeConverter<?>> found = factory.getConverter(RexLiteral.class);
         assertFalse(found.isPresent());
+    }
+
+    @Test
+    void testSingletonHasBuiltInRexConvertersRegistered() {
+        FlinkNodeConverterFactory singleton = FlinkNodeConverterFactory.getInstance();
+
+        Optional<FlinkNodeConverter<?>> inputRefConverter = singleton.getConverter(RexInputRef.class);
+        Optional<FlinkNodeConverter<?>> literalConverter = singleton.getConverter(RexLiteral.class);
+        Optional<FlinkNodeConverter<?>> callConverter = singleton.getConverter(RexCall.class);
+
+        assertTrue(inputRefConverter.isPresent());
+        assertTrue(literalConverter.isPresent());
+        assertTrue(callConverter.isPresent());
+        assertTrue(inputRefConverter.get() instanceof RexInputRefConverter);
+        assertTrue(literalConverter.get() instanceof RexLiteralConverter);
+        assertTrue(callConverter.get() instanceof RexCallConverter);
     }
 
     // ---- Test stubs ----
