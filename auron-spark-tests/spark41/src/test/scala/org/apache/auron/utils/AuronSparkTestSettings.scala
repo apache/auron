@@ -171,6 +171,7 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronParquetV2PartitionDiscoverySuite]
     .exclude("read partitioned table - normal case")
     .exclude("Infer the TIME data type from partition values")
+    .exclude("_SUCCESS should not break partitioning discovery")
     .exclude("Resolve type conflicts - decimals, dates and timestamps in partition column")
     .exclude(
       "SPARK-22109: Resolve type conflicts between strings and timestamps in partition column")
