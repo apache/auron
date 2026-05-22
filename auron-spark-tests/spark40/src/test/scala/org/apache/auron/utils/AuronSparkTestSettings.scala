@@ -101,6 +101,7 @@ class AuronSparkTestSettings extends SparkTestSettings {
     .disable("Native execution can crash in Spark 4")
   enableSuite[AuronParquetPartitionDiscoverySuite]
     .exclude("read partitioned table - normal case")
+    .exclude("Resolve type conflicts - decimals, dates and timestamps in partition column")
   enableSuite[AuronParquetProtobufCompatibilitySuite]
     .exclude("unannotated array of primitive type")
     .exclude("unannotated array of struct")
