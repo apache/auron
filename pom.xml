@@ -52,6 +52,7 @@
     <bytebuddyVersion>1.14.11</bytebuddyVersion>
     <hadoopVersion>3.4.3</hadoopVersion>
     <protobufVersion>3.25.5</protobufVersion>
+    <parquetVersion>1.16.0</parquetVersion>
     <nettyVersion>4.2.7.Final</nettyVersion>
     <javaVersion>8</javaVersion>
     <maven.compiler.source>${javaVersion}</maven.compiler.source>
@@ -812,6 +813,7 @@
         <shimName>spark-3.0</shimName>
         <scalaTestVersion>3.0.8</scalaTestVersion>
         <sparkVersion>3.0.3</sparkVersion>
+        <parquetVersion>1.10.1</parquetVersion>
         <shortSparkVersion>3.0</shortSparkVersion>
         <nettyVersion>4.1.47.Final</nettyVersion>
       </properties>
@@ -849,6 +851,7 @@
         <shimName>spark-3.1</shimName>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.1.3</sparkVersion>
+        <parquetVersion>1.10.1</parquetVersion>
         <shortSparkVersion>3.1</shortSparkVersion>
         <nettyVersion>4.1.51.Final</nettyVersion>
       </properties>
@@ -886,6 +889,7 @@
         <shimName>spark-3.2</shimName>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.2.4</sparkVersion>
+        <parquetVersion>1.12.2</parquetVersion>
         <shortSparkVersion>3.2</shortSparkVersion>
         <nettyVersion>4.1.68.Final</nettyVersion>
       </properties>
@@ -923,6 +927,7 @@
         <shimName>spark-3.3</shimName>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.3.4</sparkVersion>
+        <parquetVersion>1.12.2</parquetVersion>
         <shortSparkVersion>3.3</shortSparkVersion>
         <nettyVersion>4.1.74.Final</nettyVersion>
       </properties>
@@ -960,6 +965,7 @@
         <shimName>spark-3.4</shimName>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.4.4</sparkVersion>
+        <parquetVersion>1.12.3</parquetVersion>
         <shortSparkVersion>3.4</shortSparkVersion>
         <nettyVersion>4.1.87.Final</nettyVersion>
         <icebergVersion>1.10.1</icebergVersion>
@@ -998,6 +1004,7 @@
         <shimName>spark-3.5</shimName>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>3.5.8</sparkVersion>
+        <parquetVersion>1.13.1</parquetVersion>
         <shortSparkVersion>3.5</shortSparkVersion>
         <nettyVersion>4.1.96.Final</nettyVersion>
         <icebergVersion>1.10.1</icebergVersion>
@@ -1036,6 +1043,7 @@
         <shimName>spark-4.0</shimName>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>4.0.2</sparkVersion>
+        <parquetVersion>1.15.2</parquetVersion>
         <shortSparkVersion>4.0</shortSparkVersion>
         <nettyVersion>4.1.111.Final</nettyVersion>
         <icebergVersion>1.10.1</icebergVersion>
@@ -1094,6 +1102,7 @@
         <shimName>spark-4.1</shimName>
         <scalaTestVersion>3.2.9</scalaTestVersion>
         <sparkVersion>4.1.1</sparkVersion>
+        <parquetVersion>1.16.0</parquetVersion>
         <shortSparkVersion>4.1</shortSparkVersion>
         <nettyVersion>4.1.118.Final</nettyVersion>
       </properties>
