@@ -377,9 +377,13 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         void close();
     }
 
-    /** Factory for {@link NativeRuntime} instances, swappable in tests. */
+    /**
+     * Factory for {@link NativeRuntime} instances, swappable in tests. Extends {@link
+     * java.io.Serializable} because the field that holds an instance is part of the operator and
+     * Flink serializes operators to dispatch them to TaskManagers.
+     */
     @VisibleForTesting
-    interface NativeRuntimeFactory {
+    interface NativeRuntimeFactory extends java.io.Serializable {
         /**
          * Creates a native runtime for the given plan.
          *
