@@ -53,6 +53,16 @@ public class FlinkAuronConfiguration extends AuronConfiguration {
                     + "the Flink engine for execution?")
             .withDefaultValue(true);
 
+    /**
+     * Whether the native execution context records per-batch input statistics for monitoring.
+     * Queried by the native engine on every Auron-native operator path; the field must exist
+     * on this class so the JniBridge reflection lookup does not NPE.
+     */
+    public static final ConfigOption<Boolean> INPUT_BATCH_STATISTICS_ENABLE = new ConfigOption<>(Boolean.class)
+            .withKey("auron.input.batch.statistics.enable")
+            .withDescription("Enable collection of additional metrics for input batch statistics.")
+            .withDefaultValue(false);
+
     private final Configuration flinkConfig;
 
     public FlinkAuronConfiguration() {
