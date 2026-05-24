@@ -268,7 +268,7 @@ class StreamExecCalcTest {
 
         assertSame(stub, result, "Schema conversion failure must trigger fallback");
         assertEquals(1, node.fallbackCount);
-        assertEquals(1, StreamExecCalc.peekWarnEmitCountForTest());
+        assertEquals(1, invokeStaticInt(StreamExecCalc.class, "peekWarnEmitCountForTest"));
     }
 
     // =====================================================================
@@ -331,7 +331,7 @@ class StreamExecCalcTest {
         wireFakeUpstream(b, TWO_INT_ROW);
         invokeTranslate(b);
 
-        assertEquals(1, StreamExecCalc.peekWarnEmitCountForTest());
+        assertEquals(1, invokeStaticInt(StreamExecCalc.class, "peekWarnEmitCountForTest"));
     }
 
     /** Contract: two Calcs falling back on different unsupported RexNode classes emit two
@@ -362,7 +362,7 @@ class StreamExecCalcTest {
         wireFakeUpstream(b, TWO_INT_ROW);
         invokeTranslate(b);
 
-        assertEquals(2, StreamExecCalc.peekWarnEmitCountForTest());
+        assertEquals(2, invokeStaticInt(StreamExecCalc.class, "peekWarnEmitCountForTest"));
     }
 
     // =====================================================================
@@ -507,6 +507,12 @@ class StreamExecCalcTest {
         m.invoke(null);
     }
 
+    private static int invokeStaticInt(Class<?> cls, String methodName) throws Exception {
+        Method m = cls.getDeclaredMethod(methodName);
+        m.setAccessible(true);
+        return (int) m.invoke(null);
+    }
+
     // =====================================================================
     // Test subclass: capture the fallback delegation
     // =====================================================================
@@ -529,7 +535,9 @@ class StreamExecCalcTest {
             this.fallbackStub = fallbackStub;
         }
 
-        @Override
+        // No @Override: javac on some classpaths resolves StreamExecCalc to Flink's stock
+        // class (which lacks translateToFlinkCalc). Runtime virtual dispatch still routes
+        // the shadow's call here because the loaded StreamExecCalc is our shadow.
         protected Transformation<RowData> translateToFlinkCalc(PlannerBase planner, ExecNodeConfig config) {
             fallbackCount++;
             return fallbackStub;
