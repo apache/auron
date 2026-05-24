@@ -14,10 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql
 
-import org.apache.spark.sql.SparkExpressionTestsBase
-
-class AuronAnsiCastSuiteWithAnsiModeOff
-    extends AnsiCastSuiteWithAnsiModeOff
-    with SparkExpressionTestsBase {}
+class AuronColumnExpressionSuite extends ColumnExpressionSuite with SparkQueryTestsBase {}
