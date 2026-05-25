@@ -16,12 +16,14 @@
  */
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
 
+import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
@@ -68,6 +70,14 @@ import org.slf4j.LoggerFactory;
  * {@link FlinkAuronConfiguration#FAIL_BACK_FLINK_ENGINE_ENABLED} is {@code true}, the default) or
  * throws {@link IllegalStateException}.
  *
+ * <p>Activation observability: the first time {@link #translateToPlanInternal} is invoked per JVM,
+ * an INFO log line {@code "Auron StreamExecCalc shadow active"} is emitted with the class's code
+ * source. Absence of this log under SQL load indicates that {@code auron-flink-planner} is not
+ * classpath-ordered ahead of {@code flink-table-planner} and Flink's stock {@code StreamExecCalc}
+ * is being resolved instead — Auron's Calc rewriter is then silently inactive. Setting
+ * {@link FlinkAuronConfiguration#FAIL_BACK_FLINK_ENGINE_ENABLED} to {@code false} provides a
+ * stricter complementary signal: per-Calc conversion failures throw rather than fall back.
+ *
  * <p>Per-fallback observability: the first time a given unsupported {@link RexNode} class is seen
  * (per planner thread), a WARN log line is emitted naming the failing node ID and the unsupported
  * class so users can grep for missing converter coverage. Subsequent fallbacks on the same
@@ -97,6 +107,13 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
      * SLF4J binding configuration.
      */
     private static final ThreadLocal<int[]> WARN_EMIT_COUNT = ThreadLocal.withInitial(() -> new int[1]);
+
+    /**
+     * One-shot guard for the activation INFO log so a busy planner doesn't repeat the line per
+     * Calc submission. Static-scoped (per JVM) because the activation signal is JVM-wide, unlike
+     * the per-planner-thread dedup used for fallback WARNs.
+     */
+    private static final AtomicBoolean ACTIVATION_LOGGED = new AtomicBoolean(false);
 
     /**
      * Constructs a stream Calc node. Matches Flink's stock {@code StreamExecCalc} primary
@@ -169,6 +186,7 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
     @Override
     @SuppressWarnings("unchecked")
     protected Transformation<RowData> translateToPlanInternal(PlannerBase planner, ExecNodeConfig config) {
+        logActivationOnce();
         final Transformation<RowData> upstream =
                 (Transformation<RowData>) getInputEdges().get(0).translateToPlan(planner);
         final RowType inputRowType = (RowType) getInputEdges().get(0).getOutputType();
@@ -297,6 +315,21 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
                     t.getClass().getName(),
                     t);
             return Optional.empty();
+        }
+    }
+
+    /**
+     * Emits the activation INFO log on the first call per JVM. Subsequent calls are no-ops. The
+     * code-source location is included to help diagnose classpath-ordering mistakes — if this log
+     * appears but points at an unexpected JAR, that JAR is what Flink resolved as
+     * {@code StreamExecCalc}.
+     */
+    private static void logActivationOnce() {
+        if (ACTIVATION_LOGGED.compareAndSet(false, true)) {
+            final CodeSource cs = StreamExecCalc.class.getProtectionDomain().getCodeSource();
+            LOG.info(
+                    "Auron StreamExecCalc shadow active (loaded from {}).",
+                    cs != null ? cs.getLocation() : "<unknown source>");
         }
     }
 
