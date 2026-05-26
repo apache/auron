@@ -18,9 +18,12 @@ package org.apache.auron.jni;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FSInputStream;
@@ -43,20 +46,30 @@ public class JniBridgeTest {
     }
 
     @Test
-    public void testFileWrappersHandleReadUriAndWriteRawPercentPaths() throws Exception {
-        String readPath = "file:/tmp/t1/part=test%2520test/part-00000.parquet";
-        String writePath = "file:/tmp/t1/part=test%20test/part-00001.parquet";
+    public void testFileWrappersPreserveNormalizedPercentPathStrings() throws Exception {
+        String path = "file:/tmp/t1/part=test%20test/part-00000.parquet";
         CapturingFileSystem cfs = new CapturingFileSystem();
 
-        JniBridge.openFileAsDataInputWrapper(cfs, readPath).close();
-        JniBridge.createFileAsDataOutputWrapper(cfs, writePath).close();
+        JniBridge.openFileAsDataInputWrapper(cfs, path).close();
+        JniBridge.createFileAsDataOutputWrapper(cfs, path).close();
 
         assertEquals(
                 "/tmp/t1/part=test%20test/part-00000.parquet",
                 cfs.openedPath.toUri().getPath());
         assertEquals(
-                "/tmp/t1/part=test%20test/part-00001.parquet",
+                "/tmp/t1/part=test%20test/part-00000.parquet",
                 cfs.createdPath.toUri().getPath());
+    }
+
+    @Test
+    public void testHadoopPathUriAcceptsFilePathWithSpace() throws Exception {
+        String path = "file:/tmp/t1/part=test test/part-00000.parquet";
+
+        assertThrows(URISyntaxException.class, () -> new URI(path));
+        assertEquals("file", new Path(path).toUri().getScheme());
+        assertEquals(
+                "/tmp/t1/part=test test/part-00000.parquet",
+                new Path(path).toUri().getPath());
     }
 
     private static void assertPathPreservesHash(Path path) {
