@@ -19,11 +19,12 @@ package org.apache.flink.table.planner.plan.nodes.exec.stream;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
@@ -79,9 +80,9 @@ import org.slf4j.LoggerFactory;
  * stricter complementary signal: per-Calc conversion failures throw rather than fall back.
  *
  * <p>Per-fallback observability: the first time a given unsupported {@link RexNode} class is seen
- * (per planner thread), a WARN log line is emitted naming the failing node ID and the unsupported
- * class so users can grep for missing converter coverage. Subsequent fallbacks on the same
- * {@link RexNode} class are silent to avoid log spam.
+ * (per JVM), a WARN log line is emitted naming the failing node ID and the unsupported class so
+ * users can grep for missing converter coverage. Subsequent fallbacks on the same {@link RexNode}
+ * class are silent to avoid log spam.
  */
 @ExecNodeMetadata(
         name = "stream-exec-calc",
@@ -94,24 +95,22 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
 
     /**
      * Dedup set for the per-fallback WARN. A given unsupported {@link RexNode} class is logged at
-     * most once per planner thread; reused across submissions because the next submission only
-     * adds noise if a brand-new class shows up. ThreadLocal keeps the bookkeeping off the static
-     * mutable state path (planner threads in session clusters are reused).
+     * most once per JVM and reused across submissions because the next submission only adds noise
+     * if a brand-new class shows up. Bounded by the small finite set of {@link RexNode}
+     * subclasses Flink can generate.
      */
-    private static final ThreadLocal<Set<Class<? extends RexNode>>> WARN_DEDUP = ThreadLocal.withInitial(HashSet::new);
+    private static final Set<Class<? extends RexNode>> WARN_DEDUP = ConcurrentHashMap.newKeySet();
 
     /**
-     * Per-thread counter incremented every time a WARN log line is actually emitted (i.e. the
-     * fallback class was new in the dedup set). Tests inspect this through {@link
-     * #peekWarnEmitCountForTest()} to assert dedup behavior without depending on a particular
-     * SLF4J binding configuration.
+     * Counter incremented every time a WARN log line is actually emitted (i.e. the fallback class
+     * was new in the dedup set). Tests inspect this through {@link #peekWarnEmitCountForTest()}
+     * to assert dedup behavior without depending on a particular SLF4J binding configuration.
      */
-    private static final ThreadLocal<int[]> WARN_EMIT_COUNT = ThreadLocal.withInitial(() -> new int[1]);
+    private static final AtomicInteger WARN_EMIT_COUNT = new AtomicInteger();
 
     /**
      * One-shot guard for the activation INFO log so a busy planner doesn't repeat the line per
-     * Calc submission. Static-scoped (per JVM) because the activation signal is JVM-wide, unlike
-     * the per-planner-thread dedup used for fallback WARNs.
+     * Calc submission.
      */
     private static final AtomicBoolean ACTIVATION_LOGGED = new AtomicBoolean(false);
 
@@ -308,7 +307,7 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
                     PhysicalPlanNode.newBuilder().setProjection(proj.build()).build());
 
         } catch (Throwable t) {
-            WARN_EMIT_COUNT.get()[0]++;
+            WARN_EMIT_COUNT.incrementAndGet();
             LOG.warn(
                     "Auron StreamExecCalc fallback (node {}): plan composition threw {}; using Flink CodeGen Calc.",
                     getId(),
@@ -334,12 +333,12 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
     }
 
     /**
-     * Logs a WARN line on the first occurrence of each unsupported {@link RexNode} class per
-     * planner thread. Subsequent occurrences are silent.
+     * Logs a WARN line on the first occurrence of each unsupported {@link RexNode} class per JVM.
+     * Subsequent occurrences are silent.
      */
     private void recordFallback(Class<? extends RexNode> unsupportedRexClass) {
-        if (WARN_DEDUP.get().add(unsupportedRexClass)) {
-            WARN_EMIT_COUNT.get()[0]++;
+        if (WARN_DEDUP.add(unsupportedRexClass)) {
+            WARN_EMIT_COUNT.incrementAndGet();
             LOG.warn(
                     "Auron StreamExecCalc fallback (node {}): unsupported RexNode {}; using Flink CodeGen Calc.",
                     getId(),
@@ -347,16 +346,17 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
         }
     }
 
-    /** Test seam: clears the per-thread dedup set and emit counter so independent tests do not
-     * share state. */
+    /** Test seam: clears the dedup set and emit counter so independent tests do not share state. */
     static void resetWarnDedupForTest() {
-        WARN_DEDUP.get().clear();
-        WARN_EMIT_COUNT.get()[0] = 0;
+        WARN_DEDUP.clear();
+        WARN_EMIT_COUNT.set(0);
     }
 
-    /** Test seam: returns the number of WARN log lines actually emitted on the current thread
-     * since the last {@link #resetWarnDedupForTest()}. */
+    /**
+     * Test seam: returns the number of WARN log lines actually emitted since the last
+     * {@link #resetWarnDedupForTest()}.
+     */
     static int peekWarnEmitCountForTest() {
-        return WARN_EMIT_COUNT.get()[0];
+        return WARN_EMIT_COUNT.get();
     }
 }
