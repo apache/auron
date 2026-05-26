@@ -271,36 +271,121 @@ fn compute_levenshtein(
 ) -> Option<i32> {
     let left = left?;
     let right = right?;
+
+    if matches!(threshold, Some(t) if t < 0) {
+        return Some(-1);
+    }
+
     let distance = if left == right {
         0
     } else {
         let left_chars = left.chars().collect::<Vec<_>>();
         let right_chars = right.chars().collect::<Vec<_>>();
-        if left_chars.is_empty() {
-            right_chars.len() as i32
-        } else if right_chars.is_empty() {
-            left_chars.len() as i32
-        } else {
-            let mut previous = (0..=right_chars.len()).collect::<Vec<_>>();
-            let mut current = vec![0; right_chars.len() + 1];
-
-            for (i, left_char) in left_chars.iter().enumerate() {
-                current[0] = i + 1;
-                for (j, right_char) in right_chars.iter().enumerate() {
-                    let substitution_cost = usize::from(left_char != right_char);
-                    current[j + 1] = (current[j] + 1)
-                        .min(previous[j + 1] + 1)
-                        .min(previous[j] + substitution_cost);
-                }
-                std::mem::swap(&mut previous, &mut current);
-            }
-            previous[right_chars.len()] as i32
+        match threshold.and_then(|threshold| usize::try_from(threshold).ok()) {
+            Some(threshold) => limited_levenshtein_distance(&left_chars, &right_chars, threshold),
+            None => unlimited_levenshtein_distance(&left_chars, &right_chars),
         }
     };
     Some(match threshold {
         Some(threshold) if distance > threshold => -1,
         _ => distance,
     })
+}
+
+fn unlimited_levenshtein_distance(left_chars: &[char], right_chars: &[char]) -> i32 {
+    if left_chars.is_empty() {
+        return right_chars.len() as i32;
+    }
+    if right_chars.is_empty() {
+        return left_chars.len() as i32;
+    }
+
+    let right_len = right_chars.len();
+    let mut previous = (0..=right_len).collect::<Vec<_>>();
+    let mut current = vec![0; right_len + 1];
+
+    for (i, left_char) in left_chars.iter().enumerate() {
+        current[0] = i + 1;
+        for (j, right_char) in right_chars.iter().enumerate() {
+            let substitution_cost = usize::from(left_char != right_char);
+            current[j + 1] = (current[j] + 1)
+                .min(previous[j + 1] + 1)
+                .min(previous[j] + substitution_cost);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    previous[right_len] as i32
+}
+
+fn limited_levenshtein_distance(
+    left_chars: &[char],
+    right_chars: &[char],
+    threshold: usize,
+) -> i32 {
+    if left_chars.len().abs_diff(right_chars.len()) > threshold {
+        return -1;
+    }
+    if left_chars.is_empty() {
+        return if right_chars.len() > threshold {
+            -1
+        } else {
+            right_chars.len() as i32
+        };
+    }
+    if right_chars.is_empty() {
+        return if left_chars.len() > threshold {
+            -1
+        } else {
+            left_chars.len() as i32
+        };
+    }
+
+    let right_len = right_chars.len();
+    let out_of_band = threshold + 1;
+    let mut previous = vec![out_of_band; right_len + 1];
+    let mut current = vec![out_of_band; right_len + 1];
+
+    for j in 0..=right_len.min(threshold) {
+        previous[j] = j;
+    }
+
+    for (i, left_char) in left_chars.iter().enumerate() {
+        let row = i + 1;
+        let min = row.saturating_sub(threshold).max(1);
+        let max = right_len.min(row.saturating_add(threshold));
+
+        if min == 1 {
+            current[0] = row.min(out_of_band);
+        } else {
+            current[min - 1] = out_of_band;
+        }
+
+        let mut row_min = out_of_band;
+        for column in min..=max {
+            let substitution_cost = usize::from(left_char != &right_chars[column - 1]);
+            current[column] = (current[column - 1] + 1)
+                .min(previous[column] + 1)
+                .min(previous[column - 1] + substitution_cost)
+                .min(out_of_band);
+            row_min = row_min.min(current[column]);
+        }
+
+        if max < right_len {
+            current[max + 1] = out_of_band;
+        }
+        if row_min > threshold {
+            return -1;
+        }
+
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    if previous[right_len] > threshold {
+        -1
+    } else {
+        previous[right_len] as i32
+    }
 }
 
 /// concat() function compatible with spark (returns null if any param is null)
