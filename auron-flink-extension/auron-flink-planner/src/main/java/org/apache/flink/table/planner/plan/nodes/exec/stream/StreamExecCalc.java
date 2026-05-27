@@ -21,10 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
@@ -92,21 +89,6 @@ import org.slf4j.LoggerFactory;
 public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<RowData> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StreamExecCalc.class);
-
-    /**
-     * Dedup set for the per-fallback WARN. A given unsupported {@link RexNode} class is logged at
-     * most once per JVM and reused across submissions because the next submission only adds noise
-     * if a brand-new class shows up. Bounded by the small finite set of {@link RexNode}
-     * subclasses Flink can generate.
-     */
-    private static final Set<Class<? extends RexNode>> WARN_DEDUP = ConcurrentHashMap.newKeySet();
-
-    /**
-     * Counter incremented every time a WARN log line is actually emitted (i.e. the fallback class
-     * was new in the dedup set). Tests inspect this through {@link #peekWarnEmitCountForTest()}
-     * to assert dedup behavior without depending on a particular SLF4J binding configuration.
-     */
-    private static final AtomicInteger WARN_EMIT_COUNT = new AtomicInteger();
 
     /**
      * One-shot guard for the activation INFO log so a busy planner doesn't repeat the line per
@@ -307,7 +289,7 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
                     PhysicalPlanNode.newBuilder().setProjection(proj.build()).build());
 
         } catch (Throwable t) {
-            WARN_EMIT_COUNT.incrementAndGet();
+            StreamExecCalcWarnState.recordCompositionFailure();
             LOG.warn(
                     "Auron StreamExecCalc fallback (node {}): plan composition threw {}; using Flink CodeGen Calc.",
                     getId(),
@@ -337,26 +319,11 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
      * Subsequent occurrences are silent.
      */
     private void recordFallback(Class<? extends RexNode> unsupportedRexClass) {
-        if (WARN_DEDUP.add(unsupportedRexClass)) {
-            WARN_EMIT_COUNT.incrementAndGet();
+        if (StreamExecCalcWarnState.recordFallback(unsupportedRexClass)) {
             LOG.warn(
                     "Auron StreamExecCalc fallback (node {}): unsupported RexNode {}; using Flink CodeGen Calc.",
                     getId(),
                     unsupportedRexClass.getName());
         }
-    }
-
-    /** Test seam: clears the dedup set and emit counter so independent tests do not share state. */
-    static void resetWarnDedupForTest() {
-        WARN_DEDUP.clear();
-        WARN_EMIT_COUNT.set(0);
-    }
-
-    /**
-     * Test seam: returns the number of WARN log lines actually emitted since the last
-     * {@link #resetWarnDedupForTest()}.
-     */
-    static int peekWarnEmitCountForTest() {
-        return WARN_EMIT_COUNT.get();
     }
 }

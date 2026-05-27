@@ -99,7 +99,7 @@ class StreamExecCalcTest {
         // Reset id counter so getId()-derived strings are reproducible across tests.
         ExecNodeContext.resetIdCounter();
         // Reset the per-fallback WARN dedup so each test starts from a clean slate.
-        invokeStatic(StreamExecCalc.class, "resetWarnDedupForTest");
+        StreamExecCalcWarnState.resetForTest();
 
         tableConfig = TableConfig.getDefault();
         inputProperty = InputProperty.DEFAULT;
@@ -268,7 +268,7 @@ class StreamExecCalcTest {
 
         assertSame(stub, result, "Schema conversion failure must trigger fallback");
         assertEquals(1, node.fallbackCount);
-        assertEquals(1, invokeStaticInt(StreamExecCalc.class, "peekWarnEmitCountForTest"));
+        assertEquals(1, StreamExecCalcWarnState.peekEmitCount());
     }
 
     // =====================================================================
@@ -331,7 +331,7 @@ class StreamExecCalcTest {
         wireFakeUpstream(b, TWO_INT_ROW);
         invokeTranslate(b);
 
-        assertEquals(1, invokeStaticInt(StreamExecCalc.class, "peekWarnEmitCountForTest"));
+        assertEquals(1, StreamExecCalcWarnState.peekEmitCount());
     }
 
     /** Contract: two Calcs falling back on different unsupported RexNode classes emit two
@@ -362,7 +362,7 @@ class StreamExecCalcTest {
         wireFakeUpstream(b, TWO_INT_ROW);
         invokeTranslate(b);
 
-        assertEquals(2, invokeStaticInt(StreamExecCalc.class, "peekWarnEmitCountForTest"));
+        assertEquals(2, StreamExecCalcWarnState.peekEmitCount());
     }
 
     // =====================================================================
@@ -499,18 +499,6 @@ class StreamExecCalcTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private static void invokeStatic(Class<?> cls, String methodName) throws Exception {
-        Method m = cls.getDeclaredMethod(methodName);
-        m.setAccessible(true);
-        m.invoke(null);
-    }
-
-    private static int invokeStaticInt(Class<?> cls, String methodName) throws Exception {
-        Method m = cls.getDeclaredMethod(methodName);
-        m.setAccessible(true);
-        return (int) m.invoke(null);
     }
 
     // =====================================================================
