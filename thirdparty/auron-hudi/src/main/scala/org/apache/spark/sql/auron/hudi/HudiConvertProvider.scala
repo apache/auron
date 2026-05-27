@@ -27,17 +27,22 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class HudiConvertProvider extends AuronConvertProvider with Logging {
 
-  override def isEnabled: Boolean = {
-    val sparkVersion = org.apache.spark.SPARK_VERSION
-    val versionParts = sparkVersion.split("[\\.-]", 3)
-    val maybeMajor = versionParts.headOption.flatMap(part => Try(part.toInt).toOption)
-    val maybeMinor =
-      if (versionParts.length >= 2) Try(versionParts(1).toInt).toOption else None
-    val supported = (for {
-      major <- maybeMajor
-      minor <- maybeMinor
-    } yield major == 3 && minor >= 0 && minor <= 5).getOrElse(false)
-    SparkAuronConfiguration.ENABLE_HUDI_SCAN.get() && supported
+  override def isEnabled(exec: SparkPlan): Boolean = {
+    exec match {
+      case _: FileSourceScanExec =>
+        // Only handle Hudi-backed file scans; other scans fall through.
+        val sparkVersion = org.apache.spark.SPARK_VERSION
+        val versionParts = sparkVersion.split("[\\.-]", 3)
+        val maybeMajor = versionParts.headOption.flatMap(part => Try(part.toInt).toOption)
+        val maybeMinor =
+          if (versionParts.length >= 2) Try(versionParts(1).toInt).toOption else None
+        val supported = (for {
+          major <- maybeMajor
+          minor <- maybeMinor
+        } yield major == 3 && minor >= 0 && minor <= 5).getOrElse(false)
+        SparkAuronConfiguration.ENABLE_HUDI_SCAN.get() && supported
+      case _ => false
+    }
   }
 
   override def isSupported(exec: SparkPlan): Boolean = {

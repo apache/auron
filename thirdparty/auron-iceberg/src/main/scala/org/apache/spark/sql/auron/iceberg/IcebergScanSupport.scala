@@ -49,32 +49,31 @@ object IcebergScanSupport extends Logging {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
-    if (!AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan)) {
-      return None
-    }
+    assert(
+      AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan),
+      "Not iceberg scans.")
 
     val readSchema = scan.readSchema
     val unsupportedMetadataColumns = collectUnsupportedMetadataColumns(readSchema)
     // Native scan can project file-level metadata columns such as _file and _spec_id
     // via partition values.
     // Metadata columns that require per-row materialization (for example _pos) still fallback.
-    if (unsupportedMetadataColumns.nonEmpty) {
-      return None
-    }
+    assert(
+      !(unsupportedMetadataColumns.nonEmpty),
+      "Has per-row materialization (for example _pos).")
 
     val fileSchema = StructType(readSchema.fields.filterNot(isSupportedMetadataColumn))
     // Supported metadata columns are materialized via per-file constant values rather than
     // read from the Iceberg data file payload.
     val partitionSchema = StructType(readSchema.fields.filter(isSupportedMetadataColumn))
 
-    if (!fileSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType))) {
-      return None
-    }
+    assert(
+      fileSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
+      "Has unsupported Iceberg data-file schema type.")
 
-    if (!partitionSchema.fields.forall(field =>
-        NativeConverters.isTypeSupported(field.dataType))) {
-      return None
-    }
+    assert(
+      partitionSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
+      "Has unsupported schema type.")
 
     val partitions = inputPartitions(exec)
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
@@ -92,27 +91,25 @@ object IcebergScanSupport extends Logging {
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
     // All partitions must be Iceberg SparkInputPartition; otherwise fallback.
-    if (icebergPartitions.size != partitions.size) {
-      return None
-    }
+    assert(
+      icebergPartitions.size == partitions.size,
+      "All partitions must be Iceberg SparkInputPartition.")
 
     val fileTasks = icebergPartitions.flatMap(_.fileTasks)
 
     // Native scan does not apply delete files; only allow pure data files (COW).
-    if (!fileTasks.forall(task => task.deletes() == null || task.deletes().isEmpty)) {
-      return None
-    }
+    assert(
+      fileTasks.forall(task => task.deletes() == null || task.deletes().isEmpty),
+      "Not iceberg cow table.")
 
     // Native scan handles a single file format; mixed formats must fallback.
     val formats = fileTasks.map(_.file().format()).distinct
-    if (formats.size > 1) {
-      return None
-    }
+    assert(!(formats.size > 1), "Not all data file format is a single file format.")
 
     val format = formats.headOption.getOrElse(FileFormat.PARQUET)
-    if (format != FileFormat.PARQUET && format != FileFormat.ORC) {
-      return None
-    }
+    assert(
+      !(format != FileFormat.PARQUET && format != FileFormat.ORC),
+      "Only support parquet or orc.")
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
     Some(
@@ -198,9 +195,9 @@ object IcebergScanSupport extends Logging {
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
     // Only accept Iceberg SparkInputPartition to access task groups.
-    if (!AuronIcebergSourceUtil.getClassOfSparkInputPartition().isInstance(partition)) {
-      return None
-    }
+    assert(
+      AuronIcebergSourceUtil.getClassOfSparkInputPartition().isInstance(partition),
+      "Not iceberg scans.")
 
     try {
       // SparkInputPartition is package-private; use reflection to read its task group.

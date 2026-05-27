@@ -63,13 +63,27 @@ RUN curl https://sh.rustup.rs -sSf -o rustup-init && \
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # ---------------------------------------------------------------------
-# Install Java (OpenJDK 8)
+# Install Java (OpenJDK 8, 17, and 21)
 # ---------------------------------------------------------------------
-RUN dnf -y install java-1.8.0-openjdk java-1.8.0-openjdk-devel && \
+RUN dnf -y install java-1.8.0-openjdk java-1.8.0-openjdk-devel \
+                   java-17-openjdk java-17-openjdk-devel \
+                   java-21-openjdk java-21-openjdk-devel && \
     dnf clean all && \
     rm -rf /var/cache/dnf
-ENV JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"
+
+# Create stable symlinks for JDK paths
+RUN ln -sfn /usr/lib/jvm/java-1.8.0-openjdk /usr/lib/jvm/java-8 && \
+    ln -sfn /usr/lib/jvm/java-17-openjdk /usr/lib/jvm/java-17 && \
+    ln -sfn /usr/lib/jvm/java-21-openjdk /usr/lib/jvm/java-21
+
+ENV JAVA_HOME="/usr/lib/jvm/java-8"
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+# Entrypoint script to switch JDK at runtime based on AURON_JAVA_VERSION env var
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # ---------------------------------------------------------------------
 # Set working directory

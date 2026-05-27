@@ -567,6 +567,10 @@ if [[ "$USE_DOCKER" == true ]]; then
     echo "[INFO] Compiling inside Docker container..."
     export AURON_BUILD_ARGS="${BUILD_ARGS[*]}"
     export BUILD_CONTEXT="./${IMAGE_NAME}"
+    # Spark 4.x requires JDK 17+, auto-set if not specified
+    if [[ -z "$AURON_JAVA_VERSION" && "$SPARK_VER" == 4.* ]]; then
+        export AURON_JAVA_VERSION="17"
+    fi
     exec docker-compose -f dev/docker-build/docker-compose.yml up --abort-on-container-exit
 else
     echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} ${MVN_D_ARGS} $@"

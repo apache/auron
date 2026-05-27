@@ -21,6 +21,7 @@ import java.util.UUID
 import scala.collection.immutable.SortedMap
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
@@ -61,7 +62,11 @@ abstract class ConvertToNativeBase(override val child: SparkPlan)
   val nativeSchema: Schema = NativeConverters.convertSchema(renamedSchema)
 
   override def doExecuteNative(): NativeRDD = {
-    val inputRDD = child.execute()
+    val inputRDD: RDD[Any] = if (child.supportsColumnar) {
+      child.executeColumnar().asInstanceOf[RDD[Any]]
+    } else {
+      child.execute().asInstanceOf[RDD[Any]]
+    }
     val numInputPartitions = inputRDD.getNumPartitions
     val nativeMetrics = SparkMetricNode(metrics, Nil)
 
@@ -73,9 +78,12 @@ abstract class ConvertToNativeBase(override val child: SparkPlan)
       rddDependencies = new OneToOneDependency(inputRDD) :: Nil,
       Shims.get.getRDDShuffleReadFull(inputRDD),
       (partition, context) => {
-        val inputRowIter = inputRDD.compute(partition, context)
+        // Columnar Spark plans can cast-fail internally if we force them through execute().
+        // Keep columnar children on executeColumnar() and let ArrowFFIExporter normalize
+        // ColumnarBatch / InternalRow input into Arrow.
+        val inputIter = inputRDD.compute(partition, context).asInstanceOf[Iterator[Any]]
         val resourceId = s"ConvertToNativeExec:${UUID.randomUUID().toString}"
-        JniBridge.putResource(resourceId, new ArrowFFIExporter(inputRowIter, renamedSchema))
+        JniBridge.putResource(resourceId, new ArrowFFIExporter(inputIter, renamedSchema))
 
         PhysicalPlanNode
           .newBuilder()

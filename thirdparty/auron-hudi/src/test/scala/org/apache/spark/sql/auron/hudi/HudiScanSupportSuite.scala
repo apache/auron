@@ -322,6 +322,33 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
           "hoodie.datasource.query.type" -> "snapshot")))
   }
 
+  test("hudi isSupported rejects incremental query options") {
+    val fileFormatName =
+      "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat"
+    val cowOptions = Map("hoodie.datasource.write.table.type" -> "COPY_ON_WRITE")
+
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("hoodie.datasource.query.type" -> "incremental")))
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("hoodie.datasource.view.type" -> "incremental")))
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("hoodie.datasource.read.begin.instanttime" -> "20240101010101")))
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("hoodie.datasource.read.end.instanttime" -> "20240102010101")))
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("Hoodie.DataSource.Read.Begin.InstantTime" -> "20240101010101")))
+  }
+
   test("hudi isSupported rejects non-Hudi formats") {
     assert(
       !HudiScanSupport.isSupported(
