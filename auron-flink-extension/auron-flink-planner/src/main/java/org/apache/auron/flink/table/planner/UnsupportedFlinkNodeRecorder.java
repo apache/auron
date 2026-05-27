@@ -14,37 +14,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.flink.table.planner.plan.nodes.exec.stream;
+package org.apache.auron.flink.table.planner;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.calcite.rex.RexNode;
 import org.apache.flink.annotation.VisibleForTesting;
 
 /**
- * Holds the per-fallback WARN dedup state for the shadowed {@link StreamExecCalc}. Lives in a
- * non-shadowed sibling class so unit tests can call the {@link VisibleForTesting} seams directly
- * — the shadow shares its FQCN with Flink's stock {@code StreamExecCalc}, which can confuse javac
- * when test sources reference symbols that exist only on the shadow.
+ * Tracks unsupported Flink-side node classes encountered during plan conversion, deduplicated so
+ * a given class is logged at most once per JVM. Used by ExecNode shadow classes (e.g. {@code
+ * StreamExecCalc}) to record converter-coverage gaps without spamming the log; also tracks
+ * plan-composition failures, which always log.
  *
- * <p>Dedup is JVM-wide: a given unsupported {@link RexNode} class is logged at most once per JVM,
- * bounded by the small finite set of {@link RexNode} subclasses Flink can generate.
+ * <p>Lives in the Auron package — not in {@code org.apache.flink.*} — so unit tests can call the
+ * {@link VisibleForTesting} seams directly without classpath-ordering hazards from FQCN-shadowed
+ * classes.
  */
-final class StreamExecCalcWarnState {
+public final class UnsupportedFlinkNodeRecorder {
 
-    private static final Set<Class<? extends RexNode>> WARN_DEDUP = ConcurrentHashMap.newKeySet();
+    private static final Set<Class<?>> WARN_DEDUP = ConcurrentHashMap.newKeySet();
     private static final AtomicInteger WARN_EMIT_COUNT = new AtomicInteger();
 
-    private StreamExecCalcWarnState() {}
+    private UnsupportedFlinkNodeRecorder() {}
 
     /**
-     * Marks an unsupported {@link RexNode} class as seen and increments the emit counter. Returns
+     * Marks an unsupported Flink-side node class as seen and increments the emit counter. Returns
      * {@code true} on the first occurrence of the class (caller should emit the WARN line);
      * {@code false} on subsequent occurrences (caller should be silent).
      */
-    static boolean recordFallback(Class<? extends RexNode> unsupportedRexClass) {
-        if (WARN_DEDUP.add(unsupportedRexClass)) {
+    public static boolean recordFallback(Class<?> unsupportedFlinkNodeClass) {
+        if (WARN_DEDUP.add(unsupportedFlinkNodeClass)) {
             WARN_EMIT_COUNT.incrementAndGet();
             return true;
         }
@@ -52,18 +52,18 @@ final class StreamExecCalcWarnState {
     }
 
     /** Increments the emit counter for plan-composition failures, which always log. */
-    static void recordCompositionFailure() {
+    public static void recordCompositionFailure() {
         WARN_EMIT_COUNT.incrementAndGet();
     }
 
     @VisibleForTesting
-    static void resetForTest() {
+    public static void resetForTest() {
         WARN_DEDUP.clear();
         WARN_EMIT_COUNT.set(0);
     }
 
     @VisibleForTesting
-    static int peekEmitCount() {
+    public static int peekEmitCount() {
         return WARN_EMIT_COUNT.get();
     }
 }

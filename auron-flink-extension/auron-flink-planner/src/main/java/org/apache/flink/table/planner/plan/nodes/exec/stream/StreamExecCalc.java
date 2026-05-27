@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
+import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
 import org.apache.auron.flink.table.planner.converter.ConverterContext;
 import org.apache.auron.flink.table.planner.converter.FlinkNodeConverterFactory;
 import org.apache.auron.flink.utils.SchemaConverters;
@@ -289,7 +290,7 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
                     PhysicalPlanNode.newBuilder().setProjection(proj.build()).build());
 
         } catch (Throwable t) {
-            StreamExecCalcWarnState.recordCompositionFailure();
+            UnsupportedFlinkNodeRecorder.recordCompositionFailure();
             LOG.warn(
                     "Auron StreamExecCalc fallback (node {}): plan composition threw {}; using Flink CodeGen Calc.",
                     getId(),
@@ -319,7 +320,7 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
      * Subsequent occurrences are silent.
      */
     private void recordFallback(Class<? extends RexNode> unsupportedRexClass) {
-        if (StreamExecCalcWarnState.recordFallback(unsupportedRexClass)) {
+        if (UnsupportedFlinkNodeRecorder.recordFallback(unsupportedRexClass)) {
             LOG.warn(
                     "Auron StreamExecCalc fallback (node {}): unsupported RexNode {}; using Flink CodeGen Calc.",
                     getId(),

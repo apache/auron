@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
+import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
 import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.FFIReaderExecNode;
 import org.apache.auron.protobuf.FilterExecNode;
@@ -99,7 +100,7 @@ class StreamExecCalcTest {
         // Reset id counter so getId()-derived strings are reproducible across tests.
         ExecNodeContext.resetIdCounter();
         // Reset the per-fallback WARN dedup so each test starts from a clean slate.
-        StreamExecCalcWarnState.resetForTest();
+        UnsupportedFlinkNodeRecorder.resetForTest();
 
         tableConfig = TableConfig.getDefault();
         inputProperty = InputProperty.DEFAULT;
@@ -268,7 +269,7 @@ class StreamExecCalcTest {
 
         assertSame(stub, result, "Schema conversion failure must trigger fallback");
         assertEquals(1, node.fallbackCount);
-        assertEquals(1, StreamExecCalcWarnState.peekEmitCount());
+        assertEquals(1, UnsupportedFlinkNodeRecorder.peekEmitCount());
     }
 
     // =====================================================================
@@ -331,7 +332,7 @@ class StreamExecCalcTest {
         wireFakeUpstream(b, TWO_INT_ROW);
         invokeTranslate(b);
 
-        assertEquals(1, StreamExecCalcWarnState.peekEmitCount());
+        assertEquals(1, UnsupportedFlinkNodeRecorder.peekEmitCount());
     }
 
     /** Contract: two Calcs falling back on different unsupported RexNode classes emit two
@@ -362,7 +363,7 @@ class StreamExecCalcTest {
         wireFakeUpstream(b, TWO_INT_ROW);
         invokeTranslate(b);
 
-        assertEquals(2, StreamExecCalcWarnState.peekEmitCount());
+        assertEquals(2, UnsupportedFlinkNodeRecorder.peekEmitCount());
     }
 
     // =====================================================================
