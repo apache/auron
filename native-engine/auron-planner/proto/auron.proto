@@ -158,6 +158,7 @@ message PhysicalAggExprNode {
   AggUdaf udaf = 2;
   repeated PhysicalExprNode children = 3;
   ArrowType return_type = 4;
+  PhysicalExprNode filter = 5;
 }
 
 message AggUdaf {

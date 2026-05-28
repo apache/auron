@@ -414,14 +414,16 @@ mod test {
     use std::sync::Arc;
 
     use arrow::{
-        array::Int32Array,
-        datatypes::{DataType, Field, Schema},
+        array::{Array, ArrayRef, AsArray, BooleanArray, Int32Array, Int64Array, StringArray},
+        compute::concat_batches,
+        datatypes::{DataType, Field, Int64Type, Schema},
         record_batch::RecordBatch,
     };
     use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_sorted_eq,
         common::{Result, ScalarValue},
+        execution::TaskContext,
         physical_expr::{expressions as phys_expr, expressions::Column},
         physical_plan::{ExecutionPlan, test::TestMemoryExec},
         prelude::SessionContext,
@@ -434,6 +436,7 @@ mod test {
             AggMode::{Final, Partial},
             GroupingExpr,
             agg::create_agg,
+            sum::AggSum,
         },
         agg_exec::AggExec,
     };
@@ -580,51 +583,61 @@ mod test {
             AggExpr {
                 field_name: "agg_expr_sum".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_sum,
             },
             AggExpr {
                 field_name: "agg_expr_avg".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_avg,
             },
             AggExpr {
                 field_name: "agg_expr_max".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_max,
             },
             AggExpr {
                 field_name: "agg_expr_min".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_min,
             },
             AggExpr {
                 field_name: "agg_expr_count".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_count,
             },
             AggExpr {
                 field_name: "agg_expr_collectlist".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_collectlist,
             },
             AggExpr {
                 field_name: "agg_expr_collectset".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_collectset,
             },
             AggExpr {
                 field_name: "agg_expr_collectlist_nil".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_collectlist_nil,
             },
             AggExpr {
                 field_name: "agg_expr_collectset_nil".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_collectset_nil,
             },
             AggExpr {
                 field_name: "agg_agg_firstign".to_string(),
                 mode: Partial,
+                filter: None,
                 agg: agg_expr_firstign,
             },
         ];
@@ -678,6 +691,80 @@ mod test {
             "+---+--------------+--------------+--------------+--------------+----------------+----------------------+---------------------+--------------------------+-------------------------+------------------+",
         ];
         assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_agg_with_filter() -> Result<()> {
+        MemManager::init(1000);
+        let task_ctx = Arc::new(TaskContext::default());
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("grp", DataType::Utf8, false),
+            Field::new("val", DataType::Int32, true),
+            Field::new("flag", DataType::Boolean, false),
+        ]));
+
+        let grp_col: ArrayRef = Arc::new(StringArray::from(vec!["a", "a", "a", "b", "b", "b"]));
+        let val_col: ArrayRef = Arc::new(Int32Array::from(vec![
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(4),
+            Some(5),
+            None,
+        ]));
+        let flag_col: ArrayRef = Arc::new(BooleanArray::from(vec![
+            true, false, true, false, true, true,
+        ]));
+
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![grp_col.clone(), val_col.clone(), flag_col.clone()],
+        )?;
+
+        let input = Arc::new(TestMemoryExec::try_new(
+            &[vec![batch.clone()]],
+            schema.clone(),
+            None,
+        )?);
+
+        // SUM(val) FILTER (WHERE flag = true)
+        // Expected: a=1+3=4, b=5+0=5 (NULL val contributes 0 to sum)
+        let filter_expr = Arc::new(phys_expr::Column::new("flag", 2));
+        let agg_exec = Arc::new(AggExec::try_new(
+            HashAgg,
+            vec![GroupingExpr {
+                field_name: "grp".to_string(),
+                expr: phys_expr::col("grp", &schema)?,
+            }],
+            vec![AggExpr {
+                field_name: "sum_filtered".to_string(),
+                mode: Partial,
+                filter: Some(filter_expr),
+                agg: Arc::new(AggSum::try_new(
+                    phys_expr::col("val", &schema)?,
+                    DataType::Int64,
+                )?),
+            }],
+            false,
+            input,
+        )?);
+
+        let output = datafusion::physical_plan::collect(agg_exec, task_ctx.clone()).await?;
+        let result = concat_batches(&output[0].schema(), &output)?;
+
+        let grp_result = result.column(0).as_string::<i32>();
+        let sum_result = result.column(1).as_primitive::<Int64Type>();
+
+        assert_eq!(grp_result.len(), 2);
+        let mut found = std::collections::HashMap::new();
+        for i in 0..grp_result.len() {
+            found.insert(grp_result.value(i), sum_result.value(i));
+        }
+        assert_eq!(found["a"], 4); // 1 + 3
+        assert_eq!(found["b"], 5); // 5 (NULL val contributes 0)
+
         Ok(())
     }
 }
@@ -772,6 +859,7 @@ mod fuzztest {
                 AggExpr {
                     field_name: "sum".to_string(),
                     mode: Partial,
+                    filter: None,
                     agg: Arc::new(AggSum::try_new(
                         phys_expr::col("val", &schema)?,
                         DataType::Float64,
@@ -780,6 +868,7 @@ mod fuzztest {
                 AggExpr {
                     field_name: "cnt".to_string(),
                     mode: Partial,
+                    filter: None,
                     agg: Arc::new(AggCount::try_new(
                         vec![phys_expr::col("val", &schema)?],
                         DataType::Int64,
@@ -799,6 +888,7 @@ mod fuzztest {
                 AggExpr {
                     field_name: "sum".to_string(),
                     mode: Final,
+                    filter: None,
                     agg: Arc::new(AggSum::try_new(
                         phys_expr::col("val", &schema)?,
                         DataType::Float64,
@@ -807,6 +897,7 @@ mod fuzztest {
                 AggExpr {
                     field_name: "cnt".to_string(),
                     mode: Final,
+                    filter: None,
                     agg: Arc::new(AggCount::try_new(
                         vec![phys_expr::col("val", &schema)?],
                         DataType::Int64,

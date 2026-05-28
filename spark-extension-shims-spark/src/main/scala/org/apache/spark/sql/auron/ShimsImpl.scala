@@ -622,8 +622,6 @@ class ShimsImpl extends Shims with Logging {
   }
 
   override def convertMoreAggregateExpr(e: AggregateExpression): Option[pb.PhysicalExprNode] = {
-    assert(getAggregateExpressionFilter(e).isEmpty)
-
     e.aggregateFunction match {
       case First(child, ignoresNull) =>
         val aggExpr = pb.PhysicalAggExprNode
@@ -635,15 +633,21 @@ class ShimsImpl extends Shims with Logging {
             pb.AggFunction.FIRST
           })
           .addChildren(NativeConverters.convertExpr(child))
+        getAggregateExpressionFilter(e).foreach { filterExpr =>
+          aggExpr.setFilter(NativeConverters.convertExpr(filterExpr))
+        }
         Some(pb.PhysicalExprNode.newBuilder().setAggExpr(aggExpr).build())
 
       case agg =>
         convertBloomFilterAgg(agg) match {
           case Some(aggExpr) =>
+            getAggregateExpressionFilter(e).foreach { filterExpr =>
+              aggExpr.setFilter(NativeConverters.convertExpr(filterExpr))
+            }
             return Some(
               pb.PhysicalExprNode
                 .newBuilder()
-                .setAggExpr(aggExpr)
+                .setAggExpr(aggExpr.build())
                 .build())
           case None =>
         }
@@ -1030,7 +1034,8 @@ class ShimsImpl extends Shims with Logging {
       fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = None
 
   @sparkver("3.3 / 3.4 / 3.5 / 4.0 / 4.1")
-  private def convertBloomFilterAgg(agg: AggregateFunction): Option[pb.PhysicalAggExprNode] = {
+  private def convertBloomFilterAgg(
+      agg: AggregateFunction): Option[pb.PhysicalAggExprNode.Builder] = {
     import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
     agg match {
       case BloomFilterAggregate(child, estimatedNumItemsExpression, numBitsExpression, _, _) =>
@@ -1049,15 +1054,15 @@ class ShimsImpl extends Shims with Logging {
             .setAggFunction(pb.AggFunction.BLOOM_FILTER)
             .addChildren(NativeConverters.convertExpr(child))
             .addChildren(NativeConverters.convertExpr(Literal(estimatedNumItems)))
-            .addChildren(NativeConverters.convertExpr(Literal(numBitsNextPowerOf2)))
-            .build())
+            .addChildren(NativeConverters.convertExpr(Literal(numBitsNextPowerOf2))))
       case _ => None
     }
   }
 
   @nowarn("cat=unused") // Some params temporarily unused
   @sparkver("3.0 / 3.1 / 3.2")
-  private def convertBloomFilterAgg(agg: AggregateFunction): Option[pb.PhysicalAggExprNode] = None
+  private def convertBloomFilterAgg(
+      agg: AggregateFunction): Option[pb.PhysicalAggExprNode.Builder] = None
 
   @sparkver("3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   private def convertBloomFilterMightContain(

@@ -544,10 +544,17 @@ impl PhysicalPlanner {
                             )?,
                         };
 
+                        let filter = agg_node
+                            .filter
+                            .as_ref()
+                            .map(|f| self.try_parse_physical_expr(f, &input_schema))
+                            .transpose()?;
+
                         Ok(AggExpr {
                             agg,
                             mode,
                             field_name: name.to_owned(),
+                            filter,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;

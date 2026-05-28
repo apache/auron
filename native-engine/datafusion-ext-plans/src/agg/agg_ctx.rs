@@ -19,7 +19,7 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, ArrayRef, RecordBatchOptions},
+    array::{Array, ArrayRef, BooleanArray, RecordBatchOptions},
     datatypes::{Field, Fields, Schema, SchemaRef},
     record_batch::RecordBatch,
     row::{RowConverter, Rows, SortField},
@@ -110,6 +110,15 @@ impl AggContext {
         let need_partial_merge = aggs.iter().any(|agg| agg.mode != AggMode::Partial);
         let need_final_merge = aggs.iter().any(|agg| agg.mode == AggMode::Final);
         assert!(!(need_final_merge && aggs.iter().any(|agg| agg.mode != AggMode::Final)));
+
+        // FILTER predicates are only meaningful in Partial mode; the Spark planner must not
+        // attach a filter to PartialMerge or Final aggregates (they operate on already-filtered
+        // partial buffers, not on raw input rows).
+        assert!(
+            aggs.iter()
+                .all(|agg| agg.filter.is_none() || agg.mode == AggMode::Partial),
+            "aggregate FILTER is only valid in Partial mode"
+        );
 
         let need_partial_update_aggs: Vec<(usize, Arc<dyn Agg>)> = aggs
             .iter()
@@ -282,8 +291,79 @@ impl AggContext {
                     input_arrays.push(vec![]);
                 }
             }
-            let batch_selection = IdxSelection::Range(batch_start_idx, batch_end_idx);
-            self.partial_update(acc_table, acc_idx, &input_arrays, batch_selection)?;
+
+            // Evaluate per-aggregate FILTER predicates against the input batch.
+            // Each aggregate may have an optional filter expression; we produce
+            // a boolean array for each so that only rows evaluating to true
+            // contribute to that aggregate.
+            let filter_arrays: Vec<Option<BooleanArray>> = self
+                .aggs
+                .iter()
+                .map(|agg| {
+                    agg.filter
+                        .as_ref()
+                        .map(|filter_expr| {
+                            let result = filter_expr.evaluate(batch)?;
+                            let array = result.into_array(batch.num_rows())?;
+                            let bool_array =
+                                datafusion::common::cast::as_boolean_array(&array)?.clone();
+                            Ok(bool_array)
+                        })
+                        .transpose()
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            let udaf_indices_cache = OnceCell::new();
+            for (agg_idx, agg) in &self.need_partial_update_aggs {
+                let acc_col = &mut acc_table.cols_mut()[*agg_idx];
+                if let Some(filter_array) = &filter_arrays[*agg_idx] {
+                    // Build filtered index vectors: only rows where the filter
+                    // is true are passed to partial_update, preserving the
+                    // correct accumulator-to-input-row mapping.
+                    let (filtered_acc, filtered_input) = Self::build_filtered_indices(
+                        acc_idx,
+                        batch_start_idx,
+                        batch_end_idx,
+                        filter_array,
+                    );
+                    if !filtered_acc.is_empty() {
+                        if let Ok(udaf_agg) = downcast_any!(agg, SparkUDAFWrapper) {
+                            udaf_agg.partial_update_with_indices_cache(
+                                acc_col,
+                                IdxSelection::Indices(&filtered_acc),
+                                &input_arrays[*agg_idx],
+                                IdxSelection::Indices(&filtered_input),
+                                &udaf_indices_cache,
+                            )?;
+                        } else {
+                            agg.partial_update(
+                                acc_col,
+                                IdxSelection::Indices(&filtered_acc),
+                                &input_arrays[*agg_idx],
+                                IdxSelection::Indices(&filtered_input),
+                            )?;
+                        }
+                    }
+                } else {
+                    let batch_selection = IdxSelection::Range(batch_start_idx, batch_end_idx);
+                    if let Ok(udaf_agg) = downcast_any!(agg, SparkUDAFWrapper) {
+                        udaf_agg.partial_update_with_indices_cache(
+                            acc_col,
+                            acc_idx,
+                            &input_arrays[*agg_idx],
+                            batch_selection,
+                            &udaf_indices_cache,
+                        )?;
+                    } else {
+                        agg.partial_update(
+                            acc_col,
+                            acc_idx,
+                            &input_arrays[*agg_idx],
+                            batch_selection,
+                        )?;
+                    }
+                }
+            }
         }
 
         // partial merge
@@ -350,6 +430,67 @@ impl AggContext {
             self.output_schema.clone(),
             [grouping_columns, agg_columns].concat(),
         )?)
+    }
+
+    /// Given an `acc_idx` mapping and a filter boolean array, produce two
+    /// aligned index vectors:
+    /// - `filtered_acc`: accumulator indices to update
+    /// - `filtered_input`: input batch row indices to read from
+    ///
+    /// Only rows in `[batch_start_idx, batch_end_idx)` where the filter is
+    /// true are included. The mapping logic handles all `IdxSelection`
+    /// variants.
+    ///
+    /// NULL handling: `BooleanArray::value(i)` returns `false` for null slots,
+    /// which matches SQL FILTER semantics where NULL is treated as not-true and
+    /// the row is excluded from the aggregate.
+    fn build_filtered_indices(
+        acc_idx: IdxSelection,
+        batch_start_idx: usize,
+        batch_end_idx: usize,
+        filter_array: &BooleanArray,
+    ) -> (Vec<usize>, Vec<usize>) {
+        let mut filtered_acc = vec![];
+        let mut filtered_input = vec![];
+        match acc_idx {
+            // Single accumulator for all rows in this group.
+            IdxSelection::Single(idx) => {
+                for i in batch_start_idx..batch_end_idx {
+                    if filter_array.value(i) {
+                        filtered_acc.push(idx);
+                        filtered_input.push(i);
+                    }
+                }
+            }
+            // Per-row accumulator indices (used by sort aggregation).
+            IdxSelection::Indices(indices) => {
+                for i in batch_start_idx..batch_end_idx {
+                    if filter_array.value(i) {
+                        filtered_acc.push(indices[i - batch_start_idx]);
+                        filtered_input.push(i);
+                    }
+                }
+            }
+            // Per-row accumulator indices as u32 (used by hash aggregation).
+            IdxSelection::IndicesU32(indices) => {
+                for i in batch_start_idx..batch_end_idx {
+                    if filter_array.value(i) {
+                        filtered_acc.push(indices[i - batch_start_idx] as usize);
+                        filtered_input.push(i);
+                    }
+                }
+            }
+            // Contiguous accumulator range (used by merge / partial-skip paths).
+            IdxSelection::Range(start, _end) => {
+                for i in batch_start_idx..batch_end_idx {
+                    if filter_array.value(i) {
+                        filtered_acc.push(start + (i - batch_start_idx));
+                        filtered_input.push(i);
+                    }
+                }
+            }
+        }
+        (filtered_acc, filtered_input)
     }
 
     pub fn partial_update(

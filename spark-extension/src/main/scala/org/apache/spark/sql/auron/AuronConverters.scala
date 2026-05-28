@@ -810,7 +810,10 @@ object AuronConverters extends Logging {
   def convertHashAggregateExec(exec: HashAggregateExec): SparkPlan = {
     // split non-trivial children exprs in partial-agg to a ProjectExec
     // for enabling filter-project optimization in native side
-    getPartialAggProjection(exec.aggregateExpressions, exec.groupingExpressions) match {
+    getPartialAggProjection(
+      exec.aggregateExpressions,
+      exec.groupingExpressions,
+      exec.child.output) match {
       case Some((transformedAggregateExprs, transformedGroupingExprs, projections)) =>
         val transformedExec =
           try {
@@ -851,11 +854,13 @@ object AuronConverters extends Logging {
         NativeAggBase.findPreviousNativeAggrExec(exec).isDefined,
         "partial AggregateExec is not native")
     }
+    val boundAggregateExpressions =
+      bindAggregateFilters(exec.aggregateExpressions, exec.child.output)
     val nativeAggr = Shims.get.createNativeAggExec(
       NativeAggBase.HashAgg,
       exec.requiredChildDistributionExpressions,
       exec.groupingExpressions,
-      exec.aggregateExpressions,
+      boundAggregateExpressions,
       exec.aggregateAttributes,
       exec.initialInputBufferOffset,
       exec.requiredChildDistributionExpressions match {
@@ -891,7 +896,10 @@ object AuronConverters extends Logging {
   def convertObjectHashAggregateExec(exec: ObjectHashAggregateExec): SparkPlan = {
     // split non-trivial children exprs in partial-agg to a ProjectExec
     // for enabling filter-project optimization in native side
-    getPartialAggProjection(exec.aggregateExpressions, exec.groupingExpressions) match {
+    getPartialAggProjection(
+      exec.aggregateExpressions,
+      exec.groupingExpressions,
+      exec.child.output) match {
       case Some((transformedAggregateExprs, transformedGroupingExprs, projections)) =>
         return convertObjectHashAggregateExec(
           exec.copy(
@@ -907,11 +915,13 @@ object AuronConverters extends Logging {
     if (exec.requiredChildDistributionExpressions.isDefined) {
       assert(NativeAggBase.findPreviousNativeAggrExec(exec).isDefined)
     }
+    val boundAggregateExpressions =
+      bindAggregateFilters(exec.aggregateExpressions, exec.child.output)
     val nativeAggr = Shims.get.createNativeAggExec(
       NativeAggBase.HashAgg,
       exec.requiredChildDistributionExpressions,
       exec.groupingExpressions,
-      exec.aggregateExpressions,
+      boundAggregateExpressions,
       exec.aggregateAttributes,
       exec.initialInputBufferOffset,
       exec.requiredChildDistributionExpressions match {
@@ -960,11 +970,12 @@ object AuronConverters extends Logging {
       (NativeAggBase.SortAgg, exec.child)
     }
 
+    val boundAggregateExpressions = bindAggregateFilters(exec.aggregateExpressions, child.output)
     val nativeAggr = Shims.get.createNativeAggExec(
       aggMode,
       exec.requiredChildDistributionExpressions,
       exec.groupingExpressions,
-      exec.aggregateExpressions,
+      boundAggregateExpressions,
       exec.aggregateAttributes,
       exec.initialInputBufferOffset,
       exec.requiredChildDistributionExpressions match {
@@ -1212,9 +1223,39 @@ object AuronConverters extends Logging {
     exec
   }
 
+  /**
+   * Bind filter expressions in AggregateExpression to the actual child output attributes. This is
+   * needed because Spark 3.0's AggregateExpression does not have withNewChildrenInternal, so
+   * filter expressions may retain stale exprIds after optimizer transformations. We match by
+   * (name, dataType) and replace with the child's AttributeReference.
+   */
+  private def bindAggregateFilters(
+      aggregateExprs: Seq[AggregateExpression],
+      childOutput: Seq[Attribute]): Seq[AggregateExpression] = {
+    val attrMap = childOutput.map(a => (a.name, a.dataType) -> a).toMap
+    aggregateExprs.map { expr =>
+      expr.filter match {
+        case Some(filterExpr) =>
+          val newFilter = filterExpr.transform { case ar: AttributeReference =>
+            attrMap.get((ar.name, ar.dataType)) match {
+              case Some(newAttr) => newAttr
+              case None => ar
+            }
+          }
+          if (newFilter.eq(filterExpr)) {
+            expr
+          } else {
+            expr.copy(filter = Some(newFilter))
+          }
+        case None => expr
+      }
+    }
+  }
+
   private def getPartialAggProjection(
       aggregateExprs: Seq[AggregateExpression],
-      groupingExprs: Seq[NamedExpression])
+      groupingExprs: Seq[NamedExpression],
+      childOutput: Seq[Attribute] = Nil)
       : Option[(Seq[AggregateExpression], Seq[NamedExpression], Seq[Alias])] = {
 
     if (!aggregateExprs.forall(_.mode == Partial)) {
@@ -1248,6 +1289,35 @@ object AuronConverters extends Logging {
         }
         .asInstanceOf[AggregateFunction])
     }
+
+    // Ensure that AttributeReferences used in FILTER predicates are also included in the
+    // projection. Without this, the projection child would not output the filter column, causing
+    // bindAggregateFilters to fail (the column would be absent from child.output) and the native
+    // side to raise a SchemaError when resolving the filter expression against input_schema.
+    //
+    // We resolve each filter AttributeReference against childOutput by (name, dataType) to obtain
+    // the canonical Attribute (with the correct exprId), then add it to projections unchanged so
+    // that the downstream ProjectExec can actually evaluate it from exec.child.
+    if (childOutput.nonEmpty) {
+      val childAttrMap = childOutput.map(a => (a.name, a.dataType) -> a).toMap
+      aggregateExprs.foreach { expr =>
+        Shims.get.getAggregateExpressionFilter(expr).foreach {
+          _.foreach {
+            case ar: AttributeReference =>
+              val resolved = childAttrMap.getOrElse((ar.name, ar.dataType), ar)
+              projections.getOrElseUpdate(
+                resolved,
+                AttributeReference(
+                  resolved.name,
+                  resolved.dataType,
+                  resolved.nullable,
+                  resolved.metadata)(resolved.exprId, resolved.qualifier))
+            case _ =>
+          }
+        }
+      }
+    }
+
     Some(
       (
         transformedAggExprs.toList,
