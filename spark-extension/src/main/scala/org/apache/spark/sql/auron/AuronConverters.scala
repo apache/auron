@@ -1255,7 +1255,7 @@ object AuronConverters extends Logging {
   private def getPartialAggProjection(
       aggregateExprs: Seq[AggregateExpression],
       groupingExprs: Seq[NamedExpression],
-      childOutput: Seq[Attribute] = Nil)
+      childOutput: Seq[Attribute])
       : Option[(Seq[AggregateExpression], Seq[NamedExpression], Seq[Alias])] = {
 
     if (!aggregateExprs.forall(_.mode == Partial)) {
@@ -1298,22 +1298,20 @@ object AuronConverters extends Logging {
     // We resolve each filter AttributeReference against childOutput by (name, dataType) to obtain
     // the canonical Attribute (with the correct exprId), then add it to projections unchanged so
     // that the downstream ProjectExec can actually evaluate it from exec.child.
-    if (childOutput.nonEmpty) {
-      val childAttrMap = childOutput.map(a => (a.name, a.dataType) -> a).toMap
-      aggregateExprs.foreach { expr =>
-        Shims.get.getAggregateExpressionFilter(expr).foreach {
-          _.foreach {
-            case ar: AttributeReference =>
-              val resolved = childAttrMap.getOrElse((ar.name, ar.dataType), ar)
-              projections.getOrElseUpdate(
-                resolved,
-                AttributeReference(
-                  resolved.name,
-                  resolved.dataType,
-                  resolved.nullable,
-                  resolved.metadata)(resolved.exprId, resolved.qualifier))
-            case _ =>
-          }
+    val childAttrMap = childOutput.map(a => (a.name, a.dataType) -> a).toMap
+    aggregateExprs.foreach { expr =>
+      Shims.get.getAggregateExpressionFilter(expr).foreach {
+        _.foreach {
+          case ar: AttributeReference =>
+            val resolved = childAttrMap.getOrElse((ar.name, ar.dataType), ar)
+            projections.getOrElseUpdate(
+              resolved,
+              AttributeReference(
+                resolved.name,
+                resolved.dataType,
+                resolved.nullable,
+                resolved.metadata)(resolved.exprId, resolved.qualifier))
+          case _ =>
         }
       }
     }
