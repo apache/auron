@@ -111,9 +111,9 @@ impl AggContext {
         let need_final_merge = aggs.iter().any(|agg| agg.mode == AggMode::Final);
         assert!(!(need_final_merge && aggs.iter().any(|agg| agg.mode != AggMode::Final)));
 
-        // FILTER predicates are only meaningful in Partial mode; the Spark planner must not
-        // attach a filter to PartialMerge or Final aggregates (they operate on already-filtered
-        // partial buffers, not on raw input rows).
+        // FILTER predicates are only meaningful in Partial mode; the Spark planner must
+        // not attach a filter to PartialMerge or Final aggregates (they operate
+        // on already-filtered partial buffers, not on raw input rows).
         assert!(
             aggs.iter()
                 .all(|agg| agg.filter.is_none() || agg.mode == AggMode::Partial),
