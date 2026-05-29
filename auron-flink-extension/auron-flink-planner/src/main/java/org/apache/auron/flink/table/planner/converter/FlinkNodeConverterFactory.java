@@ -37,6 +37,10 @@ import org.slf4j.LoggerFactory;
  *       (keyed by {@code AggregateCall} class)
  * </ul>
  *
+ * <p>The singleton returned by {@link #getInstance()} is initialized with the built-in
+ * {@link FlinkRexNodeConverter} implementations ({@link RexInputRefConverter},
+ * {@link RexLiteralConverter}, {@link RexCallConverter}) registered.
+ *
  * <p>Usage:
  * <pre>
  *   FlinkNodeConverterFactory factory = FlinkNodeConverterFactory.getInstance();
@@ -51,6 +55,14 @@ public class FlinkNodeConverterFactory {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkNodeConverterFactory.class);
 
     private static final FlinkNodeConverterFactory INSTANCE = new FlinkNodeConverterFactory();
+
+    static {
+        // Production callers reach RexNode converters through the singleton; register the
+        // built-ins eagerly so getInstance() is usable without setup.
+        INSTANCE.registerRexConverter(new RexInputRefConverter());
+        INSTANCE.registerRexConverter(new RexLiteralConverter());
+        INSTANCE.registerRexConverter(new RexCallConverter(INSTANCE));
+    }
 
     private final Map<Class<? extends RexNode>, FlinkRexNodeConverter> rexConverterMap;
     private final Map<Class<? extends AggregateCall>, FlinkAggCallConverter> aggConverterMap;

@@ -153,7 +153,7 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         String opIdWithSubtask = rc.getOperatorUniqueID() + "-" + rc.getIndexOfThisSubtask();
 
         this.childAllocator = FlinkArrowUtils.createChildAllocator("FlinkAuronCalc-" + opIdWithSubtask);
-        this.metricNode = new FlinkMetricNode(getMetricGroup(), Collections.emptyList());
+        this.metricNode = buildMetricTree(plan, getMetricGroup());
         this.exporter = new FlinkArrowFFIExporter(childAllocator, inputRowType, BATCH_ROW_LIMIT);
         // UUID disambiguates re-runs after operator restart so a stale registration cannot
         // collide with the new one.
@@ -164,8 +164,10 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
 
         this.nativeMemory =
                 AuronAdaptor.getInstance().getAuronConfiguration().getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE);
-        this.nativeRuntime =
-                nativeRuntimeFactory.create(FlinkArrowUtils.getRootAllocator(), runtimePlan, metricNode, nativeMemory);
+        // Native runtime construction starts a tokio task that immediately begins streaming
+        // output through the FFI Reader; on the first pull from an empty exporter the reader
+        // sees end-of-stream and calls exporter.close(), nulling the writer. Defer construction
+        // to the first non-empty drain so the runtime always starts against a populated buffer.
 
         this.outputRecord = new StreamRecord<>(null);
     }
@@ -196,11 +198,11 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         // we'd allocate a new wrapper + exporter root only to tear them down immediately.
         closing = true;
         try {
-            // Both exporter and nativeRuntime must be initialized before draining: if open()
-            // failed between exporter creation and nativeRuntime creation, drainNative() would
-            // NPE on nativeRuntime.loadNextBatch(...). Each resource is null-guarded
-            // individually in the nested finally so partial-init still releases what exists.
-            if (exporter != null && nativeRuntime != null) {
+            // drainNative is responsible for constructing the native runtime on demand when
+            // the exporter has rows, so close() only needs to guard against open() failing
+            // before the exporter was created. Each resource is null-guarded individually in
+            // the nested finally below so partial-init still releases what exists.
+            if (exporter != null) {
                 drainNative();
             }
         } finally {
@@ -253,6 +255,10 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         if (exporter.isEmpty()) {
             return;
         }
+        if (nativeRuntime == null) {
+            this.nativeRuntime = nativeRuntimeFactory.create(
+                    FlinkArrowUtils.getRootAllocator(), runtimePlan, metricNode, nativeMemory);
+        }
         while (nativeRuntime.loadNextBatch(this::emitArrowBatch)) {
             // loop
         }
@@ -262,16 +268,16 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
     }
 
     /**
-     * Re-prepares the exporter, re-registers it under {@link #resourceId}, and builds a fresh
-     * {@link NativeRuntime} via the factory. {@link #resourceId}, {@link #runtimePlan},
-     * {@link #metricNode}, and {@link #nativeMemory} are all set once in {@link #open()} and
-     * reused across every reinit, so per-subtask operator identity is preserved.
+     * Re-prepares the exporter and re-registers it under {@link #resourceId} so the next drain
+     * cycle can buffer rows. The native runtime is intentionally left {@code null}: the next
+     * {@link #drainNative()} call constructs a fresh one once the exporter has rows, so the
+     * tokio batch producer never starts against an empty buffer (which would otherwise short the
+     * FFI Reader's read loop on its very first pull and close the exporter mid-cycle).
      */
     private void reinitExporterAndRuntime() {
         exporter.reset();
         JniBridge.putResource(resourceId, exporter);
-        this.nativeRuntime =
-                nativeRuntimeFactory.create(FlinkArrowUtils.getRootAllocator(), runtimePlan, metricNode, nativeMemory);
+        this.nativeRuntime = null;
     }
 
     /**
@@ -330,6 +336,31 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
                 + node.getPhysicalPlanTypeCase());
     }
 
+    /**
+     * Recursively constructs a {@link FlinkMetricNode} whose shape mirrors {@code node}'s plan
+     * tree. Native code walks the plan tree at finalization time and indexes into the parallel
+     * metric tree via {@link org.apache.auron.metric.MetricNode#getChild(int)}; an empty children
+     * list would throw {@link IndexOutOfBoundsException} on the first {@code getChild(0)} call.
+     * All levels share the same Flink {@link org.apache.flink.metrics.MetricGroup} so named
+     * counters aggregate at the operator scope.
+     */
+    private static FlinkMetricNode buildMetricTree(PhysicalPlanNode node, org.apache.flink.metrics.MetricGroup mg) {
+        final List<org.apache.auron.metric.MetricNode> children;
+        if (node.hasFfiReader()) {
+            children = Collections.emptyList();
+        } else if (node.hasProjection()) {
+            children = Collections.singletonList(
+                    buildMetricTree(node.getProjection().getInput(), mg));
+        } else if (node.hasFilter()) {
+            children =
+                    Collections.singletonList(buildMetricTree(node.getFilter().getInput(), mg));
+        } else {
+            throw new IllegalArgumentException(
+                    "Unexpected plan node type for metric tree: " + node.getPhysicalPlanTypeCase());
+        }
+        return new FlinkMetricNode(mg, children);
+    }
+
     // ====================================================================
     // SupportsAuronNative
     // ====================================================================
@@ -377,9 +408,13 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         void close();
     }
 
-    /** Factory for {@link NativeRuntime} instances, swappable in tests. */
+    /**
+     * Factory for {@link NativeRuntime} instances, swappable in tests. Extends {@link
+     * java.io.Serializable} because the field that holds an instance is part of the operator and
+     * Flink serializes operators to dispatch them to TaskManagers.
+     */
     @VisibleForTesting
-    interface NativeRuntimeFactory {
+    interface NativeRuntimeFactory extends java.io.Serializable {
         /**
          * Creates a native runtime for the given plan.
          *

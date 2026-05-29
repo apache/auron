@@ -257,13 +257,13 @@ public class FlinkAuronCalcOperatorTest {
      * Contract: the real {@link org.apache.auron.jni.AuronCallNativeWrapper#loadNextBatch}
      * auto-closes its native runtime when {@code JniBridge.nextBatch} returns false, and the
      * native FFI Reader's drop calls Java {@code close()} on the exporter. The operator
-     * therefore must reinitialize both {@link FlinkArrowFFIExporter} and the
-     * {@link FlinkAuronCalcOperator.NativeRuntime} after every drain cycle so subsequent
-     * {@code processElement} calls work correctly. Three consecutive batch-full triggers must
-     * produce no exception; the factory must be invoked once for {@code open()} plus once per
-     * drain cycle (= 4 total); the exporter must be re-registered under the same
-     * {@code resourceId} after each cycle; and the operator must still accept offers after the
-     * reinit cycles.
+     * therefore must re-prepare the exporter after every drain cycle so subsequent
+     * {@code processElement} calls work correctly. The native runtime is constructed lazily
+     * on the next drain (not eagerly between cycles) so the tokio batch producer never starts
+     * against an empty buffer. Three consecutive batch-full triggers must produce no
+     * exception; the factory must be invoked once per drain cycle (= 3 total); the exporter
+     * must be re-registered under the same {@code resourceId} after each cycle; and the
+     * operator must still accept offers after the reinit cycles.
      */
     @Test
     public void testProcessElementMultiCycleDrainReinitializesWrapper() throws Exception {
@@ -297,10 +297,10 @@ public class FlinkAuronCalcOperatorTest {
             }
 
             assertEquals(
-                    4,
+                    3,
                     factoryCalls.get(),
-                    "Native runtime must be reinitialized after each batch-full drain cycle "
-                            + "(1 for open() + 3 reinit)");
+                    "Native runtime must be constructed once per batch-full drain cycle "
+                            + "(deferred from open() to first non-empty drain)");
 
             // After three reinit cycles, the operator must still accept input. Offer one more
             // row and verify the tracker (re-registered each cycle, never closed by our fake)

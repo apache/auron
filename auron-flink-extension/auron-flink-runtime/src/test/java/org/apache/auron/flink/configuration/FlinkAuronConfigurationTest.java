@@ -46,5 +46,13 @@ public class FlinkAuronConfigurationTest {
         assertEquals(config.get(AuronConfiguration.BATCH_SIZE), 9999);
         assertEquals(config.get(AuronConfiguration.NATIVE_LOG_LEVEL), "DEBUG");
         assertEquals(config.get(AuronConfiguration.MEMORY_FRACTION), 0.6); // default value
+        assertEquals(true, config.get(FlinkAuronConfiguration.FAIL_BACK_FLINK_ENGINE_ENABLED));
+    }
+
+    @Test
+    public void testFailBackFlinkEngineEnabledDefaultsToTrue() {
+        assertEquals(
+                "auron.failback.flink.engine.enabled", FlinkAuronConfiguration.FAIL_BACK_FLINK_ENGINE_ENABLED.key());
+        assertEquals(Boolean.TRUE, FlinkAuronConfiguration.FAIL_BACK_FLINK_ENGINE_ENABLED.defaultValue());
     }
 }
