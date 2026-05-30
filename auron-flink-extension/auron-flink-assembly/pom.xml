@@ -61,6 +61,13 @@
             <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
               <resource>META-INF/services/org.apache.flink.table.factories.TableFactory</resource>
             </transformer>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+              <projectName>Apache Auron (Incubating)</projectName>
+              <organizationName>The Apache Software Foundation</organizationName>
+              <organizationURL>https://www.apache.org/</organizationURL>
+              <inceptionYear>2025</inceptionYear>
+            </transformer>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer" />
           </transformers>
           <filters>
             <filter>
@@ -69,6 +76,28 @@
                 <exclude>META-INF/*.SF</exclude>
                 <exclude>META-INF/*.DSA</exclude>
                 <exclude>META-INF/*.RSA</exclude>
+                <!-- Drop dependency-supplied jar-root NOTICE files. The notice transformer
+                     aggregates each dependency's META-INF/NOTICE into the final NOTICE, but it
+                     never reads a dependency's jar-root NOTICE (e.g. kafka-clients), so that
+                     required attribution is folded into this module's META-INF/NOTICE by hand
+                     instead. Excluding the jar-root copies keeps them from shipping verbatim. -->
+                <exclude>NOTICE</exclude>
+                <exclude>NOTICE.txt</exclude>
+                <exclude>NOTICE.md</exclude>
+              </excludes>
+            </filter>
+            <!-- kafka-clients and icu4j each ship a jar-root LICENSE; drop those copies so
+                 this module's jar-root LICENSE is the only top-level LICENSE in the uber jar. -->
+            <filter>
+              <artifact>org.apache.kafka:kafka-clients</artifact>
+              <excludes>
+                <exclude>LICENSE</exclude>
+              </excludes>
+            </filter>
+            <filter>
+              <artifact>com.ibm.icu:icu4j</artifact>
+              <excludes>
+                <exclude>LICENSE</exclude>
               </excludes>
             </filter>
             <!-- Drop Flink's stock StreamExecCalc so only Auron's override remains in the jar. -->
