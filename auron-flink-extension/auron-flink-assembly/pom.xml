@@ -71,6 +71,13 @@
                 <exclude>META-INF/*.RSA</exclude>
               </excludes>
             </filter>
+            <!-- Drop Flink's stock StreamExecCalc so only Auron's override remains in the jar. -->
+            <filter>
+              <artifact>org.apache.flink:flink-table-planner_2.12</artifact>
+              <excludes>
+                <exclude>org/apache/flink/table/planner/plan/nodes/exec/stream/StreamExecCalc.class</exclude>
+              </excludes>
+            </filter>
           </filters>
         </configuration>
         <executions>
