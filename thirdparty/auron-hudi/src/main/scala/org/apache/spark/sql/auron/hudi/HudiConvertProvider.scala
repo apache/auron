@@ -54,7 +54,7 @@ class HudiConvertProvider extends AuronConvertProvider with Logging {
       case scan: FileSourceScanExec =>
         // Only handle Hudi-backed file scans; other scans fall through.
         val isSupportedFileFormat = HudiScanSupport.supportedFileFormat(scan).nonEmpty
-        assert(!isSupportedFileFormat, "FileFormat is not supported.")
+        assert(isSupportedFileFormat, "FileFormat is not supported.")
         isSupportedFileFormat
       case _ => false
     }
