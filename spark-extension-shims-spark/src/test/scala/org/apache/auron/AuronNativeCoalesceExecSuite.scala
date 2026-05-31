@@ -37,7 +37,6 @@ class AuronNativeCoalesceExecSuite extends AuronQueryTest with BaseAuronSQLSuite
         case coalesceExec: NativeCoalesceExec =>
           coalesceExec
       }.isDefined)
-
     }
   }
 }
