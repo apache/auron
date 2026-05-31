@@ -25,6 +25,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.ExplainUtils.collectFirst
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
@@ -528,6 +530,22 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
       val filteredScan = assertProviderConvertsToNativeParquetScan(partitionAndDataFiltered)
       assertFilterReferences(filteredScan.partitionFilters, "dt", "partition")
       assertFilterReferences(filteredScan.dataFilters, "id", "data")
+    }
+  }
+
+  test("hudi: when falls back, check never convert reason") {
+    withTable("hudi_ts") {
+      spark.sql("create table hudi_ts (id int, ts timestamp) using hudi")
+      spark.sql("insert into hudi_ts values (1, timestamp('2026-01-01 00:00:00'))")
+      val df = spark.sql("select * from hudi_ts")
+      // Timestamp columns are not supported when native timestamp scanning is disabled.
+      logFileFormats(df)
+      df.collect()
+      val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
+      assert(collectFirst(df.queryExecution.executedPlan) {
+        case fileSourceScanExec: FileSourceScanExec =>
+          fileSourceScanExec.getTagValue(neverConvertReasonTag)
+      }.get.get.equals("Conversion disabled: FileFormat is not supported."))
     }
   }
 }
