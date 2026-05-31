@@ -102,12 +102,14 @@ impl ExecutionPlan for CoalesceExec {
     ) -> Result<SendableRecordBatchStream> {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
         let mut input = exec_ctx.execute(&self.input)?;
-        Ok(exec_ctx.output_with_sender("Coalesce", move |sender| async move {
-            while let Some(batch) = input.next().await.transpose()? {
-                sender.send(batch).await;
-            }
-            Ok(())
-        }))
+        Ok(
+            exec_ctx.output_with_sender("Coalesce", move |sender| async move {
+                while let Some(batch) = input.next().await.transpose()? {
+                    sender.send(batch).await;
+                }
+                Ok(())
+            }),
+        )
     }
 
     fn metrics(&self) -> Option<MetricsSet> {

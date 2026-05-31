@@ -578,8 +578,7 @@ impl PhysicalPlanner {
                 )))
             }
             PhysicalPlanType::Coalesce(coalesce) => {
-                let input: Arc<dyn ExecutionPlan> =
-                    convert_box_required!(self, coalesce.input)?;
+                let input: Arc<dyn ExecutionPlan> = convert_box_required!(self, coalesce.input)?;
                 Ok(Arc::new(CoalesceExec::new(
                     input,
                     coalesce.num_partitions as usize,
