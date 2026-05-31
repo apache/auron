@@ -782,8 +782,7 @@ message KafkaScanExecNode {
 
 message CoalesceExecNode {
   PhysicalPlanNode input = 1;
-  int32  numPartitions = 2
-  ;
+  int32  numPartitions = 2;
 }
 
 enum KafkaFormat {
