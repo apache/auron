@@ -561,10 +561,6 @@ impl AccSet {
     }
 
     pub fn merge(&mut self, other: &mut Self) {
-        if self.set.len() < other.set.len() {
-            // ensure the probed set is smaller
-            std::mem::swap(self, other);
-        }
         for pos_len in std::mem::take(&mut other.set).into_iter() {
             self.append_raw(other.list.ref_raw(pos_len));
         }
@@ -707,6 +703,26 @@ mod tests {
 
         assert_eq!(acc_set1.list.raw.len(), 12); // 4 bytes for each int32
         assert_eq!(acc_set1.set.len(), 3);
+        let values: Vec<ScalarValue> = acc_set1.into_values(DataType::Int32, false).collect();
+        assert_eq!(values, vec![value1, value2, value3]);
+    }
+
+    #[test]
+    fn test_acc_set_merge_preserves_first_occurrence_order_when_rhs_is_larger() {
+        let mut acc_set1 = AccSet::default();
+        let mut acc_set2 = AccSet::default();
+        let value1 = ScalarValue::Int32(Some(1));
+        let value2 = ScalarValue::Int32(Some(2));
+        let value3 = ScalarValue::Int32(Some(3));
+
+        acc_set1.append(&value1, false);
+        acc_set2.append(&value2, false);
+        acc_set2.append(&value3, false);
+
+        acc_set1.merge(&mut acc_set2);
+
+        let values: Vec<ScalarValue> = acc_set1.into_values(DataType::Int32, false).collect();
+        assert_eq!(values, vec![value1, value2, value3]);
     }
 
     #[test]
