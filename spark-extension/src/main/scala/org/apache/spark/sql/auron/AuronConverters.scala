@@ -218,13 +218,15 @@ object AuronConverters extends Logging {
             case None => tryConvert(e, convertFileSourceScanExec)
           }
         } catch {
-          case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
+          case err @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
+            val msg =
+              Option(err.getMessage)
+                .getOrElse(err.toString)
+                .replaceFirst("^assertion failed: ?", "")
             exec.setTagValue(convertToNonNativeTag, true)
             exec.setTagValue(convertibleTag, false)
             exec.setTagValue(convertStrategyTag, NeverConvert)
-            exec.setTagValue(
-              neverConvertReasonTag,
-              s"${e.getMessage.replaceFirst("^assertion failed: ?", "")}")
+            exec.setTagValue(neverConvertReasonTag, msg)
             exec
         }
       case e: ProjectExec if enableProject => // project

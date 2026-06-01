@@ -542,14 +542,11 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
       logFileFormats(df)
       df.collect()
       val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
-      assert(
-        collectFirst(df.queryExecution.executedPlan) {
-          case fileSourceScanExec: FileSourceScanExec =>
-            fileSourceScanExec.getTagValue(neverConvertReasonTag)
-        }.get.get.equals(
-          "Falling back exec: FileSourceScanExec: assertion failed: Conversion disabled: Has timestamp type."
-        )
-      ) // Some(Some(FileSourceScanExec is not supported yet.))
+      assert(collectFirst(df.queryExecution.executedPlan) {
+        case fileSourceScanExec: FileSourceScanExec =>
+          fileSourceScanExec.getTagValue(neverConvertReasonTag)
+      }.get.get.equals(
+        "Falling back exec: FileSourceScanExec: assertion failed: Conversion disabled: Has timestamp type."))
     }
   }
 }
