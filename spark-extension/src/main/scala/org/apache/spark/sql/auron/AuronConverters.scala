@@ -326,50 +326,50 @@ object AuronConverters extends Logging {
     val neverConvertReason =
       exec match {
         case _: FileSourceScanExec if !enableScan =>
-          "Conversion disabled: spark.auron.enable.scan=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SCAN.key()}=false."
         case _: ProjectExec if !enableProject =>
-          "Conversion disabled: spark.auron.enable.project=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_PROJECT.key()}=false."
         case _: FilterExec if !enableFilter =>
-          "Conversion disabled: spark.auron.enable.filter=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_FILTER.key()}=false."
         case _: SortExec if !enableSort =>
-          "Conversion disabled: spark.auron.enable.sort=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SORT.key()}=false."
         case _: UnionExec if !enableUnion =>
-          "Conversion disabled: spark.auron.enable.union=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_UNION.key()}=false."
         case _: SortMergeJoinExec if !enableSmj =>
-          "Conversion disabled: spark.auron.enable.smj=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SMJ.key()}=false."
         case _: ShuffledHashJoinExec if !enableShj =>
-          "Conversion disabled: spark.auron.enable.shj=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SHJ.key()}=false."
         case _: BroadcastHashJoinExec if !enableBhj =>
-          "Conversion disabled: spark.auron.enable.bhj=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_BHJ.key()}=false."
         case _: BroadcastNestedLoopJoinExec if !enableBnlj =>
-          "Conversion disabled: spark.auron.enable.bnlj=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_BNLJ.key()}=false."
         case _: LocalLimitExec if !enableLocalLimit =>
-          "Conversion disabled: spark.auron.enable.local.limit=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_LOCAL_LIMIT.key()}=false."
         case _: GlobalLimitExec if !enableGlobalLimit =>
-          "Conversion disabled: spark.auron.enable.global.limit=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_GLOBAL_LIMIT.key()}=false."
         case _: TakeOrderedAndProjectExec if !enableTakeOrderedAndProject =>
-          "Conversion disabled: spark.auron.enable.take.ordered.and.project=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_TAKE_ORDERED_AND_PROJECT.key()}=false."
         case _: CollectLimitExec if !enableCollectLimit =>
-          "Conversion disabled: spark.auron.enable.collectLimit=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_COLLECT_LIMIT.key()}=false."
         case _: HashAggregateExec if !enableAggr =>
-          "Conversion disabled: spark.auron.enable.aggr=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_AGGR.key()}=false."
         case _: ObjectHashAggregateExec if !enableAggr =>
-          "Conversion disabled: spark.auron.enable.aggr=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_AGGR.key()}=false."
         case _: SortAggregateExec if !enableAggr =>
-          "Conversion disabled: spark.auron.enable.aggr=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_AGGR.key()}=false."
         case _: ExpandExec if !enableExpand =>
-          "Conversion disabled: spark.auron.enable.expand=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_EXPAND.key()}=false."
         case _: WindowExec if !enableWindow =>
-          "Conversion disabled: spark.auron.enable.window=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_WINDOW.key()}=false."
         case _: UnaryExecNode
             if exec.getClass.getSimpleName == "WindowGroupLimitExec" && !enableWindowGroupLimit =>
-          "Conversion disabled: spark.auron.enable.window.group.limit=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_WINDOW_GROUP_LIMIT.key()}=false."
         case _: GenerateExec if !enableGenerate =>
-          "Conversion disabled: spark.auron.enable.generate=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_GENERATE.key()}=false."
         case _: LocalTableScanExec if !enableLocalTableScan =>
-          "Conversion disabled: spark.auron.enable.local.table.scan=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_LOCAL_TABLE_SCAN.key()}=false."
         case _: DataWritingCommandExec if !enableDataWriting =>
-          "Conversion disabled: spark.auron.enable.data.writing=false."
+          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_DATA_WRITING.key()}=false."
         case _ =>
           s"${exec.getClass.getSimpleName} is not supported yet."
       }
@@ -396,9 +396,9 @@ object AuronConverters extends Logging {
             exec match {
               case _: FileSourceScanExec if enableScan =>
                 if (!enableScanParquet) {
-                  "Conversion disabled: spark.auron.enable.scan.parquet=false."
+                  s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SCAN_PARQUET.key()}=false."
                 } else if (!enableScanOrc) {
-                  "Conversion disabled: spark.auron.enable.scan.orc=false."
+                  s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SCAN_ORC.key()}=false."
                 } else {
                   s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}"
                 }
@@ -492,7 +492,7 @@ object AuronConverters extends Logging {
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
             s"Parquet scan with timestamp type is not supported for table: ${tableIdentifier
               .getOrElse("unknown")}. " +
-              "Set spark.auron.enable.scan.parquet.timestamp=true to enable timestamp support " +
+              s"Set spark.${SparkAuronConfiguration.ENABLE_SCAN_PARQUET_TIMESTAMP.key()}=true to enable timestamp support " +
               "or remove timestamp columns from the query.")
         }
         addRenameColumnsExec(Shims.get.createNativeParquetScanExec(exec))
@@ -503,7 +503,7 @@ object AuronConverters extends Logging {
             !exec.requiredSchema.exists(e => existTimestampType(e.dataType)),
             s"ORC scan with timestamp type is not supported for tableIdentifier: ${tableIdentifier
               .getOrElse("unknown")}. " +
-              "Set spark.auron.enable.scan.orc.timestamp=true to enable timestamp support " +
+              s"Set spark.${SparkAuronConfiguration.ENABLE_SCAN_ORC_TIMESTAMP.key()}=true to enable timestamp support " +
               "or remove timestamp columns from the query.")
         }
         addRenameColumnsExec(Shims.get.createNativeOrcScanExec(exec))

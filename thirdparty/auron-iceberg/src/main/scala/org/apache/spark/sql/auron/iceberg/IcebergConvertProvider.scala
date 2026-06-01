@@ -32,7 +32,7 @@ class IcebergConvertProvider extends AuronConvertProvider with Logging {
     exec match {
       case _: BatchScanExec =>
         val enabled = SparkAuronConfiguration.ENABLE_ICEBERG_SCAN.get()
-        assert(enabled, "Conversion disabled: auron.enable.iceberg.scan=false.")
+        assert(enabled, s"Conversion disabled: ${SparkAuronConfiguration.ENABLE_ICEBERG_SCAN.key()}=false.")
         assert(
           sparkCompatible,
           s"Supported Spark versions: 3.4 to 4.0 (Iceberg ${icebergVersionOrUnknown}).")
