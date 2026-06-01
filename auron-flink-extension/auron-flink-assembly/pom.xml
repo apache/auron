@@ -108,7 +108,11 @@
                 <exclude>LICENSE</exclude>
               </excludes>
             </filter>
-            <!-- Drop Flink's stock StreamExecCalc so only Auron's override remains in the jar. -->
+            <!-- Drop Flink's stock StreamExecCalc so only Auron's override remains in the jar.
+                 Every Auron ExecNode override needs its own <exclude> here; otherwise the stock
+                 Flink copy wins the shade. AssemblyJarStructureIT, driven by the override registry
+                 META-INF/auron/shadowed-flink-execnodes.txt, fails the build if an exclude is
+                 missing. -->
             <filter>
               <artifact>org.apache.flink:flink-table-planner_2.12</artifact>
               <excludes>

@@ -38,82 +38,79 @@ import org.junit.jupiter.api.Test;
 /**
  * Structural smoke test for the shaded {@code auron-flink-assembly} uber jar.
  *
- * <p>The assembly bundles Flink's {@code flink-table-planner} content together with Auron's
- * override of {@code StreamExecCalc} (same fully-qualified class name). Because a jar holds at most
- * one entry per path, the assembly always contains exactly one {@code StreamExecCalc.class} — but
- * <em>which</em> copy survives the shade is what matters. The deployment guarantee A2 relies on is
- * that the surviving copy is <em>Auron's</em>, so that native Calc activation is structural rather
- * than dependent on shade artifact-processing order.
+ * <p>The assembly bundles Flink's {@code flink-table-planner} content together with Auron's overrides
+ * of selected Flink {@code ExecNode} classes (each shipped under the stock Flink fully-qualified
+ * class name). Because a jar holds at most one entry per path, the assembly contains exactly one
+ * entry for each override path — but <em>which</em> copy survives the shade is what matters. The
+ * deployment guarantee A2 relies on is that the surviving copy is <em>Auron's</em>, so that native
+ * activation is structural rather than dependent on shade artifact-processing order.
  *
- * <p>This test asserts the structural <em>outcome</em>: the surviving {@code StreamExecCalc} carries
- * Auron's bytecode marker, the full planner is bundled (not just Auron's one class), and the ASF
- * NOTICE names both products. The load-bearing-ness of the shade {@code <filters>} exclude that
- * produces this outcome is verified separately by the manual A/B procedure documented in the
- * reviewhelper — this test certifies the result that exclude must achieve.
+ * <p>This test asserts the structural <em>outcome</em>, driven by the override registry
+ * {@code META-INF/auron/shadowed-flink-execnodes.txt}: every registered override survives as a single
+ * class entry carrying Auron's {@code FlinkAuronExecNode} marker, the full planner is bundled (not
+ * just Auron's overrides), and the ASF NOTICE names both products. A developer who adds an override +
+ * marker + registry entry but forgets the matching per-class {@code <exclude>} in the assembly shade
+ * {@code <filters>} would let Flink's stock copy win the collision; the surviving class then lacks the
+ * marker and this test fails. The test certifies the result the exclude must achieve, not the shade
+ * mechanism itself.
  *
  * <p>Inspection is purely byte-level via {@link JarFile}: no classloading, and Flink is not on the
  * test classpath.
  */
 class AssemblyJarStructureIT {
 
-    private static final String STREAM_EXEC_CALC_ENTRY =
-            "org/apache/flink/table/planner/plan/nodes/exec/stream/StreamExecCalc.class";
-
-    /**
-     * Internal-name marker that appears in the constant pool of Auron's {@code StreamExecCalc} (it
-     * imports and constructs {@code FlinkAuronCalcOperator}). Flink's stock {@code StreamExecCalc}
-     * has no reference to any Auron type, so this byte sequence distinguishes the two copies.
-     */
-    private static final byte[] AURON_MARKER =
-            "org/apache/auron/flink/runtime/operator/FlinkAuronCalcOperator".getBytes(StandardCharsets.UTF_8);
+    private static final String OVERRIDE_REGISTRY_ENTRY = "META-INF/auron/shadowed-flink-execnodes.txt";
 
     private static final String STREAM_EXEC_PREFIX = "org/apache/flink/table/planner/plan/nodes/exec/stream/StreamExec";
 
-    @Test
-    void exactlyOneStreamExecCalc() throws IOException {
-        try (JarFile jar = openAssemblyJar()) {
-            int count = 0;
-            Enumeration<JarEntry> entries = jar.entries();
-            while (entries.hasMoreElements()) {
-                if (STREAM_EXEC_CALC_ENTRY.equals(entries.nextElement().getName())) {
-                    count++;
-                }
-            }
-            assertEquals(1, count, "Expected exactly one " + STREAM_EXEC_CALC_ENTRY + " entry, found " + count);
-        }
-    }
+    /**
+     * Internal name of the {@code FlinkAuronExecNode} marker interface that every Auron override
+     * implements. Its constant-pool reference is present in any Auron override and absent from every
+     * stock Flink class (stock Flink references no Auron type), so this byte sequence distinguishes
+     * an Auron copy from a stock copy of the same class path.
+     */
+    private static final byte[] AURON_EXEC_NODE_MARKER =
+            "org/apache/auron/flink/table/planner/FlinkAuronExecNode".getBytes(StandardCharsets.UTF_8);
 
     @Test
-    void streamExecCalcIsAuron() throws IOException {
+    void everyRegisteredOverrideIsAuron() throws IOException {
         try (JarFile jar = openAssemblyJar()) {
-            JarEntry entry = jar.getJarEntry(STREAM_EXEC_CALC_ENTRY);
-            assertNotNull(entry, "Assembly jar is missing " + STREAM_EXEC_CALC_ENTRY);
-            byte[] classBytes = readEntry(jar, entry);
-            assertTrue(
-                    indexOf(classBytes, AURON_MARKER) >= 0,
-                    "The bundled StreamExecCalc is not Auron's: its bytecode does not reference "
-                            + "FlinkAuronCalcOperator. Flink's stock copy must have shadowed Auron's "
-                            + "override — the determinism filter is not effective.");
+            List<String> overrides = readOverrideRegistry(jar);
+            for (String fqcn : overrides) {
+                String entryPath = fqcn.replace('.', '/') + ".class";
+                int count = countEntries(jar, entryPath);
+                assertEquals(1, count, "Expected exactly one " + entryPath + " entry, found " + count);
+                byte[] classBytes = readEntry(jar, jar.getJarEntry(entryPath));
+                assertTrue(
+                        indexOf(classBytes, AURON_EXEC_NODE_MARKER) >= 0,
+                        "The bundled "
+                                + fqcn
+                                + " is not Auron's: its bytecode does not reference FlinkAuronExecNode. "
+                                + "Flink's stock copy must have shadowed Auron's override — the shade "
+                                + "<filters> <exclude> for this class is missing or ineffective.");
+            }
         }
     }
 
     @Test
     void flinkPlannerContentBundled() throws IOException {
         try (JarFile jar = openAssemblyJar()) {
+            List<String> overridePaths = new ArrayList<>();
+            for (String fqcn : readOverrideRegistry(jar)) {
+                overridePaths.add(fqcn.replace('.', '/') + ".class");
+            }
             boolean otherStreamExecPresent = false;
             Enumeration<JarEntry> entries = jar.entries();
             while (entries.hasMoreElements()) {
                 String name = entries.nextElement().getName();
-                if (name.startsWith(STREAM_EXEC_PREFIX)
-                        && name.endsWith(".class")
-                        && !name.equals(STREAM_EXEC_CALC_ENTRY)) {
+                if (name.startsWith(STREAM_EXEC_PREFIX) && name.endsWith(".class") && !overridePaths.contains(name)) {
                     otherStreamExecPresent = true;
                     break;
                 }
             }
             assertTrue(
                     otherStreamExecPresent,
-                    "Assembly jar contains no StreamExec* class other than StreamExecCalc — the Flink "
+                    "Assembly jar contains no StreamExec* class other than Auron's overrides — the Flink "
                             + "planner content does not appear to be bundled.");
         }
     }
@@ -130,6 +127,38 @@ class AssemblyJarStructureIT {
                     "META-INF/NOTICE does not name \"Apache Flink\" — the bundled, modified planner "
                             + "content is not attributed.");
         }
+    }
+
+    private static List<String> readOverrideRegistry(JarFile jar) throws IOException {
+        JarEntry entry = jar.getJarEntry(OVERRIDE_REGISTRY_ENTRY);
+        assertNotNull(
+                entry,
+                "Assembly jar is missing the override registry "
+                        + OVERRIDE_REGISTRY_ENTRY
+                        + " — the auron-flink-planner resource did not survive the shade.");
+        String text = new String(readEntry(jar, entry), StandardCharsets.UTF_8);
+        List<String> overrides = new ArrayList<>();
+        for (String line : text.split("\n")) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
+                overrides.add(trimmed);
+            }
+        }
+        assertTrue(
+                !overrides.isEmpty(),
+                "Override registry " + OVERRIDE_REGISTRY_ENTRY + " lists no override class names.");
+        return overrides;
+    }
+
+    private static int countEntries(JarFile jar, String entryPath) {
+        int count = 0;
+        Enumeration<JarEntry> entries = jar.entries();
+        while (entries.hasMoreElements()) {
+            if (entryPath.equals(entries.nextElement().getName())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static JarFile openAssemblyJar() throws IOException {
