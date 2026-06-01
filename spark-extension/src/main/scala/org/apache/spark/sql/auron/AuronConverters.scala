@@ -84,7 +84,7 @@ import org.apache.spark.sql.types.ShortType
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.types.StructType
 
-import org.apache.auron.configuration.AuronConfiguration
+import org.apache.auron.configuration.{AuronConfiguration, ConfigOption}
 import org.apache.auron.jni.AuronAdaptor
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.EmptyPartitionsExecNode
@@ -322,54 +322,57 @@ object AuronConverters extends Logging {
     }
   }
 
+  private def conversionDisabledMsg[T](option: ConfigOption[T]): String =
+    s"Conversion disabled: ${SparkAuronConfiguration.sparkKey(option)}=false."
+
   private def addNeverConvertReasonTag(exec: SparkPlan) = {
     val neverConvertReason =
       exec match {
         case _: FileSourceScanExec if !enableScan =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SCAN.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_SCAN)
         case _: ProjectExec if !enableProject =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_PROJECT.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_PROJECT)
         case _: FilterExec if !enableFilter =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_FILTER.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_FILTER)
         case _: SortExec if !enableSort =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SORT.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_SORT)
         case _: UnionExec if !enableUnion =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_UNION.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_UNION)
         case _: SortMergeJoinExec if !enableSmj =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SMJ.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_SMJ)
         case _: ShuffledHashJoinExec if !enableShj =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SHJ.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_SHJ)
         case _: BroadcastHashJoinExec if !enableBhj =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_BHJ.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_BHJ)
         case _: BroadcastNestedLoopJoinExec if !enableBnlj =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_BNLJ.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_BNLJ)
         case _: LocalLimitExec if !enableLocalLimit =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_LOCAL_LIMIT.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_LOCAL_LIMIT)
         case _: GlobalLimitExec if !enableGlobalLimit =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_GLOBAL_LIMIT.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_GLOBAL_LIMIT)
         case _: TakeOrderedAndProjectExec if !enableTakeOrderedAndProject =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_TAKE_ORDERED_AND_PROJECT.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_TAKE_ORDERED_AND_PROJECT)
         case _: CollectLimitExec if !enableCollectLimit =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_COLLECT_LIMIT.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_COLLECT_LIMIT)
         case _: HashAggregateExec if !enableAggr =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_AGGR.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_AGGR)
         case _: ObjectHashAggregateExec if !enableAggr =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_AGGR.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_AGGR)
         case _: SortAggregateExec if !enableAggr =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_AGGR.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_AGGR)
         case _: ExpandExec if !enableExpand =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_EXPAND.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_EXPAND)
         case _: WindowExec if !enableWindow =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_WINDOW.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_WINDOW)
         case _: UnaryExecNode
             if exec.getClass.getSimpleName == "WindowGroupLimitExec" && !enableWindowGroupLimit =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_WINDOW_GROUP_LIMIT.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_WINDOW_GROUP_LIMIT)
         case _: GenerateExec if !enableGenerate =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_GENERATE.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_GENERATE)
         case _: LocalTableScanExec if !enableLocalTableScan =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_LOCAL_TABLE_SCAN.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_LOCAL_TABLE_SCAN)
         case _: DataWritingCommandExec if !enableDataWriting =>
-          s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_DATA_WRITING.key()}=false."
+          conversionDisabledMsg(SparkAuronConfiguration.ENABLE_DATA_WRITING)
         case _ =>
           s"${exec.getClass.getSimpleName} is not supported yet."
       }
@@ -396,9 +399,9 @@ object AuronConverters extends Logging {
             exec match {
               case _: FileSourceScanExec if enableScan =>
                 if (!enableScanParquet) {
-                  s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SCAN_PARQUET.key()}=false."
+                  conversionDisabledMsg(SparkAuronConfiguration.ENABLE_SCAN_PARQUET)
                 } else if (!enableScanOrc) {
-                  s"Conversion disabled: spark.${SparkAuronConfiguration.ENABLE_SCAN_ORC.key()}=false."
+                  conversionDisabledMsg(SparkAuronConfiguration.ENABLE_SCAN_ORC)
                 } else {
                   s"Falling back exec: ${exec.getClass.getSimpleName}: ${e.getMessage}"
                 }

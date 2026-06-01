@@ -616,6 +616,14 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             throw new IllegalArgumentException("Unsupported default value type: " + valueClass.getName());
         }
     }
+
+    /**
+     * Returns the Spark-prefixed configuration key for the given option.
+     * SQL conf keys are stored without the "spark." prefix but require it at runtime.
+     */
+    public static String sparkKey(ConfigOption<?> option) {
+        return SPARK_PREFIX + option.key();
+    }
 }
 
 class SparkContextOption<T> extends ConfigOption<T> {
