@@ -79,8 +79,8 @@ class HudiConvertProvider extends AuronConvertProvider with Logging {
             AuronConverters.addRenameColumnsExec(Shims.get.createNativeParquetScanExec(scan))
           case Some(HudiScanSupport.OrcFormat) =>
             assert(
-              SparkAuronConfiguration.ENABLE_SCAN_PARQUET.get(),
-              s"Conversion disabled: ${SparkAuronConfiguration.ENABLE_SCAN_PARQUET.key()} is false.")
+              SparkAuronConfiguration.ENABLE_SCAN_ORC.get(),
+              s"Conversion disabled: ${SparkAuronConfiguration.ENABLE_SCAN_ORC.key()} is false.")
             // ORC follows the same timestamp fallback rule as Parquet.
             assert(
               SparkAuronConfiguration.ENABLE_SCAN_ORC_TIMESTAMP.get(),
