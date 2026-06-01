@@ -33,6 +33,12 @@ class AuronNativeCoalesceExecSuite extends AuronQueryTest with BaseAuronSQLSuite
       df.show()
 
       checkAnswer(df, Seq(Row(1, 2)))
+      val test = collectFirst(df.queryExecution.executedPlan) {
+        case coalesceExec: NativeCoalesceExec =>
+          coalesceExec
+      }
+      println(test.get)
+
       assert(collectFirst(df.queryExecution.executedPlan) {
         case coalesceExec: NativeCoalesceExec =>
           coalesceExec
