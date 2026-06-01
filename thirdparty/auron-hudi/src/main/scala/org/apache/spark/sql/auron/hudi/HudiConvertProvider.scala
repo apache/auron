@@ -43,7 +43,7 @@ class HudiConvertProvider extends AuronConvertProvider with Logging {
         assert(
           SparkAuronConfiguration.ENABLE_HUDI_SCAN.get(),
           s"Conversion disabled: ${SparkAuronConfiguration.ENABLE_HUDI_SCAN.key()} is false.")
-        assert(supported, "Conversion disabled: Supported Spark versions: 3.0 to 3.5.")
+        assert(supported, "Conversion disabled: Only supported Spark versions: 3.0 to 3.5.")
         SparkAuronConfiguration.ENABLE_HUDI_SCAN.get() && supported
       case _ => false
     }
