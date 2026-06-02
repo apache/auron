@@ -21,7 +21,10 @@ import java.util.Optional;
 import java.util.Set;
 import org.apache.auron.protobuf.PhysicalBinaryExprNode;
 import org.apache.auron.protobuf.PhysicalExprNode;
+import org.apache.auron.protobuf.PhysicalIsNotNull;
+import org.apache.auron.protobuf.PhysicalIsNull;
 import org.apache.auron.protobuf.PhysicalNegativeNode;
+import org.apache.auron.protobuf.PhysicalNot;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
@@ -36,6 +39,11 @@ import org.apache.calcite.sql.type.SqlTypeUtil;
  * {@code %}), unary minus/plus, and {@code CAST}. Binary arithmetic operands
  * are promoted to a common type before conversion, and the result is cast to
  * the output type if it differs from the common type.
+ *
+ * <p>Also handles logical operators: {@code AND} and {@code OR} (folded
+ * left-deep over Calcite's n-ary operands into binary nodes), {@code NOT},
+ * {@code IS NULL}, and {@code IS NOT NULL}. Logical operands are already
+ * boolean and are not cast.
  */
 public class RexCallConverter implements FlinkRexNodeConverter {
 
@@ -52,7 +60,12 @@ public class RexCallConverter implements FlinkRexNodeConverter {
             SqlKind.MOD,
             SqlKind.MINUS_PREFIX,
             SqlKind.PLUS_PREFIX,
-            SqlKind.CAST);
+            SqlKind.CAST,
+            SqlKind.AND,
+            SqlKind.OR,
+            SqlKind.NOT,
+            SqlKind.IS_NULL,
+            SqlKind.IS_NOT_NULL);
 
     private final FlinkNodeConverterFactory factory;
 
@@ -101,6 +114,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      *   <li>{@code MINUS_PREFIX} → {@link PhysicalNegativeNode}
      *   <li>{@code PLUS_PREFIX} → identity (passthrough to operand)
      *   <li>{@code CAST} → {@link org.apache.auron.protobuf.PhysicalTryCastNode}
+     *   <li>{@code AND}/{@code OR} → {@link PhysicalBinaryExprNode} folded
+     *       left-deep over the n-ary operands
+     *   <li>{@code NOT} → {@link PhysicalNot}
+     *   <li>{@code IS NULL} → {@link PhysicalIsNull}
+     *   <li>{@code IS NOT NULL} → {@link PhysicalIsNotNull}
      * </ul>
      *
      * @throws IllegalArgumentException if the SqlKind is not supported
@@ -126,6 +144,16 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                 return convertOperand(call.getOperands().get(0), context);
             case CAST:
                 return buildTryCast(call, context);
+            case AND:
+                return buildBinaryFold(call, "And", context);
+            case OR:
+                return buildBinaryFold(call, "Or", context);
+            case NOT:
+                return buildNot(call, context);
+            case IS_NULL:
+                return buildIsNull(call, context);
+            case IS_NOT_NULL:
+                return buildIsNotNull(call, context);
             default:
                 throw new IllegalArgumentException("Unsupported SqlKind: " + kind);
         }
@@ -193,5 +221,45 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     private PhysicalExprNode buildTryCast(RexCall call, ConverterContext context) {
         PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
         return FlinkNodeConverterUtils.wrapInTryCast(operand, call.getType());
+    }
+
+    /**
+     * Folds a Calcite n-ary {@code AND}/{@code OR} (operand count &ge; 2) into a
+     * left-deep chain of binary nodes: {@code ((o0 op o1) op o2) ...}. Operands
+     * are already boolean and are not cast.
+     */
+    private PhysicalExprNode buildBinaryFold(RexCall call, String op, ConverterContext context) {
+        PhysicalExprNode acc = convertOperand(call.getOperands().get(0), context);
+        for (int i = 1; i < call.getOperands().size(); i++) {
+            PhysicalExprNode right = convertOperand(call.getOperands().get(i), context);
+            acc = PhysicalExprNode.newBuilder()
+                    .setBinaryExpr(PhysicalBinaryExprNode.newBuilder()
+                            .setL(acc)
+                            .setR(right)
+                            .setOp(op))
+                    .build();
+        }
+        return acc;
+    }
+
+    private PhysicalExprNode buildNot(RexCall call, ConverterContext context) {
+        PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
+        return PhysicalExprNode.newBuilder()
+                .setNotExpr(PhysicalNot.newBuilder().setExpr(operand))
+                .build();
+    }
+
+    private PhysicalExprNode buildIsNull(RexCall call, ConverterContext context) {
+        PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
+        return PhysicalExprNode.newBuilder()
+                .setIsNullExpr(PhysicalIsNull.newBuilder().setExpr(operand))
+                .build();
+    }
+
+    private PhysicalExprNode buildIsNotNull(RexCall call, ConverterContext context) {
+        PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
+        return PhysicalExprNode.newBuilder()
+                .setIsNotNullExpr(PhysicalIsNotNull.newBuilder().setExpr(operand))
+                .build();
     }
 }
