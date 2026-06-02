@@ -617,8 +617,7 @@ public class SparkAuronConfiguration extends AuronConfiguration {
         }
     }
 
-    /**
-     * Returns the Spark-prefixed configuration key for the given option.
+    /** Returns the Spark-prefixed configuration key for the given option.
      * SQL conf keys are stored without the "spark." prefix but require it at runtime.
      */
     public static String sparkKey(ConfigOption<?> option) {
