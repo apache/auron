@@ -1,0 +1,17 @@
+The class org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecCalc in
+this artifact is a modified version developed by Apache Auron: it redirects Calc
+execution to Auron's native engine. It replaces the stock flink-table-planner class
+of the same name (Apache License 2.0, Section 4(b)).
+
+This artifact bundles org.apache.kafka:kafka-clients, whose required attribution
+is reproduced below (kafka-clients ships it in its jar-root NOTICE):
+
+  This project contains the following code copied from Apache Hadoop:
+  clients/src/main/java/org/apache/kafka/common/utils/PureJavaCrc32C.java
+  Some portions of this file Copyright (c) 2004-2006 Intel Corporation and licensed
+  under the BSD license.
+
+  The streams-scala module was donated by Lightbend and the original code was
+  copyrighted by them:
+  Copyright (C) 2018 Lightbend Inc. <https://www.lightbend.com>
+  Copyright (C) 2017-2018 Alexis Seigneurin.

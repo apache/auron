@@ -42,7 +42,6 @@ jobs:
         flinkver: [ "1.18" ]
         javaver: [ "8" ]
         scalaver: [ "2.12" ]
-        module: [ "auron-flink-extension/auron-flink-planner" ]
         sparkver: [ "spark-3.5" ]
 
     steps:
@@ -56,12 +55,15 @@ jobs:
         java-version: ${{ matrix.javaver }}
         cache: 'maven'
 
-    - name: Test Flink Module
-      run: ./build/mvn -B test -pl ${{ matrix.module }} -am -Pscala-${{ matrix.scalaver }} -Pflink-${{ matrix.flinkver }} -P${{ matrix.sparkver }} -Prelease
+    - name: Test Flink modules and verify the assembly jar
+      run: ./build/mvn -B verify -pl auron-flink-extension/auron-flink-assembly -am -Pscala-${{ matrix.scalaver }} -Pflink-${{ matrix.flinkver }} -P${{ matrix.sparkver }} -Prelease
 
     - name: Upload reports
       if: failure()
       uses: actions/upload-artifact@v7
       with:
-        name: ${{ matrix.module }}-test-report
-        path: ${{ matrix.module }}/target/surefire-reports
+        name: auron-flink-test-report
+        path: |
+          auron-flink-extension/auron-flink-planner/target/surefire-reports
+          auron-flink-extension/auron-flink-runtime/target/surefire-reports
+          auron-flink-extension/auron-flink-assembly/target/failsafe-reports
