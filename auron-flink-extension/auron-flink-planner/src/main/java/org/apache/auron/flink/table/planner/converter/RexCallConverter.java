@@ -39,9 +39,11 @@ import org.apache.calcite.sql.type.SqlTypeUtil;
  * {@link PhysicalExprNode}.
  *
  * <p>Handles arithmetic operators ({@code +}, {@code -}, {@code *}, {@code /},
- * {@code %}), unary minus/plus, and {@code CAST}. Binary arithmetic operands
- * are promoted to a common type before conversion, and the result is cast to
- * the output type if it differs from the common type.
+ * {@code %}), comparison operators ({@code =}, {@code <>}, {@code >}, {@code <},
+ * {@code >=}, {@code <=}), unary minus/plus, and {@code CAST}. Binary arithmetic
+ * and comparison operands are promoted to a common type before conversion;
+ * arithmetic additionally casts the result to the output type if it differs from
+ * the common type, while a comparison result is already BOOLEAN and needs no cast.
  *
  * <p>Also handles logical operators: {@code AND} and {@code OR} (folded
  * left-deep over Calcite's n-ary operands into binary nodes), {@code NOT},
@@ -73,7 +75,13 @@ public class RexCallConverter implements FlinkRexNodeConverter {
             SqlKind.NOT,
             SqlKind.IS_NULL,
             SqlKind.IS_NOT_NULL,
-            SqlKind.CASE);
+            SqlKind.CASE,
+            SqlKind.EQUALS,
+            SqlKind.NOT_EQUALS,
+            SqlKind.GREATER_THAN,
+            SqlKind.LESS_THAN,
+            SqlKind.GREATER_THAN_OR_EQUAL,
+            SqlKind.LESS_THAN_OR_EQUAL);
 
     private final FlinkNodeConverterFactory factory;
 
@@ -118,7 +126,10 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      * <p>Dispatches by {@link SqlKind}:
      * <ul>
      *   <li>Binary arithmetic → {@link PhysicalBinaryExprNode} with type
-     *       promotion
+     *       promotion and an output cast when the result type differs
+     *   <li>Comparison ({@code =}, {@code <>}, {@code >}, {@code <}, {@code >=},
+     *       {@code <=}) → {@link PhysicalBinaryExprNode} with type promotion and
+     *       no output cast (the result is already BOOLEAN)
      *   <li>{@code MINUS_PREFIX} → {@link PhysicalNegativeNode}
      *   <li>{@code PLUS_PREFIX} → identity (passthrough to operand)
      *   <li>{@code CAST} → {@link org.apache.auron.protobuf.PhysicalTryCastNode}
@@ -147,6 +158,18 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                 return buildBinaryExpr(call, "Divide", context);
             case MOD:
                 return buildBinaryExpr(call, "Modulo", context);
+            case EQUALS:
+                return buildComparison(call, "Eq", context);
+            case NOT_EQUALS:
+                return buildComparison(call, "NotEq", context);
+            case GREATER_THAN:
+                return buildComparison(call, "Gt", context);
+            case LESS_THAN:
+                return buildComparison(call, "Lt", context);
+            case GREATER_THAN_OR_EQUAL:
+                return buildComparison(call, "GtEq", context);
+            case LESS_THAN_OR_EQUAL:
+                return buildComparison(call, "LtEq", context);
             case MINUS_PREFIX:
                 return buildNegative(call, context);
             case PLUS_PREFIX:
@@ -206,6 +229,39 @@ public class RexCallConverter implements FlinkRexNodeConverter {
             return FlinkNodeConverterUtils.wrapInTryCast(binaryExpr, outputType);
         }
         return binaryExpr;
+    }
+
+    /**
+     * Builds a comparison expression with type promotion between operands.
+     *
+     * <p>Operands are promoted to a common type so the native comparison kernel
+     * sees matching operand types. The result is already BOOLEAN, so it is
+     * returned without an output cast.
+     */
+    private PhysicalExprNode buildComparison(RexCall call, String op, ConverterContext context) {
+        RexNode left = call.getOperands().get(0);
+        RexNode right = call.getOperands().get(1);
+
+        RelDataType compatibleType = FlinkNodeConverterUtils.getCommonTypeForComparison(
+                left.getType(), right.getType(), FlinkNodeConverterUtils.TYPE_FACTORY);
+        if (compatibleType == null) {
+            throw new IllegalStateException("Incompatible types: "
+                    + left.getType().getSqlTypeName()
+                    + " and "
+                    + right.getType().getSqlTypeName());
+        }
+
+        PhysicalExprNode leftExpr =
+                FlinkNodeConverterUtils.castIfNecessary(convertOperand(left, context), left.getType(), compatibleType);
+        PhysicalExprNode rightExpr = FlinkNodeConverterUtils.castIfNecessary(
+                convertOperand(right, context), right.getType(), compatibleType);
+
+        return PhysicalExprNode.newBuilder()
+                .setBinaryExpr(PhysicalBinaryExprNode.newBuilder()
+                        .setL(leftExpr)
+                        .setR(rightExpr)
+                        .setOp(op))
+                .build();
     }
 
     /**

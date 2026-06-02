@@ -214,7 +214,7 @@ class StreamExecCalcTest {
         CapturingTranslator node = new CapturingTranslator(
                 tableConfig,
                 Arrays.asList(intRef(0)),
-                makeBinary(intType(), SqlStdOperatorTable.EQUALS, intRef(0), intRef(1)),
+                makeBinary(intType(), SqlStdOperatorTable.SIMILAR_TO, intRef(0), intRef(1)),
                 inputProperty,
                 RowType.of(new IntType()),
                 "calc",
@@ -231,10 +231,10 @@ class StreamExecCalcTest {
     @Test
     void testFallsBackWhenUnsupportedRexNodeInProjection() throws Exception {
         Transformation<RowData> stub = new FakeSourceTransformation();
-        // EQUALS produces a RexCall whose isSupported() returns false in RexCallConverter.
+        // SIMILAR_TO produces a RexCall whose isSupported() returns false in RexCallConverter.
         CapturingTranslator node = new CapturingTranslator(
                 tableConfig,
-                Arrays.asList(makeBinary(intType(), SqlStdOperatorTable.EQUALS, intRef(0), intRef(1))),
+                Arrays.asList(makeBinary(intType(), SqlStdOperatorTable.SIMILAR_TO, intRef(0), intRef(1))),
                 null,
                 inputProperty,
                 RowType.of(new IntType()),
@@ -284,7 +284,7 @@ class StreamExecCalcTest {
             CapturingTranslator node = new CapturingTranslator(
                     tableConfig,
                     Arrays.asList(intRef(0)),
-                    makeBinary(intType(), SqlStdOperatorTable.EQUALS, intRef(0), intRef(1)),
+                    makeBinary(intType(), SqlStdOperatorTable.SIMILAR_TO, intRef(0), intRef(1)),
                     inputProperty,
                     RowType.of(new IntType()),
                     "calc",
@@ -313,7 +313,7 @@ class StreamExecCalcTest {
         CapturingTranslator a = new CapturingTranslator(
                 tableConfig,
                 Arrays.asList(intRef(0)),
-                makeBinary(intType(), SqlStdOperatorTable.EQUALS, intRef(0), intRef(1)),
+                makeBinary(intType(), SqlStdOperatorTable.SIMILAR_TO, intRef(0), intRef(1)),
                 inputProperty,
                 RowType.of(new IntType()),
                 "calc-a",
@@ -324,7 +324,7 @@ class StreamExecCalcTest {
         CapturingTranslator b = new CapturingTranslator(
                 tableConfig,
                 Arrays.asList(intRef(0)),
-                makeBinary(intType(), SqlStdOperatorTable.EQUALS, intRef(0), intRef(1)),
+                makeBinary(intType(), SqlStdOperatorTable.SIMILAR_TO, intRef(0), intRef(1)),
                 inputProperty,
                 RowType.of(new IntType()),
                 "calc-b",
@@ -339,11 +339,11 @@ class StreamExecCalcTest {
      * distinct WARN log lines. */
     @Test
     void testFallbackEmitsDistinctWarnLogsForDistinctRexClasses() throws Exception {
-        // First fallback: RexCall (EQUALS) is unsupported by RexCallConverter.isSupported.
+        // First fallback: RexCall (SIMILAR_TO) is unsupported by RexCallConverter.isSupported.
         CapturingTranslator a = new CapturingTranslator(
                 tableConfig,
                 Arrays.asList(intRef(0)),
-                makeBinary(intType(), SqlStdOperatorTable.EQUALS, intRef(0), intRef(1)),
+                makeBinary(intType(), SqlStdOperatorTable.SIMILAR_TO, intRef(0), intRef(1)),
                 inputProperty,
                 RowType.of(new IntType()),
                 "calc-a",

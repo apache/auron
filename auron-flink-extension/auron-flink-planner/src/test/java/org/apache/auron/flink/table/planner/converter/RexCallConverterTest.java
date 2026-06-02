@@ -213,10 +213,58 @@ class RexCallConverterTest {
 
     @Test
     void testIsNotSupportedNonNumericKind() {
-        // EQUALS is not in the supported set
-        RexNode eq = REX_BUILDER.makeCall(SqlStdOperatorTable.EQUALS, makeIntRef(0), makeIntRef(0));
+        // SIMILAR_TO is not in the supported set
+        RexNode similar = REX_BUILDER.makeCall(SqlStdOperatorTable.SIMILAR_TO, makeIntRef(0), makeIntRef(0));
 
-        assertFalse(converter.isSupported(eq, context));
+        assertFalse(converter.isSupported(similar, context));
+    }
+
+    @Test
+    void testConvertEquals() {
+        assertComparison(SqlStdOperatorTable.EQUALS, "Eq");
+    }
+
+    @Test
+    void testConvertNotEquals() {
+        assertComparison(SqlStdOperatorTable.NOT_EQUALS, "NotEq");
+    }
+
+    @Test
+    void testConvertGreaterThan() {
+        assertComparison(SqlStdOperatorTable.GREATER_THAN, "Gt");
+    }
+
+    @Test
+    void testConvertLessThan() {
+        assertComparison(SqlStdOperatorTable.LESS_THAN, "Lt");
+    }
+
+    @Test
+    void testConvertGreaterThanOrEqual() {
+        assertComparison(SqlStdOperatorTable.GREATER_THAN_OR_EQUAL, "GtEq");
+    }
+
+    @Test
+    void testConvertLessThanOrEqual() {
+        assertComparison(SqlStdOperatorTable.LESS_THAN_OR_EQUAL, "LtEq");
+    }
+
+    @Test
+    void testConvertComparisonPromotesOperands() {
+        // INT (f0) = BIGINT (f1): the INT operand is promoted to BIGINT,
+        // and the comparison result is a plain BINARY expr (no outer result cast).
+        RexNode intRef = makeIntRef(0);
+        RexNode bigintRef = REX_BUILDER.makeInputRef(bigintType(), 1);
+        RexNode eq = makeCall(boolType(), SqlStdOperatorTable.EQUALS, intRef, bigintRef);
+
+        PhysicalExprNode result = converter.convert(eq, context);
+
+        assertTrue(result.hasBinaryExpr(), "Top-level node must be a plain binary expr (no outer TryCast)");
+        assertEquals("Eq", result.getBinaryExpr().getOp());
+        PhysicalExprNode left = result.getBinaryExpr().getL();
+        assertTrue(left.hasTryCast(), "Left operand (INT) should be cast to BIGINT");
+        PhysicalExprNode right = result.getBinaryExpr().getR();
+        assertTrue(right.hasColumn(), "Right operand (BIGINT) should be a plain column");
     }
 
     @Test
@@ -342,6 +390,21 @@ class RexCallConverterTest {
     }
 
     // ---- Helpers ----
+
+    private void assertComparison(org.apache.calcite.sql.SqlOperator op, String expectedOp) {
+        RexNode call = makeCall(boolType(), op, makeIntRef(0), makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(call, context);
+
+        assertTrue(result.hasBinaryExpr());
+        assertEquals(expectedOp, result.getBinaryExpr().getOp());
+        assertTrue(result.getBinaryExpr().hasL(), "Left operand must be present");
+        assertTrue(result.getBinaryExpr().hasR(), "Right operand must be present");
+    }
+
+    private static RelDataType boolType() {
+        return TYPE_FACTORY.createSqlType(SqlTypeName.BOOLEAN);
+    }
 
     private static RexNode makeIntRef(int index) {
         return REX_BUILDER.makeInputRef(intType(), index);
