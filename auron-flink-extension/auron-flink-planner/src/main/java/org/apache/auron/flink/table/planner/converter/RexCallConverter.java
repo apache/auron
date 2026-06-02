@@ -25,6 +25,7 @@ import org.apache.auron.protobuf.PhysicalCaseNode;
 import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalIsNotNull;
 import org.apache.auron.protobuf.PhysicalIsNull;
+import org.apache.auron.protobuf.PhysicalLikeExprNode;
 import org.apache.auron.protobuf.PhysicalNegativeNode;
 import org.apache.auron.protobuf.PhysicalNot;
 import org.apache.auron.protobuf.PhysicalWhenThen;
@@ -32,6 +33,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.fun.SqlLikeOperator;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 
 /**
@@ -40,10 +42,12 @@ import org.apache.calcite.sql.type.SqlTypeUtil;
  *
  * <p>Handles arithmetic operators ({@code +}, {@code -}, {@code *}, {@code /},
  * {@code %}), comparison operators ({@code =}, {@code <>}, {@code >}, {@code <},
- * {@code >=}, {@code <=}), unary minus/plus, and {@code CAST}. Binary arithmetic
- * and comparison operands are promoted to a common type before conversion;
- * arithmetic additionally casts the result to the output type if it differs from
- * the common type, while a comparison result is already BOOLEAN and needs no cast.
+ * {@code >=}, {@code <=}), {@code LIKE} / {@code NOT LIKE}, unary minus/plus, and
+ * {@code CAST}. Binary arithmetic and comparison operands are promoted to a common
+ * type before conversion; arithmetic additionally casts the result to the output
+ * type if it differs from the common type, while a comparison result is already
+ * BOOLEAN and needs no cast. {@code LIKE} maps to a dedicated like node; an
+ * explicit {@code ESCAPE} clause is unsupported and falls back.
  *
  * <p>Also handles logical operators: {@code AND} and {@code OR} (folded
  * left-deep over Calcite's n-ary operands into binary nodes), {@code NOT},
@@ -81,7 +85,8 @@ public class RexCallConverter implements FlinkRexNodeConverter {
             SqlKind.GREATER_THAN,
             SqlKind.LESS_THAN,
             SqlKind.GREATER_THAN_OR_EQUAL,
-            SqlKind.LESS_THAN_OR_EQUAL);
+            SqlKind.LESS_THAN_OR_EQUAL,
+            SqlKind.LIKE);
 
     private final FlinkNodeConverterFactory factory;
 
@@ -106,6 +111,10 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      *
      * <p>For binary arithmetic kinds, the call's result type must also be
      * numeric to reject non-arithmetic uses (e.g., TIMESTAMP + INTERVAL).
+     *
+     * <p>{@code LIKE} is supported only in its two-operand form ({@code expr
+     * LIKE pattern}). A three-operand {@code LIKE} with an explicit
+     * {@code ESCAPE} clause has no native equivalent and falls back.
      */
     @Override
     public boolean isSupported(RexNode node, ConverterContext context) {
@@ -113,6 +122,10 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         SqlKind kind = call.getKind();
         if (!SUPPORTED_KINDS.contains(kind)) {
             return false;
+        }
+        if (kind == SqlKind.LIKE) {
+            return call.getOperator() instanceof SqlLikeOperator
+                    && call.getOperands().size() == 2;
         }
         if (BINARY_ARITHMETIC_KINDS.contains(kind)) {
             return SqlTypeUtil.isNumeric(call.getType());
@@ -130,6 +143,9 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      *   <li>Comparison ({@code =}, {@code <>}, {@code >}, {@code <}, {@code >=},
      *       {@code <=}) → {@link PhysicalBinaryExprNode} with type promotion and
      *       no output cast (the result is already BOOLEAN)
+     *   <li>{@code LIKE} → {@link PhysicalLikeExprNode} (case-sensitive, never
+     *       negated); {@code NOT LIKE} is {@code NOT(LIKE(...))} and converts via
+     *       the {@code NOT} case
      *   <li>{@code MINUS_PREFIX} → {@link PhysicalNegativeNode}
      *   <li>{@code PLUS_PREFIX} → identity (passthrough to operand)
      *   <li>{@code CAST} → {@link org.apache.auron.protobuf.PhysicalTryCastNode}
@@ -170,6 +186,8 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                 return buildComparison(call, "GtEq", context);
             case LESS_THAN_OR_EQUAL:
                 return buildComparison(call, "LtEq", context);
+            case LIKE:
+                return buildLike(call, context);
             case MINUS_PREFIX:
                 return buildNegative(call, context);
             case PLUS_PREFIX:
@@ -261,6 +279,25 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                         .setL(leftExpr)
                         .setR(rightExpr)
                         .setOp(op))
+                .build();
+    }
+
+    /**
+     * Builds a {@code LIKE} expression as a {@link PhysicalLikeExprNode}. Matching
+     * is case-sensitive (Flink SQL {@code LIKE} semantics). The node is never
+     * negated here: Calcite represents {@code NOT LIKE} as {@code NOT(LIKE(...))}
+     * (a negated like operator cannot form a {@link RexCall}), so a {@code LIKE}
+     * call always reaches this method un-negated.
+     */
+    private PhysicalExprNode buildLike(RexCall call, ConverterContext context) {
+        PhysicalExprNode expr = convertOperand(call.getOperands().get(0), context);
+        PhysicalExprNode pattern = convertOperand(call.getOperands().get(1), context);
+        return PhysicalExprNode.newBuilder()
+                .setLikeExpr(PhysicalLikeExprNode.newBuilder()
+                        .setNegated(false)
+                        .setCaseInsensitive(false)
+                        .setExpr(expr)
+                        .setPattern(pattern))
                 .build();
     }
 

@@ -38,6 +38,7 @@ import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.table.types.logical.VarCharType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -61,9 +62,15 @@ class RexCallConverterTest {
 
         RowType inputType = RowType.of(
                 new LogicalType[] {
-                    new IntType(), new BigIntType(), new BooleanType(), new BooleanType(), new BooleanType()
+                    new IntType(),
+                    new BigIntType(),
+                    new BooleanType(),
+                    new BooleanType(),
+                    new BooleanType(),
+                    new VarCharType(),
+                    new VarCharType()
                 },
-                new String[] {"f0", "f1", "f2", "f3", "f4"});
+                new String[] {"f0", "f1", "f2", "f3", "f4", "f5", "f6"});
         context = new ConverterContext(new Configuration(), null, getClass().getClassLoader(), inputType);
     }
 
@@ -389,6 +396,42 @@ class RexCallConverterTest {
         assertTrue(result.getCase().hasElseExpr());
     }
 
+    @Test
+    void testConvertLike() {
+        RexNode like = makeCall(boolType(), SqlStdOperatorTable.LIKE, strRef(5), strRef(6));
+
+        PhysicalExprNode result = converter.convert(like, context);
+
+        assertTrue(result.hasLikeExpr());
+        assertFalse(result.getLikeExpr().getNegated(), "Plain LIKE must not be negated");
+        assertFalse(result.getLikeExpr().getCaseInsensitive(), "LIKE is case-sensitive");
+        assertTrue(result.getLikeExpr().hasExpr(), "Expr operand must be present");
+        assertTrue(result.getLikeExpr().hasPattern(), "Pattern operand must be present");
+    }
+
+    @Test
+    void testNotLikeConvertsAsNotOfLike() {
+        // Calcite never builds a negated LIKE RexCall (RexCall.<init> rejects a negated
+        // SqlLikeOperator via validRexOperands). At the Rex layer x NOT LIKE y is
+        // NOT(x LIKE y), which converts to a NOT wrapping the un-negated like node.
+        RexNode like = makeCall(boolType(), SqlStdOperatorTable.LIKE, strRef(5), strRef(6));
+        RexNode notLike = REX_BUILDER.makeCall(SqlStdOperatorTable.NOT, like);
+
+        assertTrue(converter.isSupported(notLike, context));
+        PhysicalExprNode result = converter.convert(notLike, context);
+        assertTrue(result.hasNotExpr());
+        assertTrue(result.getNotExpr().getExpr().hasLikeExpr(), "NOT wraps the like node");
+        assertFalse(result.getNotExpr().getExpr().getLikeExpr().getNegated(), "Inner like node stays un-negated");
+    }
+
+    @Test
+    void testLikeWithExplicitEscapeIsUnsupported() {
+        // 3-operand LIKE (expr, pattern, ESCAPE) has no native escape field → falls back.
+        RexNode escapeLike = makeCall(boolType(), SqlStdOperatorTable.LIKE, strRef(5), strRef(6), strRef(5));
+
+        assertFalse(converter.isSupported(escapeLike, context));
+    }
+
     // ---- Helpers ----
 
     private void assertComparison(org.apache.calcite.sql.SqlOperator op, String expectedOp) {
@@ -424,6 +467,14 @@ class RexCallConverterTest {
 
     private static RelDataType booleanType() {
         return TYPE_FACTORY.createSqlType(SqlTypeName.BOOLEAN);
+    }
+
+    private static RexNode strRef(int index) {
+        return REX_BUILDER.makeInputRef(varcharType(), index);
+    }
+
+    private static RelDataType varcharType() {
+        return TYPE_FACTORY.createSqlType(SqlTypeName.VARCHAR);
     }
 
     /**
