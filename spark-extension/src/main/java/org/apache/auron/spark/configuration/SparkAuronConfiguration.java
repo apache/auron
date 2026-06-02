@@ -621,7 +621,8 @@ public class SparkAuronConfiguration extends AuronConfiguration {
      * SQL conf keys are stored without the "spark." prefix but require it at runtime.
      */
     public static String sparkKey(ConfigOption<?> option) {
-        return SPARK_PREFIX + option.key();
+        String key = option.key();
+        return key.startsWith(SPARK_PREFIX) ? key : SPARK_PREFIX + key;
     }
 }
 
