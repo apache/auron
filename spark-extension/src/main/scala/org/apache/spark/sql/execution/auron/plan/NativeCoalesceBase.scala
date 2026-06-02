@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
 import org.apache.spark.rdd.{CoalescedRDDPartition, PartitionCoalescer, PartitionGroup, RDD}
-import org.apache.spark.sql.auron.{CoalesceNativeRDD, EmptyNativeRDD, NativeHelper, NativeRDD, NativeSupports}
+import org.apache.spark.sql.auron.{CoalesceNativeRDD, NativeHelper, NativeRDD, NativeSupports}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.auron.plan.NativeCoalesceBase.getNativeCoalesceBuilder
 
@@ -47,8 +47,22 @@ abstract class NativeCoalesceBase(numPartitions: Int, override val child: SparkP
         CoalescedRDDPartition(i, inputRDD, ids, pg.prefLoc)
       }
     }
-    if (numPartitions == 1 && inputRDD.getNumPartitions < 1) {
-      new EmptyNativeRDD(sparkContext)
+    if (inputRDD.getNumPartitions < 1) {
+      // Spark's CoalesceExec always returns at least numPartitions partitions even
+      // when the input is empty, so that emptyDataFrame.coalesce(1) yields 1 partition.
+      val emptyPartitions: Array[Partition] = (0 until numPartitions).map { i =>
+        CoalescedRDDPartition(i, inputRDD, Array.empty, None)
+      }.toArray
+      new CoalesceNativeRDD(
+        sparkContext,
+        Seq(new org.apache.spark.OneToOneDependency(inputRDD)),
+        emptyPartitions,
+        (_, _) =>
+          PhysicalPlanNode
+            .newBuilder()
+            .setCoalesce(nativeCoalesce.toBuilder.build())
+            .build(),
+        nodeName)
     } else {
       new CoalesceNativeRDD(
         sparkContext,
