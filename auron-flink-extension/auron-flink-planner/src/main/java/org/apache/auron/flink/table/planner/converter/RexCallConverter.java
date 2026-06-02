@@ -17,14 +17,17 @@
 package org.apache.auron.flink.table.planner.converter;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.apache.auron.protobuf.PhysicalBinaryExprNode;
+import org.apache.auron.protobuf.PhysicalCaseNode;
 import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalIsNotNull;
 import org.apache.auron.protobuf.PhysicalIsNull;
 import org.apache.auron.protobuf.PhysicalNegativeNode;
 import org.apache.auron.protobuf.PhysicalNot;
+import org.apache.auron.protobuf.PhysicalWhenThen;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
@@ -44,6 +47,10 @@ import org.apache.calcite.sql.type.SqlTypeUtil;
  * left-deep over Calcite's n-ary operands into binary nodes), {@code NOT},
  * {@code IS NULL}, and {@code IS NOT NULL}. Logical operands are already
  * boolean and are not cast.
+ *
+ * <p>{@code CASE WHEN} (searched form) becomes a {@link PhysicalCaseNode} with
+ * one {@link PhysicalWhenThen} per branch and a trailing else; each then/else
+ * result is cast to the call's result type so all branches share one type.
  */
 public class RexCallConverter implements FlinkRexNodeConverter {
 
@@ -65,7 +72,8 @@ public class RexCallConverter implements FlinkRexNodeConverter {
             SqlKind.OR,
             SqlKind.NOT,
             SqlKind.IS_NULL,
-            SqlKind.IS_NOT_NULL);
+            SqlKind.IS_NOT_NULL,
+            SqlKind.CASE);
 
     private final FlinkNodeConverterFactory factory;
 
@@ -119,6 +127,7 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      *   <li>{@code NOT} → {@link PhysicalNot}
      *   <li>{@code IS NULL} → {@link PhysicalIsNull}
      *   <li>{@code IS NOT NULL} → {@link PhysicalIsNotNull}
+     *   <li>{@code CASE} → {@link PhysicalCaseNode}
      * </ul>
      *
      * @throws IllegalArgumentException if the SqlKind is not supported
@@ -154,6 +163,8 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                 return buildIsNull(call, context);
             case IS_NOT_NULL:
                 return buildIsNotNull(call, context);
+            case CASE:
+                return buildCase(call, context);
             default:
                 throw new IllegalArgumentException("Unsupported SqlKind: " + kind);
         }
@@ -261,5 +272,32 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         return PhysicalExprNode.newBuilder()
                 .setIsNotNullExpr(PhysicalIsNotNull.newBuilder().setExpr(operand))
                 .build();
+    }
+
+    /**
+     * Builds a searched {@code CASE} from Calcite's interleaved operands
+     * {@code [when1, then1, ..., whenN, thenN, else]} (odd count, trailing
+     * else). Each then and the else are cast to the call's result type so the
+     * native {@code CaseExpr} receives uniformly-typed branches. The
+     * simple-CASE {@code expr} field is left unset.
+     */
+    private PhysicalExprNode buildCase(RexCall call, ConverterContext context) {
+        RelDataType resultType = call.getType();
+        List<RexNode> operands = call.getOperands();
+        PhysicalCaseNode.Builder caseNode = PhysicalCaseNode.newBuilder();
+        int i = 0;
+        for (; i + 1 < operands.size(); i += 2) {
+            RexNode when = operands.get(i);
+            RexNode then = operands.get(i + 1);
+            PhysicalExprNode whenExpr = convertOperand(when, context);
+            PhysicalExprNode thenExpr =
+                    FlinkNodeConverterUtils.castIfNecessary(convertOperand(then, context), then.getType(), resultType);
+            caseNode.addWhenThenExpr(
+                    PhysicalWhenThen.newBuilder().setWhenExpr(whenExpr).setThenExpr(thenExpr));
+        }
+        RexNode elseOperand = operands.get(i);
+        caseNode.setElseExpr(FlinkNodeConverterUtils.castIfNecessary(
+                convertOperand(elseOperand, context), elseOperand.getType(), resultType));
+        return PhysicalExprNode.newBuilder().setCase(caseNode).build();
     }
 }

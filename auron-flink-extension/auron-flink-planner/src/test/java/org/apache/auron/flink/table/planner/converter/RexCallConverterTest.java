@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import org.apache.auron.protobuf.PhysicalExprNode;
+import org.apache.auron.protobuf.PhysicalWhenThen;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -284,6 +285,60 @@ class RexCallConverterTest {
 
         assertTrue(result.hasIsNotNullExpr());
         assertTrue(result.getIsNotNullExpr().getExpr().hasColumn());
+    }
+
+    @Test
+    void testConvertCaseNoCast() {
+        // CASE WHEN f2 THEN f0 ELSE f0 END — all branches INT, result INT → no cast
+        RexNode caseExpr = makeCall(intType(), SqlStdOperatorTable.CASE, makeBoolRef(2), makeIntRef(0), makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(caseExpr, context);
+
+        assertTrue(result.hasCase());
+        assertEquals(1, result.getCase().getWhenThenExprCount());
+        // Searched CASE leaves the simple-CASE expr unset.
+        assertFalse(result.getCase().hasExpr());
+        PhysicalWhenThen whenThen = result.getCase().getWhenThenExpr(0);
+        assertTrue(whenThen.getWhenExpr().hasColumn());
+        // then is plain column (INT == result INT), not cast-wrapped.
+        assertTrue(whenThen.getThenExpr().hasColumn());
+        assertFalse(whenThen.getThenExpr().hasTryCast());
+        assertTrue(result.getCase().hasElseExpr());
+        assertTrue(result.getCase().getElseExpr().hasColumn());
+        assertFalse(result.getCase().getElseExpr().hasTryCast());
+    }
+
+    @Test
+    void testConvertCaseWithBranchCast() {
+        // CASE WHEN f2 THEN f0(INT) ELSE f0(INT) END with result BIGINT → branches cast to BIGINT
+        RexNode caseExpr =
+                makeCall(bigintType(), SqlStdOperatorTable.CASE, makeBoolRef(2), makeIntRef(0), makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(caseExpr, context);
+
+        assertTrue(result.hasCase());
+        PhysicalWhenThen whenThen = result.getCase().getWhenThenExpr(0);
+        assertTrue(whenThen.getThenExpr().hasTryCast(), "then INT should be cast to result BIGINT");
+        assertTrue(result.getCase().getElseExpr().hasTryCast(), "else INT should be cast to result BIGINT");
+    }
+
+    @Test
+    void testConvertCaseMultipleBranches() {
+        // CASE WHEN f2 THEN f0 WHEN f3 THEN f0 ELSE f0 END → two when/then branches
+        RexNode caseExpr = makeCall(
+                intType(),
+                SqlStdOperatorTable.CASE,
+                makeBoolRef(2),
+                makeIntRef(0),
+                makeBoolRef(3),
+                makeIntRef(0),
+                makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(caseExpr, context);
+
+        assertTrue(result.hasCase());
+        assertEquals(2, result.getCase().getWhenThenExprCount());
+        assertTrue(result.getCase().hasElseExpr());
     }
 
     // ---- Helpers ----
