@@ -628,9 +628,8 @@ impl AccSet {
             InternalSet::Huge(s) => {
                 let new_value = self.list.ref_raw(new_pos_len);
                 let hash = acc_hash(new_value);
-let found = s.find(hash, |&pos_len| {
-    new_len == pos_len.1 as usize && new_value == self.list.ref_raw(pos_len)
-});
+                let found = s.find(hash, |&pos_len| {
+                    new_len == pos_len.1 as usize && new_value == self.list.ref_raw(pos_len)
                 });
                 if found.is_none() {
                     s.insert_unique(hash, new_pos_len, |&pos_len| {
