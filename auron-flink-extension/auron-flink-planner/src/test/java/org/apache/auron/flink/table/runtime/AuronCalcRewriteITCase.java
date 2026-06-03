@@ -45,10 +45,9 @@ public class AuronCalcRewriteITCase extends AuronFlinkTableTestBase {
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(2, 2), Row.of(3, 4), Row.of(3, 4)));
     }
 
-    /** A filter-plus-projection Calc whose condition uses a not-yet-supported comparison operator
-     * falls back to Flink's codegen path. Asserts the job still produces correct results; the
-     * Auron-side {@code Filter[FFIReader]} plan-shape coverage will be added when a
-     * predicate-returning converter lands. */
+    /** A filter-plus-projection Calc whose WHERE condition and projection are both
+     * converter-supported, exercising the combined Filter+Project path. Asserts the final
+     * row set is correct; the harness does not distinguish native execution from fallback. */
     @Test
     public void testFilterAndProjectEndToEnd() {
         List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment

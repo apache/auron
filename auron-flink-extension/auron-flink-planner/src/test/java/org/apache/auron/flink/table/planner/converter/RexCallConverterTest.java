@@ -38,6 +38,7 @@ import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.table.types.logical.VarCharType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -61,9 +62,15 @@ class RexCallConverterTest {
 
         RowType inputType = RowType.of(
                 new LogicalType[] {
-                    new IntType(), new BigIntType(), new BooleanType(), new BooleanType(), new BooleanType()
+                    new IntType(),
+                    new BigIntType(),
+                    new BooleanType(),
+                    new BooleanType(),
+                    new BooleanType(),
+                    new VarCharType(),
+                    new VarCharType()
                 },
-                new String[] {"f0", "f1", "f2", "f3", "f4"});
+                new String[] {"f0", "f1", "f2", "f3", "f4", "f5", "f6"});
         context = new ConverterContext(new Configuration(), null, getClass().getClassLoader(), inputType);
     }
 
@@ -213,10 +220,58 @@ class RexCallConverterTest {
 
     @Test
     void testIsNotSupportedNonNumericKind() {
-        // EQUALS is not in the supported set
-        RexNode eq = REX_BUILDER.makeCall(SqlStdOperatorTable.EQUALS, makeIntRef(0), makeIntRef(0));
+        // SIMILAR_TO is not in the supported set
+        RexNode similar = REX_BUILDER.makeCall(SqlStdOperatorTable.SIMILAR_TO, makeIntRef(0), makeIntRef(0));
 
-        assertFalse(converter.isSupported(eq, context));
+        assertFalse(converter.isSupported(similar, context));
+    }
+
+    @Test
+    void testConvertEquals() {
+        assertComparison(SqlStdOperatorTable.EQUALS, "Eq");
+    }
+
+    @Test
+    void testConvertNotEquals() {
+        assertComparison(SqlStdOperatorTable.NOT_EQUALS, "NotEq");
+    }
+
+    @Test
+    void testConvertGreaterThan() {
+        assertComparison(SqlStdOperatorTable.GREATER_THAN, "Gt");
+    }
+
+    @Test
+    void testConvertLessThan() {
+        assertComparison(SqlStdOperatorTable.LESS_THAN, "Lt");
+    }
+
+    @Test
+    void testConvertGreaterThanOrEqual() {
+        assertComparison(SqlStdOperatorTable.GREATER_THAN_OR_EQUAL, "GtEq");
+    }
+
+    @Test
+    void testConvertLessThanOrEqual() {
+        assertComparison(SqlStdOperatorTable.LESS_THAN_OR_EQUAL, "LtEq");
+    }
+
+    @Test
+    void testConvertComparisonPromotesOperands() {
+        // INT (f0) = BIGINT (f1): the INT operand is promoted to BIGINT,
+        // and the comparison result is a plain BINARY expr (no outer result cast).
+        RexNode intRef = makeIntRef(0);
+        RexNode bigintRef = REX_BUILDER.makeInputRef(bigintType(), 1);
+        RexNode eq = makeCall(boolType(), SqlStdOperatorTable.EQUALS, intRef, bigintRef);
+
+        PhysicalExprNode result = converter.convert(eq, context);
+
+        assertTrue(result.hasBinaryExpr(), "Top-level node must be a plain binary expr (no outer TryCast)");
+        assertEquals("Eq", result.getBinaryExpr().getOp());
+        PhysicalExprNode left = result.getBinaryExpr().getL();
+        assertTrue(left.hasTryCast(), "Left operand (INT) should be cast to BIGINT");
+        PhysicalExprNode right = result.getBinaryExpr().getR();
+        assertTrue(right.hasColumn(), "Right operand (BIGINT) should be a plain column");
     }
 
     @Test
@@ -341,7 +396,58 @@ class RexCallConverterTest {
         assertTrue(result.getCase().hasElseExpr());
     }
 
+    @Test
+    void testConvertLike() {
+        RexNode like = makeCall(boolType(), SqlStdOperatorTable.LIKE, strRef(5), strRef(6));
+
+        PhysicalExprNode result = converter.convert(like, context);
+
+        assertTrue(result.hasLikeExpr());
+        assertFalse(result.getLikeExpr().getNegated(), "Plain LIKE must not be negated");
+        assertFalse(result.getLikeExpr().getCaseInsensitive(), "LIKE is case-sensitive");
+        assertTrue(result.getLikeExpr().hasExpr(), "Expr operand must be present");
+        assertTrue(result.getLikeExpr().hasPattern(), "Pattern operand must be present");
+    }
+
+    @Test
+    void testNotLikeConvertsAsNotOfLike() {
+        // Calcite never builds a negated LIKE RexCall (RexCall.<init> rejects a negated
+        // SqlLikeOperator via validRexOperands). At the Rex layer x NOT LIKE y is
+        // NOT(x LIKE y), which converts to a NOT wrapping the un-negated like node.
+        RexNode like = makeCall(boolType(), SqlStdOperatorTable.LIKE, strRef(5), strRef(6));
+        RexNode notLike = REX_BUILDER.makeCall(SqlStdOperatorTable.NOT, like);
+
+        assertTrue(converter.isSupported(notLike, context));
+        PhysicalExprNode result = converter.convert(notLike, context);
+        assertTrue(result.hasNotExpr());
+        assertTrue(result.getNotExpr().getExpr().hasLikeExpr(), "NOT wraps the like node");
+        assertFalse(result.getNotExpr().getExpr().getLikeExpr().getNegated(), "Inner like node stays un-negated");
+    }
+
+    @Test
+    void testLikeWithExplicitEscapeIsUnsupported() {
+        // 3-operand LIKE (expr, pattern, ESCAPE) has no native escape field → falls back.
+        RexNode escapeLike = makeCall(boolType(), SqlStdOperatorTable.LIKE, strRef(5), strRef(6), strRef(5));
+
+        assertFalse(converter.isSupported(escapeLike, context));
+    }
+
     // ---- Helpers ----
+
+    private void assertComparison(org.apache.calcite.sql.SqlOperator op, String expectedOp) {
+        RexNode call = makeCall(boolType(), op, makeIntRef(0), makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(call, context);
+
+        assertTrue(result.hasBinaryExpr());
+        assertEquals(expectedOp, result.getBinaryExpr().getOp());
+        assertTrue(result.getBinaryExpr().hasL(), "Left operand must be present");
+        assertTrue(result.getBinaryExpr().hasR(), "Right operand must be present");
+    }
+
+    private static RelDataType boolType() {
+        return TYPE_FACTORY.createSqlType(SqlTypeName.BOOLEAN);
+    }
 
     private static RexNode makeIntRef(int index) {
         return REX_BUILDER.makeInputRef(intType(), index);
@@ -361,6 +467,14 @@ class RexCallConverterTest {
 
     private static RelDataType booleanType() {
         return TYPE_FACTORY.createSqlType(SqlTypeName.BOOLEAN);
+    }
+
+    private static RexNode strRef(int index) {
+        return REX_BUILDER.makeInputRef(varcharType(), index);
+    }
+
+    private static RelDataType varcharType() {
+        return TYPE_FACTORY.createSqlType(SqlTypeName.VARCHAR);
     }
 
     /**

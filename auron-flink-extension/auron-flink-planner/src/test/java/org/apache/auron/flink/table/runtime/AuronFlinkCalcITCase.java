@@ -19,6 +19,7 @@ package org.apache.auron.flink.table.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import org.apache.auron.flink.table.AuronFlinkTableTestBase;
@@ -37,5 +38,95 @@ public class AuronFlinkCalcITCase extends AuronFlinkTableTestBase {
                 tableEnvironment.executeSql("select `int` + 1 from T1").collect());
         rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(2), Row.of(3), Row.of(3)));
+    }
+
+    /** An equality filter keeps only rows whose value matches. */
+    @Test
+    public void testFilterEquals() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` = 1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1)));
+    }
+
+    /** A not-equals filter drops rows whose value matches. */
+    @Test
+    public void testFilterNotEquals() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` <> 1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(2), Row.of(2)));
+    }
+
+    /** A greater-than filter keeps only rows strictly above the bound. */
+    @Test
+    public void testFilterGreaterThan() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` > 1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(2), Row.of(2)));
+    }
+
+    /** A less-than filter keeps only rows strictly below the bound. */
+    @Test
+    public void testFilterLessThan() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` < 2")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1)));
+    }
+
+    /** A greater-or-equal filter keeps rows at or above the bound. */
+    @Test
+    public void testFilterGreaterEqual() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` >= 1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1), Row.of(2), Row.of(2)));
+    }
+
+    /** A less-or-equal filter keeps rows at or below the bound. */
+    @Test
+    public void testFilterLessEqual() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` <= 2")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1), Row.of(2), Row.of(2)));
+    }
+
+    /** A comparison used directly in the projection yields a Boolean column per row. */
+    @Test
+    public void testComparisonInBooleanProjection() {
+        List<Row> rows = CollectionUtil.iteratorToList(
+                tableEnvironment.executeSql("select `int` > 1 from T1").collect());
+        rows.sort(Comparator.comparing(o -> (Boolean) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(false), Row.of(true), Row.of(true)));
+    }
+
+    /** A filter comparing an INT column against a DOUBLE column exercises INT-to-DOUBLE operand
+     * promotion; no row has int greater than double, so the result is empty. */
+    @Test
+    public void testMixedTypePromotionFilter() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` > `double`")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Collections.emptyList());
+    }
+
+    /** A LIKE filter keeps rows whose string matches the pattern. */
+    @Test
+    public void testFilterLike() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `string` from T1 where `string` LIKE 'Comment%'")
+                .collect());
+        rows.sort(Comparator.comparing(o -> (String) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of("Comment#1"), Row.of("Comment#1")));
     }
 }
