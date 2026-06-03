@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import org.apache.auron.protobuf.PhysicalExprNode;
+import org.apache.auron.protobuf.PhysicalWhenThen;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -33,6 +34,7 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
@@ -57,7 +59,11 @@ class RexCallConverterTest {
         factory.registerRexConverter(new RexLiteralConverter());
         factory.registerRexConverter(converter);
 
-        RowType inputType = RowType.of(new LogicalType[] {new IntType(), new BigIntType()}, new String[] {"f0", "f1"});
+        RowType inputType = RowType.of(
+                new LogicalType[] {
+                    new IntType(), new BigIntType(), new BooleanType(), new BooleanType(), new BooleanType()
+                },
+                new String[] {"f0", "f1", "f2", "f3", "f4"});
         context = new ConverterContext(new Configuration(), null, getClass().getClassLoader(), inputType);
     }
 
@@ -213,10 +219,136 @@ class RexCallConverterTest {
         assertFalse(converter.isSupported(eq, context));
     }
 
+    @Test
+    void testConvertAndTwoOperands() {
+        RexNode and = makeCall(booleanType(), SqlStdOperatorTable.AND, makeBoolRef(2), makeBoolRef(3));
+
+        PhysicalExprNode result = converter.convert(and, context);
+
+        assertTrue(result.hasBinaryExpr());
+        assertEquals("And", result.getBinaryExpr().getOp());
+        assertTrue(result.getBinaryExpr().getL().hasColumn());
+        assertTrue(result.getBinaryExpr().getR().hasColumn());
+    }
+
+    @Test
+    void testConvertAndThreeOperands() {
+        // AND(f2, f3, f4) folds left-deep to ((f2 AND f3) AND f4)
+        RexNode and = makeCall(booleanType(), SqlStdOperatorTable.AND, makeBoolRef(2), makeBoolRef(3), makeBoolRef(4));
+
+        PhysicalExprNode result = converter.convert(and, context);
+
+        assertTrue(result.hasBinaryExpr());
+        assertEquals("And", result.getBinaryExpr().getOp());
+        // Left child is the inner (f2 AND f3); right child is f4
+        PhysicalExprNode left = result.getBinaryExpr().getL();
+        assertTrue(left.hasBinaryExpr());
+        assertEquals("And", left.getBinaryExpr().getOp());
+        assertTrue(result.getBinaryExpr().getR().hasColumn());
+    }
+
+    @Test
+    void testConvertOr() {
+        RexNode or = makeCall(booleanType(), SqlStdOperatorTable.OR, makeBoolRef(2), makeBoolRef(3));
+
+        PhysicalExprNode result = converter.convert(or, context);
+
+        assertTrue(result.hasBinaryExpr());
+        assertEquals("Or", result.getBinaryExpr().getOp());
+    }
+
+    @Test
+    void testConvertNot() {
+        RexNode not = makeCall(booleanType(), SqlStdOperatorTable.NOT, makeBoolRef(2));
+
+        PhysicalExprNode result = converter.convert(not, context);
+
+        assertTrue(result.hasNotExpr());
+        assertTrue(result.getNotExpr().getExpr().hasColumn());
+    }
+
+    @Test
+    void testConvertIsNull() {
+        RexNode isNull = makeCall(booleanType(), SqlStdOperatorTable.IS_NULL, makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(isNull, context);
+
+        assertTrue(result.hasIsNullExpr());
+        assertTrue(result.getIsNullExpr().getExpr().hasColumn());
+    }
+
+    @Test
+    void testConvertIsNotNull() {
+        RexNode isNotNull = makeCall(booleanType(), SqlStdOperatorTable.IS_NOT_NULL, makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(isNotNull, context);
+
+        assertTrue(result.hasIsNotNullExpr());
+        assertTrue(result.getIsNotNullExpr().getExpr().hasColumn());
+    }
+
+    @Test
+    void testConvertCaseNoCast() {
+        // CASE WHEN f2 THEN f0 ELSE f0 END — all branches INT, result INT → no cast
+        RexNode caseExpr = makeCall(intType(), SqlStdOperatorTable.CASE, makeBoolRef(2), makeIntRef(0), makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(caseExpr, context);
+
+        assertTrue(result.hasCase());
+        assertEquals(1, result.getCase().getWhenThenExprCount());
+        // Searched CASE leaves the simple-CASE expr unset.
+        assertFalse(result.getCase().hasExpr());
+        PhysicalWhenThen whenThen = result.getCase().getWhenThenExpr(0);
+        assertTrue(whenThen.getWhenExpr().hasColumn());
+        // then is plain column (INT == result INT), not cast-wrapped.
+        assertTrue(whenThen.getThenExpr().hasColumn());
+        assertFalse(whenThen.getThenExpr().hasTryCast());
+        assertTrue(result.getCase().hasElseExpr());
+        assertTrue(result.getCase().getElseExpr().hasColumn());
+        assertFalse(result.getCase().getElseExpr().hasTryCast());
+    }
+
+    @Test
+    void testConvertCaseWithBranchCast() {
+        // CASE WHEN f2 THEN f0(INT) ELSE f0(INT) END with result BIGINT → branches cast to BIGINT
+        RexNode caseExpr =
+                makeCall(bigintType(), SqlStdOperatorTable.CASE, makeBoolRef(2), makeIntRef(0), makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(caseExpr, context);
+
+        assertTrue(result.hasCase());
+        PhysicalWhenThen whenThen = result.getCase().getWhenThenExpr(0);
+        assertTrue(whenThen.getThenExpr().hasTryCast(), "then INT should be cast to result BIGINT");
+        assertTrue(result.getCase().getElseExpr().hasTryCast(), "else INT should be cast to result BIGINT");
+    }
+
+    @Test
+    void testConvertCaseMultipleBranches() {
+        // CASE WHEN f2 THEN f0 WHEN f3 THEN f0 ELSE f0 END → two when/then branches
+        RexNode caseExpr = makeCall(
+                intType(),
+                SqlStdOperatorTable.CASE,
+                makeBoolRef(2),
+                makeIntRef(0),
+                makeBoolRef(3),
+                makeIntRef(0),
+                makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(caseExpr, context);
+
+        assertTrue(result.hasCase());
+        assertEquals(2, result.getCase().getWhenThenExprCount());
+        assertTrue(result.getCase().hasElseExpr());
+    }
+
     // ---- Helpers ----
 
     private static RexNode makeIntRef(int index) {
         return REX_BUILDER.makeInputRef(intType(), index);
+    }
+
+    private static RexNode makeBoolRef(int index) {
+        return REX_BUILDER.makeInputRef(booleanType(), index);
     }
 
     private static RelDataType intType() {
@@ -225,6 +357,10 @@ class RexCallConverterTest {
 
     private static RelDataType bigintType() {
         return TYPE_FACTORY.createSqlType(SqlTypeName.BIGINT);
+    }
+
+    private static RelDataType booleanType() {
+        return TYPE_FACTORY.createSqlType(SqlTypeName.BOOLEAN);
     }
 
     /**

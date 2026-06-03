@@ -80,4 +80,47 @@ public class AuronCalcRewriteITCase extends AuronFlinkTableTestBase {
         rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(2), Row.of(2), Row.of(3), Row.of(3), Row.of(9), Row.of(9)));
     }
+
+    /** Projects {@code IS NULL} and {@code IS NOT NULL} over a nullable column that contains no
+     * null values in the test data, so every row yields {@code (false, true)}. */
+    @Test
+    public void testIsNullAndIsNotNullProjection() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` IS NULL, `int` IS NOT NULL from T1")
+                .collect());
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(false, true), Row.of(false, true), Row.of(false, true)));
+    }
+
+    /** Combines {@code IS NULL}/{@code IS NOT NULL} predicates through {@code AND} and {@code OR}.
+     * With no nulls present both combined conditions are constant, so every row yields
+     * {@code (true, true)}. */
+    @Test
+    public void testAndOrBooleanCombination() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select (`int` IS NOT NULL) AND (`name` IS NOT NULL), "
+                        + "(`int` IS NULL) OR (`name` IS NOT NULL) from T1")
+                .collect());
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(true, true), Row.of(true, true), Row.of(true, true)));
+    }
+
+    /** Negates an {@code IS NULL} predicate with {@code NOT}. With no nulls present the predicate
+     * is constant, so every row yields {@code true}. */
+    @Test
+    public void testNotProjection() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select NOT (`int` IS NULL) from T1")
+                .collect());
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(true), Row.of(true), Row.of(true)));
+    }
+
+    /** A {@code CASE WHEN} whose guard holds for every row (the column has no null values) while
+     * the arithmetic {@code THEN} branch varies the output: {@code int + 1} yields 2, 3, 3. */
+    @Test
+    public void testCaseWhenWithArithmeticBranch() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select CASE WHEN `int` IS NOT NULL THEN `int` + 1 ELSE 0 END from T1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(2), Row.of(3), Row.of(3)));
+    }
 }
