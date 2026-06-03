@@ -144,6 +144,28 @@ public class AuronFlinkCalcITCase extends AuronFlinkTableTestBase {
         assertThat(rows).isEqualTo(Arrays.asList(Row.of((Object) null), Row.of((Object) null), Row.of((Object) null)));
     }
 
+    /** A valid numeric-to-numeric CAST converts to the strict native cast node and yields the
+     * widened values. */
+    @Test
+    public void testCastIntToDouble() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select cast(`int` as DOUBLE) from T1")
+                .collect());
+        rows.sort(Comparator.comparingDouble(o -> (double) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1d), Row.of(2d), Row.of(2d)));
+    }
+
+    /** A string-to-numeric CAST over a parseable per-row string converts to the strict native cast
+     * node and yields the parsed values. */
+    @Test
+    public void testCastStringToInt() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select cast(cast(`int` as STRING) as INT) from T1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1), Row.of(2), Row.of(2)));
+    }
+
     /** A cast to an unsupported target type (TIMESTAMP) is gated to Flink fallback and
      * still produces the correct row set. */
     @Test

@@ -153,13 +153,14 @@ class RexCallConverterTest {
 
     @Test
     void testConvertCast() {
+        // Explicit CAST routes to the strict cast node (throws on bad conversion).
         RexNode cast = makeCall(bigintType(), SqlStdOperatorTable.CAST, makeIntRef(0));
 
         PhysicalExprNode result = converter.convert(cast, context);
 
-        assertTrue(result.hasTryCast());
-        assertTrue(result.getTryCast().getExpr().hasColumn());
-        assertTrue(result.getTryCast().hasArrowType());
+        assertTrue(result.hasCast());
+        assertTrue(result.getCast().getExpr().hasColumn());
+        assertTrue(result.getCast().hasArrowType());
     }
 
     @Test

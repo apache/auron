@@ -17,6 +17,7 @@
 package org.apache.auron.flink.table.planner.converter;
 
 import org.apache.auron.flink.utils.SchemaConverters;
+import org.apache.auron.protobuf.PhysicalCastNode;
 import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalTryCastNode;
 import org.apache.calcite.rel.type.RelDataType;
@@ -117,6 +118,25 @@ public final class FlinkNodeConverterUtils {
         org.apache.auron.protobuf.ArrowType arrowType = SchemaConverters.convertToAuronArrowType(logicalType);
         return PhysicalExprNode.newBuilder()
                 .setTryCast(PhysicalTryCastNode.newBuilder().setExpr(expr).setArrowType(arrowType))
+                .build();
+    }
+
+    /**
+     * Wraps the given native expression in a strict {@link PhysicalCastNode}
+     * targeting the specified Calcite type. Unlike {@link #wrapInTryCast}, the
+     * strict cast errors on a bad conversion rather than producing {@code NULL}.
+     * The node shape and Arrow type stamping are identical to the try-cast
+     * variant.
+     *
+     * @param expr the native expression to wrap
+     * @param targetType the desired output type
+     * @return a new {@link PhysicalExprNode} containing a {@code Cast}
+     */
+    public static PhysicalExprNode wrapInCast(PhysicalExprNode expr, RelDataType targetType) {
+        LogicalType logicalType = FlinkTypeFactory.toLogicalType(targetType);
+        org.apache.auron.protobuf.ArrowType arrowType = SchemaConverters.convertToAuronArrowType(logicalType);
+        return PhysicalExprNode.newBuilder()
+                .setCast(PhysicalCastNode.newBuilder().setExpr(expr).setArrowType(arrowType))
                 .build();
     }
 
