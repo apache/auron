@@ -35,6 +35,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlLikeOperator;
 import org.apache.calcite.sql.type.SqlTypeUtil;
+import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
 
 /**
  * Converts a Calcite {@link RexCall} (operator expression) to an Auron native
@@ -119,6 +120,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     @Override
     public boolean isSupported(RexNode node, ConverterContext context) {
         RexCall call = (RexCall) node;
+        // TRY_CAST has SqlKind OTHER_FUNCTION (not in SUPPORTED_KINDS), so it is
+        // matched by operator identity before the kind checks.
+        if (call.getOperator() == FlinkSqlOperatorTable.TRY_CAST) {
+            return isCastTypeSupported(call.getOperands().get(0).getType(), call.getType());
+        }
         SqlKind kind = call.getKind();
         if (!SUPPORTED_KINDS.contains(kind)) {
             return false;
@@ -130,7 +136,43 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         if (BINARY_ARITHMETIC_KINDS.contains(kind)) {
             return SqlTypeUtil.isNumeric(call.getType());
         }
+        if (kind == SqlKind.CAST) {
+            return isCastTypeSupported(call.getOperands().get(0).getType(), call.getType());
+        }
         return true;
+    }
+
+    /**
+     * Returns {@code true} if a cast from {@code source} to {@code target} is in
+     * the conservatively supported set that the native cast kernel performs
+     * faithfully: numeric&harr;numeric (including decimal), numeric&rarr;string,
+     * string&rarr;numeric (including string&rarr;decimal), boolean&rarr;string, and
+     * string&rarr;boolean. Every other pair (temporal, binary, complex, etc.)
+     * returns {@code false} so the whole Calc falls back to Flink's engine.
+     */
+    private static boolean isCastTypeSupported(RelDataType source, RelDataType target) {
+        boolean srcNum = SqlTypeUtil.isNumeric(source);
+        boolean tgtNum = SqlTypeUtil.isNumeric(target);
+        boolean srcStr = SqlTypeUtil.isString(source);
+        boolean tgtStr = SqlTypeUtil.isString(target);
+        boolean srcBool = SqlTypeUtil.isBoolean(source);
+        boolean tgtBool = SqlTypeUtil.isBoolean(target);
+        if (srcNum && tgtNum) {
+            return true;
+        }
+        if (srcNum && tgtStr) {
+            return true;
+        }
+        if (srcStr && tgtNum) {
+            return true;
+        }
+        if (srcBool && tgtStr) {
+            return true;
+        }
+        if (srcStr && tgtBool) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -162,6 +204,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     @Override
     public PhysicalExprNode convert(RexNode node, ConverterContext context) {
         RexCall call = (RexCall) node;
+        // TRY_CAST has SqlKind OTHER_FUNCTION, which the switch below would route
+        // to the throwing default; match it by operator identity beforehand.
+        if (call.getOperator() == FlinkSqlOperatorTable.TRY_CAST) {
+            return buildTryCast(call, context);
+        }
         SqlKind kind = call.getKind();
         switch (kind) {
             case PLUS:

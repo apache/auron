@@ -33,6 +33,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.IntType;
@@ -159,6 +160,77 @@ class RexCallConverterTest {
         assertTrue(result.hasTryCast());
         assertTrue(result.getTryCast().getExpr().hasColumn());
         assertTrue(result.getTryCast().hasArrowType());
+    }
+
+    @Test
+    void testConvertTryCast() {
+        // TRY_CAST has SqlKind OTHER_FUNCTION; it is matched by operator identity
+        // and converts to a try-cast node (null-on-failure semantics).
+        RexNode tryCast = makeCall(bigintType(), FlinkSqlOperatorTable.TRY_CAST, makeIntRef(0));
+
+        PhysicalExprNode result = converter.convert(tryCast, context);
+
+        assertTrue(result.hasTryCast());
+        assertTrue(result.getTryCast().getExpr().hasColumn());
+        assertTrue(result.getTryCast().hasArrowType());
+    }
+
+    @Test
+    void testTryCastIsSupported() {
+        RexNode tryCast = makeCall(bigintType(), FlinkSqlOperatorTable.TRY_CAST, makeIntRef(0));
+
+        assertTrue(converter.isSupported(tryCast, context));
+    }
+
+    @Test
+    void testCastToUnsupportedTypeFallsBack() {
+        // INT -> DATE is outside the conservative supported set → not supported.
+        RexNode cast = makeCall(dateType(), SqlStdOperatorTable.CAST, makeIntRef(0));
+
+        assertFalse(converter.isSupported(cast, context));
+    }
+
+    @Test
+    void testTryCastToUnsupportedTypeFallsBack() {
+        // INT -> DATE is outside the conservative supported set → not supported.
+        RexNode tryCast = makeCall(dateType(), FlinkSqlOperatorTable.TRY_CAST, makeIntRef(0));
+
+        assertFalse(converter.isSupported(tryCast, context));
+    }
+
+    @Test
+    void testCastNumericToNumeric() {
+        RexNode cast = makeCall(bigintType(), SqlStdOperatorTable.CAST, makeIntRef(0));
+
+        assertTrue(converter.isSupported(cast, context));
+    }
+
+    @Test
+    void testCastNumericToString() {
+        RexNode cast = makeCall(varcharType(), SqlStdOperatorTable.CAST, makeIntRef(0));
+
+        assertTrue(converter.isSupported(cast, context));
+    }
+
+    @Test
+    void testCastStringToNumeric() {
+        RexNode cast = makeCall(intType(), SqlStdOperatorTable.CAST, strRef(5));
+
+        assertTrue(converter.isSupported(cast, context));
+    }
+
+    @Test
+    void testCastBooleanToString() {
+        RexNode cast = makeCall(varcharType(), SqlStdOperatorTable.CAST, makeBoolRef(2));
+
+        assertTrue(converter.isSupported(cast, context));
+    }
+
+    @Test
+    void testCastStringToDecimal() {
+        RexNode cast = makeCall(decimalType(), SqlStdOperatorTable.CAST, strRef(5));
+
+        assertTrue(converter.isSupported(cast, context));
     }
 
     @Test
@@ -475,6 +547,14 @@ class RexCallConverterTest {
 
     private static RelDataType varcharType() {
         return TYPE_FACTORY.createSqlType(SqlTypeName.VARCHAR);
+    }
+
+    private static RelDataType decimalType() {
+        return TYPE_FACTORY.createSqlType(SqlTypeName.DECIMAL, 10, 2);
+    }
+
+    private static RelDataType dateType() {
+        return TYPE_FACTORY.createSqlType(SqlTypeName.DATE);
     }
 
     /**

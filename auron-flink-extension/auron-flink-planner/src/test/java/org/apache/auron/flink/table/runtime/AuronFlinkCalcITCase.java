@@ -129,4 +129,29 @@ public class AuronFlinkCalcITCase extends AuronFlinkTableTestBase {
         rows.sort(Comparator.comparing(o -> (String) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of("Comment#1"), Row.of("Comment#1")));
     }
+
+    /**
+     * A string that cannot be parsed as INT under TRY_CAST resolves to NULL via the native
+     * try-cast path instead of failing the query, confirming the converter routes the
+     * TRY_CAST operator to the null-on-failure native node end to end.
+     */
+    @Test
+    public void testTryCastUnparseableStringToInt() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select try_cast(`string` as INT) from T1")
+                .collect());
+        // Every `string` value ("Hi", "Comment#1") is non-numeric → all NULL.
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of((Object) null), Row.of((Object) null), Row.of((Object) null)));
+    }
+
+    /** A cast to an unsupported target type (TIMESTAMP) is gated to Flink fallback and
+     * still produces the correct row set. */
+    @Test
+    public void testCastToUnsupportedTypeFallsBack() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where cast(`ts` as TIMESTAMP) is not null")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1), Row.of(2), Row.of(2)));
+    }
 }
