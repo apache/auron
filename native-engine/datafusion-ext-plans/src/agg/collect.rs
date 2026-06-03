@@ -775,4 +775,33 @@ mod tests {
         assert_eq!(acc_col.take_values(2), acc_col_unspill.take_values(2));
         Ok(())
     }
+
+    #[test]
+    fn test_acc_set_merge_preserves_first_occurrence_order_after_rhs_spill() -> Result<()> {
+        let value1 = ScalarValue::Int32(Some(1));
+        let value2 = ScalarValue::Int32(Some(2));
+        let value3 = ScalarValue::Int32(Some(3));
+
+        let mut lhs = AccSetColumn::empty(DataType::Int32);
+        lhs.resize(1);
+        lhs.append_item(0, &value1);
+
+        let mut rhs = AccSetColumn::empty(DataType::Int32);
+        rhs.resize(1);
+        rhs.append_item(0, &value2);
+        rhs.append_item(0, &value3);
+
+        let mut spill: Box<dyn Spill> = Box::new(vec![]);
+        let mut spill_writer = spill.get_compressed_writer();
+        rhs.spill(IdxSelection::Range(0, 1), &mut spill_writer)?;
+        spill_writer.finish()?;
+
+        let mut rhs_unspill = AccSetColumn::empty(DataType::Int32);
+        rhs_unspill.unspill(1, &mut spill.get_compressed_reader())?;
+
+        lhs.merge_items(0, &mut rhs_unspill, 0);
+
+        assert_eq!(lhs.take_values(0), vec![value1, value2, value3]);
+        Ok(())
+    }
 }
