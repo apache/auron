@@ -166,6 +166,28 @@ public class AuronFlinkCalcITCase extends AuronFlinkTableTestBase {
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(1), Row.of(2), Row.of(2)));
     }
 
+    /** A boolean-to-string CAST over a per-row comparison converts to the strict native cast node
+     * and renders each boolean as its lowercase textual form. */
+    @Test
+    public void testCastBooleanToString() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select cast((`int` > 1) as STRING) from T1")
+                .collect());
+        rows.sort(Comparator.comparing(o -> (String) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of("false"), Row.of("true"), Row.of("true")));
+    }
+
+    /** A string-to-boolean CAST over a per-row boolean rendered as text round-trips back to the
+     * original boolean values through the strict native cast node. */
+    @Test
+    public void testCastStringToBoolean() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select cast(cast((`int` > 1) as STRING) as BOOLEAN) from T1")
+                .collect());
+        rows.sort(Comparator.comparing(o -> (Boolean) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(false), Row.of(true), Row.of(true)));
+    }
+
     /** A cast to an unsupported target type (TIMESTAMP) is gated to Flink fallback and
      * still produces the correct row set. */
     @Test
