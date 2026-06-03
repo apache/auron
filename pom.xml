@@ -62,7 +62,7 @@
     <scala-xml.version>2.1.0</scala-xml.version>
     <scalaJava8CompatVersion>1.0.2</scalaJava8CompatVersion>
     <scalaCollectionCompatVersion>2.12.0</scalaCollectionCompatVersion>
-    <maven.version>3.9.12</maven.version>
+    <maven.version>3.9.16</maven.version>
     <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
     <maven.plugin.scalatest.version>2.2.0</maven.plugin.scalatest.version>
     <maven.plugin.scalastyle.version>1.0.0</maven.plugin.scalastyle.version>
