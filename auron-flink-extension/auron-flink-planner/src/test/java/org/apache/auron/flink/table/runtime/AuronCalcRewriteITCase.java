@@ -122,4 +122,27 @@ public class AuronCalcRewriteITCase extends AuronFlinkTableTestBase {
         rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(2), Row.of(3), Row.of(3)));
     }
+
+    /** A CASE whose guard is a comparison varies per row: the guard is false for the int=1 row
+     * (yielding the ELSE) and true for the int=2 rows. */
+    @Test
+    public void testCaseWhenComparisonGuard() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select CASE WHEN `int` > 1 THEN `int` * 2 ELSE 0 END from T1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(0), Row.of(4), Row.of(4)));
+    }
+
+    /** A multi-branch searched CASE evaluates its WHEN guards in order; the int=1 row takes the
+     * first branch and the int=2 rows fall through to the ELSE. */
+    @Test
+    public void testCaseWhenMultipleBranches() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql(
+                        "select CASE WHEN `int` = 1 THEN 'one' WHEN `int` > 2 THEN 'big' " + "ELSE 'two' END from T1")
+                .collect());
+        rows.sort(Comparator.comparing(o -> (String) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of("one"), Row.of("two"), Row.of("two")));
+    }
 }
