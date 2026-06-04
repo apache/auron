@@ -35,6 +35,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlLikeOperator;
 import org.apache.calcite.sql.type.SqlTypeUtil;
+import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
 
 /**
  * Converts a Calcite {@link RexCall} (operator expression) to an Auron native
@@ -42,12 +43,19 @@ import org.apache.calcite.sql.type.SqlTypeUtil;
  *
  * <p>Handles arithmetic operators ({@code +}, {@code -}, {@code *}, {@code /},
  * {@code %}), comparison operators ({@code =}, {@code <>}, {@code >}, {@code <},
- * {@code >=}, {@code <=}), {@code LIKE} / {@code NOT LIKE}, unary minus/plus, and
- * {@code CAST}. Binary arithmetic and comparison operands are promoted to a common
- * type before conversion; arithmetic additionally casts the result to the output
- * type if it differs from the common type, while a comparison result is already
- * BOOLEAN and needs no cast. {@code LIKE} maps to a dedicated like node; an
- * explicit {@code ESCAPE} clause is unsupported and falls back.
+ * {@code >=}, {@code <=}), {@code LIKE} / {@code NOT LIKE}, unary minus/plus,
+ * {@code CAST}, and {@code TRY_CAST}. Binary arithmetic and comparison operands
+ * are promoted to a common type before conversion; arithmetic additionally casts
+ * the result to the output type if it differs from the common type, while a
+ * comparison result is already BOOLEAN and needs no cast. {@code LIKE} maps to a
+ * dedicated like node; an explicit {@code ESCAPE} clause is unsupported and falls
+ * back.
+ *
+ * <p>An explicit {@code CAST} maps to a strict cast node that errors on a bad
+ * conversion, whereas {@code TRY_CAST} maps to a try-cast node that yields
+ * {@code NULL} on failure; the internal operand/result promotions above use the
+ * try-cast node. Only the source&rarr;target pairs in {@link #isCastTypeSupported}
+ * convert; every other pair falls back to Flink's engine.
  *
  * <p>Also handles logical operators: {@code AND} and {@code OR} (folded
  * left-deep over Calcite's n-ary operands into binary nodes), {@code NOT},
@@ -119,6 +127,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     @Override
     public boolean isSupported(RexNode node, ConverterContext context) {
         RexCall call = (RexCall) node;
+        // TRY_CAST has SqlKind OTHER_FUNCTION (not in SUPPORTED_KINDS), so it is
+        // matched by operator identity before the kind checks.
+        if (call.getOperator() == FlinkSqlOperatorTable.TRY_CAST) {
+            return isCastTypeSupported(call.getOperands().get(0).getType(), call.getType());
+        }
         SqlKind kind = call.getKind();
         if (!SUPPORTED_KINDS.contains(kind)) {
             return false;
@@ -130,7 +143,43 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         if (BINARY_ARITHMETIC_KINDS.contains(kind)) {
             return SqlTypeUtil.isNumeric(call.getType());
         }
+        if (kind == SqlKind.CAST) {
+            return isCastTypeSupported(call.getOperands().get(0).getType(), call.getType());
+        }
         return true;
+    }
+
+    /**
+     * Returns {@code true} if a cast from {@code source} to {@code target} is in
+     * the conservatively supported set that the native cast kernel performs
+     * faithfully: numeric&harr;numeric (including decimal), numeric&rarr;string,
+     * string&rarr;numeric (including string&rarr;decimal), boolean&rarr;string, and
+     * string&rarr;boolean. Every other pair (temporal, binary, complex, etc.)
+     * returns {@code false} so the whole Calc falls back to Flink's engine.
+     */
+    private static boolean isCastTypeSupported(RelDataType source, RelDataType target) {
+        boolean srcNum = SqlTypeUtil.isNumeric(source);
+        boolean tgtNum = SqlTypeUtil.isNumeric(target);
+        boolean srcStr = SqlTypeUtil.isString(source);
+        boolean tgtStr = SqlTypeUtil.isString(target);
+        boolean srcBool = SqlTypeUtil.isBoolean(source);
+        boolean tgtBool = SqlTypeUtil.isBoolean(target);
+        if (srcNum && tgtNum) {
+            return true;
+        }
+        if (srcNum && tgtStr) {
+            return true;
+        }
+        if (srcStr && tgtNum) {
+            return true;
+        }
+        if (srcBool && tgtStr) {
+            return true;
+        }
+        if (srcStr && tgtBool) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -148,7 +197,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      *       the {@code NOT} case
      *   <li>{@code MINUS_PREFIX} → {@link PhysicalNegativeNode}
      *   <li>{@code PLUS_PREFIX} → identity (passthrough to operand)
-     *   <li>{@code CAST} → {@link org.apache.auron.protobuf.PhysicalTryCastNode}
+     *   <li>{@code CAST} → {@link org.apache.auron.protobuf.PhysicalCastNode}
+     *       (strict; errors on a bad conversion)
+     *   <li>{@code TRY_CAST} → {@link org.apache.auron.protobuf.PhysicalTryCastNode}
+     *       (yields {@code NULL} on a bad conversion); matched by operator
+     *       identity before the {@link SqlKind} switch
      *   <li>{@code AND}/{@code OR} → {@link PhysicalBinaryExprNode} folded
      *       left-deep over the n-ary operands
      *   <li>{@code NOT} → {@link PhysicalNot}
@@ -162,6 +215,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     @Override
     public PhysicalExprNode convert(RexNode node, ConverterContext context) {
         RexCall call = (RexCall) node;
+        // TRY_CAST has SqlKind OTHER_FUNCTION, which the switch below would route
+        // to the throwing default; match it by operator identity beforehand.
+        if (call.getOperator() == FlinkSqlOperatorTable.TRY_CAST) {
+            return buildTryCast(call, context);
+        }
         SqlKind kind = call.getKind();
         switch (kind) {
             case PLUS:
@@ -193,7 +251,7 @@ public class RexCallConverter implements FlinkRexNodeConverter {
             case PLUS_PREFIX:
                 return convertOperand(call.getOperands().get(0), context);
             case CAST:
-                return buildTryCast(call, context);
+                return buildCast(call, context);
             case AND:
                 return buildBinaryFold(call, "And", context);
             case OR:
@@ -320,6 +378,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         return PhysicalExprNode.newBuilder()
                 .setNegative(PhysicalNegativeNode.newBuilder().setExpr(operand))
                 .build();
+    }
+
+    private PhysicalExprNode buildCast(RexCall call, ConverterContext context) {
+        PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
+        return FlinkNodeConverterUtils.wrapInCast(operand, call.getType());
     }
 
     private PhysicalExprNode buildTryCast(RexCall call, ConverterContext context) {
