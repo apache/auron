@@ -36,11 +36,9 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.OneToOneDependency
+import org.apache.spark.{OneToOneDependency, Partition}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.auron.NativeHelper
-import org.apache.spark.sql.auron.NativeRDD
-import org.apache.spark.sql.auron.NativeSupports
+import org.apache.spark.sql.auron.{NativeHelper, NativePartition, NativeRDD, NativeSupports}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.SortOrder
@@ -91,10 +89,13 @@ abstract class NativeParquetSinkBase(
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeDependencies = new OneToOneDependency(inputRDD) :: Nil
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
     new NativeRDD(
       sparkSession.sparkContext,
       nativeMetrics,
-      inputRDD.partitions,
+      rddPartitions = nativePartitions.toArray,
       inputRDD.partitioner,
       nativeDependencies,
       inputRDD.isShuffleReadFull,
@@ -146,7 +147,7 @@ abstract class NativeParquetSinkBase(
               .setValue(entry.getValue)
               .build())
 
-        val inputPartition = inputRDD.partitions(partition.index)
+        val inputPartition = partition.asInstanceOf[NativePartition[Partition]].payload
         val parquetSink = ParquetSinkExecNode
           .newBuilder()
           .setInput(inputRDD.nativePlan(inputPartition, context))

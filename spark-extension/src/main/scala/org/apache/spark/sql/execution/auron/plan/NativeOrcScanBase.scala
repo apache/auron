@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.metric.SparkMetricNode
 
-abstract class NativeOrcScanBase(basedFileScan: FileSourceScanExec)
+abstract class NativeOrcScanBase(@transient basedFileScan: FileSourceScanExec)
     extends NativeFileSourceScanBase(basedFileScan) {
 
   override def doExecuteNative(): NativeRDD = {
@@ -49,7 +49,6 @@ abstract class NativeOrcScanBase(basedFileScan: FileSourceScanExec)
         }))
       val nativePruningPredicateFilters = this.nativePruningPredicateFilters
       val nativeFileSchema = this.nativeFileSchema
-      val nativeFileGroups = this.nativeFileGroups
       val nativePartitionSchema = this.nativePartitionSchema
       val projection = schema.map(field => basedFileScan.relation.schema.fieldIndex(field.name))
       val broadcastedHadoopConf = this.broadcastedHadoopConf

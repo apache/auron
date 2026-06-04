@@ -55,6 +55,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
   override val output: Seq[Attribute] = basedFileScan.output
   override val outputPartitioning: Partitioning = basedFileScan.outputPartitioning
 
+  @transient
   protected val inputFileScanRDD: FileScanRDD = {
     MethodUtils.invokeMethod(basedFileScan, true, "prepare")
     MethodUtils.invokeMethod(basedFileScan, true, "waitForSubqueries")
@@ -77,13 +78,6 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
 
   private val partitionSchema = basedFileScan.relation.partitionSchema
 
-  private val fileSizes = inputFileScanRDD.filePartitions
-    .flatMap(_.files)
-    .groupBy(_.filePath)
-    .mapValues(_.foldLeft(0L)(_ + _.length))
-    .map(identity) // make this map serializable
-    .toMap
-
   // predicate pruning is buggy for decimal type, so we need to
   // temporarily disable predicate pruning for decimal type
   // see https://github.com/apache/auron/issues/1032
@@ -104,7 +98,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
   protected def nativePartitionSchema: pb.Schema =
     NativeConverters.convertSchema(partitionSchema)
 
-  protected def nativeFileGroups: FilePartition => pb.FileGroup = (partition: FilePartition) => {
+  protected def nativeFileGroups(partition: FilePartition): pb.FileGroup = {
     // list input file statuses
     val nativePartitionedFile = (file: PartitionedFile) => {
       val nativePartitionValues = partitionSchema.zipWithIndex.map { case (field, index) =>
@@ -115,7 +109,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
       pb.PartitionedFile
         .newBuilder()
         .setPath(s"${file.filePath}")
-        .setSize(fileSizes(file.filePath))
+        .setSize(file.fileSize)
         .addAllPartitionValues(nativePartitionValues.asJava)
         .setLastModifiedNs(0)
         .setRange(
@@ -136,7 +130,6 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
   nativePruningPredicateFilters
   nativeFileSchema
   nativePartitionSchema
-  nativeFileGroups
 
   protected def putJniBridgeResource(
       resourceId: String,

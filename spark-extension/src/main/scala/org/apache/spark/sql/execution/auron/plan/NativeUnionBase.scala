@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.EmptyPartitionsExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
-import org.apache.auron.protobuf.Schema
 import org.apache.auron.protobuf.UnionExecNode
 import org.apache.auron.protobuf.UnionInput
 
@@ -49,6 +48,8 @@ abstract class NativeUnionBase(
       .getDefaultNativeMetrics(sparkContext)
       .filterKeys(Set("stage_id", "output_rows"))
       .toSeq: _*)
+
+  val nativeSchema = Util.getNativeSchema(output)
 
   override def doExecuteNative(): NativeRDD = {
     val rdds = children.map(c => NativeHelper.executeNative(c))
@@ -115,6 +116,4 @@ abstract class NativeUnionBase(
           .setNumPartitions(numPartitions)
           .build())
       .build()
-
-  val nativeSchema: Schema = Util.getNativeSchema(output)
 }

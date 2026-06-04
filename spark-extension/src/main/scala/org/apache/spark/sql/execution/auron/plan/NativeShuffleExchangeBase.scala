@@ -25,15 +25,11 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.hashing.byteswap32
 
-import org.apache.spark.{OneToOneDependency, Partitioner, RangePartitioner, ShuffleDependency, SparkEnv, TaskContext}
+import org.apache.spark.{OneToOneDependency, Partition, Partitioner, RangePartitioner, ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleWriteProcessor
-import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.auron.NativeHelper
-import org.apache.spark.sql.auron.NativeRDD
-import org.apache.spark.sql.auron.NativeSupports
-import org.apache.spark.sql.auron.Shims
+import org.apache.spark.sql.auron.{NativeConverters, NativeHelper, NativePartition, NativeRDD, NativeSupports, Shims}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BoundReference, NullsFirst, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -54,8 +50,8 @@ import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.{IpcReaderExecNode, PhysicalExprNode, PhysicalHashRepartition, PhysicalPlanNode, PhysicalRangeRepartition, PhysicalRepartition, PhysicalRoundRobinRepartition, PhysicalSingleRepartition, PhysicalSortExprNode, Schema, SortExecNode}
 
 abstract class NativeShuffleExchangeBase(
-    override val outputPartitioning: Partitioning,
-    override val child: SparkPlan)
+    @transient override val outputPartitioning: Partitioning,
+    @transient override val child: SparkPlan)
     extends ShuffleExchangeLike
     with NativeSupports {
 
@@ -125,6 +121,7 @@ abstract class NativeShuffleExchangeBase(
   override def doExecuteNative(): NativeRDD = {
     val shuffleHandle = shuffleDependency.shuffleHandle
     val rdd = doExecuteNonNative()
+    val nativeSchema = this.nativeSchema
 
     val nativeMetrics = SparkMetricNode(
       Map(),
@@ -148,7 +145,6 @@ abstract class NativeShuffleExchangeBase(
       (partition, taskContext) => {
         val shuffleReadMetrics = taskContext.taskMetrics().createTempShuffleReadMetrics()
         val metricReporter = new SQLShuffleReadMetricsReporter(shuffleReadMetrics, metrics)
-        val nativeSchema = this.nativeSchema
 
         // store fetch iterator in jni resource before native compute
         val jniResourceId = s"NativeShuffleReadExec:${UUID.randomUUID().toString}"
@@ -244,15 +240,21 @@ abstract class NativeShuffleExchangeBase(
       case _ => null
     }
 
+    val nativeInputPartitions = nativeInputRDD.partitions.map { p =>
+      NativePartition[Partition](p.index, p)
+    }
+    val nativeHashExprs = this.nativeHashExprs
+    val nativeSortExecNode = this.nativeSortExecNode
+
     val nativeShuffleRDD = new NativeRDD(
       nativeInputRDD.sparkContext,
       nativeMetrics,
-      nativeInputRDD.partitions,
+      rddPartitions = nativeInputPartitions.toArray,
       nativeInputRDD.partitioner,
       new OneToOneDependency(nativeInputRDD) :: Nil,
       nativeInputRDD.isShuffleReadFull,
       (partition, taskContext) => {
-        val nativeInputPartition = nativeInputRDD.partitions(partition.index)
+        val nativeInputPartition = partition.asInstanceOf[NativePartition[Partition]].payload
         val repartitionBuilder = PhysicalRepartition.newBuilder()
         val nativeOutputPartitioning = outputPartitioning match {
           case SinglePartition =>
