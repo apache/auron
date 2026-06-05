@@ -198,4 +198,36 @@ public class AuronFlinkCalcITCase extends AuronFlinkTableTestBase {
         rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(1), Row.of(2), Row.of(2)));
     }
+
+    /** A compound filter ANDing two comparisons on different columns keeps only rows satisfying both;
+     * each comparison excludes a different row. */
+    @Test
+    public void testFilterAndComparison() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` <> 1 AND `ts` = '2020-10-10 00:00:02'")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(2)));
+    }
+
+    /** A compound filter ORing two comparisons on different columns keeps rows satisfying either;
+     * both operands contribute a distinct row. */
+    @Test
+    public void testFilterOrComparison() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` from T1 where `int` = 1 OR `ts` = '2020-10-10 00:00:03'")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1), Row.of(2)));
+    }
+
+    /** A NOT LIKE filter keeps rows whose string does not match the pattern. */
+    @Test
+    public void testFilterNotLike() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `string` from T1 where `string` NOT LIKE 'Comment%'")
+                .collect());
+        rows.sort(Comparator.comparing(o -> (String) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of("Hi")));
+    }
 }
