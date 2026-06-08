@@ -89,6 +89,7 @@ class AuronPaimonV2IntegrationSuite
       sql("create table paimon.db.t_empty (id int, v string) using paimon")
       val df = sql("select * from paimon.db.t_empty")
       checkAnswer(df, Seq.empty)
+      assertNativePaimonScanApplied(df)
     }
   }
 

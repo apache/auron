@@ -91,7 +91,12 @@ object PaimonScanSupport extends Logging {
     val partitionSchema = StructType(partitionFields)
     val fileSchema = StructType(fileFields)
 
-    val partitions = inputPartitions(exec)
+    val partitions = inputPartitions(exec) match {
+      case Some(p) => p
+      case None =>
+        logDebug("Skip native Paimon scan: failed to obtain input partitions.")
+        return None
+    }
     if (partitions.isEmpty) {
       logDebug("Paimon scan planned with empty input partitions.")
       return Some(
@@ -206,38 +211,51 @@ object PaimonScanSupport extends Logging {
 
   // DSv2 BatchScanExec exposes input partitions via Scan.toBatch (preferred) or a method on
   // the exec itself; the latter varies across Spark versions, so we attempt both.
-  private def inputPartitions(exec: BatchScanExec): Seq[InputPartition] = {
+  // Returns Some(partitions) on success (possibly empty if the table is empty), or None when
+  // partition planning fails - the caller falls back to Spark execution on None.
+  private def inputPartitions(exec: BatchScanExec): Option[Seq[InputPartition]] = {
     try {
       val batch = exec.scan.toBatch
       if (batch != null) {
         val parts = batch.planInputPartitions()
-        if (parts != null) return parts.toSeq
+        if (parts != null) return Some(parts.toSeq)
+        logWarning("Paimon Scan.toBatch.planInputPartitions() returned null.")
+        return None
       }
+      logWarning("Paimon Scan.toBatch returned null.")
     } catch {
       case NonFatal(t) =>
         logWarning("Failed to plan Paimon input partitions via Scan.toBatch.", t)
+        return None
     }
 
     val methods = exec.getClass.getMethods
     val m =
       methods.find(_.getName == "inputPartitions").orElse(methods.find(_.getName == "partitions"))
+    if (m.isEmpty) {
+      logWarning(
+        "BatchScanExec exposes no inputPartitions/partitions method; cannot plan Paimon scan.")
+      return None
+    }
     try {
-      m.map(_.invoke(exec))
-        .map {
-          case s: scala.collection.Seq[_]
-              if s.nonEmpty && s.head.isInstanceOf[scala.collection.Seq[_]] =>
+      m.map(_.invoke(exec)) match {
+        case Some(s: scala.collection.Seq[_])
+            if s.nonEmpty && s.head.isInstanceOf[scala.collection.Seq[_]] =>
+          Some(
             s.asInstanceOf[scala.collection.Seq[scala.collection.Seq[InputPartition]]]
               .flatten
-              .toSeq
-          case s: scala.collection.Seq[_] =>
-            s.asInstanceOf[scala.collection.Seq[InputPartition]].toSeq
-          case _ => Seq.empty[InputPartition]
-        }
-        .getOrElse(Seq.empty)
+              .toSeq)
+        case Some(s: scala.collection.Seq[_]) =>
+          Some(s.asInstanceOf[scala.collection.Seq[InputPartition]].toSeq)
+        case other =>
+          logWarning(
+            s"Unexpected return type from BatchScanExec partitions method: ${other.getClass}.")
+          None
+      }
     } catch {
       case NonFatal(t) =>
         logWarning("Failed to read Paimon input partitions via reflection.", t)
-        Seq.empty
+        None
     }
   }
 

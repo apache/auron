@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.auron.plan
 
 import java.net.URI
 import java.security.PrivilegedExceptionAction
+import java.util.Locale
 import java.util.UUID
 
 import scala.collection.JavaConverters._
@@ -35,6 +36,7 @@ import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFil
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.hive.auron.paimon.PaimonUtil
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -71,11 +73,32 @@ case class NativePaimonV2TableScanExec(basedScan: BatchScanExec, plan: PaimonSca
   private lazy val nativePartitionSchema: pb.Schema =
     NativeConverters.convertSchema(partitionSchema)
 
-  // Project the read schema onto the (fileSchema ++ partitionSchema) layout used by the native scan.
-  private lazy val projection: Seq[Integer] = {
-    val combined = StructType(fileSchema.fields ++ partitionSchema.fields)
-    plan.readSchema.fields.map(f => Integer.valueOf(combined.fieldIndex(f.name)))
+  // Project the output attributes onto the (fileSchema ++ partitionSchema) layout used by the
+  // native scan. Index lookup follows SQLConf.caseSensitiveAnalysis so that the projection
+  // remains correct under case-insensitive analysis (mirrors NativeIcebergTableScanExec).
+  private lazy val combinedSchema: StructType =
+    StructType(fileSchema.fields ++ partitionSchema.fields)
+
+  private lazy val caseSensitive: Boolean = SQLConf.get.caseSensitiveAnalysis
+
+  private lazy val fieldIndexByName: Map[String, Int] = {
+    if (caseSensitive) {
+      combinedSchema.fieldNames.zipWithIndex.toMap
+    } else {
+      combinedSchema.fieldNames.map(_.toLowerCase(Locale.ROOT)).zipWithIndex.toMap
+    }
   }
+
+  private def fieldIndexFor(name: String): Int = {
+    if (caseSensitive) {
+      fieldIndexByName.getOrElse(name, combinedSchema.fieldIndex(name))
+    } else {
+      fieldIndexByName.getOrElse(name.toLowerCase(Locale.ROOT), combinedSchema.fieldIndex(name))
+    }
+  }
+
+  private lazy val projection: Seq[Integer] =
+    output.map(attr => Integer.valueOf(fieldIndexFor(attr.name)))
 
   override def doExecuteNative(): NativeRDD = {
     if (partitions.isEmpty) {
