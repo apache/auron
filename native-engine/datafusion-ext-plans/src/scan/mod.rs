@@ -57,11 +57,10 @@ impl SchemaAdapter for AuronSchemaAdapter {
     fn map_column_index(&self, index: usize, file_schema: &Schema) -> Option<usize> {
         let field = self.table_schema.field(index);
 
-        // use case insensitive matching
         file_schema
             .fields()
             .iter()
-            .position(|f| f.name().eq_ignore_ascii_case(field.name()))
+            .position(|file_field| fields_match(field, file_field))
     }
 
     fn map_schema(&self, file_schema: &Schema) -> Result<(Arc<dyn SchemaMapper>, Vec<usize>)> {
@@ -73,7 +72,7 @@ impl SchemaAdapter for AuronSchemaAdapter {
                 .table_schema
                 .fields()
                 .iter()
-                .position(|f| f.name().eq_ignore_ascii_case(file_field.name()))
+                .position(|table_field| fields_match(table_field, file_field))
             {
                 field_mappings[table_idx] = Some(projection.len());
                 projection.push(file_idx);
@@ -86,6 +85,18 @@ impl SchemaAdapter for AuronSchemaAdapter {
             Arc::new(|col, field| schema_adapter_cast_column(col, field)),
         ));
         Ok((schema_mapper, projection))
+    }
+}
+
+const PARQUET_FIELD_ID_META_KEY: &str = "PARQUET:field_id";
+
+fn fields_match(table_field: &Field, file_field: &Field) -> bool {
+    match table_field.metadata().get(PARQUET_FIELD_ID_META_KEY) {
+        Some(table_field_id) => file_field
+            .metadata()
+            .get(PARQUET_FIELD_ID_META_KEY)
+            .is_some_and(|file_field_id| file_field_id == table_field_id),
+        None => table_field.name().eq_ignore_ascii_case(file_field.name()),
     }
 }
 

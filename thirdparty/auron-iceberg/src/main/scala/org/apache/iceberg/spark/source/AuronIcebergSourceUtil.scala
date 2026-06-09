@@ -16,7 +16,11 @@
  */
 package org.apache.iceberg.spark.source
 
+import scala.collection.JavaConverters._
+
 object AuronIcebergSourceUtil {
+
+  final case class RenameOrDrop(topLevel: Boolean, nested: Boolean)
 
   def getClassOfSparkBatchQueryScan(): Class[SparkBatchQueryScan] = {
     classOf[SparkBatchQueryScan]
@@ -25,4 +29,64 @@ object AuronIcebergSourceUtil {
   def getClassOfSparkInputPartition(): Class[SparkInputPartition] = {
     classOf[SparkInputPartition]
   }
+
+  def expectedFieldIds(scan: AnyRef): Map[String, Int] = {
+    val expectedSchema = asBatchQueryScan(scan).expectedSchema()
+    expectedSchema.columns().asScala.map(field => field.name() -> field.fieldId()).toMap
+  }
+
+  def detectRenameOrDrop(scan: AnyRef): RenameOrDrop = {
+    val table = asBatchQueryScan(scan).table()
+    val currentFields = collectFieldIdToName(table.schema())
+
+    table
+      .schemas()
+      .values()
+      .asScala
+      .foldLeft(RenameOrDrop(topLevel = false, nested = false)) { (result, schema) =>
+        collectFieldIdToName(schema).foldLeft(result) {
+          case (currentResult, (fieldId, historicalField)) =>
+            currentFields.get(fieldId) match {
+              case Some(currentField) if currentField.name != historicalField.name =>
+                if (historicalField.topLevel || currentField.topLevel) {
+                  currentResult.copy(topLevel = true)
+                } else {
+                  currentResult.copy(nested = true)
+                }
+              case None =>
+                if (historicalField.topLevel) {
+                  currentResult.copy(topLevel = true)
+                } else {
+                  currentResult.copy(nested = true)
+                }
+              case _ =>
+                currentResult
+            }
+        }
+      }
+  }
+
+  final private case class FieldIdentity(name: String, topLevel: Boolean)
+
+  private def collectFieldIdToName(schema: org.apache.iceberg.Schema): Map[Int, FieldIdentity] = {
+    def collect(
+        fields: Seq[org.apache.iceberg.types.Types.NestedField],
+        topLevel: Boolean): Seq[(Int, FieldIdentity)] = {
+      fields.flatMap { field =>
+        val current = field.fieldId() -> FieldIdentity(field.name(), topLevel)
+        val nested =
+          if (field.`type`().isNestedType) {
+            collect(field.`type`().asNestedType().fields().asScala.toSeq, topLevel = false)
+          } else {
+            Seq.empty
+          }
+        current +: nested
+      }
+    }
+
+    collect(schema.columns().asScala.toSeq, topLevel = true).toMap
+  }
+
+  private def asBatchQueryScan(scan: AnyRef): SparkBatchQueryScan =
+    scan.asInstanceOf[SparkBatchQueryScan]
 }

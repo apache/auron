@@ -41,7 +41,8 @@ final case class IcebergScanPlan(
     readSchema: StructType,
     fileSchema: StructType,
     partitionSchema: StructType,
-    pruningPredicates: Seq[pb.PhysicalExprNode])
+    pruningPredicates: Seq[pb.PhysicalExprNode],
+    fieldIdsByName: Map[String, Int])
 
 object IcebergScanSupport extends Logging {
 
@@ -75,6 +76,22 @@ object IcebergScanSupport extends Logging {
       partitionSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
       "Has unsupported schema type.")
 
+    val (renameOrDrop, fieldIdsByName) =
+      try {
+        (
+          AuronIcebergSourceUtil.detectRenameOrDrop(scan.asInstanceOf[AnyRef]),
+          AuronIcebergSourceUtil.expectedFieldIds(scan.asInstanceOf[AnyRef]))
+      } catch {
+        case NonFatal(t) =>
+          logWarning(s"Failed to inspect Iceberg field ids for $scanClassName.", t)
+          return None
+      }
+    assert(!renameOrDrop.nested, "Nested Iceberg rename or drop is not supported.")
+
+    assert(
+      fileSchema.fields.forall(field => fieldIdsByName.contains(field.name)),
+      "Failed to find field ids for all Iceberg data columns.")
+
     val partitions = inputPartitions(exec)
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
     if (partitions.isEmpty) {
@@ -86,7 +103,8 @@ object IcebergScanSupport extends Logging {
           readSchema,
           fileSchema,
           partitionSchema,
-          Seq.empty))
+          Seq.empty,
+          fieldIdsByName))
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
@@ -110,6 +128,9 @@ object IcebergScanSupport extends Logging {
     assert(
       !(format != FileFormat.PARQUET && format != FileFormat.ORC),
       "Only support parquet or orc.")
+    assert(
+      !(format == FileFormat.ORC && renameOrDrop.topLevel),
+      "Iceberg ORC rename or drop is not supported.")
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
     Some(
@@ -119,7 +140,8 @@ object IcebergScanSupport extends Logging {
         readSchema,
         fileSchema,
         partitionSchema,
-        pruningPredicates))
+        pruningPredicates,
+        fieldIdsByName))
   }
 
   private def collectUnsupportedMetadataColumns(schema: StructType): Seq[String] =

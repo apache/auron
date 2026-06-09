@@ -118,7 +118,7 @@ abstract class NativeGenerateBase(
   }
 
   private def nativeGeneratorOutput =
-    Util.getSchema(generatorOutput).map(NativeConverters.convertField)
+    Util.getSchema(generatorOutput).map(field => NativeConverters.convertField(field))
 
   private def nativeRequiredChildOutput =
     Util.getSchema(requiredChildOutput).map(_.name)

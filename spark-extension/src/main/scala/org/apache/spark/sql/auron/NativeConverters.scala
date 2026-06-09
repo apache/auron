@@ -216,18 +216,22 @@ object NativeConverters extends Logging {
     arrowTypeBuilder.build()
   }
 
-  def convertField(sparkField: StructField): pb.Field = {
-    pb.Field
+  def convertField(sparkField: StructField, fieldId: Option[Int] = None): pb.Field = {
+    val fieldBuilder = pb.Field
       .newBuilder()
       .setName(sparkField.name)
       .setNullable(sparkField.nullable)
       .setArrowType(convertDataType(sparkField.dataType))
-      .build()
+    fieldId.foreach(fieldBuilder.setFieldId)
+    fieldBuilder.build()
   }
 
-  def convertSchema(sparkSchema: StructType): pb.Schema = {
+  def convertSchema(
+      sparkSchema: StructType,
+      fieldIdsByName: Map[String, Int] = Map.empty): pb.Schema = {
     val schemaBuilder = pb.Schema.newBuilder()
-    sparkSchema.foreach(sparkField => schemaBuilder.addColumns(convertField(sparkField)))
+    sparkSchema.foreach(sparkField =>
+      schemaBuilder.addColumns(convertField(sparkField, fieldIdsByName.get(sparkField.name))))
     schemaBuilder.build()
   }
 

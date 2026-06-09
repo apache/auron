@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, Schema, TimeUnit};
 use datafusion::{common::JoinSide, logical_expr::Operator, scalar::ScalarValue};
@@ -406,17 +406,29 @@ impl TryInto<DataType> for &Box<protobuf::List> {
 impl TryInto<Field> for &protobuf::Field {
     type Error = PlanSerDeError;
     fn try_into(self) -> Result<Field, Self::Error> {
-        let pb_datatype = self.arrow_type.as_ref().ok_or_else(|| {
-            proto_error(
-                "Protobuf deserialization error: Field message missing required field 'arrow_type'",
-            )
-        })?;
+        build_arrow_field(self)
+    }
+}
 
-        Ok(Field::new(
-            self.name.as_str(),
-            pb_datatype.as_ref().try_into()?,
-            self.nullable,
-        ))
+fn build_arrow_field(field: &protobuf::Field) -> Result<Field, PlanSerDeError> {
+    let pb_datatype = field.arrow_type.as_ref().ok_or_else(|| {
+        proto_error(
+            "Protobuf deserialization error: Field message missing required field 'arrow_type'",
+        )
+    })?;
+    let arrow_field = Field::new(
+        field.name.as_str(),
+        pb_datatype.as_ref().try_into()?,
+        field.nullable,
+    );
+
+    if field.field_id == 0 {
+        Ok(arrow_field)
+    } else {
+        Ok(arrow_field.with_metadata(HashMap::from([(
+            "PARQUET:field_id".to_string(),
+            field.field_id.to_string(),
+        )])))
     }
 }
 
@@ -427,17 +439,7 @@ impl TryInto<Schema> for &protobuf::Schema {
         let fields = self
             .columns
             .iter()
-            .map(|c| {
-                let pb_arrow_type_res = c
-                    .arrow_type
-                    .as_ref()
-                    .ok_or_else(|| proto_error("Protobuf deserialization error: Field message was missing required field 'arrow_type'"));
-                let pb_arrow_type: &protobuf::ArrowType = match pb_arrow_type_res {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                };
-                Ok(Field::new(&c.name, pb_arrow_type.try_into()?, c.nullable))
-            })
+            .map(build_arrow_field)
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Schema::new(fields))
     }

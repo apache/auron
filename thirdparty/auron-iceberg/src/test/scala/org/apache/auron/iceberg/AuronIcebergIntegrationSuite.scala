@@ -190,6 +190,106 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native parquet scan reads top-level renamed columns by field id") {
+    withTable("local.db.t_rename") {
+      sql("create table local.db.t_rename (id int, old_name string) using iceberg")
+      sql("insert into local.db.t_rename values (1, 'before')")
+      sql("alter table local.db.t_rename rename column old_name to new_name")
+      sql("insert into local.db.t_rename values (2, 'after')")
+
+      val df = sql("select id, new_name from local.db.t_rename order by id")
+      checkAnswer(df, Seq(Row(1, "before"), Row(2, "after")))
+      assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg native parquet scan does not reuse a dropped field id for an added column") {
+    withTable("local.db.t_drop_add") {
+      sql("create table local.db.t_drop_add (id int, value string) using iceberg")
+      sql("insert into local.db.t_drop_add values (1, 'old')")
+      sql("alter table local.db.t_drop_add drop column value")
+      sql("alter table local.db.t_drop_add add column value string")
+      sql("insert into local.db.t_drop_add values (2, 'new')")
+
+      val df = sql("select id, value from local.db.t_drop_add order by id")
+      checkAnswer(df, Seq(Row(1, null), Row(2, "new")))
+      assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg ORC scan falls back after a top-level column rename") {
+    withTable("local.db.t_orc_rename") {
+      sql("""
+            |create table local.db.t_orc_rename (id int, old_name string)
+            |using iceberg
+            |tblproperties ('write.format.default' = 'orc')
+            |""".stripMargin)
+      sql("insert into local.db.t_orc_rename values (1, 'before')")
+      sql("alter table local.db.t_orc_rename rename column old_name to new_name")
+
+      val df = sql("select id, new_name from local.db.t_orc_rename")
+      checkAnswer(df, Seq(Row(1, "before")))
+      assert(!df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg ORC scan remains native for additive schema evolution") {
+    withTable("local.db.t_orc_add") {
+      sql("""
+            |create table local.db.t_orc_add (id int)
+            |using iceberg
+            |tblproperties ('write.format.default' = 'orc')
+            |""".stripMargin)
+      sql("insert into local.db.t_orc_add values (1)")
+      sql("alter table local.db.t_orc_add add column value string")
+
+      val df = sql("select id, value from local.db.t_orc_add")
+      checkAnswer(df, Seq(Row(1, null)))
+      assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg scan falls back after a nested column rename") {
+    withTable("local.db.t_nested_rename") {
+      sql("""
+            |create table local.db.t_nested_rename (
+            |  id int,
+            |  payload struct<old_name:string>
+            |) using iceberg
+            |""".stripMargin)
+      sql("insert into local.db.t_nested_rename values (1, named_struct('old_name', 'before'))")
+      sql("alter table local.db.t_nested_rename rename column payload.old_name to new_name")
+
+      val df = sql("select id, payload.new_name from local.db.t_nested_rename")
+      checkAnswer(df, Seq(Row(1, "before")))
+      assert(!df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg scan falls back when top-level and nested columns are both renamed") {
+    withTable("local.db.t_top_and_nested_rename") {
+      sql("""
+            |create table local.db.t_top_and_nested_rename (
+            |  old_id int,
+            |  payload struct<old_name:string>
+            |) using iceberg
+            |""".stripMargin)
+      sql("""insert into local.db.t_top_and_nested_rename
+          |values (1, named_struct('old_name', 'before'))
+          |""".stripMargin)
+      sql("alter table local.db.t_top_and_nested_rename rename column old_id to new_id")
+      sql("""
+            |alter table local.db.t_top_and_nested_rename
+            |rename column payload.old_name to new_name
+            |""".stripMargin)
+
+      val df =
+        sql("select new_id, payload.new_name from local.db.t_top_and_nested_rename")
+      checkAnswer(df, Seq(Row(1, "before")))
+      assert(!df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+    }
+  }
+
   test("iceberg native scan is applied when delete files are null (format v1)") {
     withTable("local.db.t_v1") {
       sql("""
