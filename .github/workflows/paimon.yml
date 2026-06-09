@@ -56,8 +56,25 @@ jobs:
           java-version: ${{ matrix.javaver }}
           cache: 'maven'
 
+      - name: Build dependencies (skip tests)
+        run: >
+          ./build/mvn -B install
+          -pl ${{ matrix.module }}
+          -am
+          -Pscala-${{ matrix.scalaver }}
+          -Ppaimon-${{ matrix.paimon }}
+          -P${{ matrix.sparkver }}
+          -Prelease
+          -DskipTests
+
       - name: Test Paimon Module
-        run: ./build/mvn -B test -pl ${{ matrix.module }} -am -Pscala-${{ matrix.scalaver }} -Ppaimon-${{ matrix.paimon }} -P${{ matrix.sparkver }} -Prelease
+        run: >
+          ./build/mvn -B test
+          -pl ${{ matrix.module }}
+          -Pscala-${{ matrix.scalaver }}
+          -Ppaimon-${{ matrix.paimon }}
+          -P${{ matrix.sparkver }}
+          -Prelease
 
       - name: Upload reports
         if: failure()
