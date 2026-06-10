@@ -16,7 +16,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, Schema, TimeUnit};
-use datafusion::{common::JoinSide, logical_expr::Operator, scalar::ScalarValue};
+use datafusion::{
+    common::JoinSide, logical_expr::Operator, parquet::arrow::PARQUET_FIELD_ID_META_KEY,
+    scalar::ScalarValue,
+};
 use datafusion_ext_plans::{agg::AggFunction, joins::join_utils::JoinType};
 
 use crate::error::PlanSerDeError;
@@ -426,7 +429,7 @@ fn build_arrow_field(field: &protobuf::Field) -> Result<Field, PlanSerDeError> {
         Ok(arrow_field)
     } else {
         Ok(arrow_field.with_metadata(HashMap::from([(
-            "PARQUET:field_id".to_string(),
+            PARQUET_FIELD_ID_META_KEY.to_string(),
             field.field_id.to_string(),
         )])))
     }
