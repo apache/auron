@@ -1225,7 +1225,6 @@ object NativeConverters extends Logging {
   }
 
   def convertAggregateExpr(e: AggregateExpression): pb.PhysicalExprNode = {
-    assert(Shims.get.getAggregateExpressionFilter(e).isEmpty)
     val aggBuilder = pb.PhysicalAggExprNode.newBuilder()
     aggBuilder.setReturnType(convertDataType(e.dataType))
 
@@ -1345,6 +1344,9 @@ object NativeConverters extends Logging {
             s" to true to enable UDAF fallbacking.")
         }
 
+    }
+    Shims.get.getAggregateExpressionFilter(e).foreach { filterExpr =>
+      aggBuilder.setFilter(convertExpr(filterExpr))
     }
     pb.PhysicalExprNode
       .newBuilder()
