@@ -76,16 +76,21 @@ object IcebergScanSupport extends Logging {
       partitionSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
       "Has unsupported schema type.")
 
-    val (renameOrDrop, fieldIdsByName) =
+    val inspected: Option[(AuronIcebergSourceUtil.RenameOrDrop, Map[String, Int])] =
       try {
-        (
-          AuronIcebergSourceUtil.detectRenameOrDrop(scan.asInstanceOf[AnyRef]),
-          AuronIcebergSourceUtil.expectedFieldIds(scan.asInstanceOf[AnyRef]))
+        Some(
+          (
+            AuronIcebergSourceUtil.detectRenameOrDrop(scan.asInstanceOf[AnyRef]),
+            AuronIcebergSourceUtil.expectedFieldIds(scan.asInstanceOf[AnyRef])))
       } catch {
         case NonFatal(t) =>
           logWarning(s"Failed to inspect Iceberg field ids for $scanClassName.", t)
-          return None
+          None
       }
+    if (inspected.isEmpty) {
+      return None
+    }
+    val (renameOrDrop, fieldIdsByName) = inspected.get
     assert(!renameOrDrop.nested, "Nested Iceberg rename or drop is not supported.")
 
     assert(
