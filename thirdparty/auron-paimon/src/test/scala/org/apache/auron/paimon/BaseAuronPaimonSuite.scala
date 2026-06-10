@@ -17,7 +17,7 @@
 package org.apache.auron.paimon
 
 import java.io.File
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -25,7 +25,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 trait BaseAuronPaimonSuite extends SharedSparkSession {
 
   protected lazy val paimonWarehouse: String = {
-    val dir = Files.createTempDirectory("auron-paimon-warehouse-").toFile
+    // java.io.tmpdir is set to target/tmp in the parent pom, which may not exist yet
+    val tmpDir = Files.createDirectories(Paths.get(System.getProperty("java.io.tmpdir")))
+    val dir = Files.createTempDirectory(tmpDir, "auron-paimon-warehouse-").toFile
     dir.deleteOnExit()
     dir.getAbsolutePath
   }
