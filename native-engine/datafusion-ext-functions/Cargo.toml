@@ -35,7 +35,7 @@ itertools = { workspace = true }
 log = { workspace = true }
 num = { workspace = true }
 paste = { workspace = true }
-regex = "1.12.3"
+regex = "1.12.4"
 serde_json = { workspace = true }
 sonic-rs = { workspace = true }
 chrono = "0.4.45"
