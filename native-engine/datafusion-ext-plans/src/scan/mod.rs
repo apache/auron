@@ -25,6 +25,7 @@ use datafusion::{
     datasource::schema_adapter::{
         SchemaAdapter, SchemaAdapterFactory, SchemaMapper, SchemaMapping,
     },
+    parquet::arrow::PARQUET_FIELD_ID_META_KEY,
 };
 use datafusion_ext_commons::df_execution_err;
 
@@ -87,8 +88,6 @@ impl SchemaAdapter for AuronSchemaAdapter {
         Ok((schema_mapper, projection))
     }
 }
-
-const PARQUET_FIELD_ID_META_KEY: &str = "PARQUET:field_id";
 
 fn fields_match(table_field: &Field, file_field: &Field) -> bool {
     match table_field.metadata().get(PARQUET_FIELD_ID_META_KEY) {
