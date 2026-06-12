@@ -67,8 +67,13 @@ object PaimonScanSupport extends Logging {
         return None
     }
 
-    if (!PaimonUtil.isPaimonCowTable(table)) {
-      logDebug("Skip native Paimon scan: only Paimon COW tables are supported.")
+    // Append-only tables (no primary key) have no merge process and can always be read
+    // from raw files; primary-key tables are only supported in COW mode. Either way the
+    // per-split rawConvertible/deletion-files checks below remain the final safety net.
+    val isAppendOnlyTable = table.primaryKeys().isEmpty
+    if (!isAppendOnlyTable && !PaimonUtil.isPaimonCowTable(table)) {
+      logDebug(
+        "Skip native Paimon scan: only append-only or COW primary-key tables are supported.")
       return None
     }
 
