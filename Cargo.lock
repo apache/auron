@@ -1340,7 +1340,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hashbrown 0.17.1",
- "itertools",
+ "itertools 0.14.0",
  "jni",
  "log",
  "num",
