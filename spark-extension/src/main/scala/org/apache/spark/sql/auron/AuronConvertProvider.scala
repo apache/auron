@@ -19,7 +19,7 @@ package org.apache.spark.sql.auron
 import org.apache.spark.sql.execution.SparkPlan
 
 trait AuronConvertProvider {
-  def isEnabled: Boolean
+  def isEnabled(exec: SparkPlan): Boolean
 
   def isSupported(exec: SparkPlan): Boolean
 

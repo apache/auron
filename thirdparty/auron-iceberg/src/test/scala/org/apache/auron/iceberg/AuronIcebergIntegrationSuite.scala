@@ -17,6 +17,9 @@
 package org.apache.auron.iceberg
 
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
@@ -24,13 +27,47 @@ import org.apache.iceberg.{FileFormat, FileScanTask}
 import org.apache.iceberg.data.{GenericAppenderFactory, Record}
 import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.ExplainUtils.collectFirst
+import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 
 class AuronIcebergIntegrationSuite
     extends org.apache.spark.sql.QueryTest
     with BaseAuronIcebergSuite {
+
+  test("iceberg native scan with auron.enable.iceberg.scan=false") {
+    withTable("local.db.t2") {
+      withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "false") {
+        sql("create table local.db.t2 using iceberg as select 1 as id, 'a' as v")
+        val df = sql("select * from local.db.t2")
+        df.collect()
+        val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
+        assert(collectFirst(df.queryExecution.executedPlan) { case batchScanExec: BatchScanExec =>
+          batchScanExec.getTagValue(neverConvertReasonTag)
+        }.get.get.equals("Conversion disabled: auron.enable.iceberg.scan=false."))
+      }
+    }
+  }
+
+  test(
+    "iceberg scan falls back when reading unsupported metadata columns and check never convert reason") {
+    withTable("local.db.t4_pos") {
+      sql("create table local.db.t4_pos using iceberg as select 1 as id, 'a' as v")
+      withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+        val df = sql("select _pos from local.db.t4_pos")
+        df.collect()
+        val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
+        assert(collectFirst(df.queryExecution.executedPlan) { case batchScanExec: BatchScanExec =>
+          batchScanExec.getTagValue(neverConvertReasonTag)
+        }.get.get.equals("Has per-row materialization (for example _pos)."))
+      }
+    }
+  }
 
   test("test iceberg integrate ") {
     withTable("local.db.t1") {
@@ -48,6 +85,52 @@ class AuronIcebergIntegrationSuite
       df.collect()
       val plan = df.queryExecution.executedPlan.toString()
       assert(plan.contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg native scan exposes file scan driver metrics") {
+    withTable("local.db.t_metrics") {
+      sql("create table local.db.t_metrics using iceberg as select 1 as id, 'a' as v")
+      withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+        val df = sql("select * from local.db.t_metrics")
+        val nativeScan = executedNativeIcebergTableScanExec(df)
+        val metricIds = Map(
+          "numPartitions" -> nativeScan.metrics("numPartitions").id,
+          "numFiles" -> nativeScan.metrics("numFiles").id)
+        val driverMetricUpdates = new ConcurrentLinkedQueue[(Long, Long)]()
+        val driverMetricUpdatesPosted = new CountDownLatch(1)
+        val listener = new SparkListener {
+          override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+            case SparkListenerDriverAccumUpdates(_, updates) =>
+              updates.foreach { case (metricId, value) =>
+                driverMetricUpdates.add(metricId -> value)
+              }
+              val updatedMetricIds = driverMetricUpdates.iterator().asScala.map(_._1).toSet
+              if (metricIds.values.forall(updatedMetricIds.contains)) {
+                driverMetricUpdatesPosted.countDown()
+              }
+            case _ =>
+          }
+        }
+
+        spark.sparkContext.addSparkListener(listener)
+        try {
+          checkAnswer(df, Seq(Row(1, "a")))
+          assert(driverMetricUpdatesPosted.await(30, TimeUnit.SECONDS))
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
+
+        val driverMetricValues = driverMetricUpdates
+          .iterator()
+          .asScala
+          .toSeq
+          .groupBy(_._1)
+          .mapValues(_.map(_._2).sum)
+          .toMap
+        assert(driverMetricValues.getOrElse(metricIds("numPartitions"), 0L) > 0)
+        assert(driverMetricValues.getOrElse(metricIds("numFiles"), 0L) > 0)
+      }
     }
   }
 
@@ -214,6 +297,20 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native scan supports _spec_id metadata column") {
+    withTable("local.db.t4_spec_id") {
+      sql("create table local.db.t4_spec_id using iceberg as select 1 as id, 'a' as v")
+      checkSparkAnswerAndOperator("select _spec_id from local.db.t4_spec_id")
+    }
+  }
+
+  test("iceberg native scan supports data columns with _file and _spec_id metadata columns") {
+    withTable("local.db.t4_metadata_mixed") {
+      sql("create table local.db.t4_metadata_mixed using iceberg as select 1 as id, 'a' as v")
+      checkSparkAnswerAndOperator("select id, _file, _spec_id from local.db.t4_metadata_mixed")
+    }
+  }
+
   test("iceberg native scan supports data columns with _file metadata column") {
     withTable("local.db.t4_mixed") {
       sql("create table local.db.t4_mixed using iceberg as select 1 as id, 'a' as v")
@@ -345,4 +442,12 @@ class AuronIcebergIntegrationSuite
     df.queryExecution.sparkPlan.collectFirst { case scan: BatchScanExec =>
       IcebergScanSupport.plan(scan)
     }.flatten
+
+  private def executedNativeIcebergTableScanExec(df: DataFrame): NativeIcebergTableScanExec = {
+    val nativeScan = df.queryExecution.executedPlan.collectFirst {
+      case scan: NativeIcebergTableScanExec => scan
+    }
+    assert(nativeScan.nonEmpty)
+    nativeScan.get
+  }
 }

@@ -832,6 +832,7 @@ object NativeConverters extends Logging {
       case e: Acosh => buildScalarFunction(pb.ScalarFunction.Acosh, e.children, e.dataType)
       case e: Atan => buildScalarFunction(pb.ScalarFunction.Atan, e.children, e.dataType)
       case e: Exp => buildScalarFunction(pb.ScalarFunction.Exp, e.children, e.dataType)
+      case e: MakeDate => buildScalarFunction(pb.ScalarFunction.MakeDate, e.children, e.dataType)
       case e: Log =>
         buildScalarFunction(pb.ScalarFunction.Ln, e.children.map(nullIfNegative), e.dataType)
       case e: Log2 =>
@@ -1020,14 +1021,13 @@ object NativeConverters extends Logging {
               .setExpr(convertExprWithFallback(expr, isPruningExpr, fallback))
               .setInfix(infix.toString)))
 
-      case Substring(str, Literal(pos, IntegerType), Literal(len, IntegerType))
-          if pos.asInstanceOf[Int] > 0 && len.asInstanceOf[Int] >= 0 =>
+      case Substring(str, Literal(pos, IntegerType), Literal(len, IntegerType)) =>
         val longPos = pos.asInstanceOf[Int].toLong
         val longLen = len.asInstanceOf[Int].toLong
-        buildScalarFunction(
-          pb.ScalarFunction.Substr,
+        buildExtScalarFunction(
+          "Spark_Substring",
           str :: Literal(longPos) :: Literal(longLen) :: Nil,
-          StringType)
+          str.dataType)
 
       case StringSpace(n) =>
         buildExtScalarFunction("Spark_StringSpace", n :: Nil, StringType)
@@ -1225,7 +1225,6 @@ object NativeConverters extends Logging {
   }
 
   def convertAggregateExpr(e: AggregateExpression): pb.PhysicalExprNode = {
-    assert(Shims.get.getAggregateExpressionFilter(e).isEmpty)
     val aggBuilder = pb.PhysicalAggExprNode.newBuilder()
     aggBuilder.setReturnType(convertDataType(e.dataType))
 
@@ -1345,6 +1344,9 @@ object NativeConverters extends Logging {
             s" to true to enable UDAF fallbacking.")
         }
 
+    }
+    Shims.get.getAggregateExpressionFilter(e).foreach { filterExpr =>
+      aggBuilder.setFilter(convertExpr(filterExpr))
     }
     pb.PhysicalExprNode
       .newBuilder()

@@ -574,6 +574,33 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("cume_dist window") {
+    withTable("t_cume_dist") {
+      sql("""
+            |create table t_cume_dist using parquet as
+            |select * from values
+            |  (1, 1, 10),
+            |  (1, 1, 20),
+            |  (1, 2, 30),
+            |  (2, 5, 40)
+            |as t(grp, id, v)
+            |""".stripMargin)
+
+      checkSparkAnswerAndOperator("""
+            |select
+            |  grp,
+            |  id,
+            |  v,
+            |  cume_dist() over (
+            |    partition by grp
+            |    order by id
+            |  ) as cume_dist_v
+            |from t_cume_dist
+            |order by grp, id, v
+            |""".stripMargin)
+    }
+  }
+
   test("nth_value window with row frame") {
     if (AuronTestUtils.isSparkV31OrGreater) {
       withTable("t_nth_value") {
@@ -746,6 +773,79 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         assert(bhj.isNullAwareAntiJoin)
         bhj
       }.isDefined)
+    }
+  }
+
+  test("aggregate with filter clause") {
+    withTable("t_filter_agg_2289") {
+      sql("""
+        CREATE TABLE t_filter_agg_2289(
+          category STRING,
+          amount INT,
+          quantity INT,
+          price DOUBLE,
+          is_vip BOOLEAN
+        ) USING parquet
+      """)
+
+      sql("""
+        INSERT INTO t_filter_agg_2289 VALUES
+          (' electronics', 100,  1,  99.99, true),
+          (' electronics', 200,  2, 199.99, false),
+          (' electronics', 300,  3, 299.99, true),
+          ('  clothing  ', 400,  4, 399.99, false),
+          ('  clothing  ', 500,  5, 499.99, true),
+          ('  clothing  ', NULL, NULL, NULL, true)
+      """)
+
+      // Basic FILTER on SUM(int): 100 + 300 + 500 = 900 (NULL amount contributes 0)
+      checkSparkAnswerAndOperator(
+        "SELECT SUM(amount) FILTER (WHERE is_vip = true) FROM t_filter_agg_2289")
+
+      // FILTER on SUM with GROUP BY: electronics=400, clothing=500
+      checkSparkAnswerAndOperator("""SELECT category, SUM(amount) FILTER (WHERE is_vip = true)
+        |FROM t_filter_agg_2289
+        |GROUP BY category
+        |ORDER BY category""".stripMargin)
+
+      // Multiple aggregates with different FILTER predicates
+      checkSparkAnswerAndOperator("""SELECT
+        |  SUM(amount) FILTER (WHERE is_vip = true)  AS sum_vip,
+        |  SUM(amount) FILTER (WHERE is_vip = false) AS sum_non_vip,
+        |  AVG(price) FILTER (WHERE quantity > 2)     AS avg_price,
+        |  COUNT(*) FILTER (WHERE amount IS NULL)     AS cnt_null
+        |FROM t_filter_agg_2289""".stripMargin)
+
+      // MIN/MAX with FILTER
+      checkSparkAnswerAndOperator("""SELECT
+        |  MIN(amount) FILTER (WHERE is_vip = true)  AS min_vip,
+        |  MAX(amount) FILTER (WHERE is_vip = true)  AS max_vip,
+        |  MIN(price) FILTER (WHERE quantity >= 3)   AS min_price,
+        |  MAX(price) FILTER (WHERE quantity >= 3)   AS max_price
+        |FROM t_filter_agg_2289""".stripMargin)
+
+      // Mixed filtered and non-filtered aggregates
+      checkSparkAnswerAndOperator("""SELECT
+        |  SUM(amount)                         AS total,
+        |  SUM(amount) FILTER (WHERE is_vip = true) AS vip_total,
+        |  COUNT(*)                             AS cnt_all,
+        |  COUNT(*) FILTER (WHERE amount > 200)     AS cnt_high
+        |FROM t_filter_agg_2289""".stripMargin)
+
+      // FILTER that matches all rows (equivalent to no filter)
+      checkSparkAnswerAndOperator(
+        "SELECT SUM(amount) FILTER (WHERE 1 = 1) FROM t_filter_agg_2289")
+
+      // FILTER that matches no rows (should return NULL for SUM)
+      checkSparkAnswerAndOperator(
+        "SELECT SUM(amount) FILTER (WHERE 1 = 0) FROM t_filter_agg_2289")
+
+      // COUNT(expr) with FILTER (counts only non-null expr among matching rows)
+      checkSparkAnswerAndOperator("""SELECT
+        |  COUNT(amount) FILTER (WHERE is_vip = true)    AS cnt_vip_amount,
+        |  COUNT(*) FILTER (WHERE is_vip = true)          AS cnt_vip_star,
+        |  COUNT(quantity) FILTER (WHERE amount > 150)    AS cnt_qty
+        |FROM t_filter_agg_2289""".stripMargin)
     }
   }
 }

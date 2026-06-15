@@ -184,7 +184,9 @@ impl ExecutionPlan for WindowExec {
             return combined.execute(partition, context);
         }
 
-        // at this moment only supports ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        // Streaming rank-like/agg windows are evaluated batch by batch. Functions that
+        // need complete partition context, such as cume_dist, are handled in
+        // execute_window().
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
         let input = exec_ctx.execute_with_input_stats(&self.input)?;
         let coalesced = exec_ctx.coalesce_with_default_batch_size(input);
@@ -844,6 +846,49 @@ mod test {
             "| 1  | 30 | 0  | -1      |",
             "| 2  | 40 | 0  | -1      |",
             "+----+----+----+---------+",
+        ];
+        assert_batches_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cume_dist_window() -> Result<(), Box<dyn std::error::Error>> {
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+
+        let input = build_table(
+            ("grp", &vec![1, 1, 1, 2]),
+            ("id", &vec![1, 1, 2, 5]),
+            ("v", &vec![10, 20, 30, 40]),
+        )?;
+        let window_exprs = vec![WindowExpr::new(
+            WindowFunction::CumeDist,
+            vec![],
+            Arc::new(Field::new("cume_dist", DataType::Float64, false)),
+            DataType::Float64,
+        )];
+        let window = Arc::new(WindowExec::try_new(
+            input,
+            window_exprs,
+            vec![Arc::new(Column::new("grp", 0))],
+            vec![PhysicalSortExpr {
+                expr: Arc::new(Column::new("id", 1)),
+                options: Default::default(),
+            }],
+            None,
+            true,
+        )?);
+        let stream = window.execute(0, task_ctx)?;
+        let batches = datafusion::physical_plan::common::collect(stream).await?;
+        let expected = vec![
+            "+-----+----+----+--------------------+",
+            "| grp | id | v  | cume_dist          |",
+            "+-----+----+----+--------------------+",
+            "| 1   | 1  | 10 | 0.6666666666666666 |",
+            "| 1   | 1  | 20 | 0.6666666666666666 |",
+            "| 1   | 2  | 30 | 1.0                |",
+            "| 2   | 5  | 40 | 1.0                |",
+            "+-----+----+----+--------------------+",
         ];
         assert_batches_eq!(expected, &batches);
         Ok(())

@@ -35,6 +35,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.scalactic.TripleEqualsSupport.Spread
 
+import org.apache.auron.sparkver
+
 /**
  * Base trait for all Spark expression tests.
  */
@@ -143,7 +145,7 @@ trait SparkExpressionTestsBase
       val empData = Seq(Row(1))
       _spark.createDataFrame(_spark.sparkContext.parallelize(empData), schema)
     }
-    val resultDF = df.select(Column(expression))
+    val resultDF = df.select(columnFromExpression(expression))
     val result = resultDF.collect()
 
     if (checkDataTypeSupported(expression) &&
@@ -296,23 +298,18 @@ trait SparkExpressionTestsBase
    */
   private def canConvertToDataFrame(inputRow: InternalRow): Boolean = {
     if (inputRow == EmptyRow || inputRow == InternalRow.empty) {
-      return true
-    }
-
-    if (!inputRow.isInstanceOf[GenericInternalRow]) {
-      return false
-    }
-
-    val values = inputRow.asInstanceOf[GenericInternalRow].values
-    for (value <- values) {
-      value match {
-        case _: MapData => return false
-        case _: ArrayData => return false
-        case _: InternalRow => return false
-        case _ =>
+      true
+    } else if (!inputRow.isInstanceOf[GenericInternalRow]) {
+      false
+    } else {
+      val values = inputRow.asInstanceOf[GenericInternalRow].values
+      values.forall {
+        case _: MapData => false
+        case _: ArrayData => false
+        case _: InternalRow => false
+        case _ => true
       }
     }
-    true
   }
 
   private def convertInternalRowToDataFrame(inputRow: InternalRow): DataFrame = {
@@ -350,8 +347,34 @@ trait SparkExpressionTestsBase
         structFieldSeq.append(StructField("n", IntegerType, nullable = true))
     }
 
-    _spark.internalCreateDataFrame(
+    internalCreateDataFrame(
       _spark.sparkContext.parallelize(Seq(inputRow)),
       StructType(structFieldSeq.toSeq))
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  private def columnFromExpression(expression: Expression): Column = {
+    Column(expression)
+  }
+
+  @sparkver("4.0 / 4.1")
+  private def columnFromExpression(expression: Expression): Column = {
+    new Column(org.apache.spark.sql.classic.ExpressionColumnNode(expression))
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  private def internalCreateDataFrame(
+      rows: org.apache.spark.rdd.RDD[InternalRow],
+      schema: StructType): DataFrame = {
+    _spark.internalCreateDataFrame(rows, schema)
+  }
+
+  @sparkver("4.0 / 4.1")
+  private def internalCreateDataFrame(
+      rows: org.apache.spark.rdd.RDD[InternalRow],
+      schema: StructType): org.apache.spark.sql.classic.DataFrame = {
+    _spark
+      .asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+      .internalCreateDataFrame(rows, schema)
   }
 }

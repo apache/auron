@@ -40,6 +40,29 @@ public class FlinkAuronConfiguration extends AuronConfiguration {
             .withDescription("The auron native memory size to use.")
             .withDefaultValue(256 * 1024 * 1024L); // 256 MB
 
+    /**
+     * When an Auron operator conversion fails at planning time, controls whether the
+     * job falls back to Flink's stock engine for that operator (true) or fails the
+     * submission with an {@link IllegalStateException} (false). The default is
+     * {@code true}; set to {@code false} in CI or new-converter development to surface
+     * gaps in Auron coverage instead of silently degrading.
+     */
+    public static final ConfigOption<Boolean> FAIL_BACK_FLINK_ENGINE_ENABLED = new ConfigOption<>(Boolean.class)
+            .withKey("auron.failback.flink.engine.enabled")
+            .withDescription("When an Auron operator conversion fails, does it fall back to "
+                    + "the Flink engine for execution?")
+            .withDefaultValue(true);
+
+    /**
+     * Whether the native execution context records per-batch input statistics for monitoring.
+     * Queried by the native engine on every Auron-native operator path; the field must exist
+     * on this class so the JniBridge reflection lookup does not NPE.
+     */
+    public static final ConfigOption<Boolean> INPUT_BATCH_STATISTICS_ENABLE = new ConfigOption<>(Boolean.class)
+            .withKey("auron.input.batch.statistics.enable")
+            .withDescription("Enable collection of additional metrics for input batch statistics.")
+            .withDefaultValue(false);
+
     private final Configuration flinkConfig;
 
     public FlinkAuronConfiguration() {

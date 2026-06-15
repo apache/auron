@@ -91,9 +91,9 @@ object AuronQueryTestUtil extends Assertions {
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
-    val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    val isSorted = df.queryExecution.logical.collect { case s: logical.Sort => s }.nonEmpty
     if (checkToRDD) {
-      SQLExecution.withSQLConfPropagated(df.sparkSession) {
+      SQLExecution.withSQLConfPropagated(df.queryExecution.sparkSession) {
         df.rdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
       }
     }

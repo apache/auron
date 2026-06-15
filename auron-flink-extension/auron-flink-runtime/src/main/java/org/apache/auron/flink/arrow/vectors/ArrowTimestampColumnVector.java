@@ -17,6 +17,8 @@
 package org.apache.auron.flink.arrow.vectors;
 
 import org.apache.arrow.vector.TimeStampVector;
+import org.apache.arrow.vector.types.TimeUnit;
+import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.data.columnar.vector.TimestampColumnVector;
 import org.apache.flink.util.Preconditions;
@@ -25,26 +27,27 @@ import org.apache.flink.util.Preconditions;
  * A Flink {@link TimestampColumnVector} backed by an Arrow {@link TimeStampVector}.
  *
  * <p>This wrapper delegates all reads to the underlying Arrow vector, providing zero-copy access
- * to Arrow data from Flink's columnar batch execution engine. It handles both {@code
- * TimeStampMicroVector} (TIMESTAMP) and {@code TimeStampMicroTZVector} (TIMESTAMP_LTZ) by
- * accepting their common parent type {@link TimeStampVector}. The native engine (DataFusion)
- * uses microsecond precision for all temporal types. Microsecond values are converted to Flink's
+ * to Arrow data from Flink's columnar batch execution engine. It handles all four Arrow
+ * timestamp time units (second, millisecond, microsecond, nanosecond) by reading the unit from
+ * the vector's {@link ArrowType.Timestamp} metadata and converting to Flink's
  * {@link TimestampData} representation (epoch millis + sub-millisecond nanos).
  */
 public final class ArrowTimestampColumnVector implements TimestampColumnVector {
 
     private final TimeStampVector vector;
+    private final TimeUnit timeUnit;
 
     /**
      * Creates a new wrapper around the given Arrow {@link TimeStampVector}.
      *
-     * <p>Accepts both {@code TimeStampMicroVector} and {@code TimeStampMicroTZVector} since they
-     * share the same storage format and parent type.
+     * <p>Accepts any of {@code TimeStampSecVector}, {@code TimeStampMilliVector},
+     * {@code TimeStampMicroVector}, {@code TimeStampNanoVector} (and their TZ variants).
      *
      * @param vector the Arrow vector to wrap, must not be null
      */
     public ArrowTimestampColumnVector(TimeStampVector vector) {
         this.vector = Preconditions.checkNotNull(vector);
+        this.timeUnit = ((ArrowType.Timestamp) vector.getField().getType()).getUnit();
     }
 
     /** {@inheritDoc} */
@@ -56,21 +59,29 @@ public final class ArrowTimestampColumnVector implements TimestampColumnVector {
     /**
      * Returns the timestamp at the given index as a {@link TimestampData}.
      *
-     * <p>The underlying Arrow vector stores microseconds since epoch. This method splits the value
-     * into epoch milliseconds and sub-millisecond nanoseconds to construct a {@link TimestampData}.
+     * <p>Reads the underlying Arrow value (whose unit is determined by the vector's
+     * {@link ArrowType.Timestamp} metadata, captured at construction) and converts to Flink's
+     * {@link TimestampData} representation (epoch millis + sub-millisecond nanos).
      *
      * @param i the row index
-     * @param precision the timestamp precision (unused; conversion is always from microseconds)
+     * @param precision the timestamp precision (unused; conversion is driven by the Arrow vector's unit)
      * @return the timestamp value
      */
     @Override
     public TimestampData getTimestamp(int i, int precision) {
-        long micros = vector.get(i);
-        // Use floor-based division so that for negative micros (pre-epoch), the remainder is
-        // non-negative and nanoOfMillisecond stays within [0, 999_999], as required by
-        // TimestampData.fromEpochMillis.
-        long millis = Math.floorDiv(micros, 1000);
-        int nanoOfMillisecond = ((int) Math.floorMod(micros, 1000)) * 1000;
-        return TimestampData.fromEpochMillis(millis, nanoOfMillisecond);
+        long raw = vector.get(i);
+        switch (timeUnit) {
+            case SECOND:
+                return TimestampData.fromEpochMillis(raw * 1000L, 0);
+            case MILLISECOND:
+                return TimestampData.fromEpochMillis(raw, 0);
+            case MICROSECOND:
+                return TimestampData.fromEpochMillis(Math.floorDiv(raw, 1000), ((int) Math.floorMod(raw, 1000)) * 1000);
+            case NANOSECOND:
+                return TimestampData.fromEpochMillis(
+                        Math.floorDiv(raw, 1_000_000), (int) Math.floorMod(raw, 1_000_000));
+            default:
+                throw new IllegalStateException("Unsupported Arrow timestamp unit: " + timeUnit);
+        }
     }
 }

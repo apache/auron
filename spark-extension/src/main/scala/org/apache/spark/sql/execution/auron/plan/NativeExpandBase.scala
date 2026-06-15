@@ -45,8 +45,8 @@ abstract class NativeExpandBase(
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
-      .filterKeys(
+      .getDefaultNativeMetrics(
+        sparkContext,
         Set(
           "stage_id",
           "output_rows",

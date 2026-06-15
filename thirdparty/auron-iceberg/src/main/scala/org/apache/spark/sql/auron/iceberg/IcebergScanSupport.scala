@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
 import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
+import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
@@ -32,7 +33,8 @@ import org.apache.spark.sql.types.{BinaryType, DataType, DecimalType, StringType
 import org.apache.auron.{protobuf => pb}
 
 // fileSchema is read from the data files. partitionSchema carries supported metadata columns
-// (for example _file) that are materialized as per-file constant values in the native scan.
+// (for example _file and _spec_id) that are materialized as per-file constant values in
+// the native scan.
 final case class IcebergScanPlan(
     fileTasks: Seq[FileScanTask],
     fileFormat: FileFormat,
@@ -47,36 +49,31 @@ object IcebergScanSupport extends Logging {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
-    if (!scanClassName.startsWith("org.apache.iceberg.spark.source.")) {
-      return None
-    }
-
-    // Changelog scan carries row-level changes; not supported by native COW-only path.
-    if (scanClassName == "org.apache.iceberg.spark.source.SparkChangelogScan") {
-      return None
-    }
+    assert(
+      AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan),
+      "Not iceberg scans.")
 
     val readSchema = scan.readSchema
     val unsupportedMetadataColumns = collectUnsupportedMetadataColumns(readSchema)
-    // Native scan can project file-level metadata columns such as _file via partition values.
+    // Native scan can project file-level metadata columns such as _file and _spec_id
+    // via partition values.
     // Metadata columns that require per-row materialization (for example _pos) still fallback.
-    if (unsupportedMetadataColumns.nonEmpty) {
-      return None
-    }
+    assert(
+      !(unsupportedMetadataColumns.nonEmpty),
+      "Has per-row materialization (for example _pos).")
 
     val fileSchema = StructType(readSchema.fields.filterNot(isSupportedMetadataColumn))
     // Supported metadata columns are materialized via per-file constant values rather than
     // read from the Iceberg data file payload.
     val partitionSchema = StructType(readSchema.fields.filter(isSupportedMetadataColumn))
 
-    if (!fileSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType))) {
-      return None
-    }
+    assert(
+      fileSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
+      "Has unsupported Iceberg data-file schema type.")
 
-    if (!partitionSchema.fields.forall(field =>
-        NativeConverters.isTypeSupported(field.dataType))) {
-      return None
-    }
+    assert(
+      partitionSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
+      "Has unsupported schema type.")
 
     val partitions = inputPartitions(exec)
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
@@ -94,27 +91,25 @@ object IcebergScanSupport extends Logging {
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
     // All partitions must be Iceberg SparkInputPartition; otherwise fallback.
-    if (icebergPartitions.size != partitions.size) {
-      return None
-    }
+    assert(
+      icebergPartitions.size == partitions.size,
+      "All partitions must be Iceberg SparkInputPartition.")
 
     val fileTasks = icebergPartitions.flatMap(_.fileTasks)
 
     // Native scan does not apply delete files; only allow pure data files (COW).
-    if (!fileTasks.forall(task => task.deletes() == null || task.deletes().isEmpty)) {
-      return None
-    }
+    assert(
+      fileTasks.forall(task => task.deletes() == null || task.deletes().isEmpty),
+      "Not iceberg cow table.")
 
     // Native scan handles a single file format; mixed formats must fallback.
     val formats = fileTasks.map(_.file().format()).distinct
-    if (formats.size > 1) {
-      return None
-    }
+    assert(!(formats.size > 1), "Not all data file format is a single file format.")
 
     val format = formats.headOption.getOrElse(FileFormat.PARQUET)
-    if (format != FileFormat.PARQUET && format != FileFormat.ORC) {
-      return None
-    }
+    assert(
+      !(format != FileFormat.PARQUET && format != FileFormat.ORC),
+      "Only support parquet or orc.")
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
     Some(
@@ -136,7 +131,8 @@ object IcebergScanSupport extends Logging {
     }
 
   private def isSupportedMetadataColumn(field: org.apache.spark.sql.types.StructField): Boolean =
-    field.name == MetadataColumns.FILE_PATH.name()
+    field.name == MetadataColumns.FILE_PATH.name() ||
+      field.name == MetadataColumns.SPEC_ID.name()
 
   private def inputPartitions(exec: BatchScanExec): Seq[InputPartition] = {
     // Prefer DataSource V2 batch API; if not available, fallback to exec methods via reflection.
@@ -199,9 +195,9 @@ object IcebergScanSupport extends Logging {
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
     // Only accept Iceberg SparkInputPartition to access task groups.
-    if (className != "org.apache.iceberg.spark.source.SparkInputPartition") {
-      return None
-    }
+    assert(
+      AuronIcebergSourceUtil.getClassOfSparkInputPartition().isInstance(partition),
+      "Not iceberg scans.")
 
     try {
       // SparkInputPartition is package-private; use reflection to read its task group.

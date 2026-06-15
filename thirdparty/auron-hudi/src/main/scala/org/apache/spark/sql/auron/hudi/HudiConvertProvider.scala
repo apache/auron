@@ -27,56 +27,71 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class HudiConvertProvider extends AuronConvertProvider with Logging {
 
-  override def isEnabled: Boolean = {
-    val sparkVersion = org.apache.spark.SPARK_VERSION
-    val versionParts = sparkVersion.split("[\\.-]", 3)
-    val maybeMajor = versionParts.headOption.flatMap(part => Try(part.toInt).toOption)
-    val maybeMinor =
-      if (versionParts.length >= 2) Try(versionParts(1).toInt).toOption else None
-    val supported = (for {
-      major <- maybeMajor
-      minor <- maybeMinor
-    } yield major == 3 && minor >= 0 && minor <= 5).getOrElse(false)
-    SparkAuronConfiguration.ENABLE_HUDI_SCAN.get() && supported
+  override def isEnabled(exec: SparkPlan): Boolean = {
+    exec match {
+      case _: FileSourceScanExec =>
+        // Only handle Hudi-backed file scans; other scans fall through.
+        val sparkVersion = org.apache.spark.SPARK_VERSION
+        val versionParts = sparkVersion.split("[\\.-]", 3)
+        val maybeMajor = versionParts.headOption.flatMap(part => Try(part.toInt).toOption)
+        val maybeMinor =
+          if (versionParts.length >= 2) Try(versionParts(1).toInt).toOption else None
+        val supported = (for {
+          major <- maybeMajor
+          minor <- maybeMinor
+        } yield major == 3 && minor >= 0 && minor <= 5).getOrElse(false)
+        assert(
+          SparkAuronConfiguration.ENABLE_HUDI_SCAN.get(),
+          s"Conversion disabled: ${SparkAuronConfiguration.ENABLE_HUDI_SCAN.key()} is false.")
+        assert(supported, "Conversion disabled: Only supported Spark versions: 3.0 to 3.5.")
+        SparkAuronConfiguration.ENABLE_HUDI_SCAN.get() && supported
+      case _ => false
+    }
   }
 
   override def isSupported(exec: SparkPlan): Boolean = {
     exec match {
       case scan: FileSourceScanExec =>
         // Only handle Hudi-backed file scans; other scans fall through.
-        HudiScanSupport.isSupported(scan)
+        val isSupportedFileFormat = HudiScanSupport.supportedFileFormat(scan).nonEmpty
+        assert(isSupportedFileFormat, "Conversion disabled: FileFormat is not supported.")
+        isSupportedFileFormat
       case _ => false
     }
   }
 
   override def convert(exec: SparkPlan): SparkPlan = {
     exec match {
-      case scan: FileSourceScanExec if HudiScanSupport.isSupported(scan) =>
-        HudiScanSupport.fileFormat(scan) match {
+      case scan: FileSourceScanExec =>
+        HudiScanSupport.supportedFileFormat(scan) match {
           case Some(HudiScanSupport.ParquetFormat) =>
-            if (!SparkAuronConfiguration.ENABLE_SCAN_PARQUET.get()) {
-              return exec
-            }
+            assert(
+              SparkAuronConfiguration.ENABLE_SCAN_PARQUET.get(),
+              s"Conversion disabled: ${SparkAuronConfiguration.ENABLE_SCAN_PARQUET.key()} is false.")
             // Hudi falls back to Spark when timestamp scanning is disabled.
             if (!SparkAuronConfiguration.ENABLE_SCAN_PARQUET_TIMESTAMP.get()) {
               if (scan.requiredSchema.exists(e =>
                   NativeConverters.existTimestampType(e.dataType))) {
-                return exec
+                assert(false, "Conversion disabled: Has timestamp type.")
               }
             }
             logDebug(s"Applying native parquet scan for Hudi: ${scan.relation.location}")
             AuronConverters.addRenameColumnsExec(Shims.get.createNativeParquetScanExec(scan))
           case Some(HudiScanSupport.OrcFormat) =>
-            if (!SparkAuronConfiguration.ENABLE_SCAN_ORC.get()) {
-              return exec
-            }
+            assert(
+              SparkAuronConfiguration.ENABLE_SCAN_ORC.get(),
+              s"Conversion disabled: ${SparkAuronConfiguration.ENABLE_SCAN_ORC.key()} is false.")
             // ORC follows the same timestamp fallback rule as Parquet.
+            assert(
+              SparkAuronConfiguration.ENABLE_SCAN_ORC_TIMESTAMP.get(),
+              s"Conversion disabled: ${SparkAuronConfiguration.ENABLE_SCAN_ORC_TIMESTAMP.key()} is false.")
             if (!SparkAuronConfiguration.ENABLE_SCAN_ORC_TIMESTAMP.get()) {
               if (scan.requiredSchema.exists(e =>
                   NativeConverters.existTimestampType(e.dataType))) {
-                return exec
+                assert(false, "Conversion disabled: Has timestamp type.")
               }
             }
+
             logDebug(s"Applying native ORC scan for Hudi: ${scan.relation.location}")
             AuronConverters.addRenameColumnsExec(Shims.get.createNativeOrcScanExec(scan))
           case None => exec

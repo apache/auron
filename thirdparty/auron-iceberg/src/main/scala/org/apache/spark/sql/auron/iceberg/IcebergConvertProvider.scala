@@ -28,18 +28,18 @@ import org.apache.auron.util.SemanticVersion
 
 class IcebergConvertProvider extends AuronConvertProvider with Logging {
 
-  override def isEnabled: Boolean = {
-    val enabled = SparkAuronConfiguration.ENABLE_ICEBERG_SCAN.get()
-    if (!enabled) {
-      return false
-    }
-    if (!sparkCompatible) {
-      logWarning(
-        s"Disable Iceberg native scan: Spark $SPARK_VERSION is not supported. " +
+  override def isEnabled(exec: SparkPlan): Boolean = {
+    exec match {
+      case _: BatchScanExec =>
+        val enabled = SparkAuronConfiguration.ENABLE_ICEBERG_SCAN.get()
+        assert(enabled, "Conversion disabled: auron.enable.iceberg.scan=false.")
+        assert(
+          sparkCompatible,
           s"Supported Spark versions: 3.4 to 4.0 (Iceberg ${icebergVersionOrUnknown}).")
-      return false
+        enabled
+      case _ => false
     }
-    true
+
   }
 
   override def isSupported(exec: SparkPlan): Boolean = {

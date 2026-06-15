@@ -490,21 +490,6 @@ fn parse_records(
 ) -> Result<SendableRecordBatchStream> {
     let parser_config = sonic_rs::from_str::<sonic_rs::Value>(&parser_config_json)
         .expect("parser_config_json is not valid json");
-    let pb_desc_file = parser_config
-        .get("pb_desc_file")
-        .and_then(|v| v.as_str())
-        .expect("pb_desc_file is not valid string")
-        .to_string();
-    let root_message_name = parser_config
-        .get("root_message_name")
-        .and_then(|v| v.as_str())
-        .expect("root_message_name is not valid string")
-        .to_string();
-    let skip_fields = parser_config
-        .get("skip_fields")
-        .and_then(|v| v.as_str())
-        .expect("skip_fields is not valid string")
-        .to_string();
     let nested_col_mapping_json = parser_config
         .get("nested_col_mapping")
         .expect("nested_col_mapping is not valid json");
@@ -517,17 +502,35 @@ fn parse_records(
         }
     }
 
-    let local_pb_desc_file = env::var("PWD").expect("PWD env var is not set") + "/" + &pb_desc_file;
-    log::info!("load desc from {local_pb_desc_file}");
-    let file_descriptor_bytes = fs::read(local_pb_desc_file).expect("Failed to read file");
-    let skip_fields_vec: Vec<String> = skip_fields
-        .split(",")
-        .map(|s| s.to_string())
-        .collect::<Vec<String>>();
+    let (file_descriptor_bytes, root_message_name, skip_fields_vec) = if data_format != 0 {
+        let pb_desc_file = parser_config
+            .get("pb_desc_file")
+            .and_then(|v| v.as_str())
+            .expect("pb_desc_file is not valid string")
+            .to_string();
+        let root_message_name = parser_config
+            .get("root_message_name")
+            .and_then(|v| v.as_str())
+            .expect("root_message_name is not valid string")
+            .to_string();
+        let skip_fields = parser_config
+            .get("skip_fields")
+            .and_then(|v| v.as_str())
+            .expect("skip_fields is not valid string")
+            .to_string();
+        let local_pb_desc_file =
+            env::var("PWD").expect("PWD env var is not set") + "/" + &pb_desc_file;
+        log::info!("load desc from {local_pb_desc_file}");
+        let file_descriptor_bytes = fs::read(local_pb_desc_file).expect("Failed to read file");
+        let skip_fields_vec: Vec<String> = skip_fields.split(",").map(|s| s.to_string()).collect();
+        (file_descriptor_bytes, root_message_name, skip_fields_vec)
+    } else {
+        (vec![], String::new(), vec![])
+    };
+
     Ok(exec_ctx.clone().output_with_sender(
         "KafkaScanExec.ParseRecords",
         move |sender| async move {
-            // TODO: json parser
             let mut parser: Box<dyn FlinkDeserializer> = if data_format == 0 {
                 Box::new(JsonDeserializer::new(schema.clone(), &nested_msg_mapping)?)
             } else {

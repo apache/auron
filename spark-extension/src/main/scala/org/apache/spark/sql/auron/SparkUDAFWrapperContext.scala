@@ -248,7 +248,7 @@ class DeclarativeEvaluator(val agg: DeclarativeAggregate)
       expr.transform {
         case BoundReference(odin, dt, nullable) =>
           BoundReference(odin + agg.aggBufferAttributes.length, dt, nullable)
-        case expr => expr
+        case other => other
       }
     }
     UnsafeProjection.create(

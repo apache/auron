@@ -24,13 +24,7 @@ object sparkver {
   def matchVersion(vers: String): Boolean = {
     // please ensure the common module is built
     val configuredVer = org.apache.auron.common.ProjectConstants.SHIM_NAME
-    for (ver <- vers.split("/")) {
-      val verStripped = ver.trim
-      if (s"spark-$verStripped" == configuredVer) {
-        return true
-      }
-    }
-    false
+    vers.split("/").exists(ver => s"spark-${ver.trim}" == configuredVer)
   }
 
   object Macros {

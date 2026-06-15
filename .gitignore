@@ -29,6 +29,7 @@ lib/
 
 # IDEA
 .idea/
+.codegraph/
 
 # Misc
 *.orig

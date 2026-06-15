@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils
+import org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
@@ -57,6 +58,7 @@ import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.execution.auron.plan.ConvertToNativeBase
 import org.apache.spark.sql.execution.auron.plan.NativeAggBase
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeBase
+import org.apache.spark.sql.execution.auron.plan.NativeOrcInsertIntoHiveTableBase
 import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeSortBase
@@ -70,7 +72,17 @@ import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.execution.auron.plan.NativeHiveTableScanBase
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.BinaryType
+import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.ByteType
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.FloatType
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.ShortType
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.StructType
 
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.jni.AuronAdaptor
@@ -101,6 +113,9 @@ object AuronConverters extends Logging {
   def enableGenerate: Boolean = SparkAuronConfiguration.ENABLE_GENERATE.get()
   def enableLocalTableScan: Boolean = SparkAuronConfiguration.ENABLE_LOCAL_TABLE_SCAN.get()
   def enableDataWriting: Boolean = SparkAuronConfiguration.ENABLE_DATA_WRITING.get()
+  def enableDataWritingParquet: Boolean =
+    SparkAuronConfiguration.ENABLE_DATA_WRITING_PARQUET.get()
+  def enableDataWritingOrc: Boolean = SparkAuronConfiguration.ENABLE_DATA_WRITING_ORC.get()
   def enableScanParquet: Boolean = SparkAuronConfiguration.ENABLE_SCAN_PARQUET.get()
   def enableScanParquetTimestamp: Boolean =
     SparkAuronConfiguration.ENABLE_SCAN_PARQUET_TIMESTAMP.get()
@@ -132,6 +147,42 @@ object AuronConverters extends Logging {
     supportedShuffleManagers.exists(name.contains)
   }
 
+  private val supportedOrcWriteTypeNames: String =
+    Seq[DataType](
+      BooleanType,
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType,
+      StringType,
+      BinaryType).map(_.catalogString).mkString(", ")
+
+  def isOrcWriteTypeSupported(dataType: DataType): Boolean = dataType match {
+    case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
+        StringType | BinaryType =>
+      true
+    case _ => false
+  }
+
+  def isOrcWriteSchemaSupported(schema: StructType): Boolean =
+    schema.forall(field => isOrcWriteTypeSupported(field.dataType))
+
+  def unsupportedOrcWriteSchemaMessage(schema: StructType): String = {
+    val unsupportedFields = schema
+      .filterNot(field => isOrcWriteTypeSupported(field.dataType))
+      .map(field => s"${field.name}: ${field.dataType.catalogString}")
+    val unsupportedFieldsMessage =
+      if (unsupportedFields.nonEmpty) {
+        s" Unsupported fields/types: ${unsupportedFields.mkString(", ")}."
+      } else {
+        ""
+      }
+    s"Unsupported ORC write schema.$unsupportedFieldsMessage Supported ORC write types are: " +
+      s"$supportedOrcWriteTypeNames."
+  }
+
   def convertSparkPlanRecursively(exec: SparkPlan): SparkPlan = {
     // convert
     var danglingConverted: Seq[SparkPlan] = Nil
@@ -161,9 +212,22 @@ object AuronConverters extends Logging {
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
-        extConvertProviders.find(p => p.isEnabled && p.isSupported(e)) match {
-          case Some(provider) => tryConvert(e, provider.convert)
-          case None => tryConvert(e, convertFileSourceScanExec)
+        try {
+          extConvertProviders.find(p => p.isEnabled(e) && p.isSupported(e)) match {
+            case Some(provider) => tryConvert(e, provider.convert)
+            case None => tryConvert(e, convertFileSourceScanExec)
+          }
+        } catch {
+          case err @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
+            val msg =
+              Option(err.getMessage)
+                .getOrElse(err.toString)
+                .replaceFirst("^assertion failed: ?", "")
+            exec.setTagValue(convertToNonNativeTag, true)
+            exec.setTagValue(convertibleTag, false)
+            exec.setTagValue(convertStrategyTag, NeverConvert)
+            exec.setTagValue(neverConvertReasonTag, msg)
+            exec
         }
       case e: ProjectExec if enableProject => // project
         tryConvert(e, convertProjectExec)
@@ -239,23 +303,34 @@ object AuronConverters extends Logging {
 
       case exec: ForceNativeExecutionWrapperBase => exec
       case exec =>
-        extConvertProviders.find(h => h.isEnabled && h.isSupported(exec)) match {
-          case Some(provider) => tryConvert(exec, provider.convert)
-          case None =>
-            Shims.get.convertMoreSparkPlan(exec) match {
-              case Some(exec) =>
-                exec.setTagValue(convertibleTag, true)
-                exec.setTagValue(convertStrategyTag, AlwaysConvert)
-                exec
-              case None =>
-                if (Shims.get.isNative(exec)) { // for QueryStageInput and CustomShuffleReader
+        try {
+          extConvertProviders.find(h => h.isEnabled(exec) && h.isSupported(exec)) match {
+            case Some(provider) => tryConvert(exec, provider.convert)
+            case None =>
+              Shims.get.convertMoreSparkPlan(exec) match {
+                case Some(exec) =>
                   exec.setTagValue(convertibleTag, true)
                   exec.setTagValue(convertStrategyTag, AlwaysConvert)
                   exec
-                } else {
-                  addNeverConvertReasonTag(exec)
-                }
-            }
+                case None =>
+                  if (Shims.get.isNative(exec)) { // for QueryStageInput and CustomShuffleReader
+                    exec.setTagValue(convertibleTag, true)
+                    exec.setTagValue(convertStrategyTag, AlwaysConvert)
+                    exec
+                  } else {
+                    addNeverConvertReasonTag(exec)
+                  }
+              }
+          }
+        } catch {
+          case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
+            exec.setTagValue(convertToNonNativeTag, true)
+            exec.setTagValue(convertibleTag, false)
+            exec.setTagValue(convertStrategyTag, NeverConvert)
+            exec.setTagValue(
+              neverConvertReasonTag,
+              s"${e.getMessage.replaceFirst("^assertion failed: ?", "")}")
+            exec
         }
     }
   }
@@ -748,7 +823,10 @@ object AuronConverters extends Logging {
   def convertHashAggregateExec(exec: HashAggregateExec): SparkPlan = {
     // split non-trivial children exprs in partial-agg to a ProjectExec
     // for enabling filter-project optimization in native side
-    getPartialAggProjection(exec.aggregateExpressions, exec.groupingExpressions) match {
+    getPartialAggProjection(
+      exec.aggregateExpressions,
+      exec.groupingExpressions,
+      exec.child.output) match {
       case Some((transformedAggregateExprs, transformedGroupingExprs, projections)) =>
         val transformedExec =
           try {
@@ -789,11 +867,13 @@ object AuronConverters extends Logging {
         NativeAggBase.findPreviousNativeAggrExec(exec).isDefined,
         "partial AggregateExec is not native")
     }
+    val boundAggregateExpressions =
+      bindAggregateFilters(exec.aggregateExpressions, exec.child.output)
     val nativeAggr = Shims.get.createNativeAggExec(
       NativeAggBase.HashAgg,
       exec.requiredChildDistributionExpressions,
       exec.groupingExpressions,
-      exec.aggregateExpressions,
+      boundAggregateExpressions,
       exec.aggregateAttributes,
       exec.initialInputBufferOffset,
       exec.requiredChildDistributionExpressions match {
@@ -829,7 +909,10 @@ object AuronConverters extends Logging {
   def convertObjectHashAggregateExec(exec: ObjectHashAggregateExec): SparkPlan = {
     // split non-trivial children exprs in partial-agg to a ProjectExec
     // for enabling filter-project optimization in native side
-    getPartialAggProjection(exec.aggregateExpressions, exec.groupingExpressions) match {
+    getPartialAggProjection(
+      exec.aggregateExpressions,
+      exec.groupingExpressions,
+      exec.child.output) match {
       case Some((transformedAggregateExprs, transformedGroupingExprs, projections)) =>
         return convertObjectHashAggregateExec(
           exec.copy(
@@ -845,11 +928,13 @@ object AuronConverters extends Logging {
     if (exec.requiredChildDistributionExpressions.isDefined) {
       assert(NativeAggBase.findPreviousNativeAggrExec(exec).isDefined)
     }
+    val boundAggregateExpressions =
+      bindAggregateFilters(exec.aggregateExpressions, exec.child.output)
     val nativeAggr = Shims.get.createNativeAggExec(
       NativeAggBase.HashAgg,
       exec.requiredChildDistributionExpressions,
       exec.groupingExpressions,
-      exec.aggregateExpressions,
+      boundAggregateExpressions,
       exec.aggregateAttributes,
       exec.initialInputBufferOffset,
       exec.requiredChildDistributionExpressions match {
@@ -898,11 +983,12 @@ object AuronConverters extends Logging {
       (NativeAggBase.SortAgg, exec.child)
     }
 
+    val boundAggregateExpressions = bindAggregateFilters(exec.aggregateExpressions, child.output)
     val nativeAggr = Shims.get.createNativeAggExec(
       aggMode,
       exec.requiredChildDistributionExpressions,
       exec.groupingExpressions,
-      exec.aggregateExpressions,
+      boundAggregateExpressions,
       exec.aggregateAttributes,
       exec.initialInputBufferOffset,
       exec.requiredChildDistributionExpressions match {
@@ -1012,25 +1098,55 @@ object AuronConverters extends Logging {
 
   def convertDataWritingCommandExec(exec: DataWritingCommandExec): SparkPlan = {
     logDebugPlanConversion(exec)
+
+    def isParquetInsertIntoHiveTable(cmd: InsertIntoHiveTable): Boolean =
+      cmd.table.storage.outputFormat.contains(classOf[MapredParquetOutputFormat].getName)
+
+    def isOrcInsertIntoHiveTable(cmd: InsertIntoHiveTable): Boolean =
+      cmd.table.storage.outputFormat.contains(classOf[OrcOutputFormat].getName)
+
+    def failWhenDataWritingDisabled(enabled: Boolean, confKey: String): Unit = {
+      if (!enabled) {
+        throw new NotImplementedError(s"Conversion disabled: $confKey=false.")
+      }
+    }
+
+    def sortInsertChild(cmd: InsertIntoHiveTable, child: SparkPlan): SparkPlan = {
+      var sortedChild = convertToNative(child)
+      val numDynParts = cmd.partition.count(_._2.isEmpty)
+      val requiredOrdering =
+        child.output.slice(child.output.length - numDynParts, child.output.length)
+      if (requiredOrdering.nonEmpty && child.outputOrdering.map(_.child) != requiredOrdering) {
+        val rowNumExpr = StubExpr("RowNum", LongType, nullable = false)
+        sortedChild = Shims.get.createNativeSortExec(
+          requiredOrdering.map(SortOrder(_, Ascending)) ++ Seq(SortOrder(rowNumExpr, Ascending)),
+          global = false,
+          sortedChild)
+      }
+      sortedChild
+    }
+
     exec match {
       case DataWritingCommandExec(cmd: InsertIntoHiveTable, child)
-          if cmd.table.storage.outputFormat.contains(
-            classOf[MapredParquetOutputFormat].getName) =>
-        // add an extra SortExec to sort child with dynamic columns
-        // add row number to achieve stable sort
-        var sortedChild = convertToNative(child)
-        val numDynParts = cmd.partition.count(_._2.isEmpty)
-        val requiredOrdering =
-          child.output.slice(child.output.length - numDynParts, child.output.length)
-        if (requiredOrdering.nonEmpty && child.outputOrdering.map(_.child) != requiredOrdering) {
-          val rowNumExpr = StubExpr("RowNum", LongType, nullable = false)
-          sortedChild = Shims.get.createNativeSortExec(
-            requiredOrdering.map(SortOrder(_, Ascending)) ++ Seq(
-              SortOrder(rowNumExpr, Ascending)),
-            global = false,
-            sortedChild)
+          if isParquetInsertIntoHiveTable(cmd) =>
+        failWhenDataWritingDisabled(
+          enableDataWritingParquet,
+          s"${SparkAuronConfiguration.SPARK_PREFIX}" +
+            s"${SparkAuronConfiguration.ENABLE_DATA_WRITING_PARQUET.key()}")
+        Shims.get.createNativeParquetInsertIntoHiveTableExec(cmd, sortInsertChild(cmd, child))
+
+      case DataWritingCommandExec(cmd: InsertIntoHiveTable, child)
+          if isOrcInsertIntoHiveTable(cmd) =>
+        failWhenDataWritingDisabled(
+          enableDataWritingOrc,
+          s"${SparkAuronConfiguration.SPARK_PREFIX}" +
+            s"${SparkAuronConfiguration.ENABLE_DATA_WRITING_ORC.key()}")
+        val dataSchema = NativeOrcInsertIntoHiveTableBase.dataSchema(cmd.table, cmd.partition)
+        if (isOrcWriteSchemaSupported(dataSchema)) {
+          Shims.get.createNativeOrcInsertIntoHiveTableExec(cmd, sortInsertChild(cmd, child))
+        } else {
+          throw new NotImplementedError(unsupportedOrcWriteSchemaMessage(dataSchema))
         }
-        Shims.get.createNativeParquetInsertIntoHiveTableExec(cmd, sortedChild)
 
       case _ =>
         throw new NotImplementedError("unsupported DataWritingCommandExec")
@@ -1120,9 +1236,39 @@ object AuronConverters extends Logging {
     exec
   }
 
+  /**
+   * Bind filter expressions in AggregateExpression to the actual child output attributes. This is
+   * needed because Spark 3.0's AggregateExpression does not have withNewChildrenInternal, so
+   * filter expressions may retain stale exprIds after optimizer transformations. We match by
+   * (name, dataType) and replace with the child's AttributeReference.
+   */
+  private def bindAggregateFilters(
+      aggregateExprs: Seq[AggregateExpression],
+      childOutput: Seq[Attribute]): Seq[AggregateExpression] = {
+    val attrMap = childOutput.map(a => (a.name, a.dataType) -> a).toMap
+    aggregateExprs.map { expr =>
+      expr.filter match {
+        case Some(filterExpr) =>
+          val newFilter = filterExpr.transform { case ar: AttributeReference =>
+            attrMap.get((ar.name, ar.dataType)) match {
+              case Some(newAttr) => newAttr
+              case None => ar
+            }
+          }
+          if (newFilter.eq(filterExpr)) {
+            expr
+          } else {
+            expr.copy(filter = Some(newFilter))
+          }
+        case None => expr
+      }
+    }
+  }
+
   private def getPartialAggProjection(
       aggregateExprs: Seq[AggregateExpression],
-      groupingExprs: Seq[NamedExpression])
+      groupingExprs: Seq[NamedExpression],
+      childOutput: Seq[Attribute])
       : Option[(Seq[AggregateExpression], Seq[NamedExpression], Seq[Alias])] = {
 
     if (!aggregateExprs.forall(_.mode == Partial)) {
@@ -1156,6 +1302,33 @@ object AuronConverters extends Logging {
         }
         .asInstanceOf[AggregateFunction])
     }
+
+    // Ensure that AttributeReferences used in FILTER predicates are also included in the
+    // projection. Without this, the projection child would not output the filter column, causing
+    // bindAggregateFilters to fail (the column would be absent from child.output) and the native
+    // side to raise a SchemaError when resolving the filter expression against input_schema.
+    //
+    // We resolve each filter AttributeReference against childOutput by (name, dataType) to obtain
+    // the canonical Attribute (with the correct exprId), then add it to projections unchanged so
+    // that the downstream ProjectExec can actually evaluate it from exec.child.
+    val childAttrMap = childOutput.map(a => (a.name, a.dataType) -> a).toMap
+    aggregateExprs.foreach { expr =>
+      Shims.get.getAggregateExpressionFilter(expr).foreach {
+        _.foreach {
+          case ar: AttributeReference =>
+            val resolved = childAttrMap.getOrElse((ar.name, ar.dataType), ar)
+            projections.getOrElseUpdate(
+              resolved,
+              AttributeReference(
+                resolved.name,
+                resolved.dataType,
+                resolved.nullable,
+                resolved.metadata)(resolved.exprId, resolved.qualifier))
+          case _ =>
+        }
+      }
+    }
+
     Some(
       (
         transformedAggExprs.toList,
