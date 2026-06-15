@@ -754,10 +754,7 @@ mod test {
                 Some("abXdefghij".to_string()),
                 Some("abXdefghij".to_string()),
             ]))),
-            ColumnarValue::Array(Arc::new(Int32Array::from_iter(vec![
-                Some(1),
-                Some(0),
-            ]))),
+            ColumnarValue::Array(Arc::new(Int32Array::from_iter(vec![Some(1), Some(0)]))),
         ])?;
         let s = r.into_array(2)?;
         assert_eq!(
