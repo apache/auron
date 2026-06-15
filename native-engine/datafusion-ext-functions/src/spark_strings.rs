@@ -743,6 +743,27 @@ mod test {
             as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
             vec![None]
         );
+
+        // Long-string cases to stress banded DP sentinel handling
+        let r = spark_levenshtein(&vec![
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("abcdefghij".to_string()),
+                Some("abcdefghij".to_string()),
+            ]))),
+            ColumnarValue::Array(Arc::new(StringArray::from_iter(vec![
+                Some("abXdefghij".to_string()),
+                Some("abXdefghij".to_string()),
+            ]))),
+            ColumnarValue::Array(Arc::new(Int32Array::from_iter(vec![
+                Some(1),
+                Some(0),
+            ]))),
+        ])?;
+        let s = r.into_array(2)?;
+        assert_eq!(
+            as_int32_array(&s)?.into_iter().collect::<Vec<_>>(),
+            vec![Some(1), Some(-1)]
+        );
         Ok(())
     }
 
