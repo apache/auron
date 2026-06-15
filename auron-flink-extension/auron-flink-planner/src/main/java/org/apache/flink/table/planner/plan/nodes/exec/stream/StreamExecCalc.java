@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
+import org.apache.auron.flink.table.planner.FlinkAuronExecNode;
 import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
 import org.apache.auron.flink.table.planner.converter.ConverterContext;
 import org.apache.auron.flink.table.planner.converter.FlinkNodeConverterFactory;
@@ -87,7 +88,7 @@ import org.slf4j.LoggerFactory;
         version = 1,
         minPlanVersion = FlinkVersion.v1_15,
         minStateVersion = FlinkVersion.v1_15)
-public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<RowData> {
+public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<RowData>, FlinkAuronExecNode {
 
     private static final Logger LOG = LoggerFactory.getLogger(StreamExecCalc.class);
 

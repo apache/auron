@@ -45,10 +45,9 @@ public class AuronCalcRewriteITCase extends AuronFlinkTableTestBase {
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(2, 2), Row.of(3, 4), Row.of(3, 4)));
     }
 
-    /** A filter-plus-projection Calc whose condition uses a not-yet-supported comparison operator
-     * falls back to Flink's codegen path. Asserts the job still produces correct results; the
-     * Auron-side {@code Filter[FFIReader]} plan-shape coverage will be added when a
-     * predicate-returning converter lands. */
+    /** A filter-plus-projection Calc whose WHERE condition and projection are both
+     * converter-supported, exercising the combined Filter+Project path. Asserts the final
+     * row set is correct; the harness does not distinguish native execution from fallback. */
     @Test
     public void testFilterAndProjectEndToEnd() {
         List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
@@ -79,5 +78,71 @@ public class AuronCalcRewriteITCase extends AuronFlinkTableTestBase {
                 .collect());
         rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(2), Row.of(2), Row.of(3), Row.of(3), Row.of(9), Row.of(9)));
+    }
+
+    /** Projects {@code IS NULL} and {@code IS NOT NULL} over a nullable column that contains no
+     * null values in the test data, so every row yields {@code (false, true)}. */
+    @Test
+    public void testIsNullAndIsNotNullProjection() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select `int` IS NULL, `int` IS NOT NULL from T1")
+                .collect());
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(false, true), Row.of(false, true), Row.of(false, true)));
+    }
+
+    /** Combines {@code IS NULL}/{@code IS NOT NULL} predicates through {@code AND} and {@code OR}.
+     * With no nulls present both combined conditions are constant, so every row yields
+     * {@code (true, true)}. */
+    @Test
+    public void testAndOrBooleanCombination() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select (`int` IS NOT NULL) AND (`name` IS NOT NULL), "
+                        + "(`int` IS NULL) OR (`name` IS NOT NULL) from T1")
+                .collect());
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(true, true), Row.of(true, true), Row.of(true, true)));
+    }
+
+    /** Negates an {@code IS NULL} predicate with {@code NOT}. With no nulls present the predicate
+     * is constant, so every row yields {@code true}. */
+    @Test
+    public void testNotProjection() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select NOT (`int` IS NULL) from T1")
+                .collect());
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(true), Row.of(true), Row.of(true)));
+    }
+
+    /** A {@code CASE WHEN} whose guard holds for every row (the column has no null values) while
+     * the arithmetic {@code THEN} branch varies the output: {@code int + 1} yields 2, 3, 3. */
+    @Test
+    public void testCaseWhenWithArithmeticBranch() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select CASE WHEN `int` IS NOT NULL THEN `int` + 1 ELSE 0 END from T1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(2), Row.of(3), Row.of(3)));
+    }
+
+    /** A CASE whose guard is a comparison varies per row: the guard is false for the int=1 row
+     * (yielding the ELSE) and true for the int=2 rows. */
+    @Test
+    public void testCaseWhenComparisonGuard() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select CASE WHEN `int` > 1 THEN `int` * 2 ELSE 0 END from T1")
+                .collect());
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(0), Row.of(4), Row.of(4)));
+    }
+
+    /** A multi-branch searched CASE evaluates its WHEN guards in order; the int=1 row takes the
+     * first branch and the int=2 rows fall through to the ELSE. */
+    @Test
+    public void testCaseWhenMultipleBranches() {
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql(
+                        "select CASE WHEN `int` = 1 THEN 'one' WHEN `int` > 2 THEN 'big' " + "ELSE 'two' END from T1")
+                .collect());
+        rows.sort(Comparator.comparing(o -> (String) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of("one"), Row.of("two"), Row.of("two")));
     }
 }

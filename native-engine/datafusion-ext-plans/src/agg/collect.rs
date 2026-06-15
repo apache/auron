@@ -33,7 +33,7 @@ use datafusion_ext_commons::{
     io::{read_bytes_slice, read_len, read_scalar, write_len, write_scalar},
     scalar_value::compacted_scalar_value_from_array,
 };
-use hashbrown::raw::RawTable;
+use hashbrown::HashTable;
 use smallvec::SmallVec;
 
 use crate::{
@@ -500,7 +500,7 @@ struct AccSet {
 #[derive(Clone)]
 enum InternalSet {
     Small(SmallVec<(u32, u32), 4>),
-    Huge(RawTable<(u32, u32)>),
+    Huge(HashTable<(u32, u32)>),
 }
 
 impl Default for InternalSet {
@@ -536,12 +536,12 @@ impl InternalSet {
         if let Self::Small(s) = self
             && s.len() >= 4
         {
-            let mut huge = RawTable::default();
+            let mut huge = HashTable::default();
 
             for &mut pos_len in s {
                 let raw = list.ref_raw(pos_len);
                 let hash = acc_hash(raw);
-                huge.insert(hash, pos_len, |&pos_len| acc_hash(list.ref_raw(pos_len)));
+                huge.insert_unique(hash, pos_len, |&pos_len| acc_hash(list.ref_raw(pos_len)));
             }
             *self = Self::Huge(huge);
         }
@@ -571,8 +571,7 @@ impl AccSet {
     }
 
     fn append_raw(&mut self, raw: &[u8]) {
-        let new_len = raw.len();
-        let new_pos_len = (self.list.raw.len() as u32, new_len as u32);
+        let new_pos_len = (self.list.raw.len() as u32, raw.len() as u32);
 
         match &mut self.set {
             InternalSet::Small(s) => {
@@ -591,19 +590,14 @@ impl AccSet {
             }
             InternalSet::Huge(s) => {
                 let hash = acc_hash(raw);
-                match s.find_or_find_insert_slot(
-                    hash,
-                    |&pos_len| new_len == pos_len.1 as usize && raw == self.list.ref_raw(pos_len),
-                    |&pos_len| acc_hash(self.list.ref_raw(pos_len)),
-                ) {
-                    Ok(_found) => {}
-                    Err(slot) => {
-                        unsafe {
-                            // safety: call unsafe `insert_in_slot` method
-                            self.list.raw.extend(raw);
-                            s.insert_in_slot(hash, slot, new_pos_len);
-                        }
-                    }
+                let found = s.find(hash, |&pos_len| {
+                    raw.len() == pos_len.1 as usize && raw == self.list.ref_raw(pos_len)
+                });
+                if found.is_none() {
+                    self.list.raw.extend(raw);
+                    s.insert_unique(hash, new_pos_len, |&pos_len| {
+                        acc_hash(self.list.ref_raw(pos_len))
+                    });
                 }
             }
         }
@@ -630,22 +624,15 @@ impl AccSet {
             InternalSet::Huge(s) => {
                 let new_value = self.list.ref_raw(new_pos_len);
                 let hash = acc_hash(new_value);
-                match s.find_or_find_insert_slot(
-                    hash,
-                    |&pos_len| {
-                        new_len == pos_len.1 as usize && new_value == self.list.ref_raw(pos_len)
-                    },
-                    |&pos_len| acc_hash(self.list.ref_raw(pos_len)),
-                ) {
-                    Ok(_found) => {
-                        inserted = false;
-                    }
-                    Err(slot) => {
-                        unsafe {
-                            // safety: call unsafe `insert_in_slot` method
-                            s.insert_in_slot(hash, slot, new_pos_len);
-                        }
-                    }
+                let found = s.find(hash, |&pos_len| {
+                    new_len == pos_len.1 as usize && new_value == self.list.ref_raw(pos_len)
+                });
+                if found.is_none() {
+                    s.insert_unique(hash, new_pos_len, |&pos_len| {
+                        acc_hash(self.list.ref_raw(pos_len))
+                    });
+                } else {
+                    inserted = false;
                 }
             }
         }
