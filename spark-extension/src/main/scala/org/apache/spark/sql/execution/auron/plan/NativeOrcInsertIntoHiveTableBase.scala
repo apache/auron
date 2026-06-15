@@ -71,8 +71,7 @@ abstract class NativeOrcInsertIntoHiveTableBase(
     BasicWriteJobStatsTracker.metrics ++
     Map(
       NativeHelper
-        .getDefaultNativeMetrics(sparkContext)
-        .filterKeys(Set("stage_id", "output_rows", "elapsed_compute"))
+        .getDefaultNativeMetrics(sparkContext, Set("stage_id", "output_rows", "elapsed_compute"))
         .toSeq
         :+ ("io_time" -> SQLMetrics.createNanoTimingMetric(sparkContext, "Native.io_time"))
         :+ ("bytes_written" ->
