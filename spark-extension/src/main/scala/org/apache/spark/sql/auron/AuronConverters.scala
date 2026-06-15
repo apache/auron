@@ -212,9 +212,22 @@ object AuronConverters extends Logging {
       case e: BroadcastExchangeExec if enableBroadcastExchange =>
         tryConvert(e, convertBroadcastExchangeExec)
       case e: FileSourceScanExec if enableScan => // scan
-        extConvertProviders.find(p => p.isEnabled(e) && p.isSupported(e)) match {
-          case Some(provider) => tryConvert(e, provider.convert)
-          case None => tryConvert(e, convertFileSourceScanExec)
+        try {
+          extConvertProviders.find(p => p.isEnabled(e) && p.isSupported(e)) match {
+            case Some(provider) => tryConvert(e, provider.convert)
+            case None => tryConvert(e, convertFileSourceScanExec)
+          }
+        } catch {
+          case err @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
+            val msg =
+              Option(err.getMessage)
+                .getOrElse(err.toString)
+                .replaceFirst("^assertion failed: ?", "")
+            exec.setTagValue(convertToNonNativeTag, true)
+            exec.setTagValue(convertibleTag, false)
+            exec.setTagValue(convertStrategyTag, NeverConvert)
+            exec.setTagValue(neverConvertReasonTag, msg)
+            exec
         }
       case e: ProjectExec if enableProject => // project
         tryConvert(e, convertProjectExec)
