@@ -18,4 +18,4 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.SparkExpressionTestsBase
 
-class AuronCastSuite extends CastSuite with SparkExpressionTestsBase {}
+class AuronCastWithAnsiOnSuite extends CastWithAnsiOnSuite with SparkExpressionTestsBase {}

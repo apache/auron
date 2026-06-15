@@ -18,6 +18,4 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.SparkExpressionTestsBase
 
-class AuronAnsiCastSuiteWithAnsiModeOff
-    extends AnsiCastSuiteWithAnsiModeOff
-    with SparkExpressionTestsBase {}
+class AuronCastWithAnsiOffSuite extends CastWithAnsiOffSuite with SparkExpressionTestsBase {}

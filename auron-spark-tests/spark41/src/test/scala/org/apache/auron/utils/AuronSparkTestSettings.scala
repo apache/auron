@@ -29,18 +29,8 @@ class AuronSparkTestSettings extends SparkTestSettings {
     .disable("Native execution can crash after ParquetQuery in Spark 4")
 
   enableSuite[AuronDateFunctionsSuite]
-    // Native execution wraps Spark parsing/format validation exceptions in SparkException.
-    .exclude("function to_date")
-    .exclude("unix_timestamp")
-    .exclude("to_unix_timestamp")
-    // Native date_trunc does not support all Spark aliases such as "yy".
-    .exclude("function date_trunc")
-    // Native date_trunc throws for unsupported fields instead of returning NULL as Spark does.
-    .exclude("unsupported fmt fields for trunc/date_trunc results null")
-    // Native date_trunc may produce incorrect results for historical timestamps with
-    // non-UTC timezones due to timezone handling differences in the DataFusion engine.
-    .exclude("SPARK-30766: date_trunc of old timestamps to hours and days")
-    .exclude("SPARK-30668: use legacy timestamp parser in to_timestamp")
+    .disable(
+      "Native execution can crash in Spark 4 date/partition suites causing cascade failures")
 
   enableSuite[AuronMathFunctionsSuite]
     .disable("Native execution can crash in Spark 4")
@@ -101,8 +91,7 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronParquetInteroperabilitySuite]
     .disable("Native execution can crash in Spark 4")
   enableSuite[AuronParquetPartitionDiscoverySuite]
-    .exclude("read partitioned table - normal case")
-    .exclude("Infer the TIME data type from partition values")
+    .disable("Native execution can crash in Spark 4 Parquet partition discovery")
   enableSuite[AuronParquetProtobufCompatibilitySuite]
     .exclude("unannotated array of primitive type")
     .exclude("unannotated array of struct")
@@ -125,6 +114,11 @@ class AuronSparkTestSettings extends SparkTestSettings {
     .exclude("SPARK-31159, SPARK-37705: rebasing timestamps in write")
     .exclude("SPARK-31159: rebasing dates in write")
     .exclude("SPARK-35427: datetime rebasing in the EXCEPTION mode")
+    // Spark 4.1 changed datetimeRebaseModeInWrite default to EXCEPTION, which causes these
+    // tests to fail when writing ancient dates (before 1582-10-15) in LEGACY mode.
+    .exclude(
+      "SPARK-33163, SPARK-37705: write the metadata keys 'org.apache.spark.legacyDateTime' and 'org.apache.spark.timeZone'")
+    .exclude("SPARK-33160, SPARK-37705: write the metadata key 'org.apache.spark.legacyINT96' and 'org.apache.spark.timeZone'")
   enableSuite[AuronParquetRebaseDatetimeV1Suite]
     .disable("Spark 4 test resources use jar paths unsupported by Hadoop Path")
   enableSuite[AuronParquetRebaseDatetimeV2Suite]
@@ -140,15 +134,7 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronParquetV1FilterSuite]
     .disable("Native execution can crash in Spark 4")
   enableSuite[AuronParquetV1PartitionDiscoverySuite]
-    .exclude("read partitioned table - normal case")
-    .exclude("Infer the TIME data type from partition values")
-    .exclude("read partitioned table - partition key included in Parquet file")
-    .exclude(
-      "read partitioned table - with nulls and partition keys are included in Parquet file")
-    .exclude(
-      "SPARK-18108 Parquet reader fails when data column types conflict with partition ones")
-    .exclude(
-      "SPARK-21463: MetadataLogFileIndex should respect userSpecifiedSchema for partition cols")
+    .disable("Native execution can crash in Spark 4 Parquet partition discovery")
   enableSuite[AuronParquetV1QuerySuite]
     .exclude("simple select queries")
     .exclude("appending")
@@ -167,12 +153,7 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronParquetV2FilterSuite]
     .disable("Native execution can crash in Spark 4")
   enableSuite[AuronParquetV2PartitionDiscoverySuite]
-    .exclude("read partitioned table - normal case")
-    .exclude("Infer the TIME data type from partition values")
-    .exclude("_SUCCESS should not break partitioning discovery")
-    .exclude("Resolve type conflicts - decimals, dates and timestamps in partition column")
-    .exclude(
-      "SPARK-22109: Resolve type conflicts between strings and timestamps in partition column")
+    .disable("Native execution can crash in Spark 4 Parquet partition discovery")
   enableSuite[AuronParquetV2QuerySuite]
     .exclude("simple select queries")
     .exclude("appending")
