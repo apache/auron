@@ -189,6 +189,15 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("split function with literal regex patterns") {
+    withTable("t1") {
+      sql("create table t1(c1 string, c2 string, c3 string) using parquet")
+      sql("insert into t1 values('a/b/c', 'a+b+c', 'a::b::c'), (null, null, null)")
+      checkSparkAnswerAndOperator(
+        "select split(c1, '/'), split(c2, '\\\\+'), split(c3, '::') from t1")
+    }
+  }
+
   test("weekofyear function") {
     withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
       withTable("t1") {
