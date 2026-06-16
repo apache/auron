@@ -18,6 +18,8 @@ package org.apache.iceberg.spark.source
 
 import scala.collection.JavaConverters._
 
+import org.apache.iceberg.types.TypeUtil
+
 object AuronIcebergSourceUtil {
 
   final case class RenameOrDrop(topLevel: Boolean, nested: Boolean)
@@ -41,8 +43,9 @@ object AuronIcebergSourceUtil {
 
     table
       .schemas()
-      .values()
       .asScala
+      .filterNot(_._1 == table.schema().schemaId())
+      .values
       .foldLeft(RenameOrDrop(topLevel = false, nested = false)) { (result, schema) =>
         collectFieldIdToName(schema).foldLeft(result) {
           case (currentResult, (fieldId, historicalField)) =>
@@ -69,22 +72,14 @@ object AuronIcebergSourceUtil {
   final private case class FieldIdentity(name: String, topLevel: Boolean)
 
   private def collectFieldIdToName(schema: org.apache.iceberg.Schema): Map[Int, FieldIdentity] = {
-    def collect(
-        fields: Seq[org.apache.iceberg.types.Types.NestedField],
-        topLevel: Boolean): Seq[(Int, FieldIdentity)] = {
-      fields.flatMap { field =>
-        val current = field.fieldId() -> FieldIdentity(field.name(), topLevel)
-        val nested =
-          if (field.`type`().isNestedType) {
-            collect(field.`type`().asNestedType().fields().asScala.toSeq, topLevel = false)
-          } else {
-            Seq.empty
-          }
-        current +: nested
+    val topLevelFieldIds = schema.columns().asScala.map(_.fieldId()).toSet
+    TypeUtil
+      .indexById(schema.asStruct())
+      .asScala
+      .map { case (fieldId, field) =>
+        fieldId.toInt -> FieldIdentity(field.name(), topLevelFieldIds.contains(fieldId.toInt))
       }
-    }
-
-    collect(schema.columns().asScala.toSeq, topLevel = true).toMap
+      .toMap
   }
 
   private def asBatchQueryScan(scan: AnyRef): SparkBatchQueryScan =

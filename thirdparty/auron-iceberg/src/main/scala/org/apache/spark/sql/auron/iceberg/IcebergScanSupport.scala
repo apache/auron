@@ -25,6 +25,7 @@ import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -45,8 +46,20 @@ final case class IcebergScanPlan(
     fieldIdsByName: Map[String, Int])
 
 object IcebergScanSupport extends Logging {
+  private val scanPlanTag: TreeNodeTag[Option[IcebergScanPlan]] = TreeNodeTag(
+    "auron.iceberg.scan.plan")
 
   def plan(exec: BatchScanExec): Option[IcebergScanPlan] = {
+    exec.getTagValue(scanPlanTag) match {
+      case Some(cached) => cached
+      case None =>
+        val planned = planUncached(exec)
+        exec.setTagValue(scanPlanTag, planned)
+        planned
+    }
+  }
+
+  private def planUncached(exec: BatchScanExec): Option[IcebergScanPlan] = {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
@@ -76,21 +89,30 @@ object IcebergScanSupport extends Logging {
       partitionSchema.fields.forall(field => NativeConverters.isTypeSupported(field.dataType)),
       "Has unsupported schema type.")
 
-    val (renameOrDrop, fieldIdsByName) =
+    val fieldIdsByName =
       try {
-        (
-          AuronIcebergSourceUtil.detectRenameOrDrop(scan.asInstanceOf[AnyRef]),
-          AuronIcebergSourceUtil.expectedFieldIds(scan.asInstanceOf[AnyRef]))
+        AuronIcebergSourceUtil.expectedFieldIds(scan.asInstanceOf[AnyRef])
       } catch {
         case NonFatal(t) =>
           logWarning(s"Failed to inspect Iceberg field ids for $scanClassName.", t)
           return None
       }
+
+    val renameOrDrop =
+      try {
+        AuronIcebergSourceUtil.detectRenameOrDrop(scan.asInstanceOf[AnyRef])
+      } catch {
+        case NonFatal(t) =>
+          logWarning(s"Failed to inspect Iceberg schema history for $scanClassName.", t)
+          return None
+      }
     assert(!renameOrDrop.nested, "Nested Iceberg rename or drop is not supported.")
 
+    val missingFieldIds =
+      fileSchema.fields.filterNot(field => fieldIdsByName.contains(field.name)).map(_.name)
     assert(
-      fileSchema.fields.forall(field => fieldIdsByName.contains(field.name)),
-      "Failed to find field ids for all Iceberg data columns.")
+      missingFieldIds.isEmpty,
+      s"Missing Iceberg field ids for columns: ${missingFieldIds.mkString(", ")}")
 
     val partitions = inputPartitions(exec)
     // Empty scan (e.g. empty table) should still build a plan to return no rows.

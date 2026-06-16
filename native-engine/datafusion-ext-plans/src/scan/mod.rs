@@ -92,10 +92,10 @@ const PARQUET_FIELD_ID_META_KEY: &str = "PARQUET:field_id";
 
 fn fields_match(table_field: &Field, file_field: &Field) -> bool {
     match table_field.metadata().get(PARQUET_FIELD_ID_META_KEY) {
-        Some(table_field_id) => file_field
-            .metadata()
-            .get(PARQUET_FIELD_ID_META_KEY)
-            .is_some_and(|file_field_id| file_field_id == table_field_id),
+        Some(table_field_id) => match file_field.metadata().get(PARQUET_FIELD_ID_META_KEY) {
+            Some(file_field_id) => file_field_id == table_field_id,
+            None => table_field.name().eq_ignore_ascii_case(file_field.name()),
+        },
         None => table_field.name().eq_ignore_ascii_case(file_field.name()),
     }
 }
