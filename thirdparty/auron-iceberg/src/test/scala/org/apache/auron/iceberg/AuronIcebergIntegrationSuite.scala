@@ -197,7 +197,7 @@ class AuronIcebergIntegrationSuite
       sql("alter table local.db.t_rename rename column old_name to new_name")
       sql("insert into local.db.t_rename values (2, 'after')")
 
-      val df = sql("select id, new_name from local.db.t_rename order by id")
+      val df = sql("select id, new_name from local.db.t_rename")
       checkAnswer(df, Seq(Row(1, "before"), Row(2, "after")))
       assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
     }
@@ -211,7 +211,7 @@ class AuronIcebergIntegrationSuite
       sql("alter table local.db.t_drop_add add column value string")
       sql("insert into local.db.t_drop_add values (2, 'new')")
 
-      val df = sql("select id, value from local.db.t_drop_add order by id")
+      val df = sql("select id, value from local.db.t_drop_add")
       checkAnswer(df, Seq(Row(1, null), Row(2, "new")))
       assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
     }
