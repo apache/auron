@@ -124,6 +124,21 @@ public class AuronKafkaSourceTestBase {
                 + "\n 'properties.group.id' = 'flink-test-mock',"
                 + "\n 'format' = 'JSON' "
                 + "\n )");
+
+        // T5: single-partition source with NO watermark strategy. Exercises the
+        // no-watermark emit path, where the source must still produce all records.
+        tableEnvironment.executeSql(" CREATE TABLE T5 ( "
+                + "\n `event_time` BIGINT, "
+                + "\n `age` INT, "
+                + "\n `name` STRING "
+                + "\n ) WITH ( "
+                + "\n 'connector' = 'auron-kafka',"
+                + "\n 'kafka.mock.data' = '" + jsonArray + "',"
+                + "\n 'topic' = 'mock_topic',"
+                + "\n 'properties.bootstrap.servers' = '127.0.0.1:9092',"
+                + "\n 'properties.group.id' = 'flink-test-mock',"
+                + "\n 'format' = 'JSON' "
+                + "\n )");
     }
 
     protected void assertRowsContains(List<Row> actualRows, Object[]... expectedRows) {

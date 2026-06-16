@@ -278,8 +278,12 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                         watermarkStrategy.createWatermarkGenerator(() -> metricGroup);
                 partitionWatermarkTrackers.put(partitionId, new PartitionWatermarkTracker(generator));
             }
-            this.isRunning = true;
         }
+
+        // Mark the source as running only after initialization completes. The run() loop
+        // collects rows only while isRunning is true on both the watermark and no-watermark
+        // paths, so this must be set regardless of whether a watermark strategy is present.
+        this.isRunning = true;
     }
 
     @Override
