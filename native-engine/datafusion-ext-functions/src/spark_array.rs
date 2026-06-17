@@ -25,6 +25,9 @@ use datafusion_ext_commons::{
 };
 
 pub fn array_reverse(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 1 {
+        return df_execution_err!("array_reverse requires exactly 1 argument");
+    }
     match &args[0] {
         ColumnarValue::Array(array) => Ok(ColumnarValue::Array(reverse_list_array(
             downcast_any!(array, ListArray)?,
