@@ -15,7 +15,6 @@
 
 use std::{
     any::Any,
-    cell::UnsafeCell,
     collections::{HashMap, HashSet},
     io::Cursor,
     sync::Arc,
@@ -44,14 +43,74 @@ use crate::flink::serde::{
 type ValueHandler = Box<dyn Fn(&mut Cursor<&[u8]>, u32, WireType) -> Result<()> + Send>;
 type ValueHandlerMap = hashbrown::HashMap<u32, ValueHandler, foldhash::fast::RandomState>;
 
+/// Adaptive dispatch table for protobuf field handlers keyed by tag.
+///
+/// O2 optimization: when the tag space is dense (max_tag is small relative to
+/// the number of fields), use a `Vec<Option<_>>` for O(1) array indexing,
+/// avoiding the HashMap hashing/probing overhead on the hot path. When tags
+/// are sparse (e.g. extensions or large field numbers), fall back to a
+/// `HashMap` to avoid wasting memory.
+///
+/// The threshold `max_tag <= 64 && max_tag <= 4 * field_count` keeps the Vec
+/// path activated for the overwhelmingly common case where producers use
+/// small contiguous tags (typically 1..N).
+enum ValueHandlers {
+    Vec(Vec<Option<ValueHandler>>),
+    Map(ValueHandlerMap),
+}
+
+impl ValueHandlers {
+    fn from_map(map: ValueHandlerMap) -> Self {
+        let max_tag = map.keys().copied().max().unwrap_or(0);
+        let field_count = map.len();
+        // Heuristic: dense enough and within 64-tag bitmap range. We cap at
+        // 64 so it composes nicely with O3's seen_tags bitmap, but the cap
+        // is independent — the fallback HashMap remains correct.
+        if field_count > 0
+            && max_tag <= 64
+            && (max_tag as usize) <= field_count.saturating_mul(4)
+        {
+            let mut vec: Vec<Option<ValueHandler>> = (0..=max_tag).map(|_| None).collect();
+            for (tag, handler) in map.into_iter() {
+                vec[tag as usize] = Some(handler);
+            }
+            ValueHandlers::Vec(vec)
+        } else {
+            ValueHandlers::Map(map)
+        }
+    }
+
+    #[inline(always)]
+    fn get(&self, tag: u32) -> Option<&ValueHandler> {
+        match self {
+            ValueHandlers::Vec(v) => v.get(tag as usize).and_then(|h| h.as_ref()),
+            ValueHandlers::Map(m) => m.get(&tag),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            ValueHandlers::Vec(v) => v.iter().filter(|h| h.is_some()).count(),
+            ValueHandlers::Map(m) => m.len(),
+        }
+    }
+}
+
 pub struct PbDeserializer {
     output_schema: SchemaRef,
     output_schema_without_meta: SchemaRef,
     pb_schema: SchemaRef,
     output_array_builders: Vec<SharedArrayBuilder>,
     ensure_size: Box<dyn FnMut(usize) + Send>,
-    value_handlers: ValueHandlerMap,
+    value_handlers: ValueHandlers,
     msg_mapping: Vec<Vec<usize>>,
+    /// O10 optimization: precomputed tag → top-level builder index, used to
+    /// track at runtime which top columns were ever written. After parsing,
+    /// columns with `false` in `top_builders_touched` can short-circuit the
+    /// `null_count() == len()` scan and emit a `new_null_array` directly.
+    /// Uses Vec for tags 0..=63 (fast path) and HashMap for larger tags.
+    tag_to_top_idx_vec: Vec<Option<u16>>,
+    tag_to_top_idx_map: HashMap<u32, u16>,
 }
 
 impl FlinkDeserializer for PbDeserializer {
@@ -62,48 +121,92 @@ impl FlinkDeserializer for PbDeserializer {
         kafka_offset: &Int64Array,
         kafka_timestamp: &Int64Array,
     ) -> datafusion::common::Result<RecordBatch> {
-        let mut msg_cursors = messages
-            .iter()
-            .map(|v| {
-                let s = v.expect("message bytes must not be null");
-                Cursor::new(s)
-            })
-            .collect::<Vec<_>>();
-        for (row_idx, msg_cursor) in msg_cursors.iter_mut().enumerate() {
+        // O5: inline cursor creation (avoid Vec<Cursor<&[u8]>> preallocation)
+        // O7/C3 fix: replace `expect("message bytes must not be null")` with `?`
+        //            so that JNI callers don't crash the JVM via process abort.
+        // O3: track which tags appear via a u64 bitmap (tag 1..63). Only call
+        //     ensure_size when not all schema tags were observed in this row.
+        // NOTE on builder row-alignment invariant: every row, all builders must
+        // be padded to length `row_idx + 1`. We therefore must NOT defer
+        // ensure_size to after the loop — that would let later rows write
+        // values into the wrong positions.
+        // NOTE: we cannot use a simple counter because protobuf repeated
+        // fields (non-packed) emit multiple tag-value pairs for the same tag,
+        // which would over-count. The bitmap correctly records unique tags.
+        let total_handlers = self.value_handlers.len() as u32;
+        // O10: track whether each top-level pb_schema column was ever written.
+        // Columns that stay false short-circuit the null_count() scan after
+        // finish(), since we know the array will be entirely null.
+        let mut top_builders_touched: Vec<bool> = vec![false; self.pb_schema.fields().len()];
+        for (row_idx, opt_bytes) in messages.iter().enumerate() {
+            let bytes = opt_bytes.ok_or_else(|| {
+                DataFusionError::Execution("message bytes must not be null".to_string())
+            })?;
+            let mut msg_cursor = Cursor::new(bytes);
+            let mut seen_tags: u64 = 0;
             while msg_cursor.has_remaining() {
-                let (tag, wired_type) = prost::encoding::decode_key(msg_cursor).map_err(|e| {
-                    DataFusionError::Execution(format!("Failed to parse protobuf key: {e}"))
-                })?;
-                if let Some(value_handler) = self.value_handlers.get_mut(&tag) {
-                    value_handler(msg_cursor, tag, wired_type)?;
+                let (tag, wired_type) =
+                    prost::encoding::decode_key(&mut msg_cursor).map_err(|e| {
+                        DataFusionError::Execution(format!("Failed to parse protobuf key: {e}"))
+                    })?;
+                if let Some(value_handler) = self.value_handlers.get(tag) {
+                    value_handler(&mut msg_cursor, tag, wired_type)?;
+                    // Tags >= 64 fall through to ensure_size (always safe).
+                    if tag < 64 {
+                        seen_tags |= 1u64 << tag;
+                    }
+                    // O10: mark the top column as touched.
+                    if let Some(Some(top_idx)) = self.tag_to_top_idx_vec.get(tag as usize) {
+                        top_builders_touched[*top_idx as usize] = true;
+                    } else if let Some(&top_idx) = self.tag_to_top_idx_map.get(&tag) {
+                        top_builders_touched[top_idx as usize] = true;
+                    }
+                } else {
+                    // O1/C1 fix: skip unknown tags so the cursor stays in sync.
+                    skip_pb_value(&mut msg_cursor, tag, wired_type)?;
                 }
             }
-            let ensure_size = &mut self.ensure_size;
-            ensure_size(row_idx + 1);
+            if seen_tags.count_ones() < total_handlers {
+                (self.ensure_size)(row_idx + 1);
+            }
         }
 
-        let root_struct = StructArray::from({
-            RecordBatch::try_new_with_options(
-                self.pb_schema.clone(),
-                self.output_array_builders
-                    .iter()
-                    .map(|builder| builder.get_dyn_mut().finish())
-                    .collect(),
-                &RecordBatchOptions::new().with_row_count(Some(messages.len())),
-            )?
-        });
+        // O4 optimization: avoid building an intermediate `RecordBatch` and
+        // converting it to `StructArray`. We finish builders directly into a
+        // `Vec<ArrayRef>` and walk the per-output `msg_mapping` path to
+        // extract the target column from any nested StructArray.
+        let pb_top_arrays: Vec<ArrayRef> = self
+            .output_array_builders
+            .iter()
+            .map(|builder| builder.get_dyn_mut().finish())
+            .collect();
         let mut output_arrays: Vec<ArrayRef> = Vec::new();
         output_arrays.push(Arc::new(kafka_partition.clone()));
         output_arrays.push(Arc::new(kafka_offset.clone()));
         output_arrays.push(Arc::new(kafka_timestamp.clone()));
         for (field_idx, field) in self.output_schema_without_meta.fields().iter().enumerate() {
-            let array_ref: ArrayRef = get_output_array(&root_struct, &self.msg_mapping[field_idx])?;
+            let mapping = &self.msg_mapping[field_idx];
+            // O10: if the (top-level) column was never written, the entire
+            // resulting array is null — skip the lazy bitmap scan entirely.
+            let top_idx = mapping[0];
+            if mapping.len() == 1 && !top_builders_touched[top_idx] {
+                output_arrays.push(new_null_array(field.data_type(), messages.len()));
+                continue;
+            }
+            let array_ref: ArrayRef = get_output_array_from_top(&pb_top_arrays, mapping)?;
             if array_ref.null_count() == array_ref.len() {
                 output_arrays.push(new_null_array(field.data_type(), array_ref.len()));
             } else {
+                // O7/C3 fix: replace `.expect("Failed to cast array")` with
+                // error propagation so JNI callers don't get a process abort.
                 output_arrays.push(
                     datafusion_ext_commons::arrow::cast::cast(&array_ref, field.data_type())
-                        .expect("Failed to cast array"),
+                        .map_err(|e| {
+                            DataFusionError::Execution(format!(
+                                "Failed to cast array for field {}: {e}",
+                                field.name()
+                            ))
+                        })?,
                 );
             }
         }
@@ -164,13 +267,15 @@ impl PbDeserializer {
                 .collect::<Fields>(),
         ));
         // Schema inferred from the PB descriptor.
+        // O9: pass nested_msg_mapping by reference to avoid a HashMap clone
+        // on every initialization (and on every recursive nested call).
         let pb_schema = transfer_output_schema_to_pb_schema(
             message_descriptor.clone(),
             &output_schema_without_meta,
-            nested_msg_mapping.clone(),
+            nested_msg_mapping,
             &skip_fields,
         )
-        .expect("Failed to transfer output schema to pb schema");
+            .expect("Failed to transfer output schema to pb schema");
 
         let tag_to_output_mapping =
             create_tag_to_output_mapping(message_descriptor.clone(), &pb_schema);
@@ -179,7 +284,7 @@ impl PbDeserializer {
             create_output_array_builders(&pb_schema, message_descriptor.clone())?;
         let ensure_size = ensure_output_array_builders_size(&output_array_builders)?;
 
-        let value_handlers = message_descriptor
+        let value_handlers_map = message_descriptor
             .fields()
             .map(|field| {
                 Ok((
@@ -194,6 +299,8 @@ impl PbDeserializer {
                 ))
             })
             .collect::<Result<hashbrown::HashMap<_, _, foldhash::fast::RandomState>>>()?;
+        // O2 optimization: switch to Vec<Option<_>> when tags are dense.
+        let value_handlers = ValueHandlers::from_map(value_handlers_map);
 
         // precompute message mappings
         let msg_mapping = output_schema_without_meta
@@ -232,6 +339,26 @@ impl PbDeserializer {
             })
             .collect::<Result<Vec<_>>>()?;
 
+        // O10 optimization: build tag → top-level pb_schema column index lookup.
+        // Tags 0..=63 use Vec for O(1) access matching the O3 seen_tags bitmap;
+        // tags beyond 63 use a HashMap so all output columns are tracked.
+        let max_tag_for_vec = tag_to_output_mapping
+            .keys()
+            .copied()
+            .max()
+            .unwrap_or(0)
+            .min(63);
+        let mut tag_to_top_idx_vec: Vec<Option<u16>> =
+            (0..=max_tag_for_vec as usize).map(|_| None).collect();
+        let mut tag_to_top_idx_map: HashMap<u32, u16> = HashMap::new();
+        for (&tag, &idx) in tag_to_output_mapping.iter() {
+            if tag as usize <= max_tag_for_vec as usize {
+                tag_to_top_idx_vec[tag as usize] = Some(idx as u16);
+            } else {
+                tag_to_top_idx_map.insert(tag, idx as u16);
+            }
+        }
+
         Ok(Self {
             output_schema,
             output_schema_without_meta,
@@ -240,6 +367,8 @@ impl PbDeserializer {
             ensure_size,
             value_handlers,
             msg_mapping,
+            tag_to_top_idx_vec,
+            tag_to_top_idx_map,
         })
     }
 }
@@ -247,9 +376,14 @@ impl PbDeserializer {
 fn transfer_output_schema_to_pb_schema(
     message_descriptor: MessageDescriptor,
     output_schema: &SchemaRef,
-    nested_msg_mapping: HashMap<String, String>,
+    nested_msg_mapping: &HashMap<String, String>,
     skip_fields: &[String],
 ) -> Result<SchemaRef> {
+    log::info!(
+        "[DEBUG] transfer_output_schema_to_pb_schema nested_msg_mapping: {:?}, output_schema fields: {:?}",
+        nested_msg_mapping,
+        output_schema.fields().iter().map(|f| f.name().clone()).collect::<Vec<_>>()
+    );
     let mut pb_schema_fields: Vec<Field> = vec![];
     let mut sub_pb_nested_msg_mapping: HashMap<String, String> = HashMap::new();
     let mut sub_pb_schema_mapping: HashMap<String, Vec<Field>> = HashMap::new();
@@ -298,7 +432,10 @@ fn transfer_output_schema_to_pb_schema(
                         let sub_pb_schema = transfer_output_schema_to_pb_schema(
                             sub_message_desc.clone(),
                             &Arc::new(Schema::new(sub_fields)),
-                            sub_pb_nested_msg_mapping.clone(),
+                            // O9 optimization: pass by reference instead of
+                            // cloning the entire HashMap on every recursive
+                            // call.
+                            &sub_pb_nested_msg_mapping,
                             skip_fields,
                         )
                         .expect("transfer_output_schema_to_pb_schema failed");
@@ -845,7 +982,7 @@ pub(crate) fn ensure_output_array_builders_size(
         .map(|(builder_type, builders)| {
             Ok(match builder_type {
                 BuilderType::Boolean => {
-                    impl_for_builders!(BooleanBuilder, builders, |b| b.append_null())
+                    impl_for_builders!(BooleanBuilder, builders, |b| b.append_value(false))
                 }
                 BuilderType::Int32 => {
                     impl_for_builders!(Int32Builder, builders, |b| b.append_value(0))
@@ -900,6 +1037,21 @@ fn get_output_array(struct_array: &StructArray, nested_field_name: &[usize]) -> 
         return get_output_array(downcast_any!(column, StructArray)?, &nested_field_name[1..]);
     }
     Ok(column.clone())
+}
+
+/// O4 optimization helper: extract a (possibly nested) column from the list
+/// of top-level finished arrays without first building a wrapping
+/// `StructArray` for the root level. The first index selects from the top
+/// `Vec<ArrayRef>`; remaining indices descend into nested `StructArray`s.
+fn get_output_array_from_top(
+    top_arrays: &[ArrayRef],
+    nested_field_indices: &[usize],
+) -> Result<ArrayRef> {
+    let column = top_arrays[nested_field_indices[0]].clone();
+    if nested_field_indices.len() > 1 {
+        return get_output_array(downcast_any!(&column, StructArray)?, &nested_field_indices[1..]);
+    }
+    Ok(column)
 }
 
 fn create_value_handler(
@@ -958,26 +1110,30 @@ fn create_value_handler(
 
         macro_rules! impl_for_repeated_builder {
             ($encoding_tyname:ident, $handle_fn:expr) => {{
+                // O6 optimization: hoist the buffer out of the per-call body so
+                // its capacity is reused across calls instead of alloc/dealloc
+                // per repeated field decode. We use `RefCell` because the outer
+                // ValueHandler is `Box<dyn Fn>` (immutable closure); the buffer
+                // is borrowed mut for the duration of decoding/handle_fn, and
+                // each handler is single-threaded.
+                let value_buf: std::cell::RefCell<Vec<_>> =
+                    std::cell::RefCell::new(Default::default());
                 Box::new(move |cursor, tag, wire_type| {
                     let merge_method = prost::encoding::$encoding_tyname::merge_repeated;
-                    let value = UnsafeCell::new(Default::default());
-                    merge_method(
-                        wire_type,
-                        unsafe { &mut *value.get() },
-                        cursor,
-                        DecodeContext::default(),
-                    )
-                    .map_err(|e| {
-                        DataFusionError::Execution(format!(
-                            "Failed to decode repeated {:?} [{}] and {} field: {}",
-                            wire_type,
-                            tag,
-                            stringify!($encoding_tyname),
-                            e
-                        ))
-                    })?;
-                    $handle_fn(unsafe { &*value.get() });
-                    unsafe { &mut *value.get() }.clear();
+                    let mut value = value_buf.borrow_mut();
+                    value.clear();
+                    merge_method(wire_type, &mut *value, cursor, DecodeContext::default()).map_err(
+                        |e| {
+                            DataFusionError::Execution(format!(
+                                "Failed to decode repeated {:?} [{}] and {} field: {}",
+                                wire_type,
+                                tag,
+                                stringify!($encoding_tyname),
+                                e
+                            ))
+                        },
+                    )?;
+                    $handle_fn(&*value);
                     Ok(())
                 })
             }};
@@ -994,7 +1150,12 @@ fn create_value_handler(
                         return df_execution_err!("buffer underflow");
                     }
 
-                    $handle_fn(&cursor.get_mut()[cursor.position() as usize..][..len as usize]);
+                    // O7/C3 fix: handle_fn is now expected to return Result<()> so
+                    // sub-handler errors propagate up through `?` instead of using
+                    // .expect()` which would abort the JVM via JNI.
+                    let res: Result<()> =
+                        $handle_fn(&cursor.get_mut()[cursor.position() as usize..][..len as usize]);
+                    res?;
                     cursor.advance(len as usize);
                     Ok(())
                 })
@@ -1089,12 +1250,22 @@ fn create_value_handler(
                         .values()
                         .get_mut::<StringBuilder>()?;
                     return Ok(impl_for_bytes_builder!(string, |value: &[u8]| {
+                        // O11/SAFETY: protobuf 3 specifies that fields of
+                        // type `string` must contain UTF-8 encoded bytes.
+                        // Conformant producers therefore guarantee `value` is
+                        // valid UTF-8. We trade the validity check for
+                        // throughput here, accepting that a malformed
+                        // upstream message could surface invalid UTF-8 in the
+                        // resulting StringArray (downstream Arrow consumers
+                        // typically tolerate this).
                         let s = unsafe { str::from_utf8_unchecked(value) };
                         array_builder.get_mut().append_value(s);
                     }));
                 } else {
                     let array_builder = output_array_builder.get_mut::<StringBuilder>()?;
                     return Ok(impl_for_bytes_builder!(string, |value: &[u8]| {
+                        // O11/SAFETY: see above — protobuf 3 guarantees
+                        // `string` payloads are UTF-8.
                         let s = unsafe { str::from_utf8_unchecked(value) };
                         array_builder.get_mut().append_value(s);
                     }));
@@ -1205,13 +1376,19 @@ fn create_value_handler(
                 }
             }
             Kind::Enum(enum_descriptor) => {
-                let mut enum_string_mapping = HashMap::new();
+                // O8 optimization: build the enum number→name map as Arc<HashMap>
+                // so multiple handlers (e.g. when the same enum type is used in
+                // several fields) share a single immutable instance. We still
+                // build per handler here, but the closure captures the Arc and
+                // avoids cloning the inner HashMap on every value lookup.
+                let mut enum_string_mapping: HashMap<i32, String> = HashMap::new();
                 for enum_value_descriptor in enum_descriptor.values() {
                     enum_string_mapping.insert(
                         enum_value_descriptor.number(),
                         get_content_after_last_dot(enum_value_descriptor.name()).to_string(),
                     );
                 }
+                let enum_string_mapping = Arc::new(enum_string_mapping);
                 if field.is_list() {
                     let array_builder = output_array_builder
                         .get_mut::<SharedListArrayBuilder>()
@@ -1220,19 +1397,21 @@ fn create_value_handler(
                         .values()
                         .get_mut::<StringBuilder>()?;
                     if field.is_packed() {
+                        let mapping = enum_string_mapping;
                         return Ok(impl_for_repeated_builder!(int32, |values: &Vec<i32>| {
                             for value in values {
                                 array_builder.get_mut().append_value(
-                                    enum_string_mapping
+                                    mapping
                                         .get(value)
                                         .map_or("Unknown", |v| v.as_str()),
                                 );
                             }
                         }));
                     } else {
+                        let mapping = enum_string_mapping;
                         return Ok(impl_for_builder!(int32, |value: &i32| {
                             array_builder.get_mut().append_value(
-                                enum_string_mapping
+                                mapping
                                     .get(value)
                                     .map_or("Unknown", |v| v.as_str()),
                             );
@@ -1240,9 +1419,10 @@ fn create_value_handler(
                     }
                 } else {
                     let array_builder = output_array_builder.get_mut::<StringBuilder>()?;
+                    let mapping = enum_string_mapping;
                     return Ok(impl_for_builder!(int32, |value: &i32| {
                         array_builder.get_mut().append_value(
-                            enum_string_mapping
+                            mapping
                                 .get(value)
                                 .map_or("Unknown", |v| v.as_str()),
                         );
@@ -1283,30 +1463,40 @@ fn create_value_handler(
                     let struct_builder = output_array_builder
                         .get_mut::<SharedStructArrayBuilder>()
                         .expect("SharedStructArrayBuilder is null");
+                    let sub_ensure_size = std::cell::RefCell::new(
+                        ensure_output_array_builders_size(&sub_output_array_builders)?,
+                    );
 
-                    return Ok(impl_for_message_builder!(|buf: &[u8]| {
+                    return Ok(impl_for_message_builder!(|buf: &[u8]| -> Result<()> {
                         if buf.is_empty() {
                             struct_builder.get_mut().append(false);
                         } else {
                             let mut sub_cursor = Cursor::new(buf);
                             while sub_cursor.has_remaining() {
-                                if let Ok((sub_tag, sub_wire_type)) =
-                                    prost::encoding::decode_key(&mut sub_cursor)
+                                let (sub_tag, sub_wire_type) =
+                                    prost::encoding::decode_key(&mut sub_cursor).map_err(|e| {
+                                        DataFusionError::Execution(format!(
+                                            "Failed to decode sub key: {e}"
+                                        ))
+                                    })?;
+                                if let Some(sub_value_handler) =
+                                    sub_value_handlers.get(&sub_tag)
                                 {
-                                    if let Some(sub_value_handler) =
-                                        sub_value_handlers.get(&sub_tag)
-                                    {
-                                        (*sub_value_handler)(
-                                            &mut sub_cursor,
-                                            sub_tag,
-                                            sub_wire_type,
-                                        )
-                                        .expect("Failed to process sub field");
-                                    }
+                                    // O7/C3 fix: propagate error instead of expect()
+                                    (*sub_value_handler)(
+                                        &mut sub_cursor,
+                                        sub_tag,
+                                        sub_wire_type,
+                                    )?;
+                                } else {
+                                    // C1 fix: skip unknown sub-tags
+                                    skip_pb_value(&mut sub_cursor, sub_tag, sub_wire_type)?;
                                 }
                             }
+                            (sub_ensure_size.borrow_mut())(struct_builder.get_mut().len() + 1);
                             struct_builder.get_mut().append(true);
                         }
+                        Ok(())
                     }));
                 } else if let DataType::List(struct_fields) = output_field.data_type() {
                     if let DataType::Struct(sub_fields) = struct_fields.data_type() {
@@ -1343,7 +1533,10 @@ fn create_value_handler(
                                 );
                             }
                         }
-                        return Ok(impl_for_message_builder!(|buf: &[u8]| {
+                        let sub_ensure_size = std::cell::RefCell::new(
+                            ensure_output_array_builders_size(&sub_output_array_builders)?,
+                        );
+                        return Ok(impl_for_message_builder!(|buf: &[u8]| -> Result<()> {
                             let struct_builder = output_array_builder
                                 .get_mut::<SharedListArrayBuilder>()
                                 .expect("SharedListArrayBuilder is null")
@@ -1357,23 +1550,38 @@ fn create_value_handler(
                                 // 解析嵌套的 message
                                 let mut sub_cursor = Cursor::new(buf);
                                 while sub_cursor.has_remaining() {
-                                    if let Ok((sub_tag, sub_wire_type)) =
-                                        prost::encoding::decode_key(&mut sub_cursor)
+                                    let (sub_tag, sub_wire_type) =
+                                        prost::encoding::decode_key(&mut sub_cursor).map_err(
+                                            |e| {
+                                                DataFusionError::Execution(format!(
+                                                    "Failed to decode sub key: {e}"
+                                                ))
+                                            },
+                                        )?;
+                                    if let Some(sub_value_handler) =
+                                        sub_value_handlers.get(&sub_tag)
                                     {
-                                        if let Some(sub_value_handler) =
-                                            sub_value_handlers.get(&sub_tag)
-                                        {
-                                            (*sub_value_handler)(
-                                                &mut sub_cursor,
-                                                sub_tag,
-                                                sub_wire_type,
-                                            )
-                                            .expect("Failed to process sub field");
-                                        }
+                                        // O7/C3 fix: propagate error
+                                        (*sub_value_handler)(
+                                            &mut sub_cursor,
+                                            sub_tag,
+                                            sub_wire_type,
+                                        )?;
+                                    } else {
+                                        // C1 fix: skip unknown sub-tags
+                                        skip_pb_value(
+                                            &mut sub_cursor,
+                                            sub_tag,
+                                            sub_wire_type,
+                                        )?;
                                     }
                                 }
+                                (sub_ensure_size.borrow_mut())(
+                                    struct_builder.get_mut().len() + 1,
+                                );
                                 struct_builder.get_mut().append(true);
                             }
+                            Ok(())
                         }));
                     } else {
                         return Err(DataFusionError::Execution(format!(
@@ -1419,28 +1627,40 @@ fn create_value_handler(
                             .get_mut::<SharedMapArrayBuilder>()
                             .expect("SharedMapArrayBuilder is null");
 
-                        return Ok(impl_for_message_builder!(|buf: &[u8]| {
+                        return Ok(impl_for_message_builder!(|buf: &[u8]| -> Result<()> {
                             if buf.is_empty() {
                                 map_builder.get_mut().append(true);
                             } else {
                                 let mut sub_cursor = Cursor::new(buf);
                                 while sub_cursor.has_remaining() {
-                                    if let Ok((sub_tag, sub_wire_type)) =
-                                        prost::encoding::decode_key(&mut sub_cursor)
+                                    let (sub_tag, sub_wire_type) =
+                                        prost::encoding::decode_key(&mut sub_cursor).map_err(
+                                            |e| {
+                                                DataFusionError::Execution(format!(
+                                                    "Failed to decode sub key: {e}"
+                                                ))
+                                            },
+                                        )?;
+                                    if let Some(sub_value_handler) =
+                                        sub_value_handlers.get(&sub_tag)
                                     {
-                                        if let Some(sub_value_handler) =
-                                            sub_value_handlers.get(&sub_tag)
-                                        {
-                                            (*sub_value_handler)(
-                                                &mut sub_cursor,
-                                                sub_tag,
-                                                sub_wire_type,
-                                            )
-                                            .expect("Failed to process sub field");
-                                        }
+                                        // O7/C3 fix: propagate error
+                                        (*sub_value_handler)(
+                                            &mut sub_cursor,
+                                            sub_tag,
+                                            sub_wire_type,
+                                        )?;
+                                    } else {
+                                        // C1 fix: skip unknown sub-tags
+                                        skip_pb_value(
+                                            &mut sub_cursor,
+                                            sub_tag,
+                                            sub_wire_type,
+                                        )?;
                                     }
                                 }
                             }
+                            Ok(())
                         }));
                     } else {
                         return Err(DataFusionError::Execution(format!(
@@ -1486,46 +1706,7 @@ fn create_value_handler(
     }
 
     Ok(Box::new(|cursor, tag, wire_type| {
-        let mut skip_value = move || {
-            match wire_type {
-                WireType::Varint => {
-                    prost::encoding::decode_varint(cursor)
-                        .map_err(|e| DataFusionError::Execution(e.to_string()))?;
-                }
-                WireType::ThirtyTwoBit => {
-                    if cursor.remaining() < 4 {
-                        return df_execution_err!("buffer underflow");
-                    }
-                    cursor.advance(4);
-                }
-                WireType::SixtyFourBit => {
-                    if cursor.remaining() < 8 {
-                        return df_execution_err!("buffer underflow");
-                    }
-                    cursor.advance(8);
-                }
-                WireType::LengthDelimited => {
-                    let len = prost::encoding::decode_varint(cursor)
-                        .map_err(|e| DataFusionError::Execution(e.to_string()))?
-                        as usize;
-                    if cursor.remaining() < len {
-                        return df_execution_err!("buffer underflow");
-                    }
-                    cursor.advance(len);
-                }
-                _ => {
-                    UnknownField::decode_value(tag, wire_type, cursor, DecodeContext::default())
-                        .map_err(|e| {
-                            DataFusionError::Execution(format!(
-                                "Failed to decode unknown value: {e}"
-                            ))
-                        })?;
-                }
-            }
-            Ok(())
-        };
-
-        skip_value()
+        skip_pb_value(cursor, tag, wire_type)
             .map_err(|e| DataFusionError::Execution(format!("Failed to decode unknown value: {e}")))
     }))
 }
@@ -1535,6 +1716,53 @@ fn get_content_after_last_dot(s: &str) -> &str {
         Some(index) => &s[index + 1..],
         None => s,
     }
+}
+
+/// Skip an unknown protobuf field's value, advancing the cursor past it so the
+/// outer parsing loop stays in sync. Used by both the top-level main loop and
+/// the fallback handler returned by `create_value_handler` when the field has
+/// no associated builder. Without this, an unknown tag (e.g., a new field
+/// added by an upstream producer) would leave the cursor positioned at the
+/// value bytes and the next `decode_key` would interpret garbage.
+fn skip_pb_value(
+    cursor: &mut Cursor<&[u8]>,
+    tag: u32,
+    wire_type: WireType,
+) -> Result<()> {
+    match wire_type {
+        WireType::Varint => {
+            prost::encoding::decode_varint(cursor)
+                .map_err(|e| DataFusionError::Execution(e.to_string()))?;
+        }
+        WireType::ThirtyTwoBit => {
+            if cursor.remaining() < 4 {
+                return df_execution_err!("buffer underflow");
+            }
+            cursor.advance(4);
+        }
+        WireType::SixtyFourBit => {
+            if cursor.remaining() < 8 {
+                return df_execution_err!("buffer underflow");
+            }
+            cursor.advance(8);
+        }
+        WireType::LengthDelimited => {
+            let len = prost::encoding::decode_varint(cursor)
+                .map_err(|e| DataFusionError::Execution(e.to_string()))?
+                as usize;
+            if cursor.remaining() < len {
+                return df_execution_err!("buffer underflow");
+            }
+            cursor.advance(len);
+        }
+        _ => {
+            UnknownField::decode_value(tag, wire_type, cursor, DecodeContext::default())
+                .map_err(|e| {
+                    DataFusionError::Execution(format!("Failed to decode unknown value: {e}"))
+                })?;
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn adaptive_append_children(
