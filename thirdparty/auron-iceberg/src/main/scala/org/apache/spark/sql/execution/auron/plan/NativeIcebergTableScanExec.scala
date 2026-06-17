@@ -34,6 +34,7 @@ import org.apache.spark.sql.auron.{EmptyNativeRDD, NativeConverters, NativeHelpe
 import org.apache.spark.sql.auron.iceberg.IcebergScanPlan
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -263,13 +264,10 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
   }
 
   private def buildFilePartitions(): Array[FilePartition] = {
-    // Convert Iceberg file tasks into Spark FilePartition groups for execution.
     if (fileTasks.isEmpty) {
       return Array.empty
     }
 
-    val sparkSession = Shims.get.getSqlContext(basedScan).sparkSession
-    val maxSplitBytes = getMaxSplitBytes(sparkSession, fileTasks)
     val partitionedFiles = fileTasks
       .map { task =>
         val filePath = task.file().location()
@@ -278,7 +276,13 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
       .sortBy(_.length)(Ordering[Long].reverse)
       .toSeq
 
-    FilePartition.getFilePartitions(sparkSession, partitionedFiles, maxSplitBytes).toArray
+    if (basedScan.outputPartitioning == SinglePartition) {
+      Array(FilePartition(0, partitionedFiles.toArray))
+    } else {
+      val sparkSession = Shims.get.getSqlContext(basedScan).sparkSession
+      val maxSplitBytes = getMaxSplitBytes(sparkSession, fileTasks)
+      FilePartition.getFilePartitions(sparkSession, partitionedFiles, maxSplitBytes).toArray
+    }
   }
 
   private def getMaxSplitBytes(sparkSession: SparkSession, tasks: Seq[FileScanTask]): Long = {
