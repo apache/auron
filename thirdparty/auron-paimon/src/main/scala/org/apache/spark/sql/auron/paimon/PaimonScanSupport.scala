@@ -19,6 +19,7 @@ package org.apache.spark.sql.auron.paimon
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.table.source.{DataSplit, Split}
 import org.apache.paimon.utils.RowDataToObjectArrayConverter
@@ -296,20 +297,12 @@ object PaimonScanSupport extends Logging {
     }
   }
 
+  // Invoke a no-arg method by name via commons-lang3, which resolves the full class/interface
+  // hierarchy (including interface default methods) and forces access. Returns None if the
+  // method is absent or the invocation fails, so callers fall back to Spark execution.
   private def invokeMethod(target: AnyRef, methodName: String): Option[Any] = {
     try {
-      var cls: Class[_] = target.getClass
-      while (cls != null) {
-        cls.getDeclaredMethods.find(m =>
-          m.getName == methodName && m.getParameterCount == 0) match {
-          case Some(m) =>
-            m.setAccessible(true)
-            return Some(m.invoke(target))
-          case None =>
-            cls = cls.getSuperclass
-        }
-      }
-      None
+      Option(MethodUtils.invokeMethod(target, true, methodName))
     } catch {
       case NonFatal(t) =>
         logDebug(s"Failed to invoke $methodName on ${target.getClass.getName}", t)
