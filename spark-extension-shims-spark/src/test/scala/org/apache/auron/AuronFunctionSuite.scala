@@ -95,6 +95,31 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("flatten function with mixed child array nullability") {
+    withTable("t1") {
+      sql("""
+          |create table t1 using parquet as
+          |select
+          |  array(array(1, 2), array(3, cast(null as int)), array()) as ints,
+          |  array(array(named_struct('a', 1)), array(named_struct('a', 2))) as structs
+          |union all
+          |select
+          |  array(array(4), cast(null as array<int>)),
+          |  array(array(named_struct('a', 3)), cast(array() as array<struct<a:int>>))
+          |union all
+          |select
+          |  cast(array() as array<array<int>>),
+          |  cast(array() as array<array<struct<a:int>>>)
+          |union all
+          |select
+          |  cast(null as array<array<int>>),
+          |  cast(null as array<array<struct<a:int>>>)
+          |""".stripMargin)
+
+      checkSparkAnswerAndOperator("select flatten(ints), flatten(structs) from t1")
+    }
+  }
+
   test("expm1 function") {
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")

@@ -1123,6 +1123,7 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_NormalizeNanAndZero", e.children, e.dataType)
 
       case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
+      case e: Flatten => buildExtScalarFunction("Spark_ArrayFlatten", e.children, e.dataType)
       case e: MapFromEntries =>
         buildExtScalarFunction(
           "Spark_MapFromEntries",
