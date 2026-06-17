@@ -450,4 +450,17 @@ class AuronIcebergIntegrationSuite
     assert(nativeScan.nonEmpty)
     nativeScan.get
   }
+
+  test("native iceberg scan respects SinglePartition for global sort correctness") {
+    withTable("local.db.t_global_sort") {
+      sql("create table local.db.t_global_sort (id int, value string) using iceberg")
+      sql("insert into local.db.t_global_sort values (4, 'd'), (1, 'a')")
+      sql("insert into local.db.t_global_sort values (3, 'c'), (2, 'b')")
+
+      val df = sql("select id, value from local.db.t_global_sort order by id")
+      val result = df.collect().map(_.getInt(0)).toSeq
+      assert(result === Seq(1, 2, 3, 4), s"Global ORDER BY must produce [1,2,3,4], got: $result")
+      assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+    }
+  }
 }
