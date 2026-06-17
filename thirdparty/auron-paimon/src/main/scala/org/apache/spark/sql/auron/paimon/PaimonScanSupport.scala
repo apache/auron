@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -48,6 +49,12 @@ object PaimonScanSupport extends Logging {
   private val PaimonBaseScanClassName = "org.apache.paimon.spark.PaimonBaseScan"
   private val PaimonInputPartitionClassName = "org.apache.paimon.spark.PaimonInputPartition"
 
+  // Planning a Paimon scan performs split-planning I/O (reading metadata files). The conversion
+  // pipeline calls plan() twice on the same exec (once in isSupported, once in convert), so we
+  // memoize the result on the node to avoid doubling planning latency and to guarantee both
+  // calls observe the same splits even if Paimon's split planning is non-deterministic.
+  private val scanPlanTag = TreeNodeTag[Option[PaimonScanPlan]]("auron.paimon.scanPlan")
+
   def isPaimonScan(exec: BatchScanExec): Boolean = isPaimonScan(exec.scan)
 
   private def isPaimonScan(scan: AnyRef): Boolean = {
@@ -55,6 +62,16 @@ object PaimonScanSupport extends Logging {
   }
 
   def plan(exec: BatchScanExec): Option[PaimonScanPlan] = {
+    exec.getTagValue(scanPlanTag) match {
+      case Some(cached) => cached
+      case None =>
+        val result = computePlan(exec)
+        exec.setTagValue(scanPlanTag, result)
+        result
+    }
+  }
+
+  private def computePlan(exec: BatchScanExec): Option[PaimonScanPlan] = {
     val scan = exec.scan
     if (!isPaimonScan(scan)) {
       return None
@@ -193,6 +210,7 @@ object PaimonScanSupport extends Logging {
       }
       val splits = invokeMethod(p, "splits") match {
         case Some(s: scala.collection.Seq[_]) => s.toSeq
+        case Some(s: java.util.Collection[_]) => s.asScala.toSeq
         case _ => return None
       }
       splits.foreach {
@@ -266,15 +284,16 @@ object PaimonScanSupport extends Logging {
 
   private def isInstanceOfClass(obj: AnyRef, className: String): Boolean = {
     if (obj == null) return false
-    var c: Class[_] = obj.getClass
-    while (c != null) {
-      if (c.getName == className) return true
-      c.getInterfaces.foreach { i =>
-        if (i.getName == className) return true
-      }
-      c = c.getSuperclass
+    val loader = obj.getClass.getClassLoader
+    if (loader == null) return false
+    try {
+      // Load from the object's own classloader (Paimon classes may live in a child loader) and
+      // let isInstance walk the full superclass/super-interface hierarchy, including intermediate
+      // interfaces that a hand-rolled chain walk would miss.
+      loader.loadClass(className).isInstance(obj)
+    } catch {
+      case _: ClassNotFoundException => false
     }
-    false
   }
 
   private def invokeMethod(target: AnyRef, methodName: String): Option[Any] = {
