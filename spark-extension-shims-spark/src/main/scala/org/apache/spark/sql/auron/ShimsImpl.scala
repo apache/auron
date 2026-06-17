@@ -621,13 +621,17 @@ class ShimsImpl extends Shims with Logging {
     while (index < pattern.length) {
       val ch = pattern.charAt(index)
       if (ch == '\\') {
-        if (index + 1 >= pattern.length) {
+        var escapedIndex = index
+        while (escapedIndex < pattern.length && pattern.charAt(escapedIndex) == '\\') {
+          escapedIndex += 1
+        }
+        if (escapedIndex >= pattern.length) {
           return None
         }
-        val escaped = pattern.charAt(index + 1)
+        val escaped = pattern.charAt(escapedIndex)
         if (regexMetaCharacters.contains(escaped) || escaped == '\\') {
           literalPattern.append(escaped)
-          index += 2
+          index = escapedIndex + 1
         } else {
           return None
         }
