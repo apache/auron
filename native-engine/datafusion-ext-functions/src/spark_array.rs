@@ -97,7 +97,7 @@ mod test {
 
         let result = array_reverse(&[ColumnarValue::Array(input)])?.into_array(4)?;
         let expected: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(vec![
-            Some(vec![Some(1), None, Some(3)]),
+            Some(vec![Some(3), None, Some(1)]),
             Some(vec![Some(5), Some(4)]),
             Some(vec![]),
             None,
