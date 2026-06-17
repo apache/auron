@@ -66,10 +66,7 @@ impl ValueHandlers {
         // Heuristic: dense enough and within 64-tag bitmap range. We cap at
         // 64 so it composes nicely with O3's seen_tags bitmap, but the cap
         // is independent — the fallback HashMap remains correct.
-        if field_count > 0
-            && max_tag <= 64
-            && (max_tag as usize) <= field_count.saturating_mul(4)
-        {
+        if field_count > 0 && max_tag <= 64 && (max_tag as usize) <= field_count.saturating_mul(4) {
             let mut vec: Vec<Option<ValueHandler>> = (0..=max_tag).map(|_| None).collect();
             for (tag, handler) in map.into_iter() {
                 vec[tag as usize] = Some(handler);
@@ -275,7 +272,7 @@ impl PbDeserializer {
             nested_msg_mapping,
             &skip_fields,
         )
-            .expect("Failed to transfer output schema to pb schema");
+        .expect("Failed to transfer output schema to pb schema");
 
         let tag_to_output_mapping =
             create_tag_to_output_mapping(message_descriptor.clone(), &pb_schema);
@@ -382,7 +379,11 @@ fn transfer_output_schema_to_pb_schema(
     log::info!(
         "[DEBUG] transfer_output_schema_to_pb_schema nested_msg_mapping: {:?}, output_schema fields: {:?}",
         nested_msg_mapping,
-        output_schema.fields().iter().map(|f| f.name().clone()).collect::<Vec<_>>()
+        output_schema
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect::<Vec<_>>()
     );
     let mut pb_schema_fields: Vec<Field> = vec![];
     let mut sub_pb_nested_msg_mapping: HashMap<String, String> = HashMap::new();
@@ -1049,7 +1050,10 @@ fn get_output_array_from_top(
 ) -> Result<ArrayRef> {
     let column = top_arrays[nested_field_indices[0]].clone();
     if nested_field_indices.len() > 1 {
-        return get_output_array(downcast_any!(&column, StructArray)?, &nested_field_indices[1..]);
+        return get_output_array(
+            downcast_any!(&column, StructArray)?,
+            &nested_field_indices[1..],
+        );
     }
     Ok(column)
 }
@@ -1122,8 +1126,8 @@ fn create_value_handler(
                     let merge_method = prost::encoding::$encoding_tyname::merge_repeated;
                     let mut value = value_buf.borrow_mut();
                     value.clear();
-                    merge_method(wire_type, &mut *value, cursor, DecodeContext::default()).map_err(
-                        |e| {
+                    merge_method(wire_type, &mut *value, cursor, DecodeContext::default())
+                        .map_err(|e| {
                             DataFusionError::Execution(format!(
                                 "Failed to decode repeated {:?} [{}] and {} field: {}",
                                 wire_type,
@@ -1131,8 +1135,7 @@ fn create_value_handler(
                                 stringify!($encoding_tyname),
                                 e
                             ))
-                        },
-                    )?;
+                        })?;
                     $handle_fn(&*value);
                     Ok(())
                 })
@@ -1401,31 +1404,25 @@ fn create_value_handler(
                         return Ok(impl_for_repeated_builder!(int32, |values: &Vec<i32>| {
                             for value in values {
                                 array_builder.get_mut().append_value(
-                                    mapping
-                                        .get(value)
-                                        .map_or("Unknown", |v| v.as_str()),
+                                    mapping.get(value).map_or("Unknown", |v| v.as_str()),
                                 );
                             }
                         }));
                     } else {
                         let mapping = enum_string_mapping;
                         return Ok(impl_for_builder!(int32, |value: &i32| {
-                            array_builder.get_mut().append_value(
-                                mapping
-                                    .get(value)
-                                    .map_or("Unknown", |v| v.as_str()),
-                            );
+                            array_builder
+                                .get_mut()
+                                .append_value(mapping.get(value).map_or("Unknown", |v| v.as_str()));
                         }));
                     }
                 } else {
                     let array_builder = output_array_builder.get_mut::<StringBuilder>()?;
                     let mapping = enum_string_mapping;
                     return Ok(impl_for_builder!(int32, |value: &i32| {
-                        array_builder.get_mut().append_value(
-                            mapping
-                                .get(value)
-                                .map_or("Unknown", |v| v.as_str()),
-                        );
+                        array_builder
+                            .get_mut()
+                            .append_value(mapping.get(value).map_or("Unknown", |v| v.as_str()));
                     }));
                 }
             }
@@ -1479,15 +1476,9 @@ fn create_value_handler(
                                             "Failed to decode sub key: {e}"
                                         ))
                                     })?;
-                                if let Some(sub_value_handler) =
-                                    sub_value_handlers.get(&sub_tag)
-                                {
+                                if let Some(sub_value_handler) = sub_value_handlers.get(&sub_tag) {
                                     // O7/C3 fix: propagate error instead of expect()
-                                    (*sub_value_handler)(
-                                        &mut sub_cursor,
-                                        sub_tag,
-                                        sub_wire_type,
-                                    )?;
+                                    (*sub_value_handler)(&mut sub_cursor, sub_tag, sub_wire_type)?;
                                 } else {
                                     // C1 fix: skip unknown sub-tags
                                     skip_pb_value(&mut sub_cursor, sub_tag, sub_wire_type)?;
@@ -1550,14 +1541,14 @@ fn create_value_handler(
                                 // 解析嵌套的 message
                                 let mut sub_cursor = Cursor::new(buf);
                                 while sub_cursor.has_remaining() {
-                                    let (sub_tag, sub_wire_type) =
-                                        prost::encoding::decode_key(&mut sub_cursor).map_err(
-                                            |e| {
-                                                DataFusionError::Execution(format!(
-                                                    "Failed to decode sub key: {e}"
-                                                ))
-                                            },
-                                        )?;
+                                    let (sub_tag, sub_wire_type) = prost::encoding::decode_key(
+                                        &mut sub_cursor,
+                                    )
+                                    .map_err(|e| {
+                                        DataFusionError::Execution(format!(
+                                            "Failed to decode sub key: {e}"
+                                        ))
+                                    })?;
                                     if let Some(sub_value_handler) =
                                         sub_value_handlers.get(&sub_tag)
                                     {
@@ -1569,16 +1560,10 @@ fn create_value_handler(
                                         )?;
                                     } else {
                                         // C1 fix: skip unknown sub-tags
-                                        skip_pb_value(
-                                            &mut sub_cursor,
-                                            sub_tag,
-                                            sub_wire_type,
-                                        )?;
+                                        skip_pb_value(&mut sub_cursor, sub_tag, sub_wire_type)?;
                                     }
                                 }
-                                (sub_ensure_size.borrow_mut())(
-                                    struct_builder.get_mut().len() + 1,
-                                );
+                                (sub_ensure_size.borrow_mut())(struct_builder.get_mut().len() + 1);
                                 struct_builder.get_mut().append(true);
                             }
                             Ok(())
@@ -1633,14 +1618,14 @@ fn create_value_handler(
                             } else {
                                 let mut sub_cursor = Cursor::new(buf);
                                 while sub_cursor.has_remaining() {
-                                    let (sub_tag, sub_wire_type) =
-                                        prost::encoding::decode_key(&mut sub_cursor).map_err(
-                                            |e| {
-                                                DataFusionError::Execution(format!(
-                                                    "Failed to decode sub key: {e}"
-                                                ))
-                                            },
-                                        )?;
+                                    let (sub_tag, sub_wire_type) = prost::encoding::decode_key(
+                                        &mut sub_cursor,
+                                    )
+                                    .map_err(|e| {
+                                        DataFusionError::Execution(format!(
+                                            "Failed to decode sub key: {e}"
+                                        ))
+                                    })?;
                                     if let Some(sub_value_handler) =
                                         sub_value_handlers.get(&sub_tag)
                                     {
@@ -1652,11 +1637,7 @@ fn create_value_handler(
                                         )?;
                                     } else {
                                         // C1 fix: skip unknown sub-tags
-                                        skip_pb_value(
-                                            &mut sub_cursor,
-                                            sub_tag,
-                                            sub_wire_type,
-                                        )?;
+                                        skip_pb_value(&mut sub_cursor, sub_tag, sub_wire_type)?;
                                     }
                                 }
                             }
@@ -1724,11 +1705,7 @@ fn get_content_after_last_dot(s: &str) -> &str {
 /// no associated builder. Without this, an unknown tag (e.g., a new field
 /// added by an upstream producer) would leave the cursor positioned at the
 /// value bytes and the next `decode_key` would interpret garbage.
-fn skip_pb_value(
-    cursor: &mut Cursor<&[u8]>,
-    tag: u32,
-    wire_type: WireType,
-) -> Result<()> {
+fn skip_pb_value(cursor: &mut Cursor<&[u8]>, tag: u32, wire_type: WireType) -> Result<()> {
     match wire_type {
         WireType::Varint => {
             prost::encoding::decode_varint(cursor)
@@ -1756,10 +1733,9 @@ fn skip_pb_value(
             cursor.advance(len);
         }
         _ => {
-            UnknownField::decode_value(tag, wire_type, cursor, DecodeContext::default())
-                .map_err(|e| {
-                    DataFusionError::Execution(format!("Failed to decode unknown value: {e}"))
-                })?;
+            UnknownField::decode_value(tag, wire_type, cursor, DecodeContext::default()).map_err(
+                |e| DataFusionError::Execution(format!("Failed to decode unknown value: {e}")),
+            )?;
         }
     }
     Ok(())
