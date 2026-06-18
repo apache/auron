@@ -307,33 +307,15 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
      */
     @VisibleForTesting
     static PhysicalPlanNode injectFfiReaderLeaf(PhysicalPlanNode node, String resourceId) {
-        if (node.hasFfiReader()) {
-            FFIReaderExecNode rewritten = node.getFfiReader().toBuilder()
-                    .setExportIterProviderResourceId(resourceId)
-                    .build();
-            return node.toBuilder().setFfiReader(rewritten).build();
-        }
-        if (node.hasProjection()) {
-            PhysicalPlanNode rewrittenInput =
-                    injectFfiReaderLeaf(node.getProjection().getInput(), resourceId);
-            return node.toBuilder()
-                    .setProjection(node.getProjection().toBuilder()
-                            .setInput(rewrittenInput)
-                            .build())
-                    .build();
-        }
-        if (node.hasFilter()) {
-            PhysicalPlanNode rewrittenInput =
-                    injectFfiReaderLeaf(node.getFilter().getInput(), resourceId);
-            return node.toBuilder()
-                    .setFilter(node.getFilter().toBuilder()
-                            .setInput(rewrittenInput)
-                            .build())
-                    .build();
-        }
-        throw new IllegalArgumentException("FlinkAuronCalcOperator expects Project[Filter[FFIReader]] / "
-                + "Project[FFIReader] / Filter[FFIReader] / FFIReader shape; got: "
-                + node.getPhysicalPlanTypeCase());
+        return AuronPlanTreeRewriter.rewriteFfiReaderLeaf(
+                node,
+                leaf -> leaf.toBuilder()
+                        .setFfiReader(leaf.getFfiReader().toBuilder()
+                                .setExportIterProviderResourceId(resourceId)
+                                .build())
+                        .build(),
+                "FlinkAuronCalcOperator expects Project[Filter[FFIReader]] / "
+                        + "Project[FFIReader] / Filter[FFIReader] / FFIReader shape; got: ");
     }
 
     /**

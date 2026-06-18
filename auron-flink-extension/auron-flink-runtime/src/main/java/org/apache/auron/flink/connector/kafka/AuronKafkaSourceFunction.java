@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
+import org.apache.auron.flink.runtime.operator.AuronPlanTreeRewriter;
 import org.apache.auron.flink.runtime.operator.FlinkAuronFunction;
 import org.apache.auron.flink.table.data.AuronColumnarRowData;
 import org.apache.auron.flink.utils.SchemaConverters;
@@ -44,6 +45,7 @@ import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.auron.protobuf.ProjectionExecNode;
 import org.apache.commons.collections.map.LinkedMap;
 import org.apache.commons.io.FileUtils;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.eventtime.WatermarkOutput;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.CheckpointListener;
@@ -321,11 +323,21 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                 LOG.debug("Metric Auron Source: {} = {}", name, value);
             }
         };
-        // The native output carries [meta3, logical], where logical is the projected output when a
-        // merged Calc plan is active and the original output otherwise.
+        // The native output carries [meta, logical], where logical is the projected output when a
+        // merged Calc plan is active and the original output otherwise. The metadata column count
+        // and per-field positions both derive from KAFKA_AURON_META_FIELDS so adding or reordering
+        // a metadata column does not require editing this loop.
+        final int metaCount = KAFKA_AURON_META_FIELDS.size();
         List<RowType.RowField> fieldList = new LinkedList<>(KAFKA_AURON_META_FIELDS);
         fieldList.addAll(effectiveLogicalOutputType().getFields());
         RowType auronOutputRowType = new RowType(fieldList);
+
+        // Negative indices of the metadata columns relative to the row end: a meta field at
+        // physical position p sits at (p - metaCount). The accessor type per field (INT vs BIGINT)
+        // is intrinsic to that field; only the offset magnitude comes from the constant.
+        final int partitionIdx = metaFieldNegativeIndex(KAFKA_AURON_META_PARTITION_ID, metaCount);
+        final int offsetIdx = metaFieldNegativeIndex(KAFKA_AURON_META_OFFSET, metaCount);
+        final int timestampIdx = metaFieldNegativeIndex(KAFKA_AURON_META_TIMESTAMP, metaCount);
 
         // Pre-check watermark flag to avoid per-record null checks in the hot path
         final boolean enableWatermark = partitionWatermarkTrackers != null && !partitionWatermarkTrackers.isEmpty();
@@ -345,12 +357,12 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             while (wrapper.loadNextBatch(batch -> {
                 if (isRunning) {
                     Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
-                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
+                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, metaCount);
                     for (int i = 0; i < batch.getRowCount(); i++) {
                         AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
-                        int partitionId = tmpRowData.getInt(-3);
-                        long offset = tmpRowData.getLong(-2);
-                        long kafkaTimestamp = tmpRowData.getLong(-1);
+                        int partitionId = tmpRowData.getInt(partitionIdx);
+                        long offset = tmpRowData.getLong(offsetIdx);
+                        long kafkaTimestamp = tmpRowData.getLong(timestampIdx);
                         tmpOffsets.put(partitionId, offset);
 
                         // Feed into the partition's own generator (output captures, does NOT forward)
@@ -374,12 +386,12 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             while (wrapper.loadNextBatch(batch -> {
                 if (isRunning) {
                     Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
-                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, 3);
+                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, metaCount);
                     for (int i = 0; i < batch.getRowCount(); i++) {
                         AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
-                        int partitionId = tmpRowData.getInt(-3);
-                        long offset = tmpRowData.getLong(-2);
-                        long kafkaTimestamp = tmpRowData.getLong(-1);
+                        int partitionId = tmpRowData.getInt(partitionIdx);
+                        long offset = tmpRowData.getLong(offsetIdx);
+                        long kafkaTimestamp = tmpRowData.getLong(timestampIdx);
                         tmpOffsets.put(partitionId, offset);
                         sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
                     }
@@ -650,29 +662,10 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
      * output in a projection).
      */
     private static PhysicalPlanNode spliceScanIntoLeaf(PhysicalPlanNode node, PhysicalPlanNode kafkaScan) {
-        if (node.hasFfiReader()) {
-            return kafkaScan;
-        }
-        if (node.hasProjection()) {
-            PhysicalPlanNode rewrittenInput =
-                    spliceScanIntoLeaf(node.getProjection().getInput(), kafkaScan);
-            return node.toBuilder()
-                    .setProjection(node.getProjection().toBuilder()
-                            .setInput(rewrittenInput)
-                            .build())
-                    .build();
-        }
-        if (node.hasFilter()) {
-            PhysicalPlanNode rewrittenInput =
-                    spliceScanIntoLeaf(node.getFilter().getInput(), kafkaScan);
-            return node.toBuilder()
-                    .setFilter(node.getFilter().toBuilder()
-                            .setInput(rewrittenInput)
-                            .build())
-                    .build();
-        }
-        throw new IllegalArgumentException("Merged Calc sub-plan expects Project[Filter?[FFIReader]] shape; got: "
-                + node.getPhysicalPlanTypeCase());
+        return AuronPlanTreeRewriter.rewriteFfiReaderLeaf(
+                node,
+                ffiReaderLeaf -> kafkaScan,
+                "Merged Calc sub-plan expects Project[Filter?[FFIReader]] shape; got: ");
     }
 
     /**
@@ -707,6 +700,25 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         rebuilt.addAllExpr(originalExprs).addAllExprName(originalNames).addAllDataType(originalTypes);
 
         return merged.toBuilder().setProjection(rebuilt.build()).build();
+    }
+
+    /**
+     * Resolves the negative (row-end-relative) index of the metadata column named {@code fieldName}.
+     * Metadata columns occupy the leading {@code metaCount} positions of every native output row, so
+     * a field at physical position {@code p} reads back at {@code p - metaCount}.
+     *
+     * @param fieldName the metadata column name, declared in {@link KafkaConstants#KAFKA_AURON_META_FIELDS}
+     * @param metaCount the number of leading metadata columns
+     * @return the negative index to pass to the row accessors for this metadata column
+     */
+    @VisibleForTesting
+    static int metaFieldNegativeIndex(String fieldName, int metaCount) {
+        for (int p = 0; p < KAFKA_AURON_META_FIELDS.size(); p++) {
+            if (KAFKA_AURON_META_FIELDS.get(p).getName().equals(fieldName)) {
+                return p - metaCount;
+            }
+        }
+        throw new IllegalStateException("Unknown Kafka metadata field: " + fieldName);
     }
 
     private static void addMetadataColumn(ProjectionExecNode.Builder builder, String name, LogicalType type) {

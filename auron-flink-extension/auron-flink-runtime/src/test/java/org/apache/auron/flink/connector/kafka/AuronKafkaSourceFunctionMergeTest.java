@@ -166,6 +166,25 @@ class AuronKafkaSourceFunctionMergeTest {
     }
 
     @Test
+    void testMetaFieldNegativeIndicesDeriveFromMetaFieldCount() {
+        int metaCount = KafkaConstants.KAFKA_AURON_META_FIELDS.size();
+
+        // The run() loop reads the metadata columns by row-end-relative index; those indices must
+        // derive from KAFKA_AURON_META_FIELDS (its size and the per-field position), so adding a
+        // metadata column shifts them automatically rather than misreading every row.
+        assertEquals(
+                -metaCount,
+                AuronKafkaSourceFunction.metaFieldNegativeIndex(
+                        KafkaConstants.KAFKA_AURON_META_PARTITION_ID, metaCount));
+        assertEquals(
+                -metaCount + 1,
+                AuronKafkaSourceFunction.metaFieldNegativeIndex(KafkaConstants.KAFKA_AURON_META_OFFSET, metaCount));
+        assertEquals(
+                -metaCount + 2,
+                AuronKafkaSourceFunction.metaFieldNegativeIndex(KafkaConstants.KAFKA_AURON_META_TIMESTAMP, metaCount));
+    }
+
+    @Test
     void testHasWatermarkReflectsWatermarkStrategy() {
         AuronKafkaSourceFunction fn = newFunction();
         assertFalse(fn.hasWatermark());
