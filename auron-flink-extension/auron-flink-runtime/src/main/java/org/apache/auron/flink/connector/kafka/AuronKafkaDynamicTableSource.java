@@ -119,7 +119,7 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
 
     @Override
     public DynamicTableSource copy() {
-        return new AuronKafkaDynamicTableSource(
+        AuronKafkaDynamicTableSource copy = new AuronKafkaDynamicTableSource(
                 physicalDataType,
                 kafkaTopic,
                 kafkaProperties,
@@ -129,6 +129,8 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
                 startupMode,
                 mockData,
                 partitionDiscoveryIntervalMs);
+        copy.watermarkStrategy = watermarkStrategy;
+        return copy;
     }
 
     @Override

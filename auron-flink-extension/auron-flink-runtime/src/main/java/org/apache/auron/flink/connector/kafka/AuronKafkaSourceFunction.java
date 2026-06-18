@@ -34,10 +34,14 @@ import org.apache.auron.jni.AuronAdaptor;
 import org.apache.auron.jni.AuronCallNativeWrapper;
 import org.apache.auron.jni.JniBridge;
 import org.apache.auron.metric.MetricNode;
+import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.KafkaFormat;
 import org.apache.auron.protobuf.KafkaScanExecNode;
 import org.apache.auron.protobuf.KafkaStartupMode;
+import org.apache.auron.protobuf.PhysicalColumn;
+import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
+import org.apache.auron.protobuf.ProjectionExecNode;
 import org.apache.commons.collections.map.LinkedMap;
 import org.apache.commons.io.FileUtils;
 import org.apache.flink.api.common.eventtime.WatermarkOutput;
@@ -64,8 +68,6 @@ import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartition;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartitionAssigner;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.types.logical.BigIntType;
-import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.SerializableObject;
@@ -103,6 +105,14 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private final long partitionDiscoveryIntervalMs;
     private String mockData;
     private transient PhysicalPlanNode physicalPlanNode;
+
+    // Merged Calc sub-plan handed down by a downstream Calc. When set, open() fuses the
+    // KafkaScan into this logical Project[Filter?[FFIReader-placeholder]] tree and runs the
+    // fused plan; the projected output schema replaces the original outputType downstream.
+    // Set at plan time, so these must survive operator serialization to the TaskManager
+    // (non-transient, like watermarkStrategy below).
+    private PhysicalPlanNode mergedCalcPlan;
+    private RowType mergedProjectedOutputType;
 
     // Flink Checkpoint-related, compatible with Flink Kafka Legacy source
     /** State name of the consumer's partition offset states. */
@@ -266,6 +276,13 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         sourcePlan.setKafkaScan(scanExecNode.build());
         this.physicalPlanNode = sourcePlan.build();
 
+        if (mergedCalcPlan != null) {
+            // Fuse: replace the FFIReader placeholder leaf of the logical Calc sub-plan with the
+            // freshly-built KafkaScan, and prepend the 3 Kafka metadata passthrough columns to the
+            // outer Projection so the fused output stays [partition, offset, timestamp, ...projected].
+            this.physicalPlanNode = buildMergedPlan(mergedCalcPlan, this.physicalPlanNode);
+        }
+
         // 3. Initialize per-partition WatermarkGenerators if watermarkStrategy is set
         if (watermarkStrategy != null) {
             MetricGroup metricGroup = runtimeContext.getMetricGroup();
@@ -304,11 +321,10 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                 LOG.debug("Metric Auron Source: {} = {}", name, value);
             }
         };
-        List<RowType.RowField> fieldList = new LinkedList<>();
-        fieldList.add(new RowType.RowField(KAFKA_AURON_META_PARTITION_ID, new IntType(false)));
-        fieldList.add(new RowType.RowField(KAFKA_AURON_META_OFFSET, new BigIntType(false)));
-        fieldList.add(new RowType.RowField(KAFKA_AURON_META_TIMESTAMP, new BigIntType(false)));
-        fieldList.addAll(((RowType) outputType).getFields());
+        // The native output carries [meta3, logical], where logical is the projected output when a
+        // merged Calc plan is active and the original output otherwise.
+        List<RowType.RowField> fieldList = new LinkedList<>(KAFKA_AURON_META_FIELDS);
+        fieldList.addAll(effectiveLogicalOutputType().getFields());
         RowType auronOutputRowType = new RowType(fieldList);
 
         // Pre-check watermark flag to avoid per-record null checks in the hot path
@@ -409,7 +425,15 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
 
     @Override
     public RowType getOutputType() {
-        return (RowType) outputType;
+        return effectiveLogicalOutputType();
+    }
+
+    /**
+     * The logical (metadata-excluded) output row type emitted downstream: the projected output type
+     * when a merged Calc plan is active, otherwise the original output type.
+     */
+    private RowType effectiveLogicalOutputType() {
+        return mergedProjectedOutputType != null ? mergedProjectedOutputType : (RowType) outputType;
     }
 
     @Override
@@ -505,6 +529,51 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         this.watermarkStrategy = watermarkStrategy;
     }
 
+    /**
+     * Registers a logical Calc sub-plan to fuse into the Kafka source so the native engine runs a
+     * single {@code Project[Filter?[KafkaScan]]} plan instead of a bare {@code KafkaScan} feeding a
+     * separate downstream Calc operator.
+     *
+     * <p>The sub-plan is a {@code Project[Filter?[FFIReader-placeholder]]} tree built by the
+     * downstream Calc against the LOGICAL-only input columns; its FFIReader leaf carries the
+     * resource ID {@code "placeholder"}. At {@code open()} the placeholder leaf is replaced by the
+     * freshly-built {@code KafkaScan} and the three Kafka metadata passthrough columns are prepended
+     * to the outer projection, so the fused output is {@code [partition, offset, timestamp,
+     * ...projected-logical]}.
+     *
+     * @param logicalCalcSubPlan the {@code Project[Filter?[FFIReader-placeholder]]} tree over the
+     *     logical input columns
+     * @param projectedOutputType the projected logical output row type (without the metadata
+     *     columns) emitted downstream when the fused plan is active
+     */
+    @Override
+    public void setMergedCalcPlan(PhysicalPlanNode logicalCalcSubPlan, RowType projectedOutputType) {
+        this.mergedCalcPlan = logicalCalcSubPlan;
+        this.mergedProjectedOutputType = projectedOutputType;
+    }
+
+    /**
+     * Reports whether this source has a watermark strategy configured.
+     *
+     * @return {@code true} if a {@link WatermarkStrategy} was set
+     */
+    @Override
+    public boolean hasWatermark() {
+        return watermarkStrategy != null;
+    }
+
+    /**
+     * Reports whether a merged Calc sub-plan has already been registered on this source. Guards
+     * against overwriting an already-fused plan, which would silently discard the first
+     * registration's logic.
+     *
+     * @return {@code true} if {@link #setMergedCalcPlan} has already been called
+     */
+    @Override
+    public boolean isMergedCalcPlanSet() {
+        return mergedCalcPlan != null;
+    }
+
     public void setMockData(String mockData) {
         Preconditions.checkArgument(mockData != null, "Auron kafka source mock data must not null");
         this.mockData = mockData;
@@ -550,6 +619,102 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
                 LOG.warn("Error discovering new partitions for topic {}: {}", topic, e.getMessage());
             }
         }
+    }
+
+    /**
+     * Fuses a logical Calc sub-plan with the source's {@code KafkaScan} into a single native plan.
+     *
+     * <p>Two steps: (1) replace the {@code FFIReader} placeholder leaf of {@code logicalSubPlan}
+     * with {@code kafkaScan}; (2) prepend the three Kafka metadata passthrough columns to the outer
+     * {@link ProjectionExecNode} so the fused output stays {@code [partition, offset, timestamp,
+     * ...projected-logical]}.
+     *
+     * <p>The inner projection's logical exprs reference logical column NAMES. The native planner
+     * resolves a {@code PhysicalColumn} by name against the input schema, ignoring the proto index,
+     * so the logical exprs resolve correctly against the KafkaScan output schema {@code [meta3,
+     * ...logical]} with no ordinal shift.
+     *
+     * @param logicalSubPlan a {@code Project[Filter?[FFIReader-placeholder]]} tree
+     * @param kafkaScan the {@code KafkaScan} {@link PhysicalPlanNode} to splice in as the leaf
+     * @return the fused {@code Project[Filter?[KafkaScan]]} tree with metadata passthrough prepended
+     */
+    static PhysicalPlanNode buildMergedPlan(PhysicalPlanNode logicalSubPlan, PhysicalPlanNode kafkaScan) {
+        PhysicalPlanNode spliced = spliceScanIntoLeaf(logicalSubPlan, kafkaScan);
+        return prependMetadataPassthrough(spliced);
+    }
+
+    /**
+     * Recursively walks {@code node}, locating the {@code FFIReader} leaf and replacing the whole
+     * FFIReader-bearing {@link PhysicalPlanNode} with {@code kafkaScan}. Accepted shapes:
+     * {@code Project[FFIReader]} and {@code Project[Filter[FFIReader]]} (the Calc always wraps its
+     * output in a projection).
+     */
+    private static PhysicalPlanNode spliceScanIntoLeaf(PhysicalPlanNode node, PhysicalPlanNode kafkaScan) {
+        if (node.hasFfiReader()) {
+            return kafkaScan;
+        }
+        if (node.hasProjection()) {
+            PhysicalPlanNode rewrittenInput =
+                    spliceScanIntoLeaf(node.getProjection().getInput(), kafkaScan);
+            return node.toBuilder()
+                    .setProjection(node.getProjection().toBuilder()
+                            .setInput(rewrittenInput)
+                            .build())
+                    .build();
+        }
+        if (node.hasFilter()) {
+            PhysicalPlanNode rewrittenInput =
+                    spliceScanIntoLeaf(node.getFilter().getInput(), kafkaScan);
+            return node.toBuilder()
+                    .setFilter(node.getFilter().toBuilder()
+                            .setInput(rewrittenInput)
+                            .build())
+                    .build();
+        }
+        throw new IllegalArgumentException("Merged Calc sub-plan expects Project[Filter?[FFIReader]] shape; got: "
+                + node.getPhysicalPlanTypeCase());
+    }
+
+    /**
+     * Prepends the three Kafka metadata passthrough columns (partition, offset, timestamp) to the
+     * outer {@link ProjectionExecNode}'s parallel {@code expr} / {@code expr_name} / {@code
+     * data_type} lists, so the fused output stays {@code [partition, offset, timestamp,
+     * ...projected-logical]}.
+     */
+    private static PhysicalPlanNode prependMetadataPassthrough(PhysicalPlanNode merged) {
+        if (!merged.hasProjection()) {
+            throw new IllegalArgumentException(
+                    "Merged Calc sub-plan expects a Projection root to prepend metadata passthrough; got: "
+                            + merged.getPhysicalPlanTypeCase());
+        }
+        ProjectionExecNode projection = merged.getProjection();
+        List<PhysicalExprNode> originalExprs = new ArrayList<>(projection.getExprList());
+        List<String> originalNames = new ArrayList<>(projection.getExprNameList());
+        List<ArrowType> originalTypes = new ArrayList<>(projection.getDataTypeList());
+
+        for (RowType.RowField metaField : KAFKA_AURON_META_FIELDS) {
+            if (originalNames.contains(metaField.getName())) {
+                throw new IllegalArgumentException("Logical projected column name '" + metaField.getName()
+                        + "' collides with a reserved Kafka metadata column; rename the column to fuse the Calc");
+            }
+        }
+
+        ProjectionExecNode.Builder rebuilt =
+                projection.toBuilder().clearExpr().clearExprName().clearDataType();
+        for (RowType.RowField metaField : KAFKA_AURON_META_FIELDS) {
+            addMetadataColumn(rebuilt, metaField.getName(), metaField.getType());
+        }
+        rebuilt.addAllExpr(originalExprs).addAllExprName(originalNames).addAllDataType(originalTypes);
+
+        return merged.toBuilder().setProjection(rebuilt.build()).build();
+    }
+
+    private static void addMetadataColumn(ProjectionExecNode.Builder builder, String name, LogicalType type) {
+        builder.addExpr(PhysicalExprNode.newBuilder()
+                        .setColumn(PhysicalColumn.newBuilder().setName(name).build())
+                        .build())
+                .addExprName(name)
+                .addDataType(SchemaConverters.convertToAuronArrowType(type));
     }
 
     /**

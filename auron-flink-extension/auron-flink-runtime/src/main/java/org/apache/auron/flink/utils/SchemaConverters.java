@@ -33,24 +33,9 @@ public class SchemaConverters {
     public static Schema convertToAuronSchema(RowType rowType, boolean withKafkaMeta) {
         Schema.Builder schemaBuilder = Schema.newBuilder();
         if (withKafkaMeta) {
-            schemaBuilder.addColumns(Field.newBuilder()
-                    .setName(KAFKA_AURON_META_PARTITION_ID)
-                    .setNullable(false)
-                    .setArrowType(ArrowType.newBuilder()
-                            .setINT32(EmptyMessage.getDefaultInstance())
-                            .build()));
-            schemaBuilder.addColumns(Field.newBuilder()
-                    .setName(KAFKA_AURON_META_OFFSET)
-                    .setNullable(false)
-                    .setArrowType(ArrowType.newBuilder()
-                            .setINT64(EmptyMessage.getDefaultInstance())
-                            .build()));
-            schemaBuilder.addColumns(Field.newBuilder()
-                    .setName(KAFKA_AURON_META_TIMESTAMP)
-                    .setNullable(false)
-                    .setArrowType(ArrowType.newBuilder()
-                            .setINT64(EmptyMessage.getDefaultInstance())
-                            .build()));
+            for (RowType.RowField metaField : KAFKA_AURON_META_FIELDS) {
+                schemaBuilder.addColumns(convertField(metaField, false));
+            }
         }
         for (int i = 0; i < rowType.getFields().size(); i++) {
             RowType.RowField rowField = rowType.getFields().get(i);
