@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import javax.annotation.Nullable;
+import org.apache.auron.flink.runtime.operator.FlinkAuronDynamicTableSource;
+import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -33,12 +35,14 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
+import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.Preconditions;
 
 /**
  * A {@link DynamicTableSource} for Auron Kafka.
  */
-public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWatermarkPushDown {
+public class AuronKafkaDynamicTableSource
+        implements ScanTableSource, SupportsWatermarkPushDown, FlinkAuronDynamicTableSource {
 
     private final DataType physicalDataType;
     private final String kafkaTopic;
@@ -51,6 +55,10 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
     private final long partitionDiscoveryIntervalMs;
     /** Watermark strategy that is used to generate per-partition watermark. */
     protected @Nullable WatermarkStrategy<RowData> watermarkStrategy;
+    /** Merged Calc {@code Project[Filter?]} sub-plan staged by the graph-level fusion pass. */
+    private @Nullable PhysicalPlanNode mergedCalcPlan;
+    /** Projected logical output row type that accompanies the staged merged plan. */
+    private @Nullable RowType mergedProjectedOutputType;
 
     public AuronKafkaDynamicTableSource(
             DataType physicalDataType,
@@ -82,6 +90,31 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
 
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
+        AuronKafkaSourceFunction sourceFunction = buildSourceFunction();
+
+        return new DataStreamScanProvider() {
+
+            @Override
+            public DataStream<RowData> produceDataStream(
+                    ProviderContext providerContext, StreamExecutionEnvironment execEnv) {
+                return execEnv.addSource(sourceFunction);
+            }
+
+            @Override
+            public boolean isBounded() {
+                return false;
+            }
+        };
+    }
+
+    /**
+     * Builds the {@link AuronKafkaSourceFunction} for this source, applying the watermark strategy,
+     * mock data, and any staged merged Calc plan. Extracted so the staged-plan hand-off into the
+     * function is an explicit, testable step.
+     *
+     * @return the configured source function
+     */
+    AuronKafkaSourceFunction buildSourceFunction() {
         String auronOperatorId = "AuronKafkaSource-" + UUID.randomUUID().toString();
         AuronKafkaSourceFunction sourceFunction = new AuronKafkaSourceFunction(
                 physicalDataType.getLogicalType(),
@@ -102,19 +135,11 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
             sourceFunction.setMockData(mockData);
         }
 
-        return new DataStreamScanProvider() {
+        if (mergedCalcPlan != null) {
+            sourceFunction.setMergedCalcPlan(mergedCalcPlan, mergedProjectedOutputType);
+        }
 
-            @Override
-            public DataStream<RowData> produceDataStream(
-                    ProviderContext providerContext, StreamExecutionEnvironment execEnv) {
-                return execEnv.addSource(sourceFunction);
-            }
-
-            @Override
-            public boolean isBounded() {
-                return false;
-            }
-        };
+        return sourceFunction;
     }
 
     @Override
@@ -130,6 +155,8 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
                 mockData,
                 partitionDiscoveryIntervalMs);
         copy.watermarkStrategy = watermarkStrategy;
+        copy.mergedCalcPlan = mergedCalcPlan;
+        copy.mergedProjectedOutputType = mergedProjectedOutputType;
         return copy;
     }
 
@@ -141,5 +168,21 @@ public class AuronKafkaDynamicTableSource implements ScanTableSource, SupportsWa
     @Override
     public void applyWatermark(WatermarkStrategy<RowData> watermarkStrategy) {
         this.watermarkStrategy = watermarkStrategy;
+    }
+
+    @Override
+    public void setMergedCalcPlan(PhysicalPlanNode logicalCalcSubPlan, RowType projectedOutputType) {
+        this.mergedCalcPlan = logicalCalcSubPlan;
+        this.mergedProjectedOutputType = projectedOutputType;
+    }
+
+    @Override
+    public boolean isMergedCalcPlanSet() {
+        return mergedCalcPlan != null;
+    }
+
+    @Override
+    public boolean hasWatermark() {
+        return watermarkStrategy != null;
     }
 }
