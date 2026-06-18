@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
+import org.apache.auron.flink.runtime.operator.FlinkAuronDynamicTableSource;
+import org.apache.auron.flink.table.planner.FlinkAuronCalcNode;
 import org.apache.auron.flink.table.planner.FlinkAuronExecNode;
 import org.apache.auron.flink.table.planner.converter.NativeCalcPlanBuilder;
 import org.apache.auron.jni.AuronAdaptor;
@@ -35,8 +37,10 @@ import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCreator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
+import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.delegation.PlannerBase;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeMetadata;
@@ -55,10 +59,15 @@ import org.slf4j.LoggerFactory;
  * flink-table-planner} on the classpath, Flink's planner constructs this class whenever it builds
  * a Calc {@code ExecNode}.
  *
- * <p>{@link #translateToPlanInternal(PlannerBase, ExecNodeConfig)} attempts to translate the
- * projection + condition into a native {@link PhysicalPlanNode} using the converter framework. On
- * success it returns a {@link Transformation} wrapping a {@link FlinkAuronCalcOperator}; on
- * failure it either delegates to {@code super.translateToPlanInternal} (when
+ * <p>{@link #translateToPlanInternal(PlannerBase, ExecNodeConfig)} runs native when the Calc is
+ * convertible — either fused into its source or as a standalone native operator — and falls back to
+ * Flink's codegen Calc only when the Calc is not convertible. When the graph-level fusion pass has
+ * already staged a merged plan on this Calc's native source, this node emits no standalone operator:
+ * it re-types the upstream {@link Transformation} to the projected output and returns it (the source
+ * runs the fused {@code Project[Filter?[KafkaScan]]} plan). Otherwise it attempts to translate the
+ * projection + condition into a native {@link PhysicalPlanNode} using the converter framework; on
+ * success it returns a {@link Transformation} wrapping a {@link FlinkAuronCalcOperator}; on failure
+ * it either delegates to {@code super.translateToPlanInternal} (when
  * {@link FlinkAuronConfiguration#FAIL_BACK_FLINK_ENGINE_ENABLED} is {@code true}, the default) or
  * throws {@link IllegalStateException}.
  *
@@ -80,7 +89,8 @@ import org.slf4j.LoggerFactory;
         version = 1,
         minPlanVersion = FlinkVersion.v1_15,
         minStateVersion = FlinkVersion.v1_15)
-public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<RowData>, FlinkAuronExecNode {
+public class StreamExecCalc extends CommonExecCalc
+        implements StreamExecNode<RowData>, FlinkAuronExecNode, FlinkAuronCalcNode {
 
     private static final Logger LOG = LoggerFactory.getLogger(StreamExecCalc.class);
 
@@ -167,6 +177,18 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
         final RowType inputRowType = (RowType) getInputEdges().get(0).getOutputType();
         final RowType outputRowType = (RowType) getOutputType();
 
+        if (fusedIntoSource(planner)) {
+            // The graph-level fusion pass already staged this Calc's Project[Filter?] plan on the
+            // native source, which now runs the fused Project[Filter?[KafkaScan]] and emits the
+            // projected rows. Emit no standalone Calc operator: re-type the upstream Transformation
+            // to the projected output and return it. Re-typing the shared upstream is safe only
+            // because the processor fuses exclusively into a sole-consumer source (no other consumer
+            // locked its output type); that single-consumer invariant is enforced graph-level by the
+            // fusion processor before it stages the plan.
+            upstream.setOutputType(InternalTypeInfo.of(outputRowType));
+            return upstream;
+        }
+
         final Optional<PhysicalPlanNode> plan = tryBuildAuronPlan(inputRowType, outputRowType);
 
         if (!plan.isPresent()) {
@@ -208,6 +230,33 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
     }
 
     /**
+     * Reports whether this Calc's native source already carries a merged Calc plan staged by the
+     * graph-level fusion pass. When it does, the source runs the fused {@code
+     * Project[Filter?[KafkaScan]]} plan and this Calc must emit no standalone operator.
+     *
+     * <p>Resolves the single input edge's source {@link ExecNode}; if it is a {@link
+     * StreamExecTableSourceScan} whose {@link DynamicTableSource} is a {@link
+     * FlinkAuronDynamicTableSource} with a staged plan, fusion has been decided graph-level. The
+     * source instance is the lazily-cached one the scan's own translation reuses, so reading its
+     * staged-plan flag here reflects the processor's decision.
+     *
+     * @param planner the planner forwarded from {@link #translateToPlanInternal}, used to resolve
+     *     the scan's {@link DynamicTableSource}
+     * @return {@code true} if the source carries a staged merged plan
+     */
+    private boolean fusedIntoSource(PlannerBase planner) {
+        final ExecNode<?> source = getInputEdges().get(0).getSource();
+        if (!(source instanceof StreamExecTableSourceScan)) {
+            return false;
+        }
+        final DynamicTableSource tableSource = ((StreamExecTableSourceScan) source)
+                .getTableSourceSpec()
+                .getScanTableSource(planner.getFlinkContext(), planner.getTypeFactory());
+        return tableSource instanceof FlinkAuronDynamicTableSource
+                && ((FlinkAuronDynamicTableSource) tableSource).isMergedCalcPlanSet();
+    }
+
+    /**
      * Attempts to compose a native {@code Project[Filter?[FFIReader-placeholder]]} plan from this
      * node's projection and condition, delegating to {@link NativeCalcPlanBuilder}. Returns {@link
      * Optional#empty()} if any {@link RexNode} is unsupported by the converter framework, or if plan
@@ -221,6 +270,31 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
     private Optional<PhysicalPlanNode> tryBuildAuronPlan(RowType inputRowType, RowType outputRowType) {
         return NativeCalcPlanBuilder.buildNativeCalcPlan(
                 getPersistedConfig(), projection, condition, inputRowType, outputRowType);
+    }
+
+    /**
+     * The projection expressions this Calc evaluates per row. Exposed so the graph-level fusion pass
+     * (in a different package) can build the merged native plan from the same projection this node
+     * would otherwise convert standalone.
+     *
+     * @return the projection {@link RexNode}s
+     */
+    @Override
+    public List<RexNode> getProjection() {
+        return projection;
+    }
+
+    /**
+     * The filter expression this Calc evaluates per row, or {@code null} when there is no filter.
+     * Exposed so the graph-level fusion pass (in a different package) can build the merged native
+     * plan from the same condition this node would otherwise convert standalone.
+     *
+     * @return the filter {@link RexNode}, or {@code null}
+     */
+    @Override
+    @Nullable
+    public RexNode getCondition() {
+        return condition;
     }
 
     /**

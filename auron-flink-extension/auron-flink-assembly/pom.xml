@@ -117,6 +117,7 @@
               <artifact>org.apache.flink:flink-table-planner_2.12</artifact>
               <excludes>
                 <exclude>org/apache/flink/table/planner/plan/nodes/exec/stream/StreamExecCalc.class</exclude>
+                <exclude>org/apache/flink/table/planner/delegation/DefaultPlannerFactory.class</exclude>
               </excludes>
             </filter>
           </filters>
