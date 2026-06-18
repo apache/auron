@@ -17,7 +17,6 @@
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
 
 import java.security.CodeSource;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -26,16 +25,9 @@ import javax.annotation.Nullable;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
 import org.apache.auron.flink.table.planner.FlinkAuronExecNode;
-import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
-import org.apache.auron.flink.table.planner.converter.ConverterContext;
-import org.apache.auron.flink.table.planner.converter.FlinkNodeConverterFactory;
-import org.apache.auron.flink.utils.SchemaConverters;
+import org.apache.auron.flink.table.planner.converter.NativeCalcPlanBuilder;
 import org.apache.auron.jni.AuronAdaptor;
-import org.apache.auron.protobuf.FFIReaderExecNode;
-import org.apache.auron.protobuf.FilterExecNode;
-import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
-import org.apache.auron.protobuf.ProjectionExecNode;
 import org.apache.calcite.rex.RexNode;
 import org.apache.flink.FlinkVersion;
 import org.apache.flink.api.dag.Transformation;
@@ -79,8 +71,8 @@ import org.slf4j.LoggerFactory;
  * stricter complementary signal: per-Calc conversion failures throw rather than fall back.
  *
  * <p>Per-fallback observability: the first time a given unsupported {@link RexNode} class is seen
- * (per JVM), a WARN log line is emitted naming the failing node ID and the unsupported class so
- * users can grep for missing converter coverage. Subsequent fallbacks on the same {@link RexNode}
+ * (per JVM), a WARN log line is emitted naming the unsupported {@link RexNode} class so users can
+ * grep for missing converter coverage. Subsequent fallbacks on the same {@link RexNode}
  * class are silent to avoid log spam.
  */
 @ExecNodeMetadata(
@@ -217,88 +209,18 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
 
     /**
      * Attempts to compose a native {@code Project[Filter?[FFIReader-placeholder]]} plan from this
-     * node's projection and condition. Returns {@link Optional#empty()} if any {@link RexNode} is
-     * unsupported by the converter framework, or if plan composition throws — both signals are
-     * the same for the caller: fall back to Flink's codegen Calc.
-     *
-     * <p>The outer {@link Throwable} catch is defence-in-depth: the converter framework already
-     * catches per-RexNode {@link Exception}, but {@link SchemaConverters} can throw {@link
-     * UnsupportedOperationException} on a {@link RowType} containing an unsupported logical type,
-     * and protobuf composition can theoretically throw on invalid inputs. Treating any failure as
-     * fallback keeps the rewriter safe.
+     * node's projection and condition, delegating to {@link NativeCalcPlanBuilder}. Returns {@link
+     * Optional#empty()} if any {@link RexNode} is unsupported by the converter framework, or if plan
+     * composition throws — both signals are the same for the caller: fall back to Flink's codegen
+     * Calc.
      *
      * @param inputRowType the upstream row type used by the converter context
      * @param outputRowType the row type of this Calc's output
      * @return a composed plan, or empty if conversion failed
      */
     private Optional<PhysicalPlanNode> tryBuildAuronPlan(RowType inputRowType, RowType outputRowType) {
-        try {
-            final ConverterContext ctx = new ConverterContext(
-                    getPersistedConfig(),
-                    AuronAdaptor.getInstance().getAuronConfiguration(),
-                    Thread.currentThread().getContextClassLoader(),
-                    inputRowType);
-            final FlinkNodeConverterFactory converters = FlinkNodeConverterFactory.getInstance();
-
-            PhysicalExprNode filterExpr = null;
-            if (condition != null) {
-                final Optional<PhysicalExprNode> c = converters.convertRexNode(condition, ctx);
-                if (!c.isPresent()) {
-                    recordFallback(condition.getClass());
-                    return Optional.empty();
-                }
-                filterExpr = c.get();
-            }
-
-            final List<PhysicalExprNode> projectExprs = new ArrayList<>(projection.size());
-            for (RexNode rex : projection) {
-                final Optional<PhysicalExprNode> c = converters.convertRexNode(rex, ctx);
-                if (!c.isPresent()) {
-                    recordFallback(rex.getClass());
-                    return Optional.empty();
-                }
-                projectExprs.add(c.get());
-            }
-
-            // numPartitions = 1 because each parallel FlinkAuronCalcOperator subtask owns a
-            // single Java-side exporter and one corresponding native partition; per-subtask
-            // parallelism is governed by Flink's outer Transformation parallelism, not by the
-            // FFI Reader's partition count.
-            final FFIReaderExecNode ffiReader = FFIReaderExecNode.newBuilder()
-                    .setNumPartitions(1)
-                    .setSchema(SchemaConverters.convertToAuronSchema(inputRowType, false))
-                    .setExportIterProviderResourceId("placeholder")
-                    .build();
-            PhysicalPlanNode current =
-                    PhysicalPlanNode.newBuilder().setFfiReader(ffiReader).build();
-
-            if (filterExpr != null) {
-                final FilterExecNode filterNode = FilterExecNode.newBuilder()
-                        .setInput(current)
-                        .addExpr(filterExpr)
-                        .build();
-                current = PhysicalPlanNode.newBuilder().setFilter(filterNode).build();
-            }
-
-            final ProjectionExecNode.Builder proj =
-                    ProjectionExecNode.newBuilder().setInput(current);
-            for (int i = 0; i < projectExprs.size(); i++) {
-                proj.addExpr(projectExprs.get(i));
-                proj.addExprName(outputRowType.getFieldNames().get(i));
-                proj.addDataType(SchemaConverters.convertToAuronArrowType(outputRowType.getTypeAt(i)));
-            }
-            return Optional.of(
-                    PhysicalPlanNode.newBuilder().setProjection(proj.build()).build());
-
-        } catch (Throwable t) {
-            UnsupportedFlinkNodeRecorder.recordCompositionFailure();
-            LOG.warn(
-                    "Auron StreamExecCalc fallback (node {}): plan composition threw {}; using Flink CodeGen Calc.",
-                    getId(),
-                    t.getClass().getName(),
-                    t);
-            return Optional.empty();
-        }
+        return NativeCalcPlanBuilder.buildNativeCalcPlan(
+                getPersistedConfig(), projection, condition, inputRowType, outputRowType);
     }
 
     /**
@@ -313,19 +235,6 @@ public class StreamExecCalc extends CommonExecCalc implements StreamExecNode<Row
             LOG.info(
                     "Auron StreamExecCalc shadow active (loaded from {}).",
                     cs != null ? cs.getLocation() : "<unknown source>");
-        }
-    }
-
-    /**
-     * Logs a WARN line on the first occurrence of each unsupported {@link RexNode} class per JVM.
-     * Subsequent occurrences are silent.
-     */
-    private void recordFallback(Class<? extends RexNode> unsupportedRexClass) {
-        if (UnsupportedFlinkNodeRecorder.recordFallback(unsupportedRexClass)) {
-            LOG.warn(
-                    "Auron StreamExecCalc fallback (node {}): unsupported RexNode {}; using Flink CodeGen Calc.",
-                    getId(),
-                    unsupportedRexClass.getName());
         }
     }
 }
