@@ -36,7 +36,7 @@ class AuronPaimonV2IntegrationSuite
     sql("create database if not exists paimon.db")
   }
 
-  test("paimon v2 native scan runs simple COW select") {
+  test("paimon v2 native scan runs simple append-only select") {
     withTable("paimon.db.t1") {
       sql("create table paimon.db.t1 (id int, v string) using paimon")
       sql("insert into paimon.db.t1 values (1, 'a'), (2, 'b')")
@@ -79,6 +79,24 @@ class AuronPaimonV2IntegrationSuite
             |""".stripMargin)
       sql("insert into paimon.db.t_orc values (1, 'a'), (2, 'b')")
       val df = sql("select * from paimon.db.t_orc")
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+      assertNativePaimonScanApplied(df)
+    }
+  }
+
+  test("paimon v2 native scan supports COW primary-key table") {
+    withTable("paimon.db.t_cow") {
+      sql("""
+            |create table paimon.db.t_cow (id int, v string)
+            |using paimon
+            |tblproperties (
+            |  'primary-key' = 'id',
+            |  'bucket' = '2',
+            |  'full-compaction.delta-commits' = '1'
+            |)
+            |""".stripMargin)
+      sql("insert into paimon.db.t_cow values (1, 'a'), (2, 'b')")
+      val df = sql("select * from paimon.db.t_cow")
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
       assertNativePaimonScanApplied(df)
     }
@@ -146,9 +164,10 @@ class AuronPaimonV2IntegrationSuite
       sql("insert into paimon.db.t_disable values (1, 'a')")
       withSQLConf("spark.auron.enable.paimon.scan" -> "false") {
         val df = sql("select * from paimon.db.t_disable")
-        df.collect()
         val plan = df.queryExecution.executedPlan.toString()
         assert(!plan.contains("NativePaimonV2TableScan"))
+        // Ensure the Spark fallback path still returns correct results.
+        checkAnswer(df, Seq(Row(1, "a")))
       }
     }
   }
@@ -165,9 +184,10 @@ class AuronPaimonV2IntegrationSuite
             |""".stripMargin)
       sql("insert into paimon.db.t_mor values (1, 'a'), (2, 'b')")
       val df = sql("select * from paimon.db.t_mor")
-      df.collect()
       val plan = df.queryExecution.executedPlan.toString()
       assert(!plan.contains("NativePaimonV2TableScan"))
+      // Ensure the Spark fallback path still returns correct results.
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
     }
   }
 
