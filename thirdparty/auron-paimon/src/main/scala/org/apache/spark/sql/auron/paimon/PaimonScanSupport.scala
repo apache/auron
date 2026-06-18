@@ -20,15 +20,15 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.reflect.MethodUtils
+import org.apache.paimon.spark.DataConverter
 import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.table.source.{DataSplit, Split}
+import org.apache.paimon.types.RowType
 import org.apache.paimon.utils.RowDataToObjectArrayConverter
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.hive.auron.paimon.PaimonUtil
@@ -147,13 +147,8 @@ object PaimonScanSupport extends Logging {
       return None
     }
 
-    val partitionConverter = new RowDataToObjectArrayConverter(
-      table.schema().logicalPartitionType())
-    val sessionLocalTimeZone = SQLConf.get.sessionLocalTimeZone
-    val tzOption: String = {
-      val props = CaseInsensitiveMap(table.options().asScala.toMap)
-      props.getOrElse(DateTimeUtils.TIMEZONE_OPTION, sessionLocalTimeZone)
-    }
+    val partitionRowType = table.schema().logicalPartitionType()
+    val partitionConverter = new RowDataToObjectArrayConverter(partitionRowType)
 
     val files = splits.flatMap { split =>
       val partitionValues = if (partitionSchema.isEmpty) {
@@ -161,9 +156,9 @@ object PaimonScanSupport extends Logging {
       } else {
         toPartitionRow(
           partitionConverter.convert(split.partition()),
+          partitionRowType,
           partitionSchema,
-          table.schema().partitionKeys().asScala.toSeq,
-          tzOption)
+          table.schema().partitionKeys().asScala.toSeq)
       }
       split.dataFiles().asScala.map { dataFile =>
         val filePath = s"${split.bucketPath()}/${dataFile.fileName()}"
@@ -181,12 +176,15 @@ object PaimonScanSupport extends Logging {
 
   // Build a Spark InternalRow for partition values matching partitionSchema's data types.
   // Partition values from Paimon are returned in the table's partition-key order; we reorder
-  // them to match partitionSchema and cast strings/temporals into the requested types.
+  // them to match partitionSchema and convert each value into the Spark catalyst representation
+  // expected for the field's type via Paimon's own DataConverter. This handles dates (epoch
+  // days), timestamps (micros), decimals and binary correctly, rather than the lossy
+  // String round-trip a Cast(Literal(value.toString), dataType) would perform.
   private def toPartitionRow(
       paimonValues: Array[AnyRef],
+      partitionRowType: RowType,
       partitionSchema: StructType,
-      partitionKeys: Seq[String],
-      timeZoneId: String): InternalRow = {
+      partitionKeys: Seq[String]): InternalRow = {
     val resolver = SQLConf.get.resolver
     val indexByName = partitionKeys.zipWithIndex.toMap
     InternalRow.fromSeq(partitionSchema.fields.map { field =>
@@ -194,12 +192,11 @@ object PaimonScanSupport extends Logging {
         .find { case (k, _) => resolver(k, field.name) }
         .map(_._2)
         .getOrElse(-1)
-      val raw = if (idx >= 0 && idx < paimonValues.length) paimonValues(idx) else null
-      val literal: Literal = raw match {
-        case null => Literal(null, field.dataType)
-        case v => Literal(v.toString)
+      if (idx >= 0 && idx < paimonValues.length && paimonValues(idx) != null) {
+        DataConverter.fromPaimon(paimonValues(idx), partitionRowType.getTypeAt(idx))
+      } else {
+        null
       }
-      Cast(literal, field.dataType, Option(timeZoneId)).eval()
     })
   }
 

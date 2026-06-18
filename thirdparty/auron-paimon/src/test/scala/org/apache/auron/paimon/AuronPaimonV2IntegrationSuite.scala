@@ -70,6 +70,24 @@ class AuronPaimonV2IntegrationSuite
     }
   }
 
+  test("paimon v2 native scan supports non-string partition columns") {
+    withTable("paimon.db.t_part_typed") {
+      sql("""
+            |create table paimon.db.t_part_typed (id int, v string, dt date, pid int)
+            |using paimon
+            |partitioned by (dt, pid)
+            |""".stripMargin)
+      sql("""
+            |insert into paimon.db.t_part_typed values
+            |(1, 'a', date'2023-01-01', 10),
+            |(2, 'b', date'2023-01-02', 20)
+            |""".stripMargin)
+      val df = sql("select id, v, dt, pid from paimon.db.t_part_typed where pid = 10")
+      checkAnswer(df, Seq(Row(1, "a", java.sql.Date.valueOf("2023-01-01"), 10)))
+      assertNativePaimonScanApplied(df)
+    }
+  }
+
   test("paimon v2 native scan supports ORC COW table") {
     withTable("paimon.db.t_orc") {
       sql("""

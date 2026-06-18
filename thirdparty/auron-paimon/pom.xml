@@ -41,6 +41,12 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.paimon</groupId>
+      <artifactId>paimon-spark-${shortSparkVersion}</artifactId>
+      <version>${paimonVersion}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scalaVersion}</artifactId>
       <scope>provided</scope>
@@ -52,12 +58,6 @@
     </dependency>
 
     <!-- test dependencies -->
-    <dependency>
-      <groupId>org.apache.paimon</groupId>
-      <artifactId>paimon-spark-${shortSparkVersion}</artifactId>
-      <version>${paimonVersion}</version>
-      <scope>test</scope>
-    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scalaVersion}</artifactId>
