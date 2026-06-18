@@ -51,8 +51,9 @@ public interface FlinkAuronDynamicTableSource {
 
     /**
      * Reports whether this source emits an event-time watermark. The fusion pass uses this as the
-     * planner-time gate so it never fuses over a watermarked source; the source function keeps its
-     * own {@code open()}-time hard guard as the correctness backstop.
+     * planner-time gate so it never fuses over a watermarked source; the source function re-checks
+     * the same condition at {@code open()} and throws {@link IllegalStateException} if a merged plan
+     * and a watermark ever coexist, as the fail-fast correctness backstop for this gate.
      *
      * @return {@code true} if a watermark strategy is configured on this source
      */

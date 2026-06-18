@@ -88,8 +88,9 @@ public class AuronKafkaSourceMergeITCase extends AuronKafkaSourceTestBase {
      * A directly-watermarked native source ({@code T2} declares {@code WATERMARK FOR ts}) must NOT
      * fuse: fusing a filter below the source's per-record watermark generator would hide
      * filtered-out records from it and stall event-time progress. The fusion processor's
-     * watermark gate (and the source function's {@code hasWatermark()} backstop) block fusion, so
-     * the Calc stays a separate operator above the native source.
+     * watermark gate blocks fusion here, so the Calc stays a separate operator above the native
+     * source. The source function's {@code open()}-time guard is the fail-fast backstop for that
+     * gate: it throws {@link IllegalStateException} if a merged plan and a watermark ever coexist.
      *
      * <p>This assertion is gate-sensitive: it asserts the job graph keeps exactly one standalone
      * {@code Calc} operator. If the watermark gate were deleted, the watermarked source would fuse,

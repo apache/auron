@@ -278,12 +278,7 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         sourcePlan.setKafkaScan(scanExecNode.build());
         this.physicalPlanNode = sourcePlan.build();
 
-        if (mergedCalcPlan != null) {
-            // Fuse: replace the FFIReader placeholder leaf of the logical Calc sub-plan with the
-            // freshly-built KafkaScan, and prepend the 3 Kafka metadata passthrough columns to the
-            // outer Projection so the fused output stays [partition, offset, timestamp, ...projected].
-            this.physicalPlanNode = buildMergedPlan(mergedCalcPlan, this.physicalPlanNode);
-        }
+        this.physicalPlanNode = applyMergedCalcPlan(this.physicalPlanNode);
 
         // 3. Initialize per-partition WatermarkGenerators if watermarkStrategy is set
         if (watermarkStrategy != null) {
@@ -303,6 +298,42 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         // collects rows only while isRunning is true on both the watermark and no-watermark
         // paths, so this must be set regardless of whether a watermark strategy is present.
         this.isRunning = true;
+    }
+
+    /**
+     * Applies a staged merged Calc sub-plan to {@code sourcePlan}, returning the fused plan; returns
+     * {@code sourcePlan} unchanged when no plan is staged.
+     *
+     * <p>Enforces the invariant that a merged plan must never be staged on a watermarked source. The
+     * fusion processor already gates on {@link #hasWatermark()} at plan time so a watermarked source
+     * is never staged; this is the runtime backstop for that gate. Fusing a Calc below the source's
+     * per-record watermark generator would strip the event-time timestamps the generator depends on,
+     * silently corrupting event-time progress. By the time this runs the planner has already committed
+     * to fusion (the downstream Calc was re-typed to the projected output and emitted no standalone
+     * operator), so the source cannot safely fall back to an unfused plan — the only correct action on
+     * a watermark + staged-plan coexistence is to fail fast.
+     *
+     * @param sourcePlan the freshly-built {@code KafkaScan} plan
+     * @return the fused {@code Project[Filter?[KafkaScan]]} plan when a plan is staged, else {@code sourcePlan}
+     * @throws IllegalStateException if a merged plan is staged while a watermark strategy is configured
+     */
+    @VisibleForTesting
+    PhysicalPlanNode applyMergedCalcPlan(PhysicalPlanNode sourcePlan) {
+        if (mergedCalcPlan == null) {
+            return sourcePlan;
+        }
+        if (watermarkStrategy != null) {
+            throw new IllegalStateException(
+                    "A merged Calc plan was staged on a watermarked Kafka source. The fusion processor "
+                            + "must never stage a plan on a source that carries a watermark: fusing the Calc "
+                            + "below the source's per-record watermark generator strips the per-record "
+                            + "event-time timestamps and corrupts event-time progress. This open()-time guard "
+                            + "is the runtime backstop for the planner-time hasWatermark() gate.");
+        }
+        // Fuse: replace the FFIReader placeholder leaf of the logical Calc sub-plan with the
+        // freshly-built KafkaScan, and prepend the 3 Kafka metadata passthrough columns to the
+        // outer Projection so the fused output stays [partition, offset, timestamp, ...projected].
+        return buildMergedPlan(mergedCalcPlan, sourcePlan);
     }
 
     @Override
@@ -565,7 +596,10 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     }
 
     /**
-     * Reports whether this source has a watermark strategy configured.
+     * Reports whether this source has a watermark strategy configured. The fusion processor reads
+     * this at plan time and never stages a merged Calc plan on a watermarked source; {@link
+     * #applyMergedCalcPlan} re-checks the same condition at {@code open()} and fails fast if the two
+     * ever coexist.
      *
      * @return {@code true} if a {@link WatermarkStrategy} was set
      */

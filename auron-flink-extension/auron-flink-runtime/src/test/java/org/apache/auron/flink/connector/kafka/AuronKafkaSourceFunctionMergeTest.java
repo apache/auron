@@ -18,6 +18,7 @@ package org.apache.auron.flink.connector.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Properties;
@@ -190,5 +191,42 @@ class AuronKafkaSourceFunctionMergeTest {
         assertFalse(fn.hasWatermark());
         fn.setWatermarkStrategy(WatermarkStrategy.<RowData>forMonotonousTimestamps());
         assertTrue(fn.hasWatermark());
+    }
+
+    @Test
+    void testApplyMergedCalcPlanFusesWhenNoWatermark() {
+        AuronKafkaSourceFunction fn = newFunction();
+        RowType projected = RowType.of(new LogicalType[] {new IntType()}, new String[] {"int"});
+        fn.setMergedCalcPlan(logicalProjection(ffiReaderPlaceholder()), projected);
+
+        PhysicalPlanNode fused = fn.applyMergedCalcPlan(kafkaScan());
+
+        // Plan was staged with no watermark: the leaf splices to KafkaScan and the meta passthroughs
+        // (3) are prepended to the 2 logical exprs.
+        assertTrue(fused.hasProjection());
+        assertTrue(fused.getProjection().getInput().hasKafkaScan());
+        assertEquals(5, fused.getProjection().getExprCount());
+    }
+
+    @Test
+    void testApplyMergedCalcPlanThrowsWhenWatermarkedSourceHasStagedPlan() {
+        AuronKafkaSourceFunction fn = newFunction();
+        RowType projected = RowType.of(new LogicalType[] {new IntType()}, new String[] {"int"});
+        fn.setMergedCalcPlan(logicalProjection(ffiReaderPlaceholder()), projected);
+        fn.setWatermarkStrategy(WatermarkStrategy.<RowData>forMonotonousTimestamps());
+
+        // The planner gate must never stage a plan on a watermarked source; if it ever does, open()
+        // fails fast rather than fusing the Calc below the per-record watermark generator.
+        assertThrows(IllegalStateException.class, () -> fn.applyMergedCalcPlan(kafkaScan()));
+    }
+
+    @Test
+    void testApplyMergedCalcPlanReturnsSourcePlanWhenNoPlanStaged() {
+        AuronKafkaSourceFunction fn = newFunction();
+        PhysicalPlanNode source = kafkaScan();
+
+        // No staged plan: the source plan passes through untouched, even with a watermark set.
+        fn.setWatermarkStrategy(WatermarkStrategy.<RowData>forMonotonousTimestamps());
+        assertEquals(source, fn.applyMergedCalcPlan(source));
     }
 }
