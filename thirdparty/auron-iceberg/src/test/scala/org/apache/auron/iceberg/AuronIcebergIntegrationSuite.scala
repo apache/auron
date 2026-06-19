@@ -461,6 +461,7 @@ class AuronIcebergIntegrationSuite
       val result = df.collect().map(_.getInt(0)).toSeq
       assert(result === Seq(1, 2, 3, 4), s"Global ORDER BY must produce [1,2,3,4], got: $result")
       assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+      assert(df.rdd.getNumPartitions === 1)
     }
   }
 }

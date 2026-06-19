@@ -34,7 +34,6 @@ import org.apache.spark.sql.auron.{EmptyNativeRDD, NativeConverters, NativeHelpe
 import org.apache.spark.sql.auron.iceberg.IcebergScanPlan
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -276,6 +275,7 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
       .sortBy(_.length)(Ordering[Long].reverse)
       .toSeq
 
+    // Keep the physical scan partition count aligned with the declared single-partition output.
     if (basedScan.outputPartitioning == SinglePartition) {
       Array(FilePartition(0, partitionedFiles.toArray))
     } else {
