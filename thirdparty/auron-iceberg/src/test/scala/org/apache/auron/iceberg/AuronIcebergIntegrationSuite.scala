@@ -233,6 +233,24 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg ORC scan falls back after top-level drop and add with the same name") {
+    withTable("local.db.t_orc_drop_add") {
+      sql("""
+            |create table local.db.t_orc_drop_add (id int, value string)
+            |using iceberg
+            |tblproperties ('write.format.default' = 'orc')
+            |""".stripMargin)
+      sql("insert into local.db.t_orc_drop_add values (1, 'old')")
+      sql("alter table local.db.t_orc_drop_add drop column value")
+      sql("alter table local.db.t_orc_drop_add add column value string")
+      sql("insert into local.db.t_orc_drop_add values (2, 'new')")
+
+      val df = sql("select id, value from local.db.t_orc_drop_add")
+      checkAnswer(df, Seq(Row(1, null), Row(2, "new")))
+      assert(!df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+    }
+  }
+
   test("iceberg ORC scan remains native for additive schema evolution") {
     withTable("local.db.t_orc_add") {
       sql("""
