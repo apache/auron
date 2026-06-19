@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -193,7 +193,7 @@ jobs:
         query: ${{ fromJson(inputs.queries) }}
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get dependency version from pom
         id: get-dependency-version
@@ -251,7 +251,7 @@ jobs:
           name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Checkout TPC-DS Data
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: auron-project/tpcds_1g
           path: dev/tpcds_1g
