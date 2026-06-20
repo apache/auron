@@ -199,10 +199,6 @@ object NativeHelper extends Logging {
     "input_row_count" -> (sc => SQLMetrics.createMetric(sc, "Native.input_rows")),
     "input_batch_mem_size" -> (sc => SQLMetrics.createSizeMetric(sc, "Native.input_mem_bytes")))
 
-  // Keep existing call sites source-compatible while keyed migration is in progress.
-  def getDefaultNativeMetrics(sc: SparkContext): Map[String, SQLMetric] =
-    getDefaultNativeMetrics(sc, defaultNativeMetricCreators.keySet)
-
   def getDefaultNativeMetrics(sc: SparkContext, keys: Set[String]): Map[String, SQLMetric] = {
     val enabledKeys =
       if (AuronAdaptor.getInstance.getAuronConfiguration.getBoolean(
