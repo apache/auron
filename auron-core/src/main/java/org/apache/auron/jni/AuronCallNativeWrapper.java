@@ -82,6 +82,10 @@ public class AuronCallNativeWrapper {
         if (!initialized) {
             synchronized (AuronCallNativeWrapper.class) {
                 if (!initialized) {
+                    // Retry-safe: on failure `initialized` stays false so the next call retries.
+                    // Every step below must be idempotent, or must not run on the failure path.
+                    // In particular, loadAuronLib() must throw before System.load — a retried
+                    // System.load would load the native library twice.
                     // initialize native environment
                     LOG.info("Initializing native environment (batchSize="
                             + AuronAdaptor.getInstance().getAuronConfiguration().get(AuronConfiguration.BATCH_SIZE)
