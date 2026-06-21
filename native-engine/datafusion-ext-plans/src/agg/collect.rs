@@ -532,6 +532,12 @@ impl InternalSet {
         iter
     }
 
+    fn into_ordered_positions(self) -> Vec<(u32, u32)> {
+        let mut positions: Vec<_> = self.into_iter().collect();
+        positions.sort_unstable_by_key(|&(pos, _)| pos);
+        positions
+    }
+
     fn convert_to_huge_if_needed(&mut self, list: &mut AccList) {
         if let Self::Small(s) = self
             && s.len() >= 4
@@ -561,8 +567,12 @@ impl AccSet {
     }
 
     pub fn merge(&mut self, other: &mut Self) {
-        for pos_len in std::mem::take(&mut other.set).into_iter() {
-            self.append_raw(other.list.ref_raw(pos_len));
+        let other_raw = std::mem::take(&mut other.list.raw);
+        let other_positions = std::mem::take(&mut other.set).into_ordered_positions();
+
+        for (pos, len) in other_positions {
+            let raw = &other_raw[pos as usize..][..len as usize];
+            self.append_raw(raw);
         }
     }
 
@@ -710,6 +720,32 @@ mod tests {
 
         let values: Vec<ScalarValue> = acc_set1.into_values(DataType::Int32, false).collect();
         assert_eq!(values, vec![value1, value2, value3]);
+    }
+
+    #[test]
+    fn test_acc_set_merge_preserves_first_occurrence_order_when_rhs_becomes_huge() {
+        let mut lhs = AccSet::default();
+        let mut rhs = AccSet::default();
+        let value1 = ScalarValue::Int32(Some(1));
+        let value2 = ScalarValue::Int32(Some(2));
+        let value3 = ScalarValue::Int32(Some(3));
+        let value4 = ScalarValue::Int32(Some(4));
+        let value5 = ScalarValue::Int32(Some(5));
+
+        lhs.append(&value1, false);
+        rhs.append(&value2, false);
+        rhs.append(&value3, false);
+        rhs.append(&value4, false);
+        rhs.append(&value5, false);
+
+        assert!(matches!(&rhs.set, InternalSet::Huge(_)));
+
+        lhs.merge(&mut rhs);
+
+        let values: Vec<ScalarValue> = lhs.into_values(DataType::Int32, false).collect();
+        assert_eq!(values, vec![value1, value2, value3, value4, value5]);
+        assert_eq!(rhs.list.raw.len(), 0);
+        assert_eq!(rhs.set.len(), 0);
     }
 
     #[test]
