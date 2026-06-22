@@ -150,6 +150,8 @@ object IcebergScanSupport extends Logging {
     assert(
       !(format != FileFormat.PARQUET && format != FileFormat.ORC),
       "Only support parquet or orc.")
+    // ORC cannot match Iceberg columns by field-id yet, so any historical top-level
+    // rename/drop may make older ORC files unsafe for native name/position matching.
     assert(
       !(format == FileFormat.ORC && renameOrDrop.topLevel),
       "Iceberg ORC rename or drop is not supported.")
