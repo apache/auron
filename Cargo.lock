@@ -1264,7 +1264,7 @@ dependencies = [
  "byteorder",
  "chrono",
  "datafusion",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jni",
  "log",
  "lz4_flex 0.13.1",
@@ -1287,7 +1287,7 @@ dependencies = [
  "auron-jni-bridge",
  "datafusion",
  "datafusion-ext-commons",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jni",
  "log",
  "once_cell",
@@ -1304,7 +1304,7 @@ dependencies = [
  "chrono-tz",
  "datafusion",
  "datafusion-ext-commons",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jni",
  "log",
  "num",
@@ -1340,7 +1340,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hashbrown 0.17.1",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jni",
  "log",
  "num",
@@ -2387,6 +2387,15 @@ name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
 dependencies = [
  "either",
 ]
