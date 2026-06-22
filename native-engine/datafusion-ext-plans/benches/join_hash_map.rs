@@ -16,9 +16,9 @@
 //! Microbenchmarks for JoinHashMap::lookup_many.
 //!
 //! Sweeps three build-side map sizes to cover different cache regimes:
-//!   - 4K keys  (~2 MB map)  → fits in L2, mostly cache-hot
-//!   - 64K keys (~32 MB map) → spills into L3
-//!   - 1M keys  (~512 MB map)→ well beyond L3, cache-cold
+//!   - 5M keys  (~128 MB map)  → realistic BHJ build side
+//!   - 10M keys (~256 MB map) → larger build side
+//!   - 20M keys (~512 MB map) → very large build side
 //!
 //! For each map size, three probe hit rates are measured:
 //!   - 0%   (all misses)
