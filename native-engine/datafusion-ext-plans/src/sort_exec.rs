@@ -28,7 +28,8 @@ use std::{
 
 use arrow::{
     array::ArrayRef,
-    datatypes::{Schema, SchemaRef},
+    compute::{SortOptions, sort_to_indices},
+    datatypes::{DataType, Schema, SchemaRef},
     record_batch::{RecordBatch, RecordBatchOptions},
     row::{RowConverter, Rows, SortField},
 };
@@ -642,26 +643,49 @@ impl ExternalSorter {
         self.mem_total_size
             .fetch_add(batch.get_batch_mem_size(), SeqCst);
 
-        // sort keys
+        // For a single-column primitive key (e.g. TPC-H `lineitem.l_orderkey`),
+        // skip the RowConverter byte-comparison sort and use Arrow
+        // `sort_to_indices` on the raw array instead (~6x faster on the batch
+        // in-place sort). The batch is sorted and limited here; the rest of the
+        // pipeline (encode for K-way merge, output) is unchanged.
+        let is_fast_path = self
+            .prune_sort_keys_from_batch
+            .primitive_fast_path
+            .is_some();
+        let batch = if is_fast_path {
+            self.prune_sort_keys_from_batch
+                .sort_batch_in_place(batch, self.limit)?
+        } else {
+            batch
+        };
+
         // NOTE: we use stable merge sort for longer keys due to less comparison
         let (keys, batch) = self.prune_sort_keys_from_batch.prune(batch)?;
-        let sorted_indices = if keys.size() / keys.num_rows() <= 8 {
-            (0..keys.num_rows() as u32).sorted_unstable_by_key(|&row_idx| unsafe {
-                // safety: bypass boundary and lifetime checking
-                std::mem::transmute::<_, &'static [u8]>(
-                    keys.row_unchecked(row_idx as usize).as_ref(),
-                )
-            })
+        let sorted_indices = if is_fast_path {
+            // the batch was already sorted (and limited) above, so the key rows
+            // produced by `prune` are in final order — use identity indices.
+            (0..keys.num_rows() as u32).collect::<Vec<_>>()
+        } else if keys.size() / keys.num_rows() <= 8 {
+            (0..keys.num_rows() as u32)
+                .sorted_unstable_by_key(|&row_idx| unsafe {
+                    // safety: bypass boundary and lifetime checking
+                    std::mem::transmute::<_, &'static [u8]>(
+                        keys.row_unchecked(row_idx as usize).as_ref(),
+                    )
+                })
+                .take(self.limit)
+                .collect::<Vec<_>>()
         } else {
-            (0..keys.num_rows() as u32).sorted_by_key(|&row_idx| unsafe {
-                // safety: bypass boundary and lifetime checking
-                std::mem::transmute::<_, &'static [u8]>(
-                    keys.row_unchecked(row_idx as usize).as_ref(),
-                )
-            })
-        }
-        .take(self.limit)
-        .collect::<Vec<_>>();
+            (0..keys.num_rows() as u32)
+                .sorted_by_key(|&row_idx| unsafe {
+                    // safety: bypass boundary and lifetime checking
+                    std::mem::transmute::<_, &'static [u8]>(
+                        keys.row_unchecked(row_idx as usize).as_ref(),
+                    )
+                })
+                .take(self.limit)
+                .collect::<Vec<_>>()
+        };
 
         // build keys
         let mut key_collector = InMemRowsKeyCollector::default();
@@ -673,7 +697,13 @@ impl ExternalSorter {
 
         // build batch
         let sorted_batch = if !self.prune_sort_keys_from_batch.is_all_pruned() {
-            take_batch(batch, sorted_indices)?
+            if is_fast_path {
+                // batch is already sorted and pruned by `sort_batch_in_place`;
+                // avoid an extra `take_batch` copy.
+                batch
+            } else {
+                take_batch(batch, sorted_indices)?
+            }
         } else {
             create_zero_column_batch(batch.num_rows())
         };
@@ -1087,6 +1117,41 @@ fn create_zero_column_batch(num_rows: usize) -> RecordBatch {
     .expect("failed to create empty RecordBatch")
 }
 
+struct PrimitiveSortKey {
+    sort_expr: PhysicalSortExpr,
+}
+
+impl PrimitiveSortKey {
+    fn try_new(input_schema: &SchemaRef, exprs: &[PhysicalSortExpr]) -> Option<Self> {
+        if exprs.len() != 1 {
+            return None;
+        }
+        let expr = &exprs[0];
+        // must be a direct column reference
+        expr.expr.as_any().downcast_ref::<Column>()?;
+        let data_type = expr.expr.data_type(input_schema).ok()?;
+        if !matches!(
+            data_type,
+            DataType::Int8
+                | DataType::Int16
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::UInt8
+                | DataType::UInt16
+                | DataType::UInt32
+                | DataType::UInt64
+                | DataType::Date32
+                | DataType::Date64
+                | DataType::Timestamp(_, _)
+        ) {
+            return None;
+        }
+        Some(Self {
+            sort_expr: expr.clone(),
+        })
+    }
+}
+
 struct PruneSortKeysFromBatch {
     input_projection: Vec<usize>,
     sort_row_converter: Arc<Mutex<RowConverter>>,
@@ -1095,6 +1160,7 @@ struct PruneSortKeysFromBatch {
     restored_col_mappers: Vec<ColMapper>,
     restored_schema: SchemaRef,
     pruned_schema: SchemaRef,
+    primitive_fast_path: Option<PrimitiveSortKey>,
 }
 
 #[derive(Clone, Copy)]
@@ -1165,11 +1231,45 @@ impl PruneSortKeysFromBatch {
             restored_col_mappers,
             pruned_schema,
             restored_schema,
+            primitive_fast_path: PrimitiveSortKey::try_new(&input_schema, exprs),
         })
     }
 
     fn is_all_pruned(&self) -> bool {
         self.pruned_schema.fields().is_empty()
+    }
+
+    /// Fast-path batch in-place sort for a single-column primitive key.
+    ///
+    /// Sorts the batch by the primitive sort key using Arrow `sort_to_indices`
+    /// (which compares the raw values, e.g. `i64`, instead of `RowConverter`
+    /// byte encoding), then reorders the batch by the resulting indices and
+    /// applies `limit` rows. The caller can then treat the returned batch as
+    /// already sorted and pruned. No-op precondition: `primitive_fast_path`
+    /// must be `Some`; the caller checks `is_fast_path` before calling.
+    fn sort_batch_in_place(&self, batch: RecordBatch, limit: usize) -> Result<RecordBatch> {
+        // safety/correctness: only reached when is_fast_path == true
+        let key = self
+            .primitive_fast_path
+            .as_ref()
+            .expect("sort_batch_in_place requires a primitive fast path");
+        let array = key
+            .sort_expr
+            .expr
+            .evaluate(&batch)
+            .and_then(|cv| cv.into_array(batch.num_rows()))?;
+        let options = SortOptions {
+            descending: key.sort_expr.options.descending,
+            nulls_first: key.sort_expr.options.nulls_first,
+        };
+        let indices = sort_to_indices(&array, Some(options), None)?;
+        let indices = indices
+            .values()
+            .iter()
+            .copied()
+            .take(limit)
+            .collect::<Vec<_>>();
+        take_batch(batch, indices)
     }
 
     fn pruned_schema(&self) -> SchemaRef {
@@ -1584,7 +1684,7 @@ mod fuzztest {
     use std::{sync::Arc, time::Instant};
 
     use arrow::{
-        array::{ArrayRef, StringArray, UInt32Array},
+        array::{ArrayRef, Int64Array, StringArray, UInt32Array},
         compute::{SortOptions, concat_batches},
         record_batch::RecordBatch,
     };
@@ -1597,6 +1697,92 @@ mod fuzztest {
     };
 
     use crate::sort_exec::SortExec;
+
+    /// Benchmark helper: build a single Int64 column where each value is
+    /// repeated `repeat` times, shuffled, to simulate TPC-H
+    /// lineitem.l_orderkey distribution.
+    fn build_repeated_i64_batch(num_rows: usize, repeat: usize, seed: u64) -> RecordBatch {
+        use rand::{Rng, SeedableRng};
+        let unique_keys = (num_rows + repeat - 1) / repeat;
+        let mut values: Vec<i64> = (0..unique_keys)
+            .flat_map(|v| std::iter::repeat(v as i64).take(repeat))
+            .take(num_rows)
+            .collect();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        rand::seq::SliceRandom::shuffle(values.as_mut_slice(), &mut rng);
+        let schema = Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new("l_orderkey", arrow::datatypes::DataType::Int64, false),
+        ]));
+        RecordBatch::try_new(schema, vec![Arc::new(Int64Array::from(values)) as ArrayRef])
+            .expect("failed to create benchmark batch")
+    }
+
+    async fn bench_sort_repeat(repeat: usize, mem: usize, use_auron: bool) -> Result<(usize, f64)> {
+        MemManager::init(mem);
+        let session_ctx =
+            SessionContext::new_with_config(SessionConfig::new().with_batch_size(10000));
+        let task_ctx = session_ctx.task_ctx();
+        let num_rows = 1_000_000;
+        let batch = build_repeated_i64_batch(num_rows, repeat, 42);
+        let schema = batch.schema();
+        let sort_exprs = vec![PhysicalSortExpr {
+            expr: Arc::new(Column::new("l_orderkey", 0)),
+            options: SortOptions::default(),
+        }];
+
+        let input = Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema.clone(),
+            None,
+        )?);
+        let sort: Arc<dyn ExecutionPlan> = if use_auron {
+            Arc::new(SortExec::new(input, sort_exprs.clone(), None, 0))
+        } else {
+            Arc::new(datafusion::physical_plan::sorts::sort::SortExec::new(
+                LexOrdering::new(sort_exprs.iter().cloned()).expect("invalid sort exprs"),
+                input,
+            ))
+        };
+        let start = Instant::now();
+        let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
+        let elapsed = start.elapsed().as_secs_f64();
+        let total_rows: usize = output.iter().map(|b| b.num_rows()).sum();
+        Ok((total_rows, elapsed))
+    }
+
+    #[tokio::test]
+    #[ignore = "manual benchmark"]
+    async fn bench_native_sort_varying_repeat_in_mem() -> Result<()> {
+        for repeat in [1usize, 4, 20, 100] {
+            let (_, elapsed_auron) = bench_sort_repeat(repeat, 1_000_000_000, true).await?;
+            let (_, elapsed_df) = bench_sort_repeat(repeat, 1_000_000_000, false).await?;
+            eprintln!(
+                "[sort in-mem] repeat={:>3}, auron={:.3}s, datafusion={:.3}s, speedup(df/auron)={:.2}x",
+                repeat,
+                elapsed_auron,
+                elapsed_df,
+                elapsed_auron / elapsed_df
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "manual benchmark"]
+    async fn bench_native_sort_varying_repeat_external() -> Result<()> {
+        for repeat in [1usize, 4, 20, 100] {
+            let (_, elapsed_auron) = bench_sort_repeat(repeat, 2_000_000, true).await?;
+            let (_, elapsed_df) = bench_sort_repeat(repeat, 2_000_000, false).await?;
+            eprintln!(
+                "[sort external] repeat={:>3}, auron={:.3}s, datafusion={:.3}s, speedup(df/auron)={:.2}x",
+                repeat,
+                elapsed_auron,
+                elapsed_df,
+                elapsed_auron / elapsed_df
+            );
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn fuzztest_in_mem_sorting() -> Result<()> {
