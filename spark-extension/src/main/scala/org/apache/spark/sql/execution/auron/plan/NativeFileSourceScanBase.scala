@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.auron.plan
 import java.net.URI
 import java.security.PrivilegedExceptionAction
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.fs.FileSystem

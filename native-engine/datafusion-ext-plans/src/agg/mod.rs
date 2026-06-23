@@ -88,4 +88,5 @@ pub struct AggExpr {
     pub field_name: String,
     pub mode: AggMode,
     pub agg: Arc<dyn Agg>,
+    pub filter: Option<PhysicalExprRef>,
 }

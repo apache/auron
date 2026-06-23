@@ -58,6 +58,33 @@
       <version>${sparkVersion}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-avro</artifactId>
+      <version>${parquetVersion}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-common</artifactId>
+      <version>${parquetVersion}</version>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-column</artifactId>
+      <version>${parquetVersion}</version>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-encoding</artifactId>
+      <version>${parquetVersion}</version>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -83,9 +110,45 @@
 
   <profiles>
     <profile>
+      <id>spark-3.1</id>
+      <modules>
+        <module>spark31</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-3.2</id>
+      <modules>
+        <module>spark32</module>
+      </modules>
+    </profile>
+    <profile>
       <id>spark-3.3</id>
       <modules>
         <module>spark33</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-3.4</id>
+      <modules>
+        <module>spark34</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-3.5</id>
+      <modules>
+        <module>spark35</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-4.0</id>
+      <modules>
+        <module>spark40</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spark-4.1</id>
+      <modules>
+        <module>spark41</module>
       </modules>
     </profile>
   </profiles>

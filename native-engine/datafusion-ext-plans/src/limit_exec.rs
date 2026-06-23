@@ -120,7 +120,7 @@ impl ExecutionPlan for LimitExec {
 
     fn statistics(&self) -> Result<Statistics> {
         Statistics::with_fetch(
-            self.input.statistics()?,
+            self.input.partition_statistics(None)?,
             self.schema(),
             Some(self.limit),
             self.offset,
@@ -194,6 +194,7 @@ fn execute_limit_with_offset(
 
 #[cfg(test)]
 mod test {
+    #![allow(deprecated)]
     use std::sync::Arc;
 
     use arrow::{

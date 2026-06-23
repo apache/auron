@@ -72,7 +72,7 @@ macro_rules! downcast_any {
 }
 
 pub fn batch_size() -> usize {
-    const CACHED_BATCH_SIZE: OnceCell<usize> = OnceCell::new();
+    static CACHED_BATCH_SIZE: OnceCell<usize> = OnceCell::new();
     *CACHED_BATCH_SIZE.get_or_init(|| BATCH_SIZE.value().unwrap_or(10000) as usize)
 }
 

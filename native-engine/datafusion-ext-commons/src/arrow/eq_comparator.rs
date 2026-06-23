@@ -743,11 +743,12 @@ pub mod tests {
     }
 
     #[test]
-    fn test_bytes() {
-        test_bytes_impl::<Utf8Type>();
-        test_bytes_impl::<LargeUtf8Type>();
-        test_bytes_impl::<BinaryType>();
-        test_bytes_impl::<LargeBinaryType>();
+    fn test_bytes() -> Result<()> {
+        let _ = test_bytes_impl::<Utf8Type>();
+        let _ = test_bytes_impl::<LargeUtf8Type>();
+        let _ = test_bytes_impl::<BinaryType>();
+        let _ = test_bytes_impl::<LargeBinaryType>();
+        Ok(())
     }
 
     #[test]

@@ -17,8 +17,8 @@
 package org.apache.spark.sql.execution.auron.plan
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.internal.Logging
@@ -73,19 +73,20 @@ abstract class NativeAggBase(
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
-      .filterKeys(Set(
-        "stage_id",
-        "output_rows",
-        "elapsed_compute",
-        "mem_spill_count",
-        "mem_spill_size",
-        "mem_spill_iotime",
-        "disk_spill_size",
-        "disk_spill_iotime",
-        "input_batch_count",
-        "input_batch_mem_size",
-        "input_row_count"))
+      .getDefaultNativeMetrics(
+        sparkContext,
+        Set(
+          "stage_id",
+          "output_rows",
+          "elapsed_compute",
+          "mem_spill_count",
+          "mem_spill_size",
+          "mem_spill_iotime",
+          "disk_spill_size",
+          "disk_spill_iotime",
+          "input_batch_count",
+          "input_batch_mem_size",
+          "input_row_count"))
       .toSeq: _*) ++
     Map(
       "hashing_time" -> SQLMetrics.createNanoTimingMetric(sparkContext, "Native.hashing_time")) ++

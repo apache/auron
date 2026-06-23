@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.sql.auron.NativeConverters
@@ -54,8 +54,8 @@ abstract class NativeSortMergeJoinBase(
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
-      .filterKeys(
+      .getDefaultNativeMetrics(
+        sparkContext,
         Set(
           "stage_id",
           "output_rows",

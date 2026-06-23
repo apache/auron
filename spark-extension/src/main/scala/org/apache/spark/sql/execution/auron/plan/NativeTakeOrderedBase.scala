@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.sql.auron.NativeConverters
@@ -56,8 +56,7 @@ abstract class NativeTakeOrderedBase(
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
-      .filterKeys(Set("stage_id", "output_rows", "elapsed_compute"))
+      .getDefaultNativeMetrics(sparkContext, Set("stage_id", "output_rows", "elapsed_compute"))
       .toSeq: _*)
 
   override def output: Seq[Attribute] = child.output

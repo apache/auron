@@ -18,8 +18,8 @@ package org.apache.spark.sql.hive.execution.auron.plan
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.Seq
+import scala.jdk.CollectionConverters._
 
 import org.apache.paimon.io.DataFileMeta
 import org.apache.paimon.table.FileStoreTable

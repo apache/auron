@@ -17,7 +17,6 @@ use std::{
     any::Any,
     fmt::{Debug, Display, Formatter},
     hash::{Hash, Hasher},
-    io::Write,
     sync::Arc,
 };
 

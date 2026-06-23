@@ -67,10 +67,12 @@ class NativeRDD(
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val computingNativePlan = nativePlanWrapper.plan(split, context)
 
-    // SPARK-44605: Spark 4+ refines ShuffleWriteProcessor API (early execution of NativeRDD.ShuffleWrite iterator)
-    // Adaptation for Spark 4.x: Defer NativeRDD.ShuffleWrite execution to ShuffleWriteProcessor.write() to align with Spark 3.x logic
-    if (SparkVersionUtil.isSparkV40OrGreater &&
-      computingNativePlan.getPhysicalPlanTypeCase == PhysicalPlanNode.PhysicalPlanTypeCase.SHUFFLE_WRITER) {
+    // SPARK-44605: Spark 4+ refines ShuffleWriteProcessor API (early execution of native
+    // shuffle-writer iterators). Adaptation for Spark 4.x: defer both native shuffle-writer
+    // plan types (SHUFFLE_WRITER and RSS_SHUFFLE_WRITER) to ShuffleWriteProcessor.write() to
+    // align with Spark 3.x logic.
+    if (SparkVersionUtil.isSparkV40OrGreater && (computingNativePlan.getPhysicalPlanTypeCase == PhysicalPlanNode.PhysicalPlanTypeCase.SHUFFLE_WRITER
+        || computingNativePlan.getPhysicalPlanTypeCase == PhysicalPlanNode.PhysicalPlanTypeCase.RSS_SHUFFLE_WRITER)) {
       Iterator.empty
     } else {
       NativeHelper.executeNativePlan(computingNativePlan, metrics, split, Some(context))

@@ -1434,7 +1434,7 @@ mod tests {
                 col_name,
                 schema
                     .index_of(col_name)
-                    .expect(&format!("Column '{col_name}' not found")),
+                    .expect("Column not found in schema"),
             ));
             let null_lit = Arc::new(Literal::new(null_value));
             let expr = Arc::new(BinaryExpr::new(col, Operator::Eq, null_lit));

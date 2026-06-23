@@ -52,7 +52,7 @@ class AuronShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
     sortShuffleManager.registerShuffle(shuffleId, dependency)
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def getReader[K, C](
       handle: ShuffleHandle,
       startMapIndex: Int,
@@ -67,7 +67,7 @@ class AuronShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
 
       @sparkver("3.2")
       def shuffleMergeFinalized = baseShuffleHandle.dependency.shuffleMergeFinalized
-      @sparkver("3.3 / 3.4 / 3.5 / 4.1")
+      @sparkver("3.3 / 3.4 / 3.5 / 4.0 / 4.1")
       def shuffleMergeFinalized = baseShuffleHandle.dependency.isShuffleMergeFinalizedMarked
 
       val (blocksByAddress, canEnableBatchFetch) =

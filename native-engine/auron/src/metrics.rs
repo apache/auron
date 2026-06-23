@@ -19,7 +19,7 @@ use auron_jni_bridge::{jni_call, jni_new_string};
 use datafusion::{common::Result, physical_plan::ExecutionPlan};
 use jni::objects::JObject;
 
-pub fn update_spark_metric_node(
+pub fn update_metric_node(
     metric_node: JObject,
     execution_plan: Arc<dyn ExecutionPlan>,
 ) -> Result<()> {
@@ -42,9 +42,9 @@ pub fn update_spark_metric_node(
     // update children nodes
     for (i, &child_plan) in execution_plan.children().iter().enumerate() {
         let child_metric_node = jni_call!(
-            SparkMetricNode(metric_node).getChild(i as i32) -> JObject
+            MetricNode(metric_node).getChild(i as i32) -> JObject
         )?;
-        update_spark_metric_node(child_metric_node.as_obj(), child_plan.clone())?;
+        update_metric_node(child_metric_node.as_obj(), child_plan.clone())?;
     }
     Ok(())
 }
@@ -52,7 +52,7 @@ pub fn update_spark_metric_node(
 fn update_metrics(metric_node: JObject, metric_values: &[(&str, i64)]) -> Result<()> {
     for &(name, value) in metric_values {
         let jname = jni_new_string!(&name)?;
-        jni_call!(SparkMetricNode(metric_node).add(jname.as_obj(), value) -> ())?;
+        jni_call!(MetricNode(metric_node).add(jname.as_obj(), value) -> ())?;
     }
     Ok(())
 }

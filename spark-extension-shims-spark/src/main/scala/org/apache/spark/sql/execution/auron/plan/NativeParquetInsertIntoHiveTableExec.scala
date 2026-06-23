@@ -69,7 +69,7 @@ case class NativeParquetInsertIntoHiveTableExec(
       metrics)
   }
 
-  @sparkver("4.1")
+  @sparkver("4.0 / 4.1")
   override protected def getInsertIntoHiveTableCommand(
       table: CatalogTable,
       partition: Map[String, Option[String]],
@@ -88,7 +88,7 @@ case class NativeParquetInsertIntoHiveTableExec(
       metrics)
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
@@ -295,7 +295,7 @@ case class NativeParquetInsertIntoHiveTableExec(
     }
   }
 
-  @sparkver("4.1")
+  @sparkver("4.0 / 4.1")
   class AuronInsertIntoHiveTable41(
       table: CatalogTable,
       partition: Map[String, Option[String]],

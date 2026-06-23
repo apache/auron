@@ -42,8 +42,7 @@ public class SparkAuronAdaptor extends AuronAdaptor {
     public void loadAuronLib() {
         String libName = System.mapLibraryName("auron");
         ClassLoader classLoader = AuronAdaptor.class.getClassLoader();
-        try {
-            InputStream libInputStream = classLoader.getResourceAsStream(libName);
+        try (InputStream libInputStream = classLoader.getResourceAsStream(libName)) {
             File tempFile = File.createTempFile("libauron-", ".tmp");
             tempFile.deleteOnExit();
             Files.copy(libInputStream, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -51,6 +50,15 @@ public class SparkAuronAdaptor extends AuronAdaptor {
         } catch (IOException e) {
             throw new IllegalStateException("error loading native libraries: " + e);
         }
+    }
+
+    @Override
+    public boolean isTaskRunning() {
+        TaskContext tc = TaskContext$.MODULE$.get();
+        if (tc == null) { // driver is always running
+            return true;
+        }
+        return !tc.isCompleted() && !tc.isInterrupted();
     }
 
     @Override
@@ -93,5 +101,10 @@ public class SparkAuronAdaptor extends AuronAdaptor {
     @Override
     public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer udfSerialized) {
         return new SparkAuronUDFWrapperContext(udfSerialized);
+    }
+
+    @Override
+    public String getEngineName() {
+        return "Spark";
     }
 }

@@ -16,7 +16,11 @@
 use std::{
     error::Error,
     panic::AssertUnwindSafe,
-    sync::{Arc, mpsc::Receiver},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
+    },
 };
 
 use arrow::{
@@ -25,7 +29,7 @@ use arrow::{
     record_batch::RecordBatch,
 };
 use auron_jni_bridge::{
-    conf::{IntConf, SPARK_TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU},
+    conf::{IntConf, TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU},
     is_task_running, jni_call, jni_call_static, jni_convert_byte_array, jni_exception_check,
     jni_exception_occurred, jni_new_global_ref, jni_new_object, jni_new_string,
 };
@@ -42,6 +46,7 @@ use datafusion_ext_commons::{df_execution_err, downcast_any};
 use datafusion_ext_plans::{
     common::execution_context::{ExecutionContext, cancel_all_tasks},
     ipc_writer_exec::IpcWriterExec,
+    orc_sink_exec::OrcSinkExec,
     parquet_sink_exec::ParquetSinkExec,
     shuffle_writer_exec::ShuffleWriterExec,
 };
@@ -53,7 +58,7 @@ use tokio::{runtime::Runtime, task::JoinHandle};
 use crate::{
     handle_unwinded_scope,
     logging::{THREAD_PARTITION_ID, THREAD_STAGE_ID, THREAD_TID},
-    metrics::update_spark_metric_node,
+    metrics::update_metric_node,
 };
 
 pub struct NativeExecutionRuntime {
@@ -63,6 +68,8 @@ pub struct NativeExecutionRuntime {
     batch_receiver: Receiver<Result<Option<RecordBatch>>>,
     tokio_runtime: Runtime,
     join_handle: JoinHandle<()>,
+    // Flag to indicate runtime is being finalized - used to gracefully handle SendError
+    is_finalizing: Arc<AtomicBool>,
 }
 
 impl NativeExecutionRuntime {
@@ -99,8 +106,8 @@ impl NativeExecutionRuntime {
 
         let num_worker_threads = {
             let worker_threads_per_cpu = TOKIO_WORKER_THREADS_PER_CPU.value().unwrap_or(0);
-            let spark_task_cpus = SPARK_TASK_CPUS.value().unwrap_or(0);
-            worker_threads_per_cpu * spark_task_cpus
+            let task_cpus = TASK_CPUS.value().unwrap_or(0);
+            worker_threads_per_cpu * task_cpus
         };
 
         // create tokio runtime
@@ -134,6 +141,8 @@ impl NativeExecutionRuntime {
         // spawn batch producer
         let (batch_sender, batch_receiver) = std::sync::mpsc::sync_channel(1);
         let err_sender = batch_sender.clone();
+        let is_finalizing = Arc::new(AtomicBool::new(false));
+        let is_finalizing_clone = is_finalizing.clone();
         let execution_plan_cloned = execution_plan.clone();
         let exec_ctx_cloned = exec_ctx.clone();
         let native_wrapper_cloned = native_wrapper.clone();
@@ -148,6 +157,7 @@ impl NativeExecutionRuntime {
 
             // coalesce output stream if necessary
             if downcast_any!(execution_plan_cloned, EmptyExec).is_err()
+                && downcast_any!(execution_plan_cloned, OrcSinkExec).is_err()
                 && downcast_any!(execution_plan_cloned, ParquetSinkExec).is_err()
                 && downcast_any!(execution_plan_cloned, IpcWriterExec).is_err()
                 && downcast_any!(execution_plan_cloned, ShuffleWriterExec).is_err()
@@ -173,23 +183,34 @@ impl NativeExecutionRuntime {
                 .transpose()
                 .or_else(|err| df_execution_err!("{err}"))?
             {
-                batch_sender
-                    .send(Ok(Some(batch)))
-                    .or_else(|err| df_execution_err!("send batch error: {err}"))?;
+                if let Err(err) = batch_sender.send(Ok(Some(batch))) {
+                    if is_finalizing_clone.load(Ordering::Acquire) {
+                        log::debug!("send skipped: runtime is finalizing");
+                        return Ok(());
+                    } else {
+                        return df_execution_err!("unexpected send error: {err}");
+                    }
+                }
             }
-            batch_sender
-                .send(Ok(None))
-                .or_else(|err| df_execution_err!("send batch error: {err}"))?;
-            log::info!("task finished");
+            log::info!("stream exhausted, sending Ok(None) to signal completion");
+            if let Err(err) = batch_sender.send(Ok(None)) {
+                if is_finalizing_clone.load(Ordering::Acquire) {
+                    log::debug!("send skipped: runtime is finalizing");
+                    return Ok(());
+                } else {
+                    return df_execution_err!("unexpected send error: {err}");
+                }
+            }
             Ok::<_, DataFusionError>(())
         };
 
         let native_wrapper_cloned = native_wrapper.clone();
+        let is_finalizing_for_handler = is_finalizing.clone();
         let join_handle = tokio_runtime.spawn(async move {
             consume_stream.await.unwrap_or_else(|err| {
                 handle_unwinded_scope(|| {
                     let task_running = is_task_running();
-                    if !task_running {
+                    if !task_running || is_finalizing_for_handler.load(Ordering::Acquire) {
                         log::warn!("task completed before native execution done");
                         return Ok(());
                     }
@@ -224,6 +245,7 @@ impl NativeExecutionRuntime {
             tokio_runtime,
             batch_receiver,
             join_handle,
+            is_finalizing,
         };
         Ok(native_execution_runtime)
     }
@@ -250,11 +272,13 @@ impl NativeExecutionRuntime {
         match next_batch() {
             Ok(ret) => ret,
             Err(err) => {
-                let _ = set_error(
-                    &self.native_wrapper,
-                    &format!("poll record batch error: {err}"),
-                    None,
-                );
+                if !self.is_finalizing.load(Ordering::Acquire) {
+                    let _ = set_error(
+                        &self.native_wrapper,
+                        &format!("poll record batch error: {err}"),
+                        None,
+                    );
+                }
                 false
             }
         }
@@ -266,6 +290,11 @@ impl NativeExecutionRuntime {
         log::info!("(partition={partition}) native execution finalizing");
         self.update_metrics().unwrap_or_default();
         drop(self.plan);
+
+        // Set finalizing flag before dropping receiver and native_wrapper to prevent
+        // concurrent set_error calls from next_batch/tokio workers from accessing a
+        // freed GlobalRef after finalize completes.
+        self.is_finalizing.store(true, Ordering::Release);
         drop(self.batch_receiver);
 
         cancel_all_tasks(&self.exec_ctx.task_ctx()); // cancel all pending streams
@@ -278,7 +307,7 @@ impl NativeExecutionRuntime {
         let metrics = jni_call!(
             AuronCallNativeWrapper(self.native_wrapper.as_obj()).getMetrics() -> JObject
         )?;
-        update_spark_metric_node(metrics.as_obj(), self.plan.clone())?;
+        update_metric_node(metrics.as_obj(), self.plan.clone())?;
         Ok(())
     }
 }

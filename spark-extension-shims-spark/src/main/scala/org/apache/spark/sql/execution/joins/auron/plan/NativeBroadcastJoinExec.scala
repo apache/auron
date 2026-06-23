@@ -48,7 +48,7 @@ case class NativeBroadcastJoinExec(
 
   override val condition: Option[Expression] = None
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def buildSide: org.apache.spark.sql.catalyst.optimizer.BuildSide =
     broadcastSide match {
       case JoinBuildLeft => org.apache.spark.sql.catalyst.optimizer.BuildLeft
@@ -61,7 +61,7 @@ case class NativeBroadcastJoinExec(
     case JoinBuildRight => org.apache.spark.sql.execution.joins.BuildRight
   }
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def requiredChildDistribution
       : List[org.apache.spark.sql.catalyst.plans.physical.Distribution] = {
     import org.apache.spark.sql.catalyst.plans.physical.BroadcastDistribution
@@ -80,22 +80,22 @@ case class NativeBroadcastJoinExec(
   override def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression] =
     HashJoin.rewriteKeyExpr(exprs)
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def supportCodegen: Boolean = false
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def inputRDDs(): Nothing = {
     throw new NotImplementedError("NativeBroadcastJoin dose not support codegen")
   }
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override protected def prepareRelation(
       ctx: org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext)
       : org.apache.spark.sql.execution.joins.HashedRelationInfo = {
     throw new NotImplementedError("NativeBroadcastJoin dose not support codegen")
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan,
       newRight: SparkPlan): SparkPlan =

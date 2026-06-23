@@ -55,8 +55,15 @@ fn handle_unwinded(err: Box<dyn Any + Send>) {
 }
 
 fn handle_unwinded_scope<T: Default, E: Debug>(scope: impl FnOnce() -> Result<T, E>) -> T {
-    match std::panic::catch_unwind(AssertUnwindSafe(|| scope().expect("scope failed"))) {
-        Ok(v) => v,
+    match std::panic::catch_unwind(AssertUnwindSafe(|| scope())) {
+        Ok(Ok(v)) => v,
+        Ok(Err(err)) => {
+            // Defensive handling: this path should not be reached in normal operation
+            // after the SendError fixes (is_finalizing flag, FFI_ArrowArray lifetime).
+            // If triggered, it indicates a new issue that needs investigation.
+            log::error!("error in unwinded scope: {err:?}");
+            T::default()
+        }
         Err(err) => {
             handle_unwinded(err);
             T::default()

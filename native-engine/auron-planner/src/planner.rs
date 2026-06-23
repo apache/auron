@@ -27,7 +27,7 @@ use arrow::{
 };
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use datafusion::{
-    common::{ExprSchema, Result, ScalarValue, stats::Precision},
+    common::{Result, ScalarValue, stats::Precision},
     datasource::{
         file_format::file_compression_type::FileCompressionType,
         listing::{FileRange, PartitionedFile},
@@ -40,7 +40,7 @@ use datafusion::{
         expressions::{LikeExpr, SCAndExpr, SCOrExpr, in_list},
     },
     physical_plan::{
-        ColumnStatistics, ExecutionPlan, PhysicalExpr, Statistics, expressions as phys_expr,
+        ColumnStatistics, ExecutionPlan, Statistics, expressions as phys_expr,
         expressions::{
             BinaryExpr, CaseExpr, CastExpr, Column, IsNotNullExpr, IsNullExpr, Literal,
             NegativeExpr, NotExpr, PhysicalSortExpr,
@@ -72,12 +72,14 @@ use datafusion_ext_plans::{
     expand_exec::ExpandExec,
     ffi_reader_exec::FFIReaderExec,
     filter_exec::FilterExec,
+    flink::{kafka_mock_scan_exec::KafkaMockScanExec, kafka_scan_exec::KafkaScanExec},
     generate::{create_generator, create_udtf_generator},
     generate_exec::GenerateExec,
     ipc_reader_exec::IpcReaderExec,
     ipc_writer_exec::IpcWriterExec,
     limit_exec::LimitExec,
     orc_exec::OrcExec,
+    orc_sink_exec::OrcSinkExec,
     parquet_exec::ParquetExec,
     parquet_sink_exec::ParquetSinkExec,
     project_exec::ProjectExec,
@@ -542,10 +544,17 @@ impl PhysicalPlanner {
                             )?,
                         };
 
+                        let filter = agg_node
+                            .filter
+                            .as_ref()
+                            .map(|f| self.try_parse_physical_expr(f, &input_schema))
+                            .transpose()?;
+
                         Ok(AggExpr {
                             agg,
                             mode,
                             field_name: name.to_owned(),
+                            filter,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -634,6 +643,21 @@ impl PhysicalPlanner {
                                 }
                                 protobuf::WindowFunction::DenseRank => {
                                     WindowFunction::RankLike(WindowRankType::DenseRank)
+                                }
+                                protobuf::WindowFunction::Lead => WindowFunction::Lead,
+                                protobuf::WindowFunction::NthValue => {
+                                    WindowFunction::NthValue {
+                                        ignore_nulls: false,
+                                    }
+                                }
+                                protobuf::WindowFunction::NthValueIgnoreNulls => {
+                                    WindowFunction::NthValue { ignore_nulls: true }
+                                }
+                                protobuf::WindowFunction::PercentRank => {
+                                    WindowFunction::PercentRank
+                                }
+                                protobuf::WindowFunction::CumeDist => {
+                                    WindowFunction::CumeDist
                                 }
                             },
                             protobuf::WindowFunctionType::Agg => match w.agg_func() {
@@ -800,6 +824,40 @@ impl PhysicalPlanner {
                     parquet_sink.num_dyn_parts as usize,
                     props,
                 )))
+            }
+            PhysicalPlanType::OrcSink(orc_sink) => {
+                let mut props: Vec<(String, String)> = vec![];
+                for prop in &orc_sink.prop {
+                    props.push((prop.key.clone(), prop.value.clone()));
+                }
+                Ok(Arc::new(OrcSinkExec::new(
+                    convert_box_required!(self, orc_sink.input)?,
+                    orc_sink.fs_resource_id.clone(),
+                    orc_sink.num_dyn_parts as usize,
+                    Arc::new(convert_required!(orc_sink.schema)?),
+                    props,
+                )))
+            }
+            PhysicalPlanType::KafkaScan(kafka_scan) => {
+                let schema = Arc::new(convert_required!(kafka_scan.schema)?);
+                if !kafka_scan.mock_data_json_array.is_empty() {
+                    Ok(Arc::new(KafkaMockScanExec::new(
+                        schema,
+                        kafka_scan.auron_operator_id.clone(),
+                        kafka_scan.mock_data_json_array.clone(),
+                    )))
+                } else {
+                    Ok(Arc::new(KafkaScanExec::new(
+                        kafka_scan.kafka_topic.clone(),
+                        kafka_scan.kafka_properties_json.clone(),
+                        schema,
+                        kafka_scan.batch_size as i32,
+                        kafka_scan.startup_mode,
+                        kafka_scan.auron_operator_id.clone(),
+                        kafka_scan.data_format,
+                        kafka_scan.format_config_json.clone(),
+                    )))
+                }
             }
         }
     }
@@ -1045,7 +1103,7 @@ impl PhysicalPlanner {
         input: &Arc<dyn ExecutionPlan>,
         sort: &Box<SortExecNode>,
     ) -> Result<Vec<PhysicalSortExpr>, PlanSerDeError> {
-        let pyhsical_sort_expr = sort
+        let physical_sort_expr = sort
             .expr
             .iter()
             .map(|expr| {
@@ -1078,7 +1136,7 @@ impl PhysicalPlanner {
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(pyhsical_sort_expr)
+        Ok(physical_sort_expr)
     }
 
     pub fn parse_protobuf_partitioning(
@@ -1205,6 +1263,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Tan => f::math::tan(),
             ScalarFunction::Asin => f::math::asin(),
             ScalarFunction::Acos => f::math::acos(),
+            ScalarFunction::Acosh => f::math::acosh(),
             ScalarFunction::Atan => f::math::atan(),
             ScalarFunction::Exp => f::math::exp(),
             ScalarFunction::Log => f::math::log(),
@@ -1264,6 +1323,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::ToTimestampMicros => f::datetime::to_timestamp_micros(),
             ScalarFunction::ToTimestampSeconds => f::datetime::to_timestamp_seconds(),
             ScalarFunction::Now => f::datetime::now(),
+            ScalarFunction::MakeDate => f::datetime::make_date(),
             ScalarFunction::Translate => f::unicode::translate(),
             ScalarFunction::RegexpMatch => f::regex::regexp_match(),
             ScalarFunction::Greatest => f::core::greatest(),

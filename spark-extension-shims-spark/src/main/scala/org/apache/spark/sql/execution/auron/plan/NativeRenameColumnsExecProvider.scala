@@ -21,7 +21,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.auron.sparkver
 
 case object NativeRenameColumnsExecProvider {
-  @sparkver("3.4 / 3.5 / 4.1")
+  @sparkver("3.4 / 3.5 / 4.0 / 4.1")
   def provide(child: SparkPlan, renamedColumnNames: Seq[String]): NativeRenameColumnsBase = {
     import org.apache.spark.sql.catalyst.expressions.NamedExpression
     import org.apache.spark.sql.catalyst.expressions.SortOrder

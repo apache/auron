@@ -24,7 +24,7 @@ import org.apache.auron.sparkver
 case class NativeFilterExec(condition: Expression, override val child: SparkPlan)
     extends NativeFilterBase(condition, child) {
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 

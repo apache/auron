@@ -138,13 +138,13 @@ object AuronBlockStoreShuffleReaderBase extends Logging {
 
   def getFileSegmentFromInputStream(in: InputStream): Option[(String, Long, Long)] = {
     unwrapInputStream(in) match {
-      case in: LimitedInputStream =>
-        val left = FieldUtils.readDeclaredField(in, "left", true).asInstanceOf[Long]
-        val inner = FieldUtils.readField(in, "in", true).asInstanceOf[InputStream]
+      case limited: LimitedInputStream =>
+        val left = FieldUtils.readDeclaredField(limited, "left", true).asInstanceOf[Long]
+        val inner = FieldUtils.readField(limited, "in", true).asInstanceOf[InputStream]
         inner match {
-          case in: FileInputStream =>
-            val path = FieldUtils.readDeclaredField(in, "path", true).asInstanceOf[String]
-            val offset = in.getChannel.position()
+          case fileIn: FileInputStream =>
+            val path = FieldUtils.readDeclaredField(fileIn, "path", true).asInstanceOf[String]
+            val offset = fileIn.getChannel.position()
             Some((path, offset, left))
           case _ =>
             None

@@ -158,21 +158,20 @@ class SparkOnHeapSpillManager(taskContext: TaskContext)
       return 0L
     }
 
-    logInfo(s"starts spilling to disk, size=${Utils.bytesToString(size)}}")
+    logInfo(s"starts spilling to disk, size=${Utils.bytesToString(size)}")
     dumpStatus()
     var totalFreed = 0L
 
     // prefer the max spill, to avoid generating too many small files
     Utils.tryWithSafeFinally {
       synchronized {
-        val sortedSpills = spills.seq.sortBy(0 - _.map(_.memUsed).getOrElse(0L))
-        sortedSpills.foreach {
-          case Some(spill) if spill.memUsed > 0 =>
-            totalFreed += spill.spill(trigger)
-            if (totalFreed >= size) {
-              return totalFreed
-            }
-          case _ =>
+        val sortedSpills = spills.seq.sortBy(0 - _.map(_.memUsed).getOrElse(0L)).iterator
+        while (sortedSpills.hasNext && totalFreed < size) {
+          sortedSpills.next() match {
+            case Some(spill) if spill.memUsed > 0 =>
+              totalFreed += spill.spill(trigger)
+            case _ =>
+          }
         }
       }
     } {
@@ -195,6 +194,10 @@ object SparkOnHeapSpillManager extends Logging {
 
   def current: OnHeapSpillManager = {
     val tc = TaskContext.get
-    all.getOrElseUpdate(tc.taskAttemptId(), new SparkOnHeapSpillManager(tc))
+    if (tc != null) {
+      all.getOrElseUpdate(tc.taskAttemptId(), new SparkOnHeapSpillManager(tc))
+    } else {
+      OnHeapSpillManager.getDisabledOnHeapSpillManager
+    }
   }
 }

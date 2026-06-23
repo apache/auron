@@ -167,4 +167,10 @@ impl WindowContext {
                     .collect::<Result<Vec<_>>>()?,
             )?)
     }
+
+    pub fn requires_full_partition(&self) -> bool {
+        self.window_exprs
+            .iter()
+            .any(|expr| expr.requires_full_partition())
+    }
 }

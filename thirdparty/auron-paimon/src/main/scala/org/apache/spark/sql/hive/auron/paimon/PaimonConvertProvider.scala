@@ -19,8 +19,11 @@ package org.apache.spark.sql.hive.auron.paimon
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.AuronConverters
 import org.apache.spark.sql.auron.AuronConvertProvider
+import org.apache.spark.sql.auron.paimon.PaimonScanSupport
 import org.apache.spark.sql.auron.util.AuronLogUtils
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.auron.plan.NativePaimonV2TableScanExec
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.execution.auron.plan.NativePaimonTableScanExec
 
@@ -28,7 +31,16 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 class PaimonConvertProvider extends AuronConvertProvider with Logging {
 
-  override def isEnabled: Boolean = SparkAuronConfiguration.ENABLE_PAIMON_SCAN.get()
+  override def isEnabled(exec: SparkPlan): Boolean = {
+    exec match {
+      case _: HiveTableScanExec =>
+        SparkAuronConfiguration.ENABLE_PAIMON_SCAN.get()
+      case _: BatchScanExec =>
+        SparkAuronConfiguration.ENABLE_PAIMON_SCAN.get()
+      case _ => false
+    }
+
+  }
 
   override def isSupported(exec: SparkPlan): Boolean = {
     exec match {
@@ -36,6 +48,8 @@ class PaimonConvertProvider extends AuronConvertProvider with Logging {
           if e.relation.tableMeta.storage.serde.isDefined
             && e.relation.tableMeta.storage.serde.get.contains("Paimon") =>
         true
+      case e: BatchScanExec =>
+        PaimonScanSupport.isPaimonScan(e) && PaimonScanSupport.plan(e).nonEmpty
       case _ => false
     }
   }
@@ -43,6 +57,7 @@ class PaimonConvertProvider extends AuronConvertProvider with Logging {
   override def convert(exec: SparkPlan): SparkPlan = {
     exec match {
       case hiveExec: HiveTableScanExec => convertPaimonTableScanExec(hiveExec)
+      case batchScan: BatchScanExec => convertPaimonV2BatchScanExec(batchScan)
       case _ => exec
     }
   }
@@ -64,5 +79,20 @@ class PaimonConvertProvider extends AuronConvertProvider with Logging {
         "partitionPruningPred" -> partitionPruningPred))
 
     AuronConverters.addRenameColumnsExec(NativePaimonTableScanExec(exec))
+  }
+
+  private def convertPaimonV2BatchScanExec(exec: BatchScanExec): SparkPlan = {
+    PaimonScanSupport.plan(exec) match {
+      case Some(plan) =>
+        AuronLogUtils.logDebugPlanConversion(
+          exec,
+          Seq(
+            "scan" -> exec.scan.getClass,
+            "output" -> exec.output,
+            "fileFormat" -> plan.fileFormat,
+            "numFiles" -> plan.files.size))
+        AuronConverters.addRenameColumnsExec(NativePaimonV2TableScanExec(exec, plan))
+      case None => exec
+    }
   }
 }

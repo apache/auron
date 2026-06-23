@@ -14,5 +14,9 @@
 // limitations under the License.
 
 pub mod agg_processor;
+pub mod cume_dist_processor;
+pub mod lead_processor;
+pub mod nth_value_processor;
+pub mod percent_rank_processor;
 pub mod rank_processor;
 pub mod row_number_processor;

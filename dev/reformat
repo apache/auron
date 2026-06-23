@@ -32,12 +32,105 @@ done
 
 MODE=pre
 SCALA_PROFILE=scala-2.12
-function run_maven() {
+ORIGINAL_PATH="$PATH"
+
+function java_major() {
+  # Extract Java major version (8, 11, 17, ...) from a given java command.
+  local java_cmd="$1"
+  local version
+  version="$("${java_cmd}" -version 2>&1 | awk -F '"' '/version/ {print $2; exit}')"
+  if [[ -z "$version" ]]; then
+    return 1
+  fi
+  if [[ "$version" == 1.* ]]; then
+    echo "${version#1.}" | cut -d. -f1
+  else
+    echo "${version%%.*}"
+  fi
+}
+
+function detect_java_home() {
+  # Resolve JAVA_HOME for target major version using common env vars or macOS helper.
+  local target="$1"
+  local java_home=""
+  local var
+
+  if [[ "$target" == "8" ]]; then
+    for var in JAVA_HOME_8 JAVA_HOME_8_X64 JAVA_HOME_1_8 JAVA_HOME_1_8_X64; do
+      if [[ -n "${!var:-}" ]]; then
+        java_home="${!var}"
+        break
+      fi
+    done
+  elif [[ "$target" == "17" ]]; then
+    for var in JAVA_HOME_17 JAVA_HOME_17_X64; do
+      if [[ -n "${!var:-}" ]]; then
+        java_home="${!var}"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "$java_home" ]] && command -v /usr/libexec/java_home >/dev/null 2>&1; then
+    if [[ "$target" == "8" ]]; then
+      java_home="$(/usr/libexec/java_home -v 1.8 2>/dev/null || true)"
+    else
+      java_home="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
+    fi
+  fi
+
+  if [[ -z "$java_home" ]] && [[ -n "${JAVA_HOME:-}" ]]; then
+    local current_major
+    if [[ -x "${JAVA_HOME}/bin/java" ]]; then
+      current_major="$(java_major "${JAVA_HOME}/bin/java" || true)"
+    else
+      current_major=""
+    fi
+    if [[ "$current_major" == "$target" ]]; then
+      java_home="$JAVA_HOME"
+    fi
+  fi
+
+  echo "$java_home"
+}
+
+function switch_jdk() {
+  # Update JAVA_HOME/PATH for the requested major version, fail fast if missing.
+  local target="$1"
+  local java_home
+
+  java_home="$(detect_java_home "$target")"
+  if [[ -z "$java_home" ]]; then
+    echo "JDK ${target} not found. Set JAVA_HOME_${target} or install JDK ${target}." >&2
+    exit 1
+  fi
+
+  export JAVA_HOME="$java_home"
+  export PATH="$JAVA_HOME/bin:$ORIGINAL_PATH"
+}
+
+function prepare_for_spark() {
+  # Spark 4.x requires Scala 2.13 + JDK 17; Spark 3.x uses Scala 2.12 + JDK 8.
+  local sparkver="$1"
+  if [[ "$sparkver" =~ ^spark-4\. ]]; then
+    SCALA_PROFILE=scala-2.13
+    switch_jdk 17
+  else
+    SCALA_PROFILE=scala-2.12
+    switch_jdk 8
+  fi
+}
+function run_maven_format() {
   if [[ "$CHECK" == "true" ]]; then
     "${PROJECT_DIR}"/build/mvn spotless:check compile test-compile scalafix:scalafix -Dscalafix.mode=CHECK -Dscalafix.skipTest=true -DskipBuildNative -P"${MODE}" -P"${SCALA_PROFILE}" "$@"
   else
     "${PROJECT_DIR}"/build/mvn spotless:apply compile test-compile scalafix:scalafix -DskipBuildNative -P"${MODE}" -P"${SCALA_PROFILE}" "$@"
   fi
+}
+
+function run_maven_compile() {
+  # Only compile/test-compile to avoid Spotless/scalafmt conflicts across Spark versions.
+  "${PROJECT_DIR}"/build/mvn compile test-compile -DskipBuildNative -P"${MODE}" -P"${SCALA_PROFILE}" "$@"
 }
 
 # check or format the rust code
@@ -48,16 +141,18 @@ else
   cargo fmt --all -q --
 fi
 
-# Check or format all code, including third-party code, with spark-3.5
+# Check or format all code, including third-party code, with spark-3.5 (formatting authority).
 sparkver=spark-3.5
+prepare_for_spark "${sparkver}"
 for celebornver in celeborn-0.5 celeborn-0.6
 do
-  run_maven -P"${sparkver}" -Pceleborn,"${celebornver}" -Puniffle,uniffle-0.10 -Ppaimon,paimon-1.2 -Pflink,flink-1.18 -Piceberg,iceberg-1.9
+  run_maven_format -P"${sparkver}" -Pceleborn,"${celebornver}" -Puniffle,uniffle-0.10 -Ppaimon,paimon-1.2 -Pflink-1.18 -Piceberg-1.10.1 -Phudi-0.15
 
 done
 
-sparkvers=(spark-3.0 spark-3.1 spark-3.2 spark-3.3 spark-3.4)
+sparkvers=(spark-3.0 spark-3.1 spark-3.2 spark-3.3 spark-3.4 spark-4.0 spark-4.1)
 for sparkver in "${sparkvers[@]}"
 do
-  run_maven -P"${sparkver}"
+  prepare_for_spark "${sparkver}"
+  run_maven_compile -P"${sparkver}"
 done

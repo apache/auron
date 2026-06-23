@@ -29,52 +29,12 @@ private[ui] class AuronAllExecutionsPage(parent: AuronSQLTab) extends WebUIPage(
 
   @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   override def render(request: javax.servlet.http.HttpServletRequest): Seq[Node] = {
-    val buildInfo = sqlStore.buildInfo()
-    val infos =
-      UIUtils.listingTable(propertyHeader, propertyRow, buildInfo.info, fixedWidth = true)
-    val summary: NodeSeq =
-      <div>
-        <div>
-          <span class="collapse-sql-properties collapse-table"
-                onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
-            <h4>
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Auron Build Information</a>
-            </h4>
-          </span>
-          <div class="sql-properties collapsible-table">
-            {infos}
-          </div>
-        </div>
-        <br/>
-      </div>
-
-    UIUtils.headerSparkPage(request, "Auron", summary, parent)
+    UIUtils.headerSparkPage(request, "Auron", buildInfoSummary(sqlStore.buildInfo()), parent)
   }
 
-  @sparkver("4.1")
+  @sparkver("4.0 / 4.1")
   override def render(request: jakarta.servlet.http.HttpServletRequest): Seq[Node] = {
-    val buildInfo = sqlStore.buildInfo()
-    val infos =
-      UIUtils.listingTable(propertyHeader, propertyRow, buildInfo.info, fixedWidth = true)
-    val summary: NodeSeq =
-      <div>
-        <div>
-          <span class="collapse-sql-properties collapse-table"
-                onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
-            <h4>
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Auron Build Information</a>
-            </h4>
-          </span>
-          <div class="sql-properties collapsible-table">
-            {infos}
-          </div>
-        </div>
-        <br/>
-      </div>
-
-    UIUtils.headerSparkPage(request, "Auron", summary, parent)
+    UIUtils.headerSparkPage(request, "Auron", buildInfoSummary(sqlStore.buildInfo()), parent)
   }
 
   private def propertyHeader = Seq("Name", "Value")
@@ -86,5 +46,35 @@ private[ui] class AuronAllExecutionsPage(parent: AuronSQLTab) extends WebUIPage(
       {kv._2}
     </td>
   </tr>
+
+  private def buildInfoSummary(buildInfoOpt: Option[AuronBuildInfoUIData]): NodeSeq = {
+    buildInfoOpt match {
+      case Some(buildInfo) =>
+        val infos =
+          UIUtils.listingTable(propertyHeader, propertyRow, buildInfo.info, fixedWidth = true)
+        <div>
+          <div>
+            <span class="collapse-sql-properties collapse-table"
+                  onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Auron Build Information</a>
+              </h4>
+            </span>
+            <div class="sql-properties collapsible-table">
+              {infos}
+            </div>
+          </div>
+          <br/>
+        </div>
+      case None =>
+        // Show a friendly empty state instead of failing or rendering a blank page.
+        <div>
+          <div class="alert alert-warning">
+            Auron build information is not available for this application.
+          </div>
+        </div>
+    }
+  }
 
 }

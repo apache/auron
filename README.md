@@ -20,21 +20,21 @@
 [![TPC-DS](https://github.com/apache/auron/actions/workflows/tpcds.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/tpcds.yml)
 [![master-amd64-builds](https://github.com/apache/auron/actions/workflows/build-amd64-releases.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/build-amd64-releases.yml)
 
-<p align="center"><img src="./dev/auron-logo.png" /></p>
+<p align="center"><img src="./dev/auron-logo.png" alt="Auron logo" /></p>
 
 The Auron accelerator for big data engines (e.g., Spark, Flink) leverages native vectorized execution to accelerate query processing. It combines
 the power of the [Apache DataFusion](https://arrow.apache.org/datafusion/) library and the scale of the distributed
 computing framework.
 
-Auron takes a fully optimized physical plan from distributed computing framework, mapping it into DataFusion's execution plan, and performs native
+Auron takes a fully optimized physical plan from a distributed computing framework, mapping it into DataFusion's execution plan, and performs native
 plan computation.
 
 The key capabilities of Auron include:
 
-- **Native execution**:  Implemented in Rust, eliminating JVM overhead and enabling predictable performance.
+- **Native execution**: Implemented in Rust, eliminating JVM overhead and enabling predictable performance.
 - **Vectorized computation**: Built on Apache Arrow's columnar format, fully leveraging SIMD instructions for batch processing.
-- **Pluggable architecture:**: Seamlessly integrates with Apache Spark while designed for future extensibility to other engines.
-- **Production-hardened optimizations:** Multi-level memory management, compacted shuffle formats, and adaptive execution strategies developed through large-scale deployment.
+- **Pluggable architecture**: Seamlessly integrates with Apache Spark while designed for future extensibility to other engines.
+- **Production-hardened optimizations**: Multi-level memory management, compacted shuffle formats, and adaptive execution strategies developed through large-scale deployment.
 
 Based on the inherent well-defined extensibility of DataFusion, Auron can be easily extended to support:
 
@@ -43,8 +43,8 @@ Based on the inherent well-defined extensibility of DataFusion, Auron can be eas
 - Simple and Aggregate functions.
 - File formats.
 
-We encourage you to extend [DataFusion](https://github.com/apache/arrow-datafusion) capability directly and add the
-supports in Auron with simple modifications in plan-serde and extension translation.
+We encourage you to extend [DataFusion](https://github.com/apache/arrow-datafusion) capability directly and add support in
+Auron with simple modifications in plan-serde and extension translation.
 
 ## Build from source
 
@@ -58,7 +58,7 @@ We recommend using [rustup](https://rustup.rs/) for installation.
 
 2. Install JDK
 
-Auron has been well tested with JDK 8, 11, and 17.
+Auron is regularly tested on JDK 8, 11, and 17, and is also tested on JDK 21.
 
 Make sure `JAVA_HOME` is properly set and points to your desired version.
 

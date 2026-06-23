@@ -209,7 +209,7 @@ impl ExecutionPlan for SortExec {
 
     fn statistics(&self) -> Result<Statistics> {
         Statistics::with_fetch(
-            self.input.statistics()?,
+            self.input.partition_statistics(None)?,
             self.schema(),
             self.limit,
             self.offset,
@@ -718,7 +718,7 @@ impl ExternalSorter {
             if !in_mem_blocks.is_empty() {
                 let mut merger = Merger::try_new(self.clone(), in_mem_blocks)?;
                 if self.skip > 0 {
-                    merger.skip_rows::<InMemRowsKeyCollector>(self.skip, output_batch_size);
+                    let _ = merger.skip_rows::<InMemRowsKeyCollector>(self.skip, output_batch_size);
                 }
                 while let Some((key_collector, pruned_batch)) =
                     merger.next::<InMemRowsKeyCollector>(output_batch_size)?
@@ -744,7 +744,7 @@ impl ExternalSorter {
         let spill_blocks = spills.into_iter().map(|spill| spill.block).collect();
         let mut merger = Merger::try_new(self.to_arc(), spill_blocks)?;
         if self.skip > 0 {
-            merger.skip_rows::<InMemRowsKeyCollector>(self.skip, output_batch_size);
+            let _ = merger.skip_rows::<InMemRowsKeyCollector>(self.skip, output_batch_size);
         }
         while let Some((key_collector, pruned_batch)) =
             merger.next::<InMemRowsKeyCollector>(output_batch_size)?
@@ -1580,6 +1580,7 @@ mod test {
 
 #[cfg(test)]
 mod fuzztest {
+    #![allow(deprecated)]
     use std::{sync::Arc, time::Instant};
 
     use arrow::{

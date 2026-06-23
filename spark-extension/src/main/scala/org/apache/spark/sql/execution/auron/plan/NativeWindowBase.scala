@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.sql.auron.NativeConverters
@@ -26,10 +26,14 @@ import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.CumeDist
 import org.apache.spark.sql.catalyst.expressions.DenseRank
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.Lead
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.NullsFirst
+import org.apache.spark.sql.catalyst.expressions.PercentRank
 import org.apache.spark.sql.catalyst.expressions.Rank
 import org.apache.spark.sql.catalyst.expressions.RowNumber
 import org.apache.spark.sql.catalyst.expressions.SortOrder
@@ -67,8 +71,7 @@ abstract class NativeWindowBase(
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
-      .filterKeys(Set("stage_id", "output_rows", "elapsed_compute"))
+      .getDefaultNativeMetrics(sparkContext, Set("stage_id", "output_rows", "elapsed_compute"))
       .toSeq: _*)
 
   override def output: Seq[Attribute] = groupLimit match {
@@ -88,6 +91,36 @@ abstract class NativeWindowBase(
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
+
+  private def leadIgnoreNulls(expr: Lead): Boolean =
+    expr.getClass.getMethods
+      .find(method => method.getName == "ignoreNulls" && method.getParameterCount == 0)
+      .exists(method => method.invoke(expr).asInstanceOf[Boolean])
+
+  private def invokeNoArg[T](expr: Expression, methodName: String): T =
+    expr.getClass.getMethod(methodName).invoke(expr).asInstanceOf[T]
+
+  private def isNthValue(expr: Expression): Boolean = expr.getClass.getSimpleName == "NthValue"
+
+  private def nthValueInput(expr: Expression): Expression = invokeNoArg[Expression](expr, "input")
+
+  private def nthValueOffset(expr: Expression): Expression =
+    invokeNoArg[Expression](expr, "offset")
+
+  private def nthValueIgnoreNulls(expr: Expression): Boolean =
+    invokeNoArg[Boolean](expr, "ignoreNulls")
+
+  private def nthValueOffsetLiteral(expr: Expression): Literal = {
+    val offset = nthValueOffset(expr)
+    offset match {
+      case literal: Literal => literal
+      case foldable if foldable.foldable =>
+        Literal.create(foldable.eval(), foldable.dataType)
+      case other =>
+        throw new NotImplementedError(
+          s"window function not supported: nth_value offset must be foldable, got: $other")
+    }
+  }
 
   private def nativeWindowExprs = windowExpression.map { named =>
     val field = NativeConverters.convertField(Util.getSchema(named :: Nil).fields(0))
@@ -117,6 +150,49 @@ abstract class NativeWindowBase(
               s"window frame not supported: ${spec.frameSpecification}")
             windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
             windowExprBuilder.setWindowFunc(pb.WindowFunction.DENSE_RANK)
+
+          case e: PercentRank =>
+            assert(
+              spec.frameSpecification == e.frame,
+              s"window frame not supported: ${spec.frameSpecification}")
+            assert(
+              spec.orderSpec.nonEmpty,
+              "window function not supported: percent_rank requires ORDER BY")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(pb.WindowFunction.PERCENT_RANK)
+          case e if isNthValue(e) =>
+            assert(
+              // Spark defaults ordered nth_value() to a RANGE frame. The current native executor
+              // only supports cumulative ROW frames, so keep the conversion scoped to the
+              // explicit ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW case.
+              spec.frameSpecification == RowNumber().frame, // only supports RowFrame(Unbounded, CurrentRow)
+              s"window frame not supported: ${spec.frameSpecification}")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(if (nthValueIgnoreNulls(e)) {
+              pb.WindowFunction.NTH_VALUE_IGNORE_NULLS
+            } else {
+              pb.WindowFunction.NTH_VALUE
+            })
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(nthValueInput(e)))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(nthValueOffsetLiteral(e)))
+
+          case e: Lead =>
+            assert(
+              spec.frameSpecification == e.frame,
+              s"window frame not supported: ${spec.frameSpecification}")
+            assert(!leadIgnoreNulls(e), "window function not supported: lead with IGNORE NULLS")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(pb.WindowFunction.LEAD)
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.input))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.offset))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.default))
+
+          case e: CumeDist =>
+            assert(
+              spec.frameSpecification == e.frame,
+              s"window frame not supported: ${spec.frameSpecification}")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(pb.WindowFunction.CUME_DIST)
 
           case e: Sum =>
             assert(

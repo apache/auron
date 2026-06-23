@@ -66,7 +66,9 @@ class UnifflePartitionWriter[K, V, C](
     val bufferManager = rssShuffleWriter.getBufferManager
     val restBlocks = bufferManager.clear()
     if (success && restBlocks != null && !restBlocks.isEmpty) {
-      rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, restBlocks)
+      rssShuffleWriter.synchronized {
+        rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, restBlocks)
+      }
     }
     val writeDurationMs = bufferManager.getWriteTime + (System.currentTimeMillis() - start)
     metrics.incWriteTime(TimeUnit.MILLISECONDS.toNanos(writeDurationMs))

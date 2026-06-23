@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.Partition
@@ -60,19 +60,20 @@ abstract class NativeBroadcastJoinBase(
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
-      .filterKeys(Set(
-        "stage_id",
-        "output_rows",
-        "elapsed_compute",
-        "probed_side_hash_time",
-        "probed_side_search_time",
-        "probed_side_compare_time",
-        "build_output_time",
-        "fallback_sort_merge_join_time",
-        "input_batch_count",
-        "input_batch_mem_size",
-        "input_row_count"))
+      .getDefaultNativeMetrics(
+        sparkContext,
+        Set(
+          "stage_id",
+          "output_rows",
+          "elapsed_compute",
+          "probed_side_hash_time",
+          "probed_side_search_time",
+          "probed_side_compare_time",
+          "build_output_time",
+          "fallback_sort_merge_join_time",
+          "input_batch_count",
+          "input_batch_mem_size",
+          "input_row_count"))
       .toSeq: _*)
 
   {

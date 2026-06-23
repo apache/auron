@@ -23,9 +23,9 @@ import java.util.concurrent.Future
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 import scala.concurrent.Promise
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.spark.OneToOneDependency
@@ -85,13 +85,35 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
   def getRunId: UUID
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
+      .getDefaultNativeMetrics(
+        sparkContext,
+        Set(
+          "stage_id",
+          "output_rows",
+          "output_batches",
+          "elapsed_compute",
+          "build_hash_map_time",
+          "probed_side_hash_time",
+          "probed_side_search_time",
+          "probed_side_compare_time",
+          "build_output_time",
+          "fallback_sort_merge_join_time",
+          "mem_spill_count",
+          "mem_spill_size",
+          "mem_spill_iotime",
+          "disk_spill_size",
+          "disk_spill_iotime",
+          "shuffle_write_total_time",
+          "shuffle_read_total_time",
+          "input_batch_count",
+          "input_row_count",
+          "input_batch_mem_size"))
       .toSeq :+
-      ("dataSize", SQLMetrics.createSizeMetric(sparkContext, "data size")) :+
-      ("numOutputRows", SQLMetrics.createMetric(sparkContext, "number of output rows")) :+
-      ("collectTime", SQLMetrics.createTimingMetric(sparkContext, "time to collect")) :+
-      ("buildTime", SQLMetrics.createTimingMetric(sparkContext, "time to build")) :+
-      ("broadcastTime", SQLMetrics.createTimingMetric(sparkContext, "time to broadcast")): _*)
+      ("dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")) :+
+      ("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) :+
+      ("collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect")) :+
+      ("buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build")) :+
+      ("broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast")): _*)
 
   override protected def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException(
@@ -268,7 +290,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
     }
   }
 
-  @sparkver("4.1")
+  @sparkver("4.0 / 4.1")
   private def getRelationFuture = {
     SQLExecution.withThreadLocalCaptured[Broadcast[Any]](
       this.session.sqlContext.sparkSession,

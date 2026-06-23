@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution.auron.plan
 import java.net.URI
 import java.security.PrivilegedExceptionAction
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.broadcast.Broadcast
@@ -143,7 +143,7 @@ abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
 
   override protected def doCanonicalize(): SparkPlan = basedHiveScan.canonicalized
 
-  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.1")
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def simpleString(maxFields: Int): String =
     s"$nodeName (${basedHiveScan.simpleString(maxFields)})"
 }
