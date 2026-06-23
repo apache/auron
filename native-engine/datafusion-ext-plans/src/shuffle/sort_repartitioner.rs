@@ -107,6 +107,7 @@ impl MemConsumer for SortShuffleRepartitioner {
         .await
         .expect("tokio spawn_blocking error")?;
         spills.push(spill);
+        drop(spills);
         self.update_mem_used(0).await?;
         Ok(())
     }
