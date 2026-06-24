@@ -31,6 +31,8 @@ import org.apache.auron.functions.AuronUDFWrapperContext;
  */
 public class FlinkAuronAdaptor extends AuronAdaptor {
 
+    private final AuronConfiguration auronFlinkConfig = new FlinkAuronConfiguration();
+
     @Override
     public void loadAuronLib() {
         String libName = System.mapLibraryName("auron");
@@ -64,7 +66,7 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
 
     @Override
     public AuronConfiguration getAuronConfiguration() {
-        return new FlinkAuronConfiguration();
+        return auronFlinkConfig;
     }
 
     @Override
