@@ -32,7 +32,9 @@ pub fn array_reverse(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         ColumnarValue::Array(array) => Ok(ColumnarValue::Array(reverse_list_array(
             downcast_any!(array, ListArray)?,
         )?)),
-        ColumnarValue::Scalar(scalar) if scalar.is_null() => Ok(ColumnarValue::Scalar(scalar.clone())),
+        ColumnarValue::Scalar(scalar) if scalar.is_null() => {
+            Ok(ColumnarValue::Scalar(scalar.clone()))
+        }
         ColumnarValue::Scalar(scalar) => match scalar.data_type() {
             DataType::List(_) => {
                 let array = scalar.to_array()?;
@@ -42,7 +44,7 @@ pub fn array_reverse(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                 )?))
             }
             data_type => df_execution_err!("array_reverse only supports list, got {data_type:?}"),
-        }
+        },
     }
 }
 
