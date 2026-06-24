@@ -20,6 +20,7 @@ import java.sql.Date
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.functions.{col, split}
 import org.apache.spark.sql.internal.SQLConf
 
 import org.apache.auron.util.AuronTestUtils
@@ -190,13 +191,44 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("split function with literal regex patterns") {
-    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
-      withTable("t1") {
-        sql("create table t1(c1 string, c2 string, c3 string) using parquet")
-        sql("insert into t1 values('a/b/c', 'a+b+c', 'a::b::c'), (null, null, null)")
-        checkSparkAnswerAndOperator(
-          "select split(c1, '/'), split(c2, '\\\\+'), split(c3, '::') from t1")
+    withTable("t1") {
+      sql("create table t1(c1 string, c2 string, c3 string) using parquet")
+      sql("insert into t1 values('a/b/c', 'a+b+c', 'a::b::c'), (null, null, null)")
+      checkSparkAnswerAndOperator { () =>
+        sql("select c1, c2, c3 from t1").select(
+          split(col("c1"), "/"),
+          split(col("c2"), "\\+"),
+          split(col("c3"), "::"))
       }
+    }
+  }
+
+  test("split function with regex patterns falls back to Spark") {
+    withTable("t1") {
+      sql("create table t1(c1 string, c2 string, c3 string) using parquet")
+      sql("insert into t1 values('abc', 'a+b+c', 'a.b.c'), (null, null, null)")
+      val df = checkSparkAnswerAndOperator(
+        () =>
+          sql("select c1, c2, c3 from t1").select(
+            split(col("c1"), ".+"),
+            split(col("c2"), "[+]"),
+            split(col("c3"), ".")),
+        requireNative = false)
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      assert(
+        plan.collectFirst { case op if !isNativeOrPassThrough(op) => op }.nonEmpty,
+        "regex split patterns should fall back to Spark")
+
+      val escapedBackslashDf = checkSparkAnswerAndOperator(
+        () => sql("select c2 from t1").select(split(col("c2"), "\\\\+")),
+        requireNative = false)
+      val escapedBackslashPlan = stripAQEPlan(escapedBackslashDf.queryExecution.executedPlan)
+      val escapedBackslashFallback = escapedBackslashPlan.collectFirst {
+        case op if !isNativeOrPassThrough(op) => op
+      }.nonEmpty
+      assert(
+        escapedBackslashFallback,
+        "split on repeated backslash regex should fall back to Spark")
     }
   }
 
