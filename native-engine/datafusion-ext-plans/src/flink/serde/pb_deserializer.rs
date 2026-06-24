@@ -2411,8 +2411,9 @@ mod tests {
         )
         .expect("Failed to create deserializer");
 
-        // Key: fill every row with id + scores, so that seen_tags.count_ones() == total_handlers,
-        // triggering O3 to skip the ensure_size path (under the current bug, list row slots are not finalized).
+        // Key: fill every row with id + scores, so that seen_tags.count_ones() ==
+        // total_handlers, triggering O3 to skip the ensure_size path (under the
+        // current bug, list row slots are not finalized).
         let messages = create_binary_array(vec![
             create_repeated_test_message(1, &[10, 11]),
             create_repeated_test_message(2, &[20, 21, 22]),
