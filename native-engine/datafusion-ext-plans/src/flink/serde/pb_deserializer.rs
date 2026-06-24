@@ -108,6 +108,13 @@ pub struct PbDeserializer {
     /// Uses Vec for tags 0..=63 (fast path) and HashMap for larger tags.
     tag_to_top_idx_vec: Vec<Option<u16>>,
     tag_to_top_idx_map: HashMap<u32, u16>,
+    /// C1 fix: whether any top-level pb_schema column is a List or Map. The O3
+    /// ensure_size skip is only sound for scalar/struct columns, which finalize
+    /// their own per-row slot. List/Map builders rely on ensure_size to append
+    /// their per-row offset/null entries (the per-value handlers only push to
+    /// the child values builder, never the parent). When this is true,
+    /// ensure_size must run every row regardless of how many tags were seen.
+    top_level_has_list_or_map: bool,
 }
 
 impl FlinkDeserializer for PbDeserializer {
@@ -121,8 +128,15 @@ impl FlinkDeserializer for PbDeserializer {
         // O5: inline cursor creation (avoid Vec<Cursor<&[u8]>> preallocation)
         // O7/C3 fix: replace `expect("message bytes must not be null")` with `?`
         //            so that JNI callers don't crash the JVM via process abort.
-        // O3: track which tags appear via a u64 bitmap (tag 1..63). Only call
-        //     ensure_size when not all schema tags were observed in this row.
+        // O3: track which tags appear via a u64 bitmap (tag 0..63). When all
+        //     schema tags were observed in a row, scalar/struct builders are
+        //     already aligned and ensure_size can be skipped for that row.
+        // C1 fix: the O3 skip is UNSOUND for top-level List/Map columns. Their
+        //     per-row offset/null slot is finalized only inside ensure_size —
+        //     the per-value handlers append to the child values builder, never
+        //     to the parent SharedListArrayBuilder/SharedMapArrayBuilder. So
+        //     when the schema has any top-level List/Map, ensure_size must run
+        //     every row (see `ensure_size_every_row` below).
         // NOTE on builder row-alignment invariant: every row, all builders must
         // be padded to length `row_idx + 1`. We therefore must NOT defer
         // ensure_size to after the loop — that would let later rows write
@@ -131,6 +145,7 @@ impl FlinkDeserializer for PbDeserializer {
         // fields (non-packed) emit multiple tag-value pairs for the same tag,
         // which would over-count. The bitmap correctly records unique tags.
         let total_handlers = self.value_handlers.len() as u32;
+        let ensure_size_every_row = self.top_level_has_list_or_map;
         // O10: track whether each top-level pb_schema column was ever written.
         // Columns that stay false short-circuit the null_count() scan after
         // finish(), since we know the array will be entirely null.
@@ -163,7 +178,7 @@ impl FlinkDeserializer for PbDeserializer {
                     skip_pb_value(&mut msg_cursor, tag, wired_type)?;
                 }
             }
-            if seen_tags.count_ones() < total_handlers {
+            if ensure_size_every_row || seen_tags.count_ones() < total_handlers {
                 (self.ensure_size)(row_idx + 1);
             }
         }
@@ -356,6 +371,13 @@ impl PbDeserializer {
             }
         }
 
+        // C1 fix: detect top-level List/Map columns that require ensure_size
+        // every row (their per-row slots are finalized only inside ensure_size).
+        let top_level_has_list_or_map = pb_schema
+            .fields()
+            .iter()
+            .any(|f| matches!(f.data_type(), DataType::List(_) | DataType::Map(_, _)));
+
         Ok(Self {
             output_schema,
             output_schema_without_meta,
@@ -366,6 +388,7 @@ impl PbDeserializer {
             msg_mapping,
             tag_to_top_idx_vec,
             tag_to_top_idx_map,
+            top_level_has_list_or_map,
         })
     }
 }
@@ -376,8 +399,8 @@ fn transfer_output_schema_to_pb_schema(
     nested_msg_mapping: &HashMap<String, String>,
     skip_fields: &[String],
 ) -> Result<SchemaRef> {
-    log::info!(
-        "[DEBUG] transfer_output_schema_to_pb_schema nested_msg_mapping: {:?}, output_schema fields: {:?}",
+    log::debug!(
+        "transfer_output_schema_to_pb_schema nested_msg_mapping: {:?}, output_schema fields: {:?}",
         nested_msg_mapping,
         output_schema
             .fields()
@@ -1261,6 +1284,10 @@ fn create_value_handler(
                         // upstream message could surface invalid UTF-8 in the
                         // resulting StringArray (downstream Arrow consumers
                         // typically tolerate this).
+                        debug_assert!(
+                            str::from_utf8(value).is_ok(),
+                            "protobuf string field contains invalid UTF-8"
+                        );
                         let s = unsafe { str::from_utf8_unchecked(value) };
                         array_builder.get_mut().append_value(s);
                     }));
@@ -1269,6 +1296,10 @@ fn create_value_handler(
                     return Ok(impl_for_bytes_builder!(string, |value: &[u8]| {
                         // O11/SAFETY: see above — protobuf 3 guarantees
                         // `string` payloads are UTF-8.
+                        debug_assert!(
+                            str::from_utf8(value).is_ok(),
+                            "protobuf string field contains invalid UTF-8"
+                        );
                         let s = unsafe { str::from_utf8_unchecked(value) };
                         array_builder.get_mut().append_value(s);
                     }));
@@ -1466,6 +1497,10 @@ fn create_value_handler(
 
                     return Ok(impl_for_message_builder!(|buf: &[u8]| -> Result<()> {
                         if buf.is_empty() {
+                            // C2 fix: pad the struct's child builders before
+                            // advancing the struct null buffer, so children
+                            // length stays aligned with the struct length.
+                            (sub_ensure_size.borrow_mut())(struct_builder.get_mut().len() + 1);
                             struct_builder.get_mut().append(false);
                         } else {
                             let mut sub_cursor = Cursor::new(buf);
@@ -1536,6 +1571,11 @@ fn create_value_handler(
                                 .get_mut::<SharedStructArrayBuilder>()
                                 .expect("SharedStructArrayBuilder is null");
                             if buf.is_empty() {
+                                // C2 fix: pad child builders before append(false)
+                                // to keep struct children aligned with the
+                                // struct length (symmetric with the non-empty
+                                // branch below).
+                                (sub_ensure_size.borrow_mut())(struct_builder.get_mut().len() + 1);
                                 struct_builder.get_mut().append(false);
                             } else {
                                 // 解析嵌套的 message
@@ -1993,6 +2033,75 @@ mod tests {
         buf
     }
 
+    fn create_repeated_test_descriptor() -> Vec<u8> {
+        let field_descriptors = vec![
+            FieldDescriptorProto {
+                name: Some("id".to_string()),
+                number: Some(1),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::Int32 as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("id".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+            FieldDescriptorProto {
+                name: Some("scores".to_string()),
+                number: Some(2),
+                label: Some(Label::Repeated as i32),
+                r#type: Some(Type::Int32 as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("scores".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+        ];
+
+        let message_descriptor = DescriptorProto {
+            name: Some("RepeatedMessage".to_string()),
+            field: field_descriptors,
+            extension: vec![],
+            nested_type: vec![],
+            enum_type: vec![],
+            extension_range: vec![],
+            oneof_decl: vec![],
+            options: None,
+            reserved_range: vec![],
+            reserved_name: vec![],
+        };
+
+        let file_descriptor = FileDescriptorProto {
+            name: Some("repeated_test.proto".to_string()),
+            package: Some("test".to_string()),
+            dependency: vec![],
+            public_dependency: vec![],
+            weak_dependency: vec![],
+            message_type: vec![message_descriptor],
+            enum_type: vec![],
+            service: vec![],
+            extension: vec![],
+            options: None,
+            source_code_info: None,
+            syntax: Some("proto3".to_string()),
+        };
+
+        let descriptor_set = FileDescriptorSet {
+            file: vec![file_descriptor],
+        };
+
+        let mut buf = Vec::new();
+        descriptor_set
+            .encode(&mut buf)
+            .expect("Failed to encode FileDescriptorSet");
+        buf
+    }
+
     fn create_test_message(id: i32, name: &str, score: f64, active: bool) -> Vec<u8> {
         use prost::encoding::*;
 
@@ -2043,6 +2152,39 @@ mod tests {
         encode_key(2, WireType::LengthDelimited, &mut buf);
         encode_varint(address_buf.len() as u64, &mut buf);
         buf.extend_from_slice(&address_buf);
+
+        buf
+    }
+
+    fn create_repeated_test_message(id: i32, scores: &[i32]) -> Vec<u8> {
+        use prost::encoding::*;
+
+        let mut buf = Vec::new();
+
+        encode_key(1, WireType::Varint, &mut buf);
+        encode_varint(id as u64, &mut buf);
+
+        for score in scores {
+            encode_key(2, WireType::Varint, &mut buf);
+            encode_varint(*score as u64, &mut buf);
+        }
+
+        buf
+    }
+
+    fn create_empty_nested_test_message(name: &str) -> Vec<u8> {
+        use prost::encoding::*;
+
+        let mut buf = Vec::new();
+
+        // name (field 1, string) —— present
+        encode_key(1, WireType::LengthDelimited, &mut buf);
+        encode_varint(name.len() as u64, &mut buf);
+        buf.extend_from_slice(name.as_bytes());
+
+        // address (field 2, message) —— present but length 0（空 sub-message）
+        encode_key(2, WireType::LengthDelimited, &mut buf);
+        encode_varint(0, &mut buf);
 
         buf
     }
@@ -2243,6 +2385,128 @@ mod tests {
             .expect("Failed to downcast city array to StringArray");
         assert_eq!(city_array.value(0), "New York");
         assert_eq!(city_array.value(1), "Los Angeles");
+    }
+
+    #[test]
+    fn test_parse_messages_with_repeated_field_all_tags_present() {
+        let descriptor_data = create_repeated_test_descriptor();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("serialized_kafka_records_partition", DataType::Int32, false),
+            Field::new("serialized_kafka_records_offset", DataType::Int64, false),
+            Field::new("serialized_kafka_records_timestamp", DataType::Int64, false),
+            Field::new("id", DataType::Int32, true),
+            Field::new(
+                "scores",
+                DataType::List(Arc::new(Field::new("scores", DataType::Int32, true))),
+                true,
+            ),
+        ]));
+
+        let mut deserializer = PbDeserializer::new(
+            descriptor_data,
+            "RepeatedMessage",
+            schema,
+            &HashMap::new(),
+            &[],
+        )
+        .expect("Failed to create deserializer");
+
+        // Key: fill every row with id + scores, so that seen_tags.count_ones() == total_handlers,
+        // triggering O3 to skip the ensure_size path (under the current bug, list row slots are not finalized).
+        let messages = create_binary_array(vec![
+            create_repeated_test_message(1, &[10, 11]),
+            create_repeated_test_message(2, &[20, 21, 22]),
+        ]);
+        let partitions = create_partition_array(vec![0, 0]);
+        let offsets = create_offset_array(vec![100, 101]);
+        let timestamps = create_timestamp_array(vec![1000, 1001]);
+
+        let batch = deserializer
+            .parse_messages_with_kafka_meta(&messages, &partitions, &offsets, &timestamps)
+            .expect("Failed to deserialize repeated message");
+
+        assert_eq!(batch.num_rows(), 2);
+        let scores = batch
+            .column(4)
+            .as_any()
+            .downcast_ref::<ListArray>()
+            .expect("Failed to downcast scores array to ListArray");
+        assert_eq!(scores.len(), 2);
+
+        let row0 = scores.value(0);
+        let row0_values = row0
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("Failed to downcast row0 scores to Int32Array");
+        assert_eq!(row0_values.values(), &[10, 11]);
+
+        let row1 = scores.value(1);
+        let row1_values = row1
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("Failed to downcast row1 scores to Int32Array");
+        assert_eq!(row1_values.values(), &[20, 21, 22]);
+    }
+
+    #[test]
+    fn test_parse_messages_with_empty_struct_message_all_tags_present() {
+        let descriptor_data = create_nested_test_descriptor();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("serialized_kafka_records_partition", DataType::Int32, false),
+            Field::new("serialized_kafka_records_offset", DataType::Int64, false),
+            Field::new("serialized_kafka_records_timestamp", DataType::Int64, false),
+            Field::new("name", DataType::Utf8, true),
+            Field::new("street", DataType::Utf8, true),
+            Field::new("city", DataType::Utf8, true),
+        ]));
+
+        let mut nested_mapping = HashMap::new();
+        nested_mapping.insert("street".to_string(), "address.street".to_string());
+        nested_mapping.insert("city".to_string(), "address.city".to_string());
+
+        let mut deserializer =
+            PbDeserializer::new(descriptor_data, "Person", schema, &nested_mapping, &[])
+                .expect("Failed to create deserializer");
+
+        // Both name and address tags are present (address being an empty sub-message),
+        // triggering the empty struct branch + the O3 all-fields-hit path.
+        let messages = create_binary_array(vec![
+            create_empty_nested_test_message("Alice"),
+            create_empty_nested_test_message("Bob"),
+        ]);
+        let partitions = create_partition_array(vec![0, 0]);
+        let offsets = create_offset_array(vec![200, 201]);
+        let timestamps = create_timestamp_array(vec![2000, 2001]);
+
+        let batch = deserializer
+            .parse_messages_with_kafka_meta(&messages, &partitions, &offsets, &timestamps)
+            .expect("Failed to deserialize empty nested message");
+
+        assert_eq!(batch.num_rows(), 2);
+
+        let street = batch
+            .column(4)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("Failed to downcast street array to StringArray");
+        assert_eq!(street.len(), 2);
+        // C2: the empty sub-message pads children to align with the struct
+        // length. `ensure_output_array_builders_size` pads String children
+        // with a non-null default (""), consistent with how absent fields are
+        // already handled everywhere else — so street is non-null empty.
+        assert_eq!(street.null_count(), 0);
+        assert_eq!(street.value(0), "");
+        assert_eq!(street.value(1), "");
+
+        let city = batch
+            .column(5)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("Failed to downcast city array to StringArray");
+        assert_eq!(city.len(), 2);
+        assert_eq!(city.null_count(), 0);
+        assert_eq!(city.value(0), "");
+        assert_eq!(city.value(1), "");
     }
 
     #[test]
