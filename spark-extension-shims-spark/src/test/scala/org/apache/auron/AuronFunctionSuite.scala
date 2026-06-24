@@ -209,10 +209,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       sql("insert into t1 values('abc', 'a+b+c', 'a.b.c'), (null, null, null)")
       val df = checkSparkAnswerAndOperator(
         () =>
-          sql("select c1, c2, c3 from t1").select(
-            split(col("c1"), ".+"),
-            split(col("c2"), "[+]"),
-            split(col("c3"), ".")),
+          sql("select c1, c2, c3 from t1")
+            .select(split(col("c1"), ".+"), split(col("c2"), "[+]"), split(col("c3"), ".")),
         requireNative = false)
       val plan = stripAQEPlan(df.queryExecution.executedPlan)
       assert(
