@@ -22,6 +22,9 @@ github:
     - spark
     - datafusion
     - arrow
+  copilot_code_review:
+    enabled: true
+    review_on_push: true
   enabled_merge_buttons:
     squash: true
     squash_commit_message: PR_TITLE_AND_DESC
