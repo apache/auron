@@ -573,9 +573,6 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             }
 
             if (configEntry == null) {
-                // Auron's own options are not registered in Spark's ConfigEntry registry, so the
-                // alt keys must be passed as the synthesized entry's alternatives list. Otherwise
-                // ConfigEntry#readString only reads the primary key and the alt keys are ignored.
                 configEntry = new ConfigEntryWithDefaultFunction<>(
                         sparkConfKey,
                         Option.empty(),
