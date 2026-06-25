@@ -27,7 +27,7 @@ import org.apache.spark.internal.config.ConfigEntry;
 import org.apache.spark.internal.config.ConfigEntryWithDefaultFunction;
 import org.apache.spark.sql.internal.SQLConf;
 import scala.Option;
-import scala.collection.immutable.List$;
+import scala.collection.mutable.ListBuffer;
 
 /**
  * Spark configuration proxy for Auron.
@@ -561,13 +561,15 @@ public class SparkAuronConfiguration extends AuronConfiguration {
 
         synchronized (SparkAuronConfiguration.class) {
             String sparkConfKey = key.startsWith(SPARK_PREFIX) ? key : SPARK_PREFIX + key;
+            ListBuffer<String> sparkConfAltKeys = new ListBuffer<>();
+
             configEntry = ConfigEntry.findEntry(sparkConfKey);
             for (String altKey : altKeys) {
                 String sparkConfAltKey = altKey.startsWith(SPARK_PREFIX) ? altKey : SPARK_PREFIX + altKey;
-                if (configEntry != null) {
-                    break;
+                sparkConfAltKeys.$plus$eq(sparkConfAltKey);
+                if (configEntry == null) {
+                    configEntry = ConfigEntry.findEntry(sparkConfAltKey);
                 }
-                configEntry = ConfigEntry.findEntry(sparkConfAltKey);
             }
 
             if (configEntry == null) {
@@ -575,7 +577,7 @@ public class SparkAuronConfiguration extends AuronConfiguration {
                         sparkConfKey,
                         Option.empty(),
                         "",
-                        List$.MODULE$.empty(),
+                        sparkConfAltKeys.toList(),
                         defaultValueSupplier::get,
                         val -> valueConverter(val, valueClass),
                         String::valueOf,
