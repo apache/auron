@@ -18,7 +18,6 @@ package org.apache.flink.table.planner.plan.nodes.exec.stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,8 +27,10 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
 import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
+import org.apache.auron.jni.AuronAdaptor;
 import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.FFIReaderExecNode;
 import org.apache.auron.protobuf.FilterExecNode;
@@ -445,60 +446,32 @@ class StreamExecCalcTest {
     }
 
     /**
-     * Runs {@code action} with the strict-mode {@code flink-conf.yaml} test resource pointed at
-     * by {@code FLINK_CONF_DIR}. The file disables fallback so the operator throws on conversion
-     * failure. Restores the prior environment after the action runs.
+     * Runs {@code action} with fallback disabled by mutating the cached {@link
+     * FlinkAuronConfiguration}'s backing {@link Configuration} in place.
      *
-     * <p>{@link org.apache.auron.flink.configuration.FlinkAuronConfiguration} resolves its
-     * underlying Flink config via {@link org.apache.flink.configuration.GlobalConfiguration#loadConfiguration()},
-     * which consults the {@code FLINK_CONF_DIR} environment variable; flipping that pointer is
-     * the supported way to swap configurations across test cases.
+     * <p>{@link AuronAdaptor#getInstance()} returns a process-wide singleton {@code
+     * FlinkAuronAdaptor} whose {@code FlinkAuronConfiguration} is constructed once (its backing
+     * Flink config loaded once at that point), so flipping {@code FLINK_CONF_DIR} no longer
+     * reloads it. Instead we reach into the cached config and set
+     * {@code flink.auron.failback.flink.engine.enabled=false} directly — the Flink {@link
+     * Configuration} is a mutable map, so the {@code final} field reference need not change. The
+     * key is removed in {@code finally}, restoring the default-loaded state (key absent →
+     * {@code getOptional} empty → default {@code true}) so later tests observe the cached default.
      */
     private static <T> T withStrictModeConf(java.util.concurrent.Callable<T> action) throws Exception {
-        java.net.URL yaml =
-                StreamExecCalcTest.class.getClassLoader().getResource("strict-mode-flink-conf/flink-conf.yaml");
-        assertNotNull(yaml, "strict-mode-flink-conf/flink-conf.yaml test resource must exist");
-        String confDir = new java.io.File(yaml.getFile()).getParentFile().getAbsolutePath();
-        String previous = System.getenv(org.apache.flink.configuration.ConfigConstants.ENV_FLINK_CONF_DIR);
-        java.util.Map<String, String> env = new java.util.HashMap<>(System.getenv());
-        env.put(org.apache.flink.configuration.ConfigConstants.ENV_FLINK_CONF_DIR, confDir);
-        mutateEnv(env);
+        FlinkAuronConfiguration auronConfig =
+                (FlinkAuronConfiguration) AuronAdaptor.getInstance().getAuronConfiguration();
+        Field f = FlinkAuronConfiguration.class.getDeclaredField("flinkConfig");
+        f.setAccessible(true);
+        Configuration flinkConfig = (Configuration) f.get(auronConfig);
+
+        final String key =
+                FlinkAuronConfiguration.FLINK_PREFIX + FlinkAuronConfiguration.FAIL_BACK_FLINK_ENGINE_ENABLED.key();
+        flinkConfig.setBoolean(key, false);
         try {
             return action.call();
         } finally {
-            java.util.Map<String, String> restore = new java.util.HashMap<>(System.getenv());
-            if (previous == null) {
-                restore.remove(org.apache.flink.configuration.ConfigConstants.ENV_FLINK_CONF_DIR);
-            } else {
-                restore.put(org.apache.flink.configuration.ConfigConstants.ENV_FLINK_CONF_DIR, previous);
-            }
-            mutateEnv(restore);
-        }
-    }
-
-    /** Reflectively replaces the JVM's environment map. Test-only — based on the same pattern
-     * used by {@code CommonTestUtils.setEnv} in {@code auron-flink-runtime}. */
-    @SuppressWarnings("unchecked")
-    private static void mutateEnv(java.util.Map<String, String> newEnv) {
-        try {
-            java.util.Map<String, String> currentEnv = System.getenv();
-            Field f = currentEnv.getClass().getDeclaredField("m");
-            f.setAccessible(true);
-            java.util.Map<String, String> backing = (java.util.Map<String, String>) f.get(currentEnv);
-            backing.clear();
-            backing.putAll(newEnv);
-            try {
-                Class<?> peClass = Class.forName("java.lang.ProcessEnvironment");
-                Field ci = peClass.getDeclaredField("theCaseInsensitiveEnvironment");
-                ci.setAccessible(true);
-                java.util.Map<String, String> cienv = (java.util.Map<String, String>) ci.get(null);
-                cienv.clear();
-                cienv.putAll(newEnv);
-            } catch (NoSuchFieldException ignored) {
-                // theCaseInsensitiveEnvironment is Windows-only.
-            }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+            flinkConfig.removeKey(key);
         }
     }
 
