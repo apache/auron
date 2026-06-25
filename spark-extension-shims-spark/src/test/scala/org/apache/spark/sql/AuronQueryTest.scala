@@ -60,7 +60,25 @@ abstract class AuronQueryTest
     }
 
     val dfAuron = dataframe()
-    checkAnswer(dfAuron, expected)
+
+    // Canonicalize NaN before comparing. The IEEE-754 NaN bit pattern (sign/payload) is
+    // implementation-defined, so semantically-equal NaNs produced by vanilla Spark and the
+    // native engine may differ in their raw bits; QueryTest compares doubles via
+    // Double.doubleToRawLongBits, which would otherwise flag them as mismatches.
+    def canonicalizeNaN(rows: Seq[Row]): Seq[Row] = rows.map { row =>
+      Row.fromSeq(row.toSeq.map {
+        case d: Double if d.isNaN => Double.NaN
+        case f: Float if f.isNaN => Float.NaN
+        case other => other
+      })
+    }
+
+    QueryTest
+      .sameRows(canonicalizeNaN(expected), canonicalizeNaN(dfAuron.collect()))
+      .foreach(msg => fail(s"""
+             |Results do not match for query:
+             |${dfAuron.queryExecution}
+             |$msg""".stripMargin))
 
     if (requireNative) {
       val plan = stripAQEPlan(dfAuron.queryExecution.executedPlan)

@@ -550,19 +550,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   test("acosh null propagation") {
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")
-      sql("insert into t1 values(null), (1.0), (2.0)")
-      // null propagates to null; in-domain values must match vanilla Spark exactly.
+      sql("insert into t1 values(null), (0.0), (1.0), (2.0)")
       checkSparkAnswerAndOperator("select acosh(c1) from t1")
-    }
-    // Out-of-domain input (acosh is defined on [1, inf)) yields NaN. The IEEE-754 NaN
-    // bit pattern (sign/payload) is implementation-defined: vanilla Spark and the native
-    // engine emit different NaN encodings, and QueryTest compares doubles via
-    // Double.doubleToRawLongBits. So assert NaN-ness here rather than exact equality.
-    withTable("t2") {
-      sql("create table t2(c1 double) using parquet")
-      sql("insert into t2 values(0.0)")
-      val result = sql("select acosh(c1) from t2").collect()
-      assert(result.length == 1 && java.lang.Double.isNaN(result(0).getDouble(0)))
     }
   }
 
