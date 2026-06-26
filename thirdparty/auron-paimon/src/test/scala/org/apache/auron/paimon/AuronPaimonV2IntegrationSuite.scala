@@ -209,11 +209,60 @@ class AuronPaimonV2IntegrationSuite
     }
   }
 
+  test("paimon v2 native scan supports file-level metadata columns") {
+    withTable("paimon.db.t_metadata") {
+      sql("create table paimon.db.t_metadata (id int, v string) using paimon")
+      sql("insert into paimon.db.t_metadata values (1, 'a')")
+
+      checkSparkAnswerAndNativePaimonScan(
+        "select id, __paimon_file_path, __paimon_bucket from paimon.db.t_metadata")
+    }
+  }
+
+  test("paimon v2 native scan supports metadata columns with table partitions") {
+    withTable("paimon.db.t_metadata_part") {
+      sql("""
+            |create table paimon.db.t_metadata_part (id int, v string, p string)
+            |using paimon
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into paimon.db.t_metadata_part values (1, 'a', 'p1'), (2, 'b', 'p2')")
+
+      checkSparkAnswerAndNativePaimonScan(
+        "select p, __paimon_file_path, id, __paimon_bucket from paimon.db.t_metadata_part")
+    }
+  }
+
+  test("paimon v2 native scan falls back for unsupported metadata columns") {
+    withTable("paimon.db.t_metadata_unsupported") {
+      sql("create table paimon.db.t_metadata_unsupported (id int, v string) using paimon")
+      sql("insert into paimon.db.t_metadata_unsupported values (1, 'a')")
+
+      val df = sql("select id, __paimon_row_index from paimon.db.t_metadata_unsupported")
+      val plan = df.queryExecution.executedPlan.toString()
+
+      assert(!plan.contains("NativePaimonV2TableScan"))
+      assert(df.collect().length === 1)
+    }
+  }
+        
   private def assertNativePaimonScanApplied(df: DataFrame): Unit = {
     val plan = df.queryExecution.executedPlan.toString()
     assert(
       plan.contains("NativePaimonV2TableScan"),
       s"plan should use native paimon scan:\n$plan")
+  }
+
+  private def checkSparkAnswerAndNativePaimonScan(sqlText: String): DataFrame = {
+    var expected: Seq[Row] = Nil
+    withSQLConf("spark.auron.enable.paimon.scan" -> "false") {
+      expected = sql(sqlText).collect().toSeq
+    }
+
+    val df = sql(sqlText)
+    checkAnswer(df, expected)
+    assertNativePaimonScanApplied(df)
+    df
   }
 
   private def executedNativeScan(df: DataFrame): NativePaimonV2TableScanExec = {
