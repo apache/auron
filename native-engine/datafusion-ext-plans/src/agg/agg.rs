@@ -27,6 +27,7 @@ use crate::agg::{
     AggFunction,
     acc::AccColumnRef,
     avg::AggAvg,
+    bitwise::{AggBitAnd, AggBitOr, AggBitXor},
     bloom_filter::AggBloomFilter,
     brickhouse,
     collect::{AggCollectList, AggCollectSet},
@@ -211,6 +212,18 @@ pub fn create_agg(
         AggFunction::FirstIgnoresNull => {
             let dt = children[0].data_type(input_schema)?;
             Arc::new(AggFirstIgnoresNull::try_new(children[0].clone(), dt)?)
+        }
+        AggFunction::BitAnd => {
+            let dt = children[0].data_type(input_schema)?;
+            Arc::new(AggBitAnd::try_new(children[0].clone(), dt)?)
+        }
+        AggFunction::BitOr => {
+            let dt = children[0].data_type(input_schema)?;
+            Arc::new(AggBitOr::try_new(children[0].clone(), dt)?)
+        }
+        AggFunction::BitXor => {
+            let dt = children[0].data_type(input_schema)?;
+            Arc::new(AggBitXor::try_new(children[0].clone(), dt)?)
         }
         AggFunction::BloomFilter => {
             let dt = children[0].data_type(input_schema)?;

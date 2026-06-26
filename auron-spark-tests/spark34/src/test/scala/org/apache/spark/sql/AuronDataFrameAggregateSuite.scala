@@ -21,7 +21,7 @@ import scala.util.Random
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.auron.plan.NativeAggBase
-import org.apache.spark.sql.functions.{collect_list, monotonically_increasing_id, rand, randn, spark_partition_id, sum}
+import org.apache.spark.sql.functions.{collect_list, expr, monotonically_increasing_id, rand, randn, spark_partition_id, sum}
 import org.apache.spark.sql.internal.SQLConf
 
 class AuronDataFrameAggregateSuite extends DataFrameAggregateSuite with SparkQueryTestsBase {
@@ -74,5 +74,38 @@ class AuronDataFrameAggregateSuite extends DataFrameAggregateSuite with SparkQue
       spark_partition_id(),
       rand(Random.nextLong()),
       randn(Random.nextLong())).foreach(assertNoExceptions)
+  }
+
+  testAuron("native bit_and / bit_or / bit_xor aggregate") {
+    // bit_* are integral-only, skip nulls, and are order-independent
+    // (associative + commutative), so the grouped result is deterministic.
+    //   k=1: v = [3, 5, 1]      => bit_and=1, bit_or=7, bit_xor=7
+    //   k=2: v = [12, null, 10] => bit_and=8, bit_or=14, bit_xor=6
+    //   k=3: v = [null, null]   => bit_and=null, bit_or=null, bit_xor=null
+    val df = Seq[(Int, Option[Int])](
+      (1, Some(3)),
+      (1, Some(5)),
+      (1, Some(1)),
+      (2, Some(12)),
+      (2, None),
+      (2, Some(10)),
+      (3, None),
+      (3, None))
+      .toDF("k", "v")
+
+    val aggDF = df
+      .groupBy("k")
+      .agg(
+        expr("bit_and(v)").as("ba"),
+        expr("bit_or(v)").as("bo"),
+        expr("bit_xor(v)").as("bx"))
+
+    checkAnswer(aggDF, Seq(Row(1, 1, 7, 7), Row(2, 8, 14, 6), Row(3, null, null, null)))
+
+    // the aggregate must be offloaded to the native engine
+    assert(getExecutedPlan(aggDF).exists {
+      case _: NativeAggBase => true
+      case _ => false
+    })
   }
 }
