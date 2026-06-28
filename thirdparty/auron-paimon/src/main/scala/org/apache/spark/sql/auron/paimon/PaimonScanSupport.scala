@@ -115,8 +115,11 @@ object PaimonScanSupport extends Logging {
       logDebug("Skip native Paimon scan: unsupported column data type in read schema.")
       return None
     }
+    val physicalColumnSet = table.schema().fieldNames().asScala.toSet
+    def isPhysicalColumn(name: String): Boolean = containsName(physicalColumnSet, name)
     val unsupportedMetadataColumns = readSchema.fields.filter { f =>
-      isPaimonMetadataColumn(f.name) && !isSupportedMetadataColumn(f.name)
+      !isPhysicalColumn(f.name) && isPaimonMetadataColumn(f.name) && !isSupportedMetadataColumn(
+        f.name)
     }
     if (unsupportedMetadataColumns.nonEmpty) {
       logDebug(
@@ -125,9 +128,10 @@ object PaimonScanSupport extends Logging {
       return None
     }
 
-    val partitionKeys = table.schema().partitionKeys().asScala.toSet
+    val partitionKeySet = table.schema().partitionKeys().asScala.toSet
     def isPartitionValueField(name: String): Boolean =
-      containsName(partitionKeys, name) || isSupportedMetadataColumn(name)
+      containsName(partitionKeySet, name) ||
+        (!isPhysicalColumn(name) && isSupportedMetadataColumn(name))
     val partitionFields = readSchema.fields.filter(f => isPartitionValueField(f.name))
     val fileFields = readSchema.fields.filterNot(f => isPartitionValueField(f.name))
     val partitionSchema = StructType(partitionFields)
@@ -168,20 +172,28 @@ object PaimonScanSupport extends Logging {
 
     val partitionRowType = table.schema().logicalPartitionType()
     val partitionConverter = new RowDataToObjectArrayConverter(partitionRowType)
+    val partitionKeys = table.schema().partitionKeys().asScala.toSeq
+    val filePathMetadataIndex = partitionSchema.fields.indexWhere { field =>
+      isFilePathMetadataColumn(field.name)
+    }
 
     val files = splits.flatMap { split =>
+      val partitionValueTemplate = if (partitionSchema.isEmpty) {
+        Array.empty[Any]
+      } else {
+        toPartitionValueTemplate(
+          partitionConverter.convert(split.partition()),
+          partitionRowType,
+          partitionSchema,
+          partitionKeys,
+          split.bucket())
+      }
       split.dataFiles().asScala.map { dataFile =>
         val filePath = s"${split.bucketPath()}/${dataFile.fileName()}"
         val partitionValues = if (partitionSchema.isEmpty) {
           InternalRow.empty
         } else {
-          toPartitionRow(
-            partitionConverter.convert(split.partition()),
-            partitionRowType,
-            partitionSchema,
-            table.schema().partitionKeys().asScala.toSeq,
-            filePath,
-            split.bucket())
+          toPartitionRow(partitionValueTemplate, filePathMetadataIndex, filePath)
         }
         PaimonFile(filePath, dataFile.fileSize(), partitionValues)
       }
@@ -209,24 +221,23 @@ object PaimonScanSupport extends Logging {
 
   private def isPaimonMetadataColumn(name: String): Boolean = {
     containsName(PaimonMetadataColumns, name) ||
-      name.toLowerCase(Locale.ROOT).startsWith(PaimonMetadataColumnPrefix)
+    name.toLowerCase(Locale.ROOT).startsWith(PaimonMetadataColumnPrefix)
   }
 
-  // Build constants for partition columns and supported file-level metadata columns in
+  // Build split-invariant constants for partition columns and supported metadata columns in
   // partitionSchema order. Paimon's DataConverter preserves Catalyst representations for typed
   // partition values such as dates, timestamps, decimals and binary.
-  private def toPartitionRow(
+  private def toPartitionValueTemplate(
       paimonValues: Array[AnyRef],
       partitionRowType: RowType,
       partitionSchema: StructType,
       partitionKeys: Seq[String],
-      filePath: String,
-      bucket: Int): InternalRow = {
+      bucket: Int): Array[Any] = {
     val resolver = SQLConf.get.resolver
     val indexByName = partitionKeys.zipWithIndex.toMap
-    InternalRow.fromSeq(partitionSchema.fields.map { field =>
+    partitionSchema.fields.map { field =>
       if (isFilePathMetadataColumn(field.name)) {
-        UTF8String.fromString(filePath)
+        null
       } else if (isBucketMetadataColumn(field.name)) {
         bucket
       } else {
@@ -240,7 +251,20 @@ object PaimonScanSupport extends Logging {
           null
         }
       }
-    })
+    }
+  }
+
+  private def toPartitionRow(
+      partitionValueTemplate: Array[Any],
+      filePathMetadataIndex: Int,
+      filePath: String): InternalRow = {
+    if (filePathMetadataIndex < 0) {
+      InternalRow.fromSeq(partitionValueTemplate)
+    } else {
+      val partitionValues = partitionValueTemplate.clone()
+      partitionValues(filePathMetadataIndex) = UTF8String.fromString(filePath)
+      InternalRow.fromSeq(partitionValues)
+    }
   }
 
   private def collectSplits(partitions: Seq[InputPartition]): Option[Seq[DataSplit]] = {

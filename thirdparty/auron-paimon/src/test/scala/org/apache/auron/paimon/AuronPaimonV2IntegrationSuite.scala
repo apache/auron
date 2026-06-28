@@ -219,6 +219,30 @@ class AuronPaimonV2IntegrationSuite
     }
   }
 
+  test("paimon v2 native scan supports metadata-only projection") {
+    withTable("paimon.db.t_metadata_only") {
+      sql("create table paimon.db.t_metadata_only (id int, v string) using paimon")
+      sql("insert into paimon.db.t_metadata_only values (1, 'a'), (2, 'b')")
+
+      checkSparkAnswerAndNativePaimonScan(
+        "select __paimon_file_path from paimon.db.t_metadata_only")
+    }
+  }
+
+  test("paimon v2 native scan reads physical columns that share metadata names") {
+    withTable("paimon.db.t_metadata_name_collision") {
+      sql("""
+            |create table paimon.db.t_metadata_name_collision
+            |(`__paimon_bucket` int, id int)
+            |using paimon
+            |""".stripMargin)
+      sql("insert into paimon.db.t_metadata_name_collision values (10, 1), (20, 2)")
+
+      checkSparkAnswerAndNativePaimonScan(
+        "select `__paimon_bucket`, id from paimon.db.t_metadata_name_collision")
+    }
+  }
+
   test("paimon v2 native scan supports metadata columns with table partitions") {
     withTable("paimon.db.t_metadata_part") {
       sql("""
@@ -245,7 +269,7 @@ class AuronPaimonV2IntegrationSuite
       assert(df.collect().length === 1)
     }
   }
-        
+
   private def assertNativePaimonScanApplied(df: DataFrame): Unit = {
     val plan = df.queryExecution.executedPlan.toString()
     assert(
@@ -253,7 +277,7 @@ class AuronPaimonV2IntegrationSuite
       s"plan should use native paimon scan:\n$plan")
   }
 
-  private def checkSparkAnswerAndNativePaimonScan(sqlText: String): DataFrame = {
+  private def checkSparkAnswerAndNativePaimonScan(sqlText: String): Unit = {
     var expected: Seq[Row] = Nil
     withSQLConf("spark.auron.enable.paimon.scan" -> "false") {
       expected = sql(sqlText).collect().toSeq
@@ -262,7 +286,6 @@ class AuronPaimonV2IntegrationSuite
     val df = sql(sqlText)
     checkAnswer(df, expected)
     assertNativePaimonScanApplied(df)
-    df
   }
 
   private def executedNativeScan(df: DataFrame): NativePaimonV2TableScanExec = {
