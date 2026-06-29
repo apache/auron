@@ -22,9 +22,13 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
+import org.apache.paimon.spark.PaimonInputPartition
+import org.apache.paimon.table.source.DataSplit
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.auron.paimon.PaimonScanSupport
 import org.apache.spark.sql.execution.auron.plan.NativePaimonV2TableScanExec
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 
 class AuronPaimonV2IntegrationSuite
@@ -223,9 +227,70 @@ class AuronPaimonV2IntegrationSuite
     withTable("paimon.db.t_metadata_only") {
       sql("create table paimon.db.t_metadata_only (id int, v string) using paimon")
       sql("insert into paimon.db.t_metadata_only values (1, 'a'), (2, 'b')")
+      sql("insert into paimon.db.t_metadata_only values (3, 'c'), (4, 'd')")
 
-      checkSparkAnswerAndNativePaimonScan(
-        "select __paimon_file_path from paimon.db.t_metadata_only")
+      withSQLConf(
+        "spark.sql.files.maxPartitionBytes" -> "256",
+        "spark.sql.files.openCostInBytes" -> "1") {
+        checkSparkAnswerAndNativePaimonScan(
+          "select __paimon_file_path from paimon.db.t_metadata_only")
+      }
+    }
+  }
+
+  test(
+    "paimon v2 native scan planning supports metadata across multiple data files in one split") {
+    withTable("paimon.db.t_metadata_multi_file_split") {
+      sql("""
+            |create table paimon.db.t_metadata_multi_file_split (id int, v string)
+            |using paimon
+            |tblproperties (
+            |  'source.split.target-size' = '1 gb',
+            |  'source.split.open-file-cost' = '1 b'
+            |)
+            |""".stripMargin)
+      withSQLConf("spark.sql.shuffle.partitions" -> "2") {
+        spark
+          .range(0, 20)
+          .repartition(2)
+          .selectExpr("cast(id as int) as id", "cast(id as string) as v")
+          .writeTo("paimon.db.t_metadata_multi_file_split")
+          .append()
+      }
+
+      val sqlText =
+        "select id, v, __paimon_file_path, __paimon_bucket " +
+          "from paimon.db.t_metadata_multi_file_split"
+      withSQLConf("spark.sql.files.minPartitionNum" -> "1") {
+        var expected: Seq[Row] = Nil
+        withSQLConf("spark.auron.enable.paimon.scan" -> "false") {
+          expected = sql(sqlText).collect().toSeq
+        }
+        assert(
+          expected.map(_.getString(2)).distinct.size > 1,
+          s"expected rows from multiple data files, got $expected")
+
+        val df = sql(sqlText)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.sparkPlan
+        val batchScan = plan.collectFirst { case scan: BatchScanExec => scan }
+        assert(batchScan.nonEmpty, s"expected BatchScanExec in spark plan:\n$plan")
+        val splits = paimonDataSplits(batchScan.get)
+        assert(
+          splits.exists(_.dataFiles().size() > 1),
+          s"expected at least one Paimon split with multiple data files, got " +
+            s"${splits.map(_.dataFiles().size()).mkString("[", ", ", "]")}")
+
+        val scanPlan = PaimonScanSupport.plan(batchScan.get)
+        assert(scanPlan.nonEmpty, s"expected native Paimon scan plan for:\n$batchScan")
+        val filePathIndex = scanPlan.get.partitionSchema.fieldIndex("__paimon_file_path")
+        val plannedFilePaths = scanPlan.get.files.map { file =>
+          file.partitionValues.getUTF8String(filePathIndex).toString
+        }
+        assert(
+          plannedFilePaths.distinct.size > 1,
+          s"expected per-file metadata paths in native scan plan, got $plannedFilePaths")
+      }
     }
   }
 
@@ -243,6 +308,26 @@ class AuronPaimonV2IntegrationSuite
     }
   }
 
+  test("paimon v2 native scan reads partition columns that share metadata names") {
+    withTable("paimon.db.t_metadata_partition_name_collision") {
+      sql("""
+            |create table paimon.db.t_metadata_partition_name_collision
+            |(`__paimon_bucket` int, `__paimon_file_path` string, id int)
+            |using paimon
+            |partitioned by (`__paimon_bucket`, `__paimon_file_path`)
+            |""".stripMargin)
+      sql("""
+            |insert into paimon.db.t_metadata_partition_name_collision values
+            |(10, 'path-a', 1),
+            |(20, 'path-b', 2)
+            |""".stripMargin)
+
+      checkSparkAnswerAndNativePaimonScan(
+        "select `__paimon_bucket`, `__paimon_file_path`, id " +
+          "from paimon.db.t_metadata_partition_name_collision")
+    }
+  }
+
   test("paimon v2 native scan supports metadata columns with table partitions") {
     withTable("paimon.db.t_metadata_part") {
       sql("""
@@ -250,10 +335,40 @@ class AuronPaimonV2IntegrationSuite
             |using paimon
             |partitioned by (p)
             |""".stripMargin)
-      sql("insert into paimon.db.t_metadata_part values (1, 'a', 'p1'), (2, 'b', 'p2')")
+      sql("insert into paimon.db.t_metadata_part values (1, 'a', 'p1'), (2, 'b', '50%')")
 
       checkSparkAnswerAndNativePaimonScan(
         "select p, __paimon_file_path, id, __paimon_bucket from paimon.db.t_metadata_part")
+    }
+  }
+
+  test("paimon v2 native scan supports non-zero bucket metadata columns") {
+    withTable("paimon.db.t_metadata_bucketed") {
+      sql("""
+            |create table paimon.db.t_metadata_bucketed (id int, v string)
+            |using paimon
+            |tblproperties (
+            |  'primary-key' = 'id',
+            |  'bucket' = '2',
+            |  'full-compaction.delta-commits' = '1'
+            |)
+            |""".stripMargin)
+      sql(
+        "insert into paimon.db.t_metadata_bucketed " +
+          "select cast(id as int), cast(id as string) from range(0, 100)")
+
+      var expected: Seq[Row] = Nil
+      withSQLConf("spark.auron.enable.paimon.scan" -> "false") {
+        expected =
+          sql("select id, __paimon_bucket from paimon.db.t_metadata_bucketed").collect().toSeq
+      }
+      assert(
+        expected.exists(_.getInt(1) != 0),
+        s"expected at least one non-zero Paimon bucket, got $expected")
+
+      val df = sql("select id, __paimon_bucket from paimon.db.t_metadata_bucketed")
+      checkAnswer(df, expected)
+      assertNativePaimonScanApplied(df)
     }
   }
 
@@ -289,10 +404,21 @@ class AuronPaimonV2IntegrationSuite
   }
 
   private def executedNativeScan(df: DataFrame): NativePaimonV2TableScanExec = {
-    val nativeScan = df.queryExecution.executedPlan.collectFirst {
-      case scan: NativePaimonV2TableScanExec => scan
-    }
-    assert(nativeScan.nonEmpty, "expected NativePaimonV2TableScanExec in executed plan")
+    val plan = df.queryExecution.executedPlan
+    val nativeScan = plan.collectFirst { case scan: NativePaimonV2TableScanExec => scan }
+    assert(nativeScan.nonEmpty, s"expected NativePaimonV2TableScanExec in executed plan:\n$plan")
     nativeScan.get
+  }
+
+  private def paimonDataSplits(batchScan: BatchScanExec): Seq[DataSplit] = {
+    batchScan.scan.toBatch.planInputPartitions().toSeq.flatMap { partition =>
+      assert(
+        partition.isInstanceOf[PaimonInputPartition],
+        s"expected Paimon input partition, got $partition")
+      partition
+        .asInstanceOf[PaimonInputPartition]
+        .splits
+        .collect { case split: DataSplit => split }
+    }
   }
 }
