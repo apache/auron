@@ -1220,6 +1220,8 @@ object AuronConverters extends Logging {
         true
       case exec if exec.nodeName == "NativeIcebergTableScan" =>
         true
+      case exec if exec.nodeName == "NativePaimonV2TableScan" =>
+        true
       case _: ConvertToNativeBase => needRenameColumns(plan.children.head)
       case exec if NativeHelper.isNative(exec) =>
         NativeHelper.getUnderlyingNativePlan(exec).output != plan.output

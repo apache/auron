@@ -102,6 +102,25 @@ class AuronPaimonV2IntegrationSuite
     }
   }
 
+  test("paimon v2 native scan supports native filter on renamed output columns") {
+    withTable("paimon.db.t_rename_columns") {
+      sql("create table paimon.db.t_rename_columns (id int, v string) using paimon")
+      sql("insert into paimon.db.t_rename_columns values (1, 'a'), (2, 'b')")
+
+      withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+        val df = sql("select id from paimon.db.t_rename_columns where id = 1")
+        assertNativePaimonScanApplied(df)
+
+        val plan = df.queryExecution.executedPlan
+        assert(
+          plan.exists(_.nodeName == "NativeFilter"),
+          s"expected a native filter consuming the Paimon scan:\n$plan")
+
+        checkAnswer(df, Seq(Row(1)))
+      }
+    }
+  }
+
   test("paimon v2 native scan supports COW primary-key table") {
     withTable("paimon.db.t_cow") {
       sql("""
