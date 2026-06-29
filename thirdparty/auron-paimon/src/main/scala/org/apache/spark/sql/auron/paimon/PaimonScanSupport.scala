@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.reflect.MethodUtils
+import org.apache.paimon.fs.Path
 import org.apache.paimon.spark.DataConverter
 import org.apache.paimon.spark.schema.PaimonMetadataColumn
 import org.apache.paimon.table.FileStoreTable
@@ -128,7 +129,8 @@ object PaimonScanSupport extends Logging {
       return None
     }
 
-    val partitionKeySet = table.schema().partitionKeys().asScala.toSet
+    val partitionKeys = table.schema().partitionKeys().asScala.toSeq
+    val partitionKeySet = partitionKeys.toSet
     def isPartitionValueField(name: String): Boolean =
       containsName(partitionKeySet, name) ||
         (!isPhysicalColumn(name) && isSupportedMetadataColumn(name))
@@ -172,9 +174,16 @@ object PaimonScanSupport extends Logging {
 
     val partitionRowType = table.schema().logicalPartitionType()
     val partitionConverter = new RowDataToObjectArrayConverter(partitionRowType)
-    val partitionKeys = table.schema().partitionKeys().asScala.toSeq
+    val partitionKeyIndexByName = partitionKeys.zipWithIndex.toMap
+    val resolver = SQLConf.get.resolver
+    val partitionFieldIndexes = partitionSchema.fields.map { field =>
+      partitionKeyIndexByName
+        .find { case (k, _) => resolver(k, field.name) }
+        .map(_._2)
+        .getOrElse(-1)
+    }
     val filePathMetadataIndex = partitionSchema.fields.indexWhere { field =>
-      isFilePathMetadataColumn(field.name)
+      !isPhysicalColumn(field.name) && isFilePathMetadataColumn(field.name)
     }
 
     val files = splits.flatMap { split =>
@@ -185,17 +194,20 @@ object PaimonScanSupport extends Logging {
           partitionConverter.convert(split.partition()),
           partitionRowType,
           partitionSchema,
-          partitionKeys,
+          partitionFieldIndexes,
           split.bucket())
       }
       split.dataFiles().asScala.map { dataFile =>
-        val filePath = s"${split.bucketPath()}/${dataFile.fileName()}"
+        val rawFilePath = dataFile
+          .externalPath()
+          .orElse(s"${split.bucketPath()}/${dataFile.fileName()}")
+        val metadataFilePath = new Path(rawFilePath).toUri.toString
         val partitionValues = if (partitionSchema.isEmpty) {
           InternalRow.empty
         } else {
-          toPartitionRow(partitionValueTemplate, filePathMetadataIndex, filePath)
+          toPartitionRow(partitionValueTemplate, filePathMetadataIndex, metadataFilePath)
         }
-        PaimonFile(filePath, dataFile.fileSize(), partitionValues)
+        PaimonFile(rawFilePath, dataFile.fileSize(), partitionValues)
       }
     }
 
@@ -231,25 +243,23 @@ object PaimonScanSupport extends Logging {
       paimonValues: Array[AnyRef],
       partitionRowType: RowType,
       partitionSchema: StructType,
-      partitionKeys: Seq[String],
+      partitionFieldIndexes: Array[Int],
       bucket: Int): Array[Any] = {
-    val resolver = SQLConf.get.resolver
-    val indexByName = partitionKeys.zipWithIndex.toMap
-    partitionSchema.fields.map { field =>
-      if (isFilePathMetadataColumn(field.name)) {
+    partitionSchema.fields.zip(partitionFieldIndexes).map { case (field, partitionColumnIndex) =>
+      if (partitionColumnIndex >= 0 && partitionColumnIndex < paimonValues.length) {
+        if (paimonValues(partitionColumnIndex) == null) {
+          null
+        } else {
+          DataConverter.fromPaimon(
+            paimonValues(partitionColumnIndex),
+            partitionRowType.getTypeAt(partitionColumnIndex))
+        }
+      } else if (isFilePathMetadataColumn(field.name)) {
         null
       } else if (isBucketMetadataColumn(field.name)) {
         bucket
       } else {
-        val idx = indexByName
-          .find { case (k, _) => resolver(k, field.name) }
-          .map(_._2)
-          .getOrElse(-1)
-        if (idx >= 0 && idx < paimonValues.length && paimonValues(idx) != null) {
-          DataConverter.fromPaimon(paimonValues(idx), partitionRowType.getTypeAt(idx))
-        } else {
-          null
-        }
+        null
       }
     }
   }
