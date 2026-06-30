@@ -182,7 +182,11 @@ object IcebergScanSupport extends Logging {
     }
 
     val format = formats.headOption.getOrElse(FileFormat.PARQUET)
-    if (format != FileFormat.PARQUET && format != FileFormat.ORC) {
+    // ORC cannot match Iceberg columns by field-id yet, so any historical top-level
+    // rename/drop may make older ORC files unsafe for native name/position matching.
+    val supportedFormat =
+      format == FileFormat.PARQUET || (format == FileFormat.ORC && !renameOrDrop.topLevel)
+    if (!supportedFormat) {
       return None
     }
 
@@ -195,7 +199,8 @@ object IcebergScanSupport extends Logging {
         readSchema,
         fileSchema,
         partitionSchema,
-        pruningPredicates))
+        pruningPredicates,
+        fieldIdsByName))
   }
 
   private def planChangelogScan(exec: BatchScanExec, scan: Scan): Option[IcebergScanPlan] = {
@@ -215,7 +220,8 @@ object IcebergScanSupport extends Logging {
           readSchema,
           fileSchema,
           partitionSchema,
-          Seq.empty))
+          Seq.empty,
+          Map.empty))
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
@@ -253,11 +259,6 @@ object IcebergScanSupport extends Logging {
     if (format != FileFormat.PARQUET && format != FileFormat.ORC) {
       return None
     }
-    // ORC cannot match Iceberg columns by field-id yet, so any historical top-level
-    // rename/drop may make older ORC files unsafe for native name/position matching.
-    if (format == FileFormat.ORC && renameOrDrop.topLevel) {
-      return None
-    }
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
     val nativeTasks = addedRowsTasks.map(task => toNativeScanTask(task, partitionSchema))
@@ -269,7 +270,7 @@ object IcebergScanSupport extends Logging {
         fileSchema,
         partitionSchema,
         pruningPredicates,
-        fieldIdsByName))
+        Map.empty))
   }
 
   private def supportedSchemas(
