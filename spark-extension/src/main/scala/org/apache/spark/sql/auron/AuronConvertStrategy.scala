@@ -71,7 +71,9 @@ object AuronConvertStrategy extends Logging {
           if (!exec.getTagValue(neverConvertReasonTag).isDefined) {
             exec.setTagValue(
               neverConvertReasonTag,
-              s"${exec.getClass.getSimpleName} is not supported yet.")
+              converted
+                .getTagValue(neverConvertReasonTag)
+                .getOrElse(s"${exec.getClass.getSimpleName} is not supported yet."))
           }
       }
       danglingChildren = newDangling :+ converted
