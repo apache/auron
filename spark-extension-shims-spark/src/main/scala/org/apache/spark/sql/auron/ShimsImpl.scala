@@ -1022,6 +1022,18 @@ class ShimsImpl extends Shims with Logging {
       size: Long): PartitionedFile =
     PartitionedFile(partitionValues, filePath, offset, size)
 
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3")
+  override def getPartitionedFilePathString(file: PartitionedFile): String = {
+    import org.apache.hadoop.fs.Path
+    import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
+
+    // Spark 3.0-3.3 PartitionedFile.filePath is URI-encoded.
+    file.filePath
+      .split(Path.SEPARATOR, -1)
+      .map(ExternalCatalogUtils.unescapePathName)
+      .mkString(Path.SEPARATOR)
+  }
+
   @sparkver("3.4 / 3.5 / 4.0 / 4.1")
   override def getPartitionedFile(
       partitionValues: InternalRow,
@@ -1032,6 +1044,10 @@ class ShimsImpl extends Shims with Logging {
     import org.apache.spark.paths.SparkPath
     PartitionedFile(partitionValues, SparkPath.fromPath(new Path(filePath)), offset, size)
   }
+
+  @sparkver("3.4 / 3.5 / 4.0 / 4.1")
+  override def getPartitionedFilePathString(file: PartitionedFile): String =
+    file.toPath.toString
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def getMinPartitionNum(sparkSession: SparkSession): Int =
