@@ -25,6 +25,27 @@ import org.apache.auron.util.AuronTestUtils
 class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
   import testImplicits._
 
+  test("config alt keys are honored") {
+    // AURON_ENABLED has primary key "spark.auron.enabled" and alt key "spark.auron.enable".
+    // Setting either key must take effect (primary takes precedence over alt).
+    withSQLConf("spark.auron.enabled" -> "false") {
+      assert(!SparkAuronConfiguration.AURON_ENABLED.get())
+    }
+    withSQLConf("spark.auron.enable" -> "false") {
+      assert(!SparkAuronConfiguration.AURON_ENABLED.get())
+    }
+    withSQLConf("spark.auron.enabled" -> "true") {
+      assert(SparkAuronConfiguration.AURON_ENABLED.get())
+    }
+    withSQLConf("spark.auron.enable" -> "true") {
+      assert(SparkAuronConfiguration.AURON_ENABLED.get())
+    }
+    // Primary key wins when both are set to conflicting values.
+    withSQLConf("spark.auron.enabled" -> "true", "spark.auron.enable" -> "false") {
+      assert(SparkAuronConfiguration.AURON_ENABLED.get())
+    }
+  }
+
   test("test partition path has url encoded character") {
     withTable("t1") {
       sql(

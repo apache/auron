@@ -616,8 +616,16 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   test("acosh null propagation") {
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")
-      sql("insert into t1 values(null), (0.0), (1.0), (2.0)")
+      sql("insert into t1 values(null), (1.0), (2.0)")
       checkSparkAnswerAndOperator("select acosh(c1) from t1")
+    }
+    withTable("t2") {
+      sql("create table t2(c1 double) using parquet")
+      sql("insert into t2 values(0.0), (-1.0)")
+      // acosh is defined on [1, inf), so out-of-domain inputs yield NaN. Vanilla Spark and the
+      // native engine may encode that NaN with different bits (checkSparkAnswerAndOperator
+      // compares doubles by raw bits), so compare NaN-ness via the natively-supported isnan.
+      checkSparkAnswerAndOperator("select isnan(acosh(c1)) from t2")
     }
   }
 
