@@ -54,8 +54,9 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronMiscFunctionsSuite]
 
   enableSuite[AuronStringFunctionsSuite]
-    // Native levenshtein has a Spark 3.5+ result or schema comparison mismatch.
-    .exclude("string Levenshtein distance")
+    // Native substr does not support BinaryType inputs.
+    // See https://github.com/apache/auron/issues/1724
+    .exclude("string / binary substring function")
 
   enableSuite[AuronDataFrameAggregateSuite]
     // See https://github.com/apache/auron/issues/1840

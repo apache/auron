@@ -79,6 +79,7 @@ pub fn create_auron_ext_function(
         "Spark_StringLower" => Arc::new(spark_strings::string_lower),
         "Spark_StringUpper" => Arc::new(spark_strings::string_upper),
         "Spark_Substring" => Arc::new(spark_strings::spark_substring),
+        "Spark_Levenshtein" => Arc::new(spark_strings::spark_levenshtein),
         "Spark_InitCap" => Arc::new(spark_initcap::string_initcap),
         "Spark_Year" => Arc::new(spark_dates::spark_year),
         "Spark_Month" => Arc::new(spark_dates::spark_month),

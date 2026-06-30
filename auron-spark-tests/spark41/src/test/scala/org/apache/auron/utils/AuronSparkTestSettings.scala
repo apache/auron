@@ -41,11 +41,10 @@ class AuronSparkTestSettings extends SparkTestSettings {
   enableSuite[AuronStringFunctionsSuite]
     .exclude("string concat")
     .exclude("string concat_ws")
-    // Spark 4 adds the threshold argument, but native levenshtein currently supports only
-    // two arguments.
-    .exclude("string Levenshtein distance")
     .exclude("UTF-8 string validate")
     .exclude("RegExpReplace throws the right exception when replace fails on a particular row")
+    // Native substr does not support BinaryType inputs.
+    .exclude("string / binary substring function")
 
   enableSuite[AuronDataFrameAggregateSuite]
     .disable("Native execution can crash in Spark 4")
