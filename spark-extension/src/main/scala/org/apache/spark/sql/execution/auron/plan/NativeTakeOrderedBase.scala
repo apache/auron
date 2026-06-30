@@ -21,9 +21,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.InternalRow
@@ -181,16 +183,19 @@ abstract class NativePartialTakeOrderedBase(
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeSortExprs = this.nativeSortExprs
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
 
     new NativeRDD(
       sparkContext,
       metrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil),
-      inputRDD.partitions,
-      inputRDD.partitioner,
-      new OneToOneDependency(inputRDD) :: Nil,
+      rddPartitions = nativePartitions.toArray,
+      rddPartitioner = inputRDD.partitioner,
+      rddDependencies = new OneToOneDependency(inputRDD) :: Nil,
       rddShuffleReadFull = false,
       (partition, taskContext) => {
-        val inputPartition = inputRDD.partitions(partition.index)
+        val inputPartition = partition.asInstanceOf[NativePartition[Partition]].payload
         val nativeTakeOrderedExec = SortExecNode
           .newBuilder()
           .setInput(inputRDD.nativePlan(inputPartition, taskContext))

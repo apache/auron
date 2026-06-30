@@ -43,7 +43,7 @@ import org.apache.auron.protobuf.FFIReaderExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.protobuf.Schema
 
-abstract class ConvertToNativeBase(override val child: SparkPlan)
+abstract class ConvertToNativeBase(@transient override val child: SparkPlan)
     extends UnaryExecNode
     with NativeSupports {
   override val nodeName: String = "ConvertToNative"

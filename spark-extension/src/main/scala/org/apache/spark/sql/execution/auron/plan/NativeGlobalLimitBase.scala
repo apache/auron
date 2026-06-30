@@ -18,10 +18,8 @@ package org.apache.spark.sql.execution.auron.plan
 
 import scala.collection.immutable.SortedMap
 
-import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.NativeHelper
-import org.apache.spark.sql.auron.NativeRDD
-import org.apache.spark.sql.auron.NativeSupports
+import org.apache.spark.{OneToOneDependency, Partition}
+import org.apache.spark.sql.auron.{NativeHelper, NativePartition, NativeRDD, NativeSupports}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.physical.AllTuples
@@ -52,16 +50,19 @@ abstract class NativeGlobalLimitBase(limit: Int, offset: Int, override val child
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
 
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      inputRDD.partitions,
-      inputRDD.partitioner,
-      new OneToOneDependency(inputRDD) :: Nil,
+      rddPartitions = nativePartitions.toArray,
+      rddPartitioner = inputRDD.partitioner,
+      rddDependencies = new OneToOneDependency(inputRDD) :: Nil,
       rddShuffleReadFull = false,
       (partition, taskContext) => {
-        val inputPartition = inputRDD.partitions(partition.index)
+        val inputPartition = partition.asInstanceOf[NativePartition[Partition]].payload
         val nativeLimitExec = LimitExecNode
           .newBuilder()
           .setInput(inputRDD.nativePlan(inputPartition, taskContext))

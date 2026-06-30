@@ -67,7 +67,9 @@ import org.apache.auron.{protobuf => pb, sparkver}
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.metric.SparkMetricNode
 
-abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val child: SparkPlan)
+abstract class NativeBroadcastExchangeBase(
+    @transient mode: BroadcastMode,
+    override val child: SparkPlan)
     extends BroadcastExchangeLike
     with NativeSupports {
 
@@ -241,7 +243,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
               metrics("dataSize") += byteArray.length
             })
 
-          val input = inputRDD.nativePlan(inputRDD.partitions(split.index), context)
+          val input = inputRDD.nativePlan(split, context)
           val nativeIpcWriterExec = pb.PhysicalPlanNode
             .newBuilder()
             .setIpcWriter(

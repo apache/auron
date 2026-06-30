@@ -36,7 +36,7 @@ import org.apache.auron.util.SparkVersionUtil
 class NativeRDD(
     @transient private val rddSparkContext: SparkContext,
     val metrics: SparkMetricNode,
-    private val rddPartitions: Array[Partition],
+    @transient private val rddPartitions: Array[Partition],
     private val rddPartitioner: Option[Partitioner],
     private val rddDependencies: Seq[Dependency[_]],
     private val rddShuffleReadFull: Boolean,
@@ -46,12 +46,12 @@ class NativeRDD(
     with Logging
     with Serializable {
 
-  // use serializable wrapper to avoid serializing nativePlan
-  val nativePlanWrapper = new NativePlanWrapper(nativePlan)
-
   if (friendlyName != null) {
     setName(friendlyName)
   }
+
+  // use serializable wrapper to avoid serializing nativePlan
+  val nativePlanWrapper = new NativePlanWrapper(nativePlan)
 
   def nativePlan(p: Partition, tc: TaskContext): PhysicalPlanNode = {
     nativePlanWrapper.plan(p, tc)
@@ -60,9 +60,10 @@ class NativeRDD(
   def isShuffleReadFull: Boolean = Shims.get.getRDDShuffleReadFull(this)
   Shims.get.setRDDShuffleReadFull(this, rddShuffleReadFull)
 
+  override val partitioner: Option[Partitioner] = rddPartitioner
+
   override protected def getPartitions: Array[Partition] = rddPartitions
   override protected def getDependencies: Seq[Dependency[_]] = rddDependencies
-  override val partitioner: Option[Partitioner] = rddPartitioner
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val computingNativePlan = nativePlanWrapper.plan(split, context)
@@ -100,6 +101,8 @@ class EmptyNativeRDD(@transient private val rddSparkContext: SparkContext)
   }
 
 }
+
+case class NativePartition[P](override val index: Int, payload: P) extends Partition {}
 
 class NativePlanWrapper(var p: (Partition, TaskContext) => PhysicalPlanNode)
     extends Serializable {

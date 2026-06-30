@@ -56,8 +56,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 
 abstract class NativeParquetInsertIntoHiveTableBase(
-    cmd: InsertIntoHiveTable,
-    override val child: SparkPlan)
+    @transient cmd: InsertIntoHiveTable,
+    @transient override val child: SparkPlan)
     extends UnaryExecNode
     with NativeSupports {
 

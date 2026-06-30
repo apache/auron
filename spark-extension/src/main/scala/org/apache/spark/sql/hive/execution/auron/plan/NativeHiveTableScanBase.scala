@@ -45,7 +45,7 @@ import org.apache.auron.{protobuf => pb}
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.sparkver
 
-abstract class NativeHiveTableScanBase(basedHiveScan: HiveTableScanExec)
+abstract class NativeHiveTableScanBase(@transient basedHiveScan: HiveTableScanExec)
     extends LeafExecNode
     with NativeSupports {
 

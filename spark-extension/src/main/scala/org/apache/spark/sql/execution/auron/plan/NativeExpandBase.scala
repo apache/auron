@@ -20,9 +20,11 @@ import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -75,16 +77,19 @@ abstract class NativeExpandBase(
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeSchema = this.nativeSchema
     val nativeProjections = this.nativeProjections
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
 
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      rddPartitions = inputRDD.partitions,
+      rddPartitions = nativePartitions.toArray,
       rddPartitioner = inputRDD.partitioner,
       rddDependencies = new OneToOneDependency(inputRDD) :: Nil,
       inputRDD.isShuffleReadFull,
       (partition, taskContext) => {
-        val inputPartition = inputRDD.partitions(partition.index)
+        val inputPartition = partition.asInstanceOf[NativePartition[Partition]].payload
         val nativeExpandExec = ExpandExecNode
           .newBuilder()
           .setInput(inputRDD.nativePlan(inputPartition, taskContext))

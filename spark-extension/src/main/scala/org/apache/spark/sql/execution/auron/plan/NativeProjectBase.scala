@@ -21,9 +21,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativeRDD
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.catalyst.analysis.ResolvedStar
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -71,16 +73,19 @@ abstract class NativeProjectBase(projectList: Seq[NamedExpression], override val
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeProject = this.nativeProject
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
 
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      rddPartitions = inputRDD.partitions,
+      rddPartitions = nativePartitions.toArray,
       rddPartitioner = inputRDD.partitioner,
       rddDependencies = new OneToOneDependency(inputRDD) :: Nil,
       inputRDD.isShuffleReadFull,
       (partition, taskContext) => {
-        val inputPartition = inputRDD.partitions(partition.index)
+        val inputPartition = partition.asInstanceOf[NativePartition[Partition]].payload
         val nativeProjectExec = nativeProject.toBuilder
           .setInput(inputRDD.nativePlan(inputPartition, taskContext))
           .build()
