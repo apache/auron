@@ -20,6 +20,7 @@ import java.sql.Date
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.functions.{col, split}
 import org.apache.spark.sql.internal.SQLConf
 
 import org.apache.auron.util.AuronTestUtils
@@ -92,6 +93,31 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |select hash(arr) from t1
           |""".stripMargin
       checkSparkAnswerAndOperator(functions)
+    }
+  }
+
+  test("flatten function with mixed child array nullability") {
+    withTable("t1") {
+      sql("""
+          |create table t1 using parquet as
+          |select
+          |  array(array(1, 2), array(3, cast(null as int)), array()) as ints,
+          |  array(array(named_struct('a', 1)), array(named_struct('a', 2))) as structs
+          |union all
+          |select
+          |  array(array(4), cast(null as array<int>)),
+          |  array(array(named_struct('a', 3)), cast(array() as array<struct<a:int>>))
+          |union all
+          |select
+          |  cast(array() as array<array<int>>),
+          |  cast(array() as array<array<struct<a:int>>>)
+          |union all
+          |select
+          |  cast(null as array<array<int>>),
+          |  cast(null as array<array<struct<a:int>>>)
+          |""".stripMargin)
+
+      checkSparkAnswerAndOperator("select flatten(ints), flatten(structs) from t1")
     }
   }
 
@@ -186,6 +212,46 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         sql("insert into t1 values('Auron Spark SQL')")
         checkSparkAnswerAndOperator("select regexp_extract(c1, '^A(.*)L$', 1) from t1")
       }
+    }
+  }
+
+  test("split function with literal regex patterns") {
+    withTable("t1") {
+      sql("create table t1(c1 string, c2 string, c3 string) using parquet")
+      sql("insert into t1 values('a/b/c', 'a+b+c', 'a::b::c'), (null, null, null)")
+      checkSparkAnswerAndOperator { () =>
+        sql("select c1, c2, c3 from t1").select(
+          split(col("c1"), "/"),
+          split(col("c2"), "\\+"),
+          split(col("c3"), "::"))
+      }
+    }
+  }
+
+  test("split function with regex patterns falls back to Spark") {
+    withTable("t1") {
+      sql("create table t1(c1 string, c2 string, c3 string) using parquet")
+      sql("insert into t1 values('abc', 'a+b+c', 'a.b.c'), (null, null, null)")
+      val df = checkSparkAnswerAndOperator(
+        () =>
+          sql("select c1, c2, c3 from t1")
+            .select(split(col("c1"), ".+"), split(col("c2"), "[+]"), split(col("c3"), ".")),
+        requireNative = false)
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      assert(
+        plan.collectFirst { case op if !isNativeOrPassThrough(op) => op }.nonEmpty,
+        "regex split patterns should fall back to Spark")
+
+      val escapedBackslashDf = checkSparkAnswerAndOperator(
+        () => sql("select c2 from t1").select(split(col("c2"), "\\\\+")),
+        requireNative = false)
+      val escapedBackslashPlan = stripAQEPlan(escapedBackslashDf.queryExecution.executedPlan)
+      val escapedBackslashFallback = escapedBackslashPlan.collectFirst {
+        case op if !isNativeOrPassThrough(op) => op
+      }.nonEmpty
+      assert(
+        escapedBackslashFallback,
+        "split on repeated backslash regex should fall back to Spark")
     }
   }
 
@@ -550,8 +616,16 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   test("acosh null propagation") {
     withTable("t1") {
       sql("create table t1(c1 double) using parquet")
-      sql("insert into t1 values(null), (0.0), (1.0), (2.0)")
+      sql("insert into t1 values(null), (1.0), (2.0)")
       checkSparkAnswerAndOperator("select acosh(c1) from t1")
+    }
+    withTable("t2") {
+      sql("create table t2(c1 double) using parquet")
+      sql("insert into t2 values(0.0), (-1.0)")
+      // acosh is defined on [1, inf), so out-of-domain inputs yield NaN. Vanilla Spark and the
+      // native engine may encode that NaN with different bits (checkSparkAnswerAndOperator
+      // compares doubles by raw bits), so compare NaN-ness via the natively-supported isnan.
+      checkSparkAnswerAndOperator("select isnan(acosh(c1)) from t2")
     }
   }
 

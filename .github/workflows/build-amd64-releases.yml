@@ -96,7 +96,7 @@ jobs:
             image: rockylinux8
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -121,7 +121,7 @@ jobs:
 
       - name: Cache auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
         id: cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: target-docker/auron-${{matrix.sparkver}}_${{matrix.scalaver}}-release-${{ env.osclassfier }}-${{ matrix.auronver }}.jar
           key: auron-${{matrix.sparkver}}_${{matrix.scalaver}}-release-${{ env.osclassfier }}-${{ matrix.auronver }}.jar

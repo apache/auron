@@ -19,6 +19,7 @@ use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
 use datafusion_ext_commons::df_unimplemented_err;
 
 mod brickhouse;
+mod spark_array;
 mod spark_bround;
 mod spark_check_overflow;
 mod spark_crypto;
@@ -63,6 +64,8 @@ pub fn create_auron_ext_function(
             Arc::new(spark_get_json_object::spark_get_parsed_json_object)
         }
         "Spark_ParseJson" => Arc::new(spark_get_json_object::spark_parse_json),
+        "Spark_ArrayReverse" => Arc::new(spark_array::array_reverse),
+        "Spark_ArrayFlatten" => Arc::new(spark_array::array_flatten),
         "Spark_MakeArray" => Arc::new(spark_make_array::array),
         "Spark_MapConcat" => Arc::new(spark_map::map_concat),
         "Spark_MapFromArrays" => Arc::new(spark_map::map_from_arrays),
@@ -75,6 +78,7 @@ pub fn create_auron_ext_function(
         "Spark_StringConcatWs" => Arc::new(spark_strings::string_concat_ws),
         "Spark_StringLower" => Arc::new(spark_strings::string_lower),
         "Spark_StringUpper" => Arc::new(spark_strings::string_upper),
+        "Spark_Substring" => Arc::new(spark_strings::spark_substring),
         "Spark_InitCap" => Arc::new(spark_initcap::string_initcap),
         "Spark_Year" => Arc::new(spark_dates::spark_year),
         "Spark_Month" => Arc::new(spark_dates::spark_month),

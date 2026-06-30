@@ -38,5 +38,5 @@ paste = { workspace = true }
 regex = "1.12.3"
 serde_json = { workspace = true }
 sonic-rs = { workspace = true }
-chrono = "0.4.44"
+chrono = "0.4.45"
 chrono-tz = "0.10.4"

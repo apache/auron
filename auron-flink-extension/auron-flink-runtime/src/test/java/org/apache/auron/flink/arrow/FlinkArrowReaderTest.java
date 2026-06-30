@@ -37,6 +37,9 @@ import org.apache.arrow.vector.SmallIntVector;
 import org.apache.arrow.vector.TimeMicroVector;
 import org.apache.arrow.vector.TimeStampMicroTZVector;
 import org.apache.arrow.vector.TimeStampMicroVector;
+import org.apache.arrow.vector.TimeStampMilliVector;
+import org.apache.arrow.vector.TimeStampNanoVector;
+import org.apache.arrow.vector.TimeStampSecVector;
 import org.apache.arrow.vector.TinyIntVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
@@ -430,6 +433,72 @@ public class FlinkArrowReaderTest {
             assertEquals(1_672_531_200_000L, ts.getMillisecond());
             assertEquals(123_000, ts.getNanoOfMillisecond());
             assertTrue(reader.read(1).isNullAt(0));
+
+            reader.close();
+            root.close();
+        }
+    }
+
+    @Test
+    public void testTimestampMilliVector() {
+        try (BufferAllocator allocator =
+                FlinkArrowUtils.ROOT_ALLOCATOR.newChildAllocator("testTsMilli", 0, Long.MAX_VALUE)) {
+            TimeStampMilliVector vec = new TimeStampMilliVector("col", allocator);
+            vec.allocateNew(1);
+            vec.setSafe(0, 1_773_662_580_000L); // 2026-03-16T12:03:00.000
+            vec.setValueCount(1);
+
+            VectorSchemaRoot root = new VectorSchemaRoot(Collections.singletonList(vec));
+            RowType rowType = RowType.of(new TimestampType(3));
+            FlinkArrowReader reader = FlinkArrowReader.create(root, rowType);
+
+            TimestampData ts = reader.read(0).getTimestamp(0, 3);
+            assertEquals(1_773_662_580_000L, ts.getMillisecond());
+            assertEquals(0, ts.getNanoOfMillisecond());
+
+            reader.close();
+            root.close();
+        }
+    }
+
+    @Test
+    public void testTimestampSecVector() {
+        try (BufferAllocator allocator =
+                FlinkArrowUtils.ROOT_ALLOCATOR.newChildAllocator("testTsSec", 0, Long.MAX_VALUE)) {
+            TimeStampSecVector vec = new TimeStampSecVector("col", allocator);
+            vec.allocateNew(1);
+            vec.setSafe(0, 1_773_662_580L); // 2026-03-16T12:03:00 (seconds)
+            vec.setValueCount(1);
+
+            VectorSchemaRoot root = new VectorSchemaRoot(Collections.singletonList(vec));
+            RowType rowType = RowType.of(new TimestampType(0));
+            FlinkArrowReader reader = FlinkArrowReader.create(root, rowType);
+
+            TimestampData ts = reader.read(0).getTimestamp(0, 0);
+            assertEquals(1_773_662_580_000L, ts.getMillisecond());
+            assertEquals(0, ts.getNanoOfMillisecond());
+
+            reader.close();
+            root.close();
+        }
+    }
+
+    @Test
+    public void testTimestampNanoVector() {
+        try (BufferAllocator allocator =
+                FlinkArrowUtils.ROOT_ALLOCATOR.newChildAllocator("testTsNano", 0, Long.MAX_VALUE)) {
+            TimeStampNanoVector vec = new TimeStampNanoVector("col", allocator);
+            vec.allocateNew(1);
+            vec.setSafe(0, 1_672_531_200_000_123_456L); // 2023-01-01T00:00:00.000123456
+            vec.setValueCount(1);
+
+            VectorSchemaRoot root = new VectorSchemaRoot(Collections.singletonList(vec));
+            RowType rowType = RowType.of(new TimestampType(9));
+            FlinkArrowReader reader = FlinkArrowReader.create(root, rowType);
+
+            TimestampData ts = reader.read(0).getTimestamp(0, 9);
+            assertEquals(1_672_531_200_000L, ts.getMillisecond());
+            assertEquals(123_456, ts.getNanoOfMillisecond());
 
             reader.close();
             root.close();

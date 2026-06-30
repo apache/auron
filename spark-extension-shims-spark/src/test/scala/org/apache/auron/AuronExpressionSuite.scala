@@ -33,11 +33,16 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("UnaryMinus") {
-    withTable("t1") {
-      sql("create table t1(col1 int) using parquet")
-      sql(
-        "insert into t1 values(1), (2), (3), (3), (-1), (0), (null), (2147483647), (-2147483648)")
-      checkSparkAnswerAndOperator("SELECT negative(col1), -(col1) FROM t1")
+    // Negating Int.MinValue overflows. Under ANSI mode (default in Spark 4.x) vanilla Spark
+    // throws while the native engine wraps, so the comparison diverges. Disable ANSI so both
+    // engines wrap consistently and the boundary value can still be exercised.
+    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+      withTable("t1") {
+        sql("create table t1(col1 int) using parquet")
+        sql(
+          "insert into t1 values(1), (2), (3), (3), (-1), (0), (null), (2147483647), (-2147483648)")
+        checkSparkAnswerAndOperator("SELECT negative(col1), -(col1) FROM t1")
+      }
     }
   }
 }

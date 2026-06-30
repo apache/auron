@@ -46,6 +46,7 @@ use datafusion_ext_commons::{df_execution_err, downcast_any};
 use datafusion_ext_plans::{
     common::execution_context::{ExecutionContext, cancel_all_tasks},
     ipc_writer_exec::IpcWriterExec,
+    orc_sink_exec::OrcSinkExec,
     parquet_sink_exec::ParquetSinkExec,
     shuffle_writer_exec::ShuffleWriterExec,
 };
@@ -156,6 +157,7 @@ impl NativeExecutionRuntime {
 
             // coalesce output stream if necessary
             if downcast_any!(execution_plan_cloned, EmptyExec).is_err()
+                && downcast_any!(execution_plan_cloned, OrcSinkExec).is_err()
                 && downcast_any!(execution_plan_cloned, ParquetSinkExec).is_err()
                 && downcast_any!(execution_plan_cloned, IpcWriterExec).is_err()
                 && downcast_any!(execution_plan_cloned, ShuffleWriterExec).is_err()
@@ -203,11 +205,12 @@ impl NativeExecutionRuntime {
         };
 
         let native_wrapper_cloned = native_wrapper.clone();
+        let is_finalizing_for_handler = is_finalizing.clone();
         let join_handle = tokio_runtime.spawn(async move {
             consume_stream.await.unwrap_or_else(|err| {
                 handle_unwinded_scope(|| {
                     let task_running = is_task_running();
-                    if !task_running {
+                    if !task_running || is_finalizing_for_handler.load(Ordering::Acquire) {
                         log::warn!("task completed before native execution done");
                         return Ok(());
                     }
@@ -269,11 +272,13 @@ impl NativeExecutionRuntime {
         match next_batch() {
             Ok(ret) => ret,
             Err(err) => {
-                let _ = set_error(
-                    &self.native_wrapper,
-                    &format!("poll record batch error: {err}"),
-                    None,
-                );
+                if !self.is_finalizing.load(Ordering::Acquire) {
+                    let _ = set_error(
+                        &self.native_wrapper,
+                        &format!("poll record batch error: {err}"),
+                        None,
+                    );
+                }
                 false
             }
         }
@@ -286,8 +291,9 @@ impl NativeExecutionRuntime {
         self.update_metrics().unwrap_or_default();
         drop(self.plan);
 
-        // Set finalizing flag before dropping receiver to allow graceful SendError
-        // handling
+        // Set finalizing flag before dropping receiver and native_wrapper to prevent
+        // concurrent set_error calls from next_batch/tokio workers from accessing a
+        // freed GlobalRef after finalize completes.
         self.is_finalizing.store(true, Ordering::Release);
         drop(self.batch_receiver);
 

@@ -25,6 +25,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.ExplainUtils.collectFirst
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
@@ -322,6 +324,33 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
           "hoodie.datasource.query.type" -> "snapshot")))
   }
 
+  test("hudi isSupported rejects incremental query options") {
+    val fileFormatName =
+      "org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat"
+    val cowOptions = Map("hoodie.datasource.write.table.type" -> "COPY_ON_WRITE")
+
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("hoodie.datasource.query.type" -> "incremental")))
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("hoodie.datasource.view.type" -> "incremental")))
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("hoodie.datasource.read.begin.instanttime" -> "20240101010101")))
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("hoodie.datasource.read.end.instanttime" -> "20240102010101")))
+    assert(
+      !HudiScanSupport.isSupported(
+        fileFormatName,
+        cowOptions + ("Hoodie.DataSource.Read.Begin.InstantTime" -> "20240101010101")))
+  }
+
   test("hudi isSupported rejects non-Hudi formats") {
     assert(
       !HudiScanSupport.isSupported(
@@ -501,6 +530,23 @@ class HudiScanSupportSuite extends SparkFunSuite with SharedSparkSession {
       val filteredScan = assertProviderConvertsToNativeParquetScan(partitionAndDataFiltered)
       assertFilterReferences(filteredScan.partitionFilters, "dt", "partition")
       assertFilterReferences(filteredScan.dataFilters, "id", "data")
+    }
+  }
+
+  test("hudi: when falls back, check never convert reason") {
+    withTable("hudi_ts") {
+      spark.sql("create table hudi_ts (id int, ts timestamp) using hudi")
+      spark.sql("insert into hudi_ts values (1, timestamp('2026-01-01 00:00:00'))")
+      val df = spark.sql("select * from hudi_ts")
+      // Timestamp columns are not supported when native timestamp scanning is disabled.
+      logFileFormats(df)
+      df.collect()
+      val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
+      assert(collectFirst(df.queryExecution.executedPlan) {
+        case fileSourceScanExec: FileSourceScanExec =>
+          fileSourceScanExec.getTagValue(neverConvertReasonTag)
+      }.get.get.equals(
+        "Falling back exec: FileSourceScanExec: assertion failed: Conversion disabled: Has timestamp type."))
     }
   }
 }

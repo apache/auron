@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -193,7 +193,7 @@ jobs:
         query: ${{ fromJson(inputs.queries) }}
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get dependency version from pom
         id: get-dependency-version
@@ -215,7 +215,7 @@ jobs:
           fi
 
       - name: Cache Spark (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, ${{ inputs.hadoop-profile }})
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: cache-spark-bin
         with:
           path: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
@@ -251,7 +251,7 @@ jobs:
           name: auron-it-${{ inputs.sparkver }}_${{ inputs.scalaver }}-jdk-${{ inputs.javaver }}${{ inputs.celebornver && format('-{0}', inputs.celebornver) || '' }}${{ inputs.unifflever && format('-{0}', inputs.unifflever) || '' }}
 
       - name: Checkout TPC-DS Data
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: auron-project/tpcds_1g
           path: dev/tpcds_1g
@@ -279,7 +279,7 @@ jobs:
           echo "AURON_IT_JAR=$jar" >> "$GITHUB_ENV"
 
       - name: Cache Celeborn-${{ steps.get-dependency-version.outputs.celebornversion }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         if: ${{ inputs.celebornver != '' }}
         id: cache-celeborn-bin
         with:
@@ -315,7 +315,7 @@ jobs:
           cp celeborn-bin-${{ steps.get-dependency-version.outputs.celebornversion }}/spark/celeborn-client-spark-*_${{ inputs.scalaver }}-*.jar spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Cache Uniffle-${{ steps.get-dependency-version.outputs.uniffleversion }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         if: ${{ inputs.unifflever != '' }}
         id: cache-uniffle-bin
         with:
@@ -335,7 +335,7 @@ jobs:
           tar -xf ./$UNIFFLE_FILE -C uniffle-bin-${{ steps.get-dependency-version.outputs.uniffleversion }} --strip-component=1
 
       - name: Cache hadoop-${{ inputs.hadoopver }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         if: ${{ inputs.hadoopver != '' }}
         id: cache-hadoop-bin
         with:

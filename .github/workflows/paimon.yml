@@ -47,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout Auron
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Java and Maven cache
         uses: actions/setup-java@v5
@@ -56,12 +56,29 @@ jobs:
           java-version: ${{ matrix.javaver }}
           cache: 'maven'
 
+      - name: Build dependencies (skip tests)
+        run: >
+          ./build/mvn -B install
+          -pl ${{ matrix.module }}
+          -am
+          -Pscala-${{ matrix.scalaver }}
+          -Ppaimon-${{ matrix.paimon }}
+          -P${{ matrix.sparkver }}
+          -Prelease
+          -DskipTests
+
       - name: Test Paimon Module
-        run: ./build/mvn -B test -pl ${{ matrix.module }} -am -Pscala-${{ matrix.scalaver }} -Ppaimon-${{ matrix.paimon }} -P${{ matrix.sparkver }} -Prelease
+        run: >
+          ./build/mvn -B test
+          -pl ${{ matrix.module }}
+          -Pscala-${{ matrix.scalaver }}
+          -Ppaimon-${{ matrix.paimon }}
+          -P${{ matrix.sparkver }}
+          -Prelease
 
       - name: Upload reports
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.module }}-test-report
+          name: auron-paimon-test-report
           path: ${{ matrix.module }}/target/surefire-reports

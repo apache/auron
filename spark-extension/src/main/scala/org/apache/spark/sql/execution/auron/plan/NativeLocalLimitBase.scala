@@ -39,8 +39,7 @@ abstract class NativeLocalLimitBase(limit: Int, override val child: SparkPlan)
 
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
     NativeHelper
-      .getDefaultNativeMetrics(sparkContext)
-      .filterKeys(Set("stage_id", "output_rows"))
+      .getDefaultNativeMetrics(sparkContext, Set("stage_id", "output_rows"))
       .toSeq: _*)
 
   override def output: Seq[Attribute] = child.output

@@ -930,6 +930,8 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_NullIf", left :: right :: Nil, e.dataType)
       case Md5(_1) =>
         buildExtScalarFunction("Spark_MD5", Seq(unpackBinaryTypeCast(_1)), StringType)
+      case e @ Reverse(child) if child.dataType.isInstanceOf[ArrayType] =>
+        buildExtScalarFunction("Spark_ArrayReverse", e.children, e.dataType)
       case Reverse(_1) =>
         buildScalarFunction(pb.ScalarFunction.Reverse, Seq(unpackBinaryTypeCast(_1)), StringType)
       case e: InitCap =>
@@ -1025,14 +1027,13 @@ object NativeConverters extends Logging {
               .setExpr(convertExprWithFallback(expr, isPruningExpr, fallback))
               .setInfix(infix.toString)))
 
-      case Substring(str, Literal(pos, IntegerType), Literal(len, IntegerType))
-          if pos.asInstanceOf[Int] > 0 && len.asInstanceOf[Int] >= 0 =>
+      case Substring(str, Literal(pos, IntegerType), Literal(len, IntegerType)) =>
         val longPos = pos.asInstanceOf[Int].toLong
         val longLen = len.asInstanceOf[Int].toLong
-        buildScalarFunction(
-          pb.ScalarFunction.Substr,
+        buildExtScalarFunction(
+          "Spark_Substring",
           str :: Literal(longPos) :: Literal(longLen) :: Nil,
-          StringType)
+          str.dataType)
 
       case StringSpace(n) =>
         buildExtScalarFunction("Spark_StringSpace", n :: Nil, StringType)
@@ -1126,6 +1127,7 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_NormalizeNanAndZero", e.children, e.dataType)
 
       case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
+      case e: Flatten => buildExtScalarFunction("Spark_ArrayFlatten", e.children, e.dataType)
       case e: MapFromEntries =>
         buildExtScalarFunction(
           "Spark_MapFromEntries",
@@ -1230,7 +1232,6 @@ object NativeConverters extends Logging {
   }
 
   def convertAggregateExpr(e: AggregateExpression): pb.PhysicalExprNode = {
-    assert(Shims.get.getAggregateExpressionFilter(e).isEmpty)
     val aggBuilder = pb.PhysicalAggExprNode.newBuilder()
     aggBuilder.setReturnType(convertDataType(e.dataType))
 
@@ -1350,6 +1351,9 @@ object NativeConverters extends Logging {
             s" to true to enable UDAF fallbacking.")
         }
 
+    }
+    Shims.get.getAggregateExpressionFilter(e).foreach { filterExpr =>
+      aggBuilder.setFilter(convertExpr(filterExpr))
     }
     pb.PhysicalExprNode
       .newBuilder()

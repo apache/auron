@@ -46,6 +46,8 @@ object HudiScanSupport extends Logging {
     "hoodie.table.type")
   private val hudiQueryTypeKeys =
     Seq("hoodie.datasource.query.type", "hoodie.datasource.view.type")
+  private val hudiIncrementalInstantKeys =
+    Seq("hoodie.datasource.read.begin.instanttime", "hoodie.datasource.read.end.instanttime")
   private val hudiBaseFileFormatKeys = Seq(
     "hoodie.table.base.file.format",
     "hoodie.datasource.write.base.file.format",
@@ -115,6 +117,9 @@ object HudiScanSupport extends Logging {
     if (hasTimeTravel(options)) {
       return false
     }
+    if (hasIncrementalQuery(options)) {
+      return false
+    }
 
     val tableType = tableTypeFromOptions(options)
       .orElse(tableTypeFromCatalog(catalogTable))
@@ -128,7 +133,7 @@ object HudiScanSupport extends Logging {
     queryType match {
       case Some(query) if readOptimizedQueryTypes.contains(query) => true
       case Some("snapshot") => !isMor
-      case Some("incremental" | "realtime") => false
+      case Some("realtime") => false
       case Some(_) => false
       case None =>
         // MOR snapshot reads may need log-file merging. Native scan is safe only
@@ -255,6 +260,11 @@ object HudiScanSupport extends Logging {
         "as.of.timestamp",
         "hoodie.datasource.read.as.of.instant",
         "hoodie.datasource.read.as.of.timestamp")).isDefined
+  }
+
+  private def hasIncrementalQuery(options: Map[String, String]): Boolean = {
+    queryTypeFromOptions(options).exists(_.equalsIgnoreCase("incremental")) ||
+    caseInsensitiveValue(options, hudiIncrementalInstantKeys).isDefined
   }
 
   private def normalizePath(rawPath: String): String = {
