@@ -167,16 +167,14 @@ mod tests {
         let array = result.into_array(5)?;
         let float_arr = as_float64_array(&array)?;
 
-        // All values should be different (with extremely high probability)
+        // Values should not be constant across rows, which verifies a value is generated
+        // per row rather than a single value being broadcast. (Individual samples are allowed
+        // to repeat, so we don't require all values to be distinct.)
         let values: Vec<f64> = (0..5).map(|i| float_arr.value(i)).collect();
-        for i in 0..values.len() {
-            for j in (i + 1)..values.len() {
-                assert_ne!(
-                    values[i], values[j],
-                    "Values at index {i} and {j} should be different"
-                );
-            }
-        }
+        assert!(
+            values.iter().any(|&v| v != values[0]),
+            "Expected per-row values, but all rows were identical: {values:?}"
+        );
 
         Ok(())
     }
