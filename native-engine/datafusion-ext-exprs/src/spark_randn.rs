@@ -38,9 +38,12 @@ use crate::down_cast_any_ref;
 /// Returns random values with independent and identically distributed (i.i.d.)
 /// samples drawn from the standard normal distribution.
 ///
-/// Matches Spark's behavior:
+/// Spark-compatible semantics:
 /// - RNG is seeded with `seed + partition_id`
 /// - RNG state advances for each row (stateful across batches)
+///
+/// Note: the underlying RNG/gaussian implementation is not intended to reproduce Spark's exact
+/// output sequence for a given seed/partition.
 pub struct SparkRandnExpr {
     seed: i64,
     partition_id: usize,
