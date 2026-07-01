@@ -1137,4 +1137,17 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       }
     }
   }
+
+  test("test OR pushdown with an unconvertible disjunct for orc table") {
+    withTable("orc_or") {
+      sql("create table orc_or(id int, b string) using orc")
+      // enough rows so `id` statistics differ across row groups and pruning kicks in
+      sql("insert into orc_or select cast(id as int), cast(id as string) from range(0, 1000000)")
+      // `b = 900000` (string col vs int literal) -> cast(b as double)=2.0 -> not convertible
+      // `id = 5`                            -> convertible
+      // OR drops the b-branch -> pushes only `id = 5` -> row groups without id=5 are skipped,
+      // losing the row where b='900000'
+      checkSparkAnswerAndOperator("select * from orc_or where id = 5 or b = 900000")
+    }
+  }
 }
