@@ -63,14 +63,14 @@ abstract class AuronQueryTest
     checkAnswer(dfAuron, expected)
 
     if (requireNative) {
-      assertNativeOperator(dfAuron)
+      assertPlanIsNative(dfAuron)
     }
 
     dfAuron
   }
 
   /** Fail if any operator in the executed plan is not native or a pass-through. */
-  protected def assertNativeOperator(df: DataFrame): Unit = {
+  protected def assertPlanIsNative(df: DataFrame): Unit = {
     val plan = stripAQEPlan(df.queryExecution.executedPlan)
     plan
       .collectFirst { case op if !isNativeOrPassThrough(op) => op }
