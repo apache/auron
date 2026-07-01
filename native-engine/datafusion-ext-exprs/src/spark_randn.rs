@@ -42,8 +42,8 @@ use crate::down_cast_any_ref;
 /// - RNG is seeded with `seed + partition_id`
 /// - RNG state advances for each row (stateful across batches)
 ///
-/// Note: the underlying RNG/gaussian implementation is not intended to reproduce Spark's exact
-/// output sequence for a given seed/partition.
+/// Note: the underlying RNG/gaussian implementation is not intended to
+/// reproduce Spark's exact output sequence for a given seed/partition.
 pub struct SparkRandnExpr {
     seed: i64,
     partition_id: usize,
@@ -170,9 +170,10 @@ mod tests {
         let array = result.into_array(5)?;
         let float_arr = as_float64_array(&array)?;
 
-        // Values should not be constant across rows, which verifies a value is generated
-        // per row rather than a single value being broadcast. (Individual samples are allowed
-        // to repeat, so we don't require all values to be distinct.)
+        // Values should not be constant across rows, which verifies a value is
+        // generated per row rather than a single value being broadcast.
+        // (Individual samples are allowed to repeat, so we don't require all
+        // values to be distinct.)
         let values: Vec<f64> = (0..5).map(|i| float_arr.value(i)).collect();
         assert!(
             values.iter().any(|&v| v != values[0]),
