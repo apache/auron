@@ -16,9 +16,12 @@
  */
 package org.apache.auron
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.internal.SQLConf
 
 trait AuronSQLTestHelper {
+  self: BaseAuronSQLSuite =>
+
   def withEnvConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val conf = SQLConf.get
     val (keys, values) = pairs.unzip
@@ -29,7 +32,7 @@ trait AuronSQLTestHelper {
         None
       }
     }
-    (keys, values).zipped.foreach { (k, v) =>
+    keys.zip(values).foreach { case (k, v) =>
       conf.setConfString(k, v)
     }
     try f
@@ -37,6 +40,28 @@ trait AuronSQLTestHelper {
       keys.zip(currentValues).foreach {
         case (key, Some(value)) => conf.setConfString(key, value)
         case (key, None) => conf.unsetConf(key)
+      }
+    }
+  }
+
+  def withSparkConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val confs = Seq(spark.sparkContext.getConf, SparkEnv.get.conf).distinct
+    val (keys, values) = pairs.unzip
+    val currentValuesByConf = confs.map(conf => conf -> keys.map(conf.getOption))
+
+    confs.foreach { conf =>
+      keys.zip(values).foreach { case (k, v) =>
+        conf.set(k, v)
+      }
+    }
+
+    try f
+    finally {
+      currentValuesByConf.foreach { case (conf, currentValues) =>
+        keys.zip(currentValues).foreach {
+          case (key, Some(value)) => conf.set(key, value)
+          case (key, None) => conf.remove(key)
+        }
       }
     }
   }

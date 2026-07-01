@@ -217,6 +217,7 @@ mod tests {
                     right,
                     on,
                     join_type,
+                    None,
                     sort_options,
                 )?)
             }
@@ -235,6 +236,7 @@ mod tests {
                     true,
                     None,
                     false,
+                    None,
                 )?)
             }
             BHJRightProbed => {
@@ -252,6 +254,7 @@ mod tests {
                     true,
                     None,
                     false,
+                    None,
                 )?)
             }
             SHJLeftProbed => Arc::new(BroadcastJoinExec::try_new(
@@ -264,6 +267,7 @@ mod tests {
                 false,
                 None,
                 false,
+                None,
             )?),
             SHJRightProbed => Arc::new(BroadcastJoinExec::try_new(
                 schema,
@@ -275,6 +279,7 @@ mod tests {
                 false,
                 None,
                 false,
+                None,
             )?),
         };
         let columns = columns(&join.schema());
@@ -306,6 +311,7 @@ mod tests {
                     right,
                     on,
                     join_type,
+                    None,
                     sort_options,
                 )?)
             }
@@ -324,6 +330,7 @@ mod tests {
                     true,
                     None,
                     false,
+                    None,
                 )?)
             }
             BHJRightProbed => {
@@ -341,6 +348,7 @@ mod tests {
                     true,
                     None,
                     false,
+                    None,
                 )?)
             }
             SHJLeftProbed => Arc::new(BroadcastJoinExec::try_new(
@@ -353,6 +361,7 @@ mod tests {
                 false,
                 None,
                 false,
+                None,
             )?),
             SHJRightProbed => Arc::new(BroadcastJoinExec::try_new(
                 schema,
@@ -364,6 +373,7 @@ mod tests {
                 false,
                 None,
                 false,
+                None,
             )?),
         };
         let columns = columns(&join.schema());

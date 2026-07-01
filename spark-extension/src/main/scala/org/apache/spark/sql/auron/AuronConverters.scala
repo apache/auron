@@ -47,6 +47,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
+import org.apache.spark.sql.catalyst.plans.InnerLike
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -584,7 +586,6 @@ object AuronConverters extends Logging {
           "rightKeys" -> rightKeys,
           "joinType" -> joinType,
           "condition" -> condition))
-      assert(condition.isEmpty, "join condition is not supported")
 
       val buildSide = exec
         .getTagValue(joinSmallerSideTag)
@@ -594,12 +595,14 @@ object AuronConverters extends Logging {
           JoinBuildRight
         }
 
+      validateNativeInnerJoinCondition(joinType, condition)
       return Shims.get.createNativeShuffledHashJoinExec(
         addRenameColumnsExec(convertToNative(left.children(0))),
         addRenameColumnsExec(convertToNative(right.children(0))),
         leftKeys,
         rightKeys,
         joinType,
+        condition,
         buildSide,
         isSkewJoin)
     }
@@ -620,14 +623,15 @@ object AuronConverters extends Logging {
         "rightKeys" -> rightKeys,
         "joinType" -> joinType,
         "condition" -> condition))
-    assert(condition.isEmpty, "join condition is not supported")
 
+    validateNativeInnerJoinCondition(joinType, condition)
     Shims.get.createNativeSortMergeJoinExec(
       addRenameColumnsExec(convertToNative(left)),
       addRenameColumnsExec(convertToNative(right)),
       leftKeys,
       rightKeys,
       joinType,
+      condition,
       isSkewJoin)
   }
 
@@ -644,13 +648,14 @@ object AuronConverters extends Logging {
         "condition" -> condition,
         "buildSide" -> buildSide))
     try {
-      assert(condition.isEmpty, "join condition is not supported")
+      validateNativeInnerJoinCondition(joinType, condition)
       Shims.get.createNativeShuffledHashJoinExec(
         addRenameColumnsExec(convertToNative(left)),
         addRenameColumnsExec(convertToNative(right)),
         leftKeys,
         rightKeys,
         joinType,
+        condition,
         buildSide,
         Shims.get.getIsSkewJoinFromSHJ(exec))
     } catch {
@@ -688,6 +693,29 @@ object AuronConverters extends Logging {
           SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, leftSorted, rightSorted)
         smj.setTagValue(convertToNonNativeTag, true)
         smj
+    }
+  }
+
+  private def validateNativeInnerJoinCondition(
+      joinType: JoinType,
+      condition: Option[Expression]): Unit = {
+    condition.foreach { expr =>
+      assert(
+        SparkAuronConfiguration.ENABLE_NATIVE_JOIN_CONDITION.get(),
+        "native join condition is disabled")
+      assert(joinType.isInstanceOf[InnerLike], "join condition is not supported")
+      validateNativeInnerJoinConditionExpr(expr)
+    }
+  }
+
+  private def validateNativeInnerJoinConditionExpr(condition: Expression): Unit = {
+    Shims.get.shimVersion match {
+      case "spark-3.0" | "spark-3.1" =>
+        NativeConverters.convertExprWithFallback(
+          condition,
+          isPruningExpr = false,
+          expr => throw new NotImplementedError(s"unsupported join condition expression: $expr"))
+      case _ =>
     }
   }
 

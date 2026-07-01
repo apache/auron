@@ -26,6 +26,7 @@ import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.RightOuter
 import org.apache.spark.sql.execution.BinaryExecNode
@@ -41,6 +42,7 @@ abstract class NativeShuffledHashJoinBase(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
+    condition: Option[Expression],
     buildSide: JoinBuildSide)
     extends BinaryExecNode
     with NativeSupports {
@@ -80,6 +82,9 @@ abstract class NativeShuffledHashJoinBase(
 
   private def nativeJoinType = NativeConverters.convertJoinType(joinType)
 
+  private def nativeJoinFilter =
+    condition.map(NativeConverters.convertJoinFilter(_, left.output, right.output))
+
   private def nativeBuildSide = buildSide match {
     case JoinBuildLeft => pb.JoinSide.LEFT_SIDE
     case JoinBuildRight => pb.JoinSide.RIGHT_SIDE
@@ -90,6 +95,7 @@ abstract class NativeShuffledHashJoinBase(
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
 
   // check whether native converting is supported
+  assert(condition.isEmpty || joinType.isInstanceOf[InnerLike], "join condition is not supported")
   nativeSchema
   nativeJoinOn
   nativeJoinType
@@ -101,6 +107,7 @@ abstract class NativeShuffledHashJoinBase(
     val nativeMetrics = SparkMetricNode(metrics, leftRDD.metrics :: rightRDD.metrics :: Nil)
     val nativeJoinOn = this.nativeJoinOn
     val nativeJoinType = this.nativeJoinType
+    val nativeJoinFilter = this.nativeJoinFilter
     val nativeBuildSide = this.nativeBuildSide
 
     val (partitions, partitioner) = if (joinType != RightOuter) {
@@ -132,6 +139,7 @@ abstract class NativeShuffledHashJoinBase(
           .setJoinType(nativeJoinType)
           .addAllOn(nativeJoinOn.asJava)
           .setBuildSide(nativeBuildSide)
+        nativeJoinFilter.foreach(hashJoinExec.setFilter)
         pb.PhysicalPlanNode.newBuilder().setHashJoin(hashJoinExec).build()
       },
       friendlyName = "NativeRDD.ShuffledHashJoin")

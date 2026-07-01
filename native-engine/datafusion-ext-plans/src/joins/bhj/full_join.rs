@@ -24,13 +24,14 @@ use std::{
 use arrow::{
     array::{Array, ArrayRef, RecordBatch, RecordBatchOptions, UInt32Array, new_null_array},
     buffer::NullBuffer,
+    compute::filter,
 };
 use async_trait::async_trait;
 use bitvec::{bitvec, prelude::BitVec};
 use datafusion::{common::Result, physical_plan::metrics::Time};
 use datafusion_ext_commons::{
     arrow::{eq_comparator::EqComparator, selection::take_cols},
-    likely,
+    df_execution_err, likely,
 };
 
 use crate::{
@@ -163,6 +164,55 @@ impl<const P: JoinerParams> FullJoiner<P> {
         let num_rows = probe_indices.len();
 
         assert_eq!(probe_indices.len(), build_indices.len());
+
+        if let Some(join_filter) = &self.join_params.join_filter {
+            if P.probe_side_outer || P.build_side_outer {
+                df_execution_err!("join filter is only supported for inner shuffled hash join")?;
+            }
+            // Materialize candidate pairs from the hash lookup before
+            // evaluating the residual condition. This keeps the filter inside
+            // the join operator and avoids emitting rows that a parent filter
+            // would immediately discard.
+            let pcols = if probe_indices.len() == probed_batch.num_rows()
+                && probe_indices
+                    .iter()
+                    .zip(0..probed_batch.num_rows() as u32)
+                    .all(|(&idx, i)| idx == i)
+            {
+                probed_batch.columns().to_vec()
+            } else {
+                take_cols(probed_batch.columns(), probe_indices)?
+            };
+            let bcols = take_cols(self.map.data_batch().columns(), build_indices)?;
+
+            let (left_cols, right_cols) = match P.probe_side {
+                L => (&pcols, &bcols),
+                R => (&bcols, &pcols),
+            };
+            let selected = join_filter.evaluate(left_cols, right_cols, num_rows)?;
+            let num_rows = selected.iter().filter(|v| matches!(v, Some(true))).count();
+            let left_cols = left_cols
+                .iter()
+                .map(|col| Ok(filter(col, &selected)?))
+                .collect::<Result<Vec<_>>>()?;
+            let right_cols = right_cols
+                .iter()
+                .map(|col| Ok(filter(col, &selected)?))
+                .collect::<Result<Vec<_>>>()?;
+            let pcols = match P.probe_side {
+                L => self.join_params.projection.project_left(&left_cols),
+                R => self.join_params.projection.project_right(&right_cols),
+            };
+            let bcols = match P.probe_side {
+                L => self.join_params.projection.project_right(&right_cols),
+                R => self.join_params.projection.project_left(&left_cols),
+            };
+
+            build_output_time
+                .exclude_timer_async(self.flush(pcols, bcols, num_rows))
+                .await?;
+            return Ok(());
+        }
 
         let pprojected = match P.probe_side {
             L => self

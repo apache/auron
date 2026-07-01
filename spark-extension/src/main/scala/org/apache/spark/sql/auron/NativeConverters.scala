@@ -252,7 +252,7 @@ object NativeConverters extends Logging {
             .setIndex(rightOutput.indexWhere(_.exprId == attr.exprId))
             .build()
         case _ =>
-          columnIndices += pb.ColumnIndex.newBuilder().buildPartial()
+          throw new IllegalArgumentException(s"cannot resolve join filter attribute: $attr")
       }
     }
     pb.JoinFilter

@@ -254,6 +254,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       isSkewJoin: Boolean): NativeSortMergeJoinBase =
     NativeSortMergeJoinExecProvider.provide(
       left,
@@ -261,6 +262,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys,
       rightKeys,
       joinType,
+      condition,
       isSkewJoin)
 
   override def createNativeShuffledHashJoinExec(
@@ -269,6 +271,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       buildSide: JoinBuildSide,
       isSkewJoin: Boolean): SparkPlan =
     NativeShuffledHashJoinExecProvider.provide(
@@ -277,6 +280,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys,
       rightKeys,
       joinType,
+      condition,
       buildSide,
       isSkewJoin)
 

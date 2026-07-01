@@ -77,6 +77,7 @@ use datafusion_ext_plans::{
     generate_exec::GenerateExec,
     ipc_reader_exec::IpcReaderExec,
     ipc_writer_exec::IpcWriterExec,
+    joins::{ColumnIndex, JoinFilter, join_utils::JoinType},
     limit_exec::LimitExec,
     orc_exec::OrcExec,
     orc_sink_exec::OrcSinkExec,
@@ -233,6 +234,17 @@ impl PhysicalPlanner {
 
                 let join_type =
                     protobuf::JoinType::try_from(hash_join.join_type).expect("invalid JoinType");
+                let join_type = JoinType::from(join_type);
+                // Spark residual join conditions are evaluated after join key
+                // matching. Keep the native implementation limited to inner
+                // joins for now so filtering matched pairs cannot change outer
+                // join null-extension semantics.
+                let join_filter = self.parse_join_filter(hash_join.filter.as_ref())?;
+                if join_filter.is_some() && join_type != JoinType::Inner {
+                    return Err(proto_error(
+                        "hash join filter is only supported for inner join",
+                    ));
+                }
 
                 let build_side =
                     protobuf::JoinSide::try_from(hash_join.build_side).expect("invalid BuildSide");
@@ -242,15 +254,14 @@ impl PhysicalPlanner {
                     left,
                     right,
                     on,
-                    join_type
-                        .try_into()
-                        .map_err(|_| proto_error("invalid JoinType"))?,
+                    join_type,
                     build_side
                         .try_into()
                         .map_err(|_| proto_error("invalid BuildSide"))?,
                     false,
                     None,
                     false,
+                    join_filter,
                 )?))
             }
             PhysicalPlanType::SortMergeJoin(sort_merge_join) => {
@@ -290,15 +301,25 @@ impl PhysicalPlanner {
 
                 let join_type = protobuf::JoinType::try_from(sort_merge_join.join_type)
                     .expect("invalid JoinType");
+                let join_type = JoinType::from(join_type);
+                // Spark residual join conditions are evaluated after join key
+                // matching. Keep the native implementation limited to inner
+                // joins for now so filtering matched pairs cannot change outer
+                // join null-extension semantics.
+                let join_filter = self.parse_join_filter(sort_merge_join.filter.as_ref())?;
+                if join_filter.is_some() && join_type != JoinType::Inner {
+                    return Err(proto_error(
+                        "sort-merge join filter is only supported for inner join",
+                    ));
+                }
 
                 Ok(Arc::new(SortMergeJoinExec::try_new(
                     schema,
                     left,
                     right,
                     on,
-                    join_type
-                        .try_into()
-                        .map_err(|_| proto_error("invalid JoinType"))?,
+                    join_type,
+                    join_filter,
                     sort_options,
                 )?))
             }
@@ -426,6 +447,7 @@ impl PhysicalPlanner {
                     true,
                     Some(cached_build_hash_map_id),
                     is_null_aware_anti_join,
+                    None,
                 )?))
             }
             PhysicalPlanType::Union(union) => {
@@ -860,6 +882,43 @@ impl PhysicalPlanner {
                 }
             }
         }
+    }
+
+    fn parse_join_filter(
+        &self,
+        filter: Option<&protobuf::JoinFilter>,
+    ) -> Result<Option<JoinFilter>, PlanSerDeError> {
+        let Some(filter) = filter else {
+            return Ok(None);
+        };
+
+        // The filter expression is serialized against a compact schema made
+        // from only the referenced join-side columns. column_indices maps each
+        // compact filter input back to the original left/right child column.
+        let schema: SchemaRef = Arc::new(convert_required!(filter.schema)?);
+        let expression = filter
+            .expression
+            .as_ref()
+            .ok_or_else(|| proto_error("join filter expression must be present"))
+            .and_then(|expr| self.try_parse_physical_expr(expr, &schema))?;
+        let column_indices = filter
+            .column_indices
+            .iter()
+            .map(|column_index| {
+                let side = protobuf::JoinSide::try_from(column_index.side)
+                    .map_err(|_| proto_error("invalid join filter column side"))?;
+                Ok(ColumnIndex {
+                    side: side.into(),
+                    index: column_index.index as usize,
+                })
+            })
+            .collect::<Result<Vec<_>, PlanSerDeError>>()?;
+
+        Ok(Some(JoinFilter {
+            expression,
+            column_indices,
+            schema,
+        }))
     }
 
     fn try_parse_physical_expr(
