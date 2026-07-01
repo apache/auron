@@ -110,6 +110,7 @@ object AuronConverters extends Logging {
     SparkAuronConfiguration.ENABLE_TAKE_ORDERED_AND_PROJECT.get()
   def enableCollectLimit: Boolean = SparkAuronConfiguration.ENABLE_COLLECT_LIMIT.get()
   def enableAggr: Boolean = SparkAuronConfiguration.ENABLE_AGGR.get()
+  def enableCoalesec: Boolean = SparkAuronConfiguration.ENABLE_COALESEC.get()
   def enableExpand: Boolean = SparkAuronConfiguration.ENABLE_EXPAND.get()
   def enableWindow: Boolean = SparkAuronConfiguration.ENABLE_WINDOW.get()
   def enableWindowGroupLimit: Boolean = SparkAuronConfiguration.ENABLE_WINDOW_GROUP_LIMIT.get()
@@ -268,6 +269,10 @@ object AuronConverters extends Logging {
         }
         convertedAgg
 
+      case e: CoalesceExec if enableCoalesec => // coalesec
+        val convertedCoalesce = tryConvert(e, convertCoalesceExec)
+        convertedCoalesce
+
       case e: ObjectHashAggregateExec if enableAggr => // object hash aggregate
         val convertedAgg = tryConvert(e, convertObjectHashAggregateExec)
         if (!e.getTagValue(convertibleTag).contains(true)) {
@@ -386,6 +391,8 @@ object AuronConverters extends Logging {
           "Conversion disabled: spark.auron.enable.local.table.scan=false."
         case _: DataWritingCommandExec if !enableDataWriting =>
           "Conversion disabled: spark.auron.enable.data.writing=false."
+        case _: CoalesceExec if !enableCoalesec =>
+          "Conversion disabled: spark.auron.enable.coalesce=false."
         case _ =>
           s"${exec.getClass.getSimpleName} is not supported yet."
       }
@@ -849,6 +856,10 @@ object AuronConverters extends Logging {
     logDebugPlanConversion(exec)
     val (limit, offset) = Shims.get.getLimitAndOffset(exec)
     Shims.get.createNativeCollectLimitExec(limit, offset, exec.child)
+  }
+
+  def convertCoalesceExec(exec: CoalesceExec): SparkPlan = {
+    Shims.get.createNativeCoalesceExec(exec.numPartitions, exec.child)
   }
 
   def convertHashAggregateExec(exec: HashAggregateExec): SparkPlan = {
