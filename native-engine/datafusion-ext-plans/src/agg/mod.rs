@@ -25,6 +25,8 @@ pub mod collect;
 pub mod count;
 pub mod first;
 pub mod first_ignores_null;
+pub mod last;
+pub mod last_ignores_null;
 pub mod maxmin;
 pub mod spark_udaf_wrapper;
 pub mod sum;
@@ -69,6 +71,8 @@ pub enum AggFunction {
     Min,
     First,
     FirstIgnoresNull,
+    Last,
+    LastIgnoresNull,
     CollectList,
     CollectSet,
     BloomFilter,
