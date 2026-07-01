@@ -1014,6 +1014,68 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("randn function with seed") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(id INT) USING parquet")
+      sql("INSERT INTO t1 VALUES(1), (2), (3)")
+
+      // randn is non-deterministic and intentionally does not replicate Spark's RNG, so its
+      // values cannot be compared against vanilla Spark. Verify it runs natively, produces a
+      // non-null value per row, and is reproducible for a fixed seed.
+      val query = "SELECT id, randn(42) AS r1, randn(100) AS r2 FROM t1 ORDER BY id"
+      val df = sql(query)
+      val rows = df.collect()
+      assertPlanIsNative(df)
+
+      assert(rows.length == 3)
+      assert(rows.forall(r => !r.isNullAt(1) && !r.isNullAt(2)))
+
+      // Same seed -> same values across executions.
+      val rows2 = sql(query).collect()
+      assert(rows.map(_.getDouble(1)).sameElements(rows2.map(_.getDouble(1))))
+      assert(rows.map(_.getDouble(2)).sameElements(rows2.map(_.getDouble(2))))
+
+      // Different seeds -> different values.
+      assert(rows.exists(r => r.getDouble(1) != r.getDouble(2)))
+    }
+  }
+
+  test("randn function with foldable seed expression") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(id INT) USING parquet")
+      sql("INSERT INTO t1 VALUES(1), (2), (3)")
+
+      // A foldable (non-literal) seed must still be converted to the native randn expression.
+      val query = "SELECT id, randn(cast(42 as bigint)) AS r FROM t1 ORDER BY id"
+      val df = sql(query)
+      val rows = df.collect()
+      assertPlanIsNative(df)
+
+      assert(rows.length == 3)
+      assert(rows.forall(r => !r.isNullAt(1)))
+
+      // Reproducible for a fixed seed.
+      val rows2 = sql(query).collect()
+      assert(rows.map(_.getDouble(1)).sameElements(rows2.map(_.getDouble(1))))
+    }
+  }
+
+  test("randn function without seed") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(id INT) USING parquet")
+      sql("INSERT INTO t1 VALUES(1), (2), (3)")
+
+      // randn() with no seed uses a randomly assigned seed, so values are not reproducible
+      // across executions. Verify it still runs natively and produces a non-null value per row.
+      val df = sql("SELECT id, randn() AS r FROM t1 ORDER BY id")
+      val rows = df.collect()
+      assertPlanIsNative(df)
+
+      assert(rows.length == 3)
+      assert(rows.forall(r => !r.isNullAt(1)))
+    }
+  }
+
   test("ascii function") {
     withTable("t1") {
       sql("create table t1(c1 string) using parquet")

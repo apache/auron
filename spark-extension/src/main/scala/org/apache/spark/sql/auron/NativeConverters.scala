@@ -878,6 +878,21 @@ object NativeConverters extends Logging {
       case e: Hex => buildScalarFunction(pb.ScalarFunction.Hex, e.children, e.dataType)
       case e: IsNaN =>
         buildExtScalarFunction("Spark_IsNaN", e.children, e.dataType)
+      case e: Randn =>
+        val seedOpt: Option[Long] = e.child match {
+          case Literal(s: Long, _) => Some(s)
+          case Literal(s: Int, _) => Some(s.toLong)
+          case expr if expr.foldable =>
+            Option(expr.eval(null)).collect { case n: Number => n.longValue() }
+          case _ => None
+        }
+        seedOpt
+          .map { seed =>
+            buildExprNode {
+              _.setSparkRandnExpr(pb.SparkRandnExprNode.newBuilder().setSeed(seed))
+            }
+          }
+          .getOrElse(fallback(e))
       case e: Round =>
         e.scale match {
           case Literal(n: Int, _) =>

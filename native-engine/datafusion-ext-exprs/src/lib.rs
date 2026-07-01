@@ -25,6 +25,7 @@ pub mod named_struct;
 pub mod row_num;
 pub mod spark_monotonically_increasing_id;
 pub mod spark_partition_id;
+pub mod spark_randn;
 pub mod spark_scalar_subquery_wrapper;
 pub mod spark_udf_wrapper;
 pub mod string_contains;
