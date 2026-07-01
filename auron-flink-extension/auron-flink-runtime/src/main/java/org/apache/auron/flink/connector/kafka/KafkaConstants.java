@@ -17,7 +17,11 @@
 package org.apache.auron.flink.connector.kafka;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.IntType;
+import org.apache.flink.table.types.logical.RowType;
 
 /**
  * Utilities for Kafka.
@@ -236,6 +240,18 @@ public class KafkaConstants {
     public static final String KAFKA_AURON_META_PARTITION_ID = "serialized_kafka_records_partition";
     public static final String KAFKA_AURON_META_OFFSET = "serialized_kafka_records_offset";
     public static final String KAFKA_AURON_META_TIMESTAMP = "serialized_kafka_records_timestamp";
+
+    /**
+     * The three Kafka metadata columns the native Kafka scan prepends to every emitted row, in
+     * physical order: partition id (INT, not null), offset (BIGINT, not null), Kafka timestamp
+     * (BIGINT, not null). This is the single source of truth for the metadata columns; the source
+     * function's row-type assembly, projection passthrough, and proto schema conversion all derive
+     * from it so adding or renaming a metadata column happens in one place.
+     */
+    public static final List<RowType.RowField> KAFKA_AURON_META_FIELDS = Collections.unmodifiableList(Arrays.asList(
+            new RowType.RowField(KAFKA_AURON_META_PARTITION_ID, new IntType(false)),
+            new RowType.RowField(KAFKA_AURON_META_OFFSET, new BigIntType(false)),
+            new RowType.RowField(KAFKA_AURON_META_TIMESTAMP, new BigIntType(false))));
 
     public static final String FLINK_SQL_PROC_TIME_KEY_WORD = "proctime";
 }

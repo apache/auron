@@ -20,19 +20,21 @@ import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.flink.table.types.logical.RowType;
 
 /**
- * Flink function which supports Auron should implement this interface.
+ * Table-source-layer marker for a native Auron {@code DynamicTableSource} that can host a fused
+ * downstream Calc. A graph-level fusion pass detects the source through this marker (rather than a
+ * concrete connector class, so any future native source is a fusion target), stages the merged
+ * {@code Project[Filter?]} plan on the source instance, and the source forwards it into its source
+ * function when the runtime provider is built.
  *
- * <p>A native Auron source function also exposes the source-side fusion hand-off: a downstream Calc
- * that can fuse into this source registers its logical {@code Project[Filter?]} sub-plan here, and
- * the source splices it onto its native scan and emits the projected rows directly, so the chain
- * runs as one native plan with a single columnar-to-row conversion at the tail.
+ * <p>This is the table-source parallel of {@link FlinkAuronFunction}, which carries the same fusion
+ * hand-off one layer down at the source-function level.
  */
-public interface FlinkAuronFunction extends SupportsAuronNative {
+public interface FlinkAuronDynamicTableSource {
 
     /**
-     * Registers a downstream Calc's logical {@code Project[Filter?[FFIReader-placeholder]]} sub-plan
-     * to be fused into this source's native scan. When set, the source runs the fused plan and emits
-     * the projected rows in place of its original output.
+     * Stages a downstream Calc's logical {@code Project[Filter?]} sub-plan on this source so that the
+     * source forwards it into its source function at build time. The function splices the sub-plan
+     * onto its native scan and emits the projected rows directly.
      *
      * @param logicalCalcSubPlan the {@code Project[Filter?]} tree over the logical input columns
      * @param projectedOutputType the projected logical output row type emitted downstream
@@ -40,17 +42,18 @@ public interface FlinkAuronFunction extends SupportsAuronNative {
     void setMergedCalcPlan(PhysicalPlanNode logicalCalcSubPlan, RowType projectedOutputType);
 
     /**
-     * Reports whether a merged Calc sub-plan has already been registered, so a second downstream
-     * Calc does not overwrite the first.
+     * Reports whether a merged Calc sub-plan has already been staged on this source, so the fusion
+     * pass can skip a source that is already staged (multi-consumer or re-entry safety).
      *
      * @return {@code true} if {@link #setMergedCalcPlan} has already been called
      */
     boolean isMergedCalcPlanSet();
 
     /**
-     * Reports whether this source emits an event-time watermark. Fusion is disabled for a
-     * watermarked source because the downstream Calc must not strip the per-record timestamps it
-     * still emits.
+     * Reports whether this source emits an event-time watermark. The fusion pass uses this as the
+     * planner-time gate so it never fuses over a watermarked source; the source function re-checks
+     * the same condition at {@code open()} and throws {@link IllegalStateException} if a merged plan
+     * and a watermark ever coexist, as the fail-fast correctness backstop for this gate.
      *
      * @return {@code true} if a watermark strategy is configured on this source
      */
