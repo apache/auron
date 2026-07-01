@@ -475,6 +475,35 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg changelog scan reads renamed columns by field id") {
+    withTable("local.db.t_changelog_rename") {
+      withTempView("t_changelog_rename_changes") {
+        sql("""
+              |create table local.db.t_changelog_rename (id int, old_name string)
+              |using iceberg
+              |tblproperties ('format-version' = '2')
+              |""".stripMargin)
+        sql("insert into local.db.t_changelog_rename values (0, 'initial')")
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_rename")
+        sql("insert into local.db.t_changelog_rename values (1, 'before')")
+        sql("alter table local.db.t_changelog_rename rename column old_name to new_name")
+        sql("insert into local.db.t_changelog_rename values (2, 'after')")
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_rename")
+        createChangelogView(
+          "local.db.t_changelog_rename",
+          "t_changelog_rename_changes",
+          startSnapshotId,
+          endSnapshotId)
+
+        checkSparkAnswerAndOperator("""
+            |select id, new_name, _change_type, _change_ordinal, _commit_snapshot_id
+            |from t_changelog_rename_changes
+            |order by id
+            |""".stripMargin)
+      }
+    }
+  }
+
   test("iceberg changelog scan falls back when delete changes exist") {
     withTable("local.db.t_changelog_delete") {
       withTempView("t_changelog_delete_changes") {
