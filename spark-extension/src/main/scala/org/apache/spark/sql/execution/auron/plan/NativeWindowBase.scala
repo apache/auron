@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.auron.plan
 
 import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.sql.auron.NativeConverters
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.CumeDist
 import org.apache.spark.sql.catalyst.expressions.DenseRank
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.Lag
 import org.apache.spark.sql.catalyst.expressions.Lead
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
@@ -92,13 +94,11 @@ abstract class NativeWindowBase(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
 
-  private def leadIgnoreNulls(expr: Lead): Boolean =
-    expr.getClass.getMethods
-      .find(method => method.getName == "ignoreNulls" && method.getParameterCount == 0)
-      .exists(method => method.invoke(expr).asInstanceOf[Boolean])
-
   private def invokeNoArg[T](expr: Expression, methodName: String): T =
     expr.getClass.getMethod(methodName).invoke(expr).asInstanceOf[T]
+
+  private def ignoreNulls(expr: Expression): Boolean =
+    Try(invokeNoArg[Boolean](expr, "ignoreNulls")).getOrElse(false)
 
   private def isNthValue(expr: Expression): Boolean = expr.getClass.getSimpleName == "NthValue"
 
@@ -180,7 +180,18 @@ abstract class NativeWindowBase(
             assert(
               spec.frameSpecification == e.frame,
               s"window frame not supported: ${spec.frameSpecification}")
-            assert(!leadIgnoreNulls(e), "window function not supported: lead with IGNORE NULLS")
+            assert(!ignoreNulls(e), "window function not supported: lead with IGNORE NULLS")
+            windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
+            windowExprBuilder.setWindowFunc(pb.WindowFunction.LEAD)
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.input))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.offset))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.default))
+
+          case e: Lag =>
+            assert(
+              spec.frameSpecification == e.frame,
+              s"window frame not supported: ${spec.frameSpecification}")
+            assert(!ignoreNulls(e), "window function not supported: lag with IGNORE NULLS")
             windowExprBuilder.setFuncType(pb.WindowFunctionType.Window)
             windowExprBuilder.setWindowFunc(pb.WindowFunction.LEAD)
             windowExprBuilder.addChildren(NativeConverters.convertExpr(e.input))
