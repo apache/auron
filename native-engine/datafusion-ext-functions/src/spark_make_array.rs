@@ -17,12 +17,15 @@
 
 use std::sync::Arc;
 
-use arrow::{array::*, datatypes::DataType};
+use arrow::{
+    array::*,
+    datatypes::{DataType, Field, Fields},
+};
 use datafusion::{
     common::{Result, ScalarValue},
     logical_expr::ColumnarValue,
 };
-use datafusion_ext_commons::df_execution_err;
+use datafusion_ext_commons::{arrow::cast::cast, df_execution_err};
 
 macro_rules! downcast_vec {
     ($ARGS:expr, $ARRAY_TYPE:ident) => {{
@@ -105,9 +108,20 @@ fn array_array(args: &[ArrayRef]) -> Result<ArrayRef> {
         DataType::UInt16 => array!(args, UInt16Array, UInt16Builder),
         DataType::UInt32 => array!(args, UInt32Array, UInt32Builder),
         DataType::UInt64 => array!(args, UInt64Array, UInt64Builder),
-        data_type => {
+        _ => {
             // naive implementation with scalar values
             let num_rows = args[0].len();
+            let data_type = common_array_element_data_type(args)?;
+            let args = args
+                .iter()
+                .map(|arg| {
+                    if arg.data_type() == &data_type {
+                        Ok(arg.clone())
+                    } else {
+                        cast(arg.as_ref(), &data_type)
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?;
             let mut output_scalars = Vec::with_capacity(num_rows);
             for i in 0..num_rows {
                 let row_scalars: Vec<ScalarValue> = args
@@ -116,7 +130,7 @@ fn array_array(args: &[ArrayRef]) -> Result<ArrayRef> {
                     .collect::<Result<_>>()?;
                 output_scalars.push(ScalarValue::List(ScalarValue::new_list(
                     &row_scalars,
-                    data_type,
+                    &data_type,
                     true,
                 )));
             }
@@ -124,6 +138,57 @@ fn array_array(args: &[ArrayRef]) -> Result<ArrayRef> {
         }
     };
     Ok(res)
+}
+
+fn common_array_element_data_type(args: &[ArrayRef]) -> Result<DataType> {
+    let mut data_type = args[0].data_type().clone();
+    for arg in &args[1..] {
+        data_type = widen_data_type(&data_type, arg.data_type())?;
+    }
+    Ok(data_type)
+}
+
+fn widen_data_type(left: &DataType, right: &DataType) -> Result<DataType> {
+    if left == right {
+        return Ok(left.clone());
+    }
+
+    match (left, right) {
+        (DataType::List(left_field), DataType::List(right_field)) => {
+            let item_type = widen_data_type(left_field.data_type(), right_field.data_type())?;
+            Ok(DataType::List(Arc::new(Field::new(
+                left_field.name().as_str(),
+                item_type,
+                left_field.is_nullable() || right_field.is_nullable(),
+            ))))
+        }
+        (DataType::Struct(left_fields), DataType::Struct(right_fields))
+            if left_fields.len() == right_fields.len() =>
+        {
+            let fields = left_fields
+                .iter()
+                .zip(right_fields.iter())
+                .map(|(left_field, right_field)| {
+                    if left_field.name() != right_field.name() {
+                        return df_execution_err!(
+                            "array child struct fields must have same names, got {} and {}",
+                            left_field.name(),
+                            right_field.name()
+                        );
+                    }
+                    Ok(Arc::new(Field::new(
+                        left_field.name().as_str(),
+                        widen_data_type(left_field.data_type(), right_field.data_type())?,
+                        left_field.is_nullable() || right_field.is_nullable(),
+                    )))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(DataType::Struct(Fields::from(fields)))
+        }
+        _ => df_execution_err!(
+            "array child values must have same data type, got {left:?} and {right:?}"
+        ),
+    }
 }
 
 /// put values in an array.
@@ -145,7 +210,8 @@ mod test {
 
     use arrow::{
         array::{ArrayRef, Int32Array, ListArray},
-        datatypes::{Float32Type, Int32Type},
+        buffer::{OffsetBuffer, ScalarBuffer},
+        datatypes::{DataType, Field, Float32Type, Int32Type},
     };
     use datafusion::{common::ScalarValue, physical_plan::ColumnarValue};
 
@@ -211,6 +277,50 @@ mod test {
         let expected = vec![Some(vec![Some(2.2), Some(-2.3)])];
         let expected = ListArray::from_iter_primitive::<Float32Type, _, _>(expected);
         let expected: ArrayRef = Arc::new(expected);
+
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_make_array_with_mixed_child_array_nullability() -> Result<(), Box<dyn Error>> {
+        let non_nullable_items: ArrayRef = Arc::new(Int32Array::from(vec![Some(1), Some(2)]));
+        let non_nullable_list: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(DataType::Int32, false)),
+            OffsetBuffer::new(ScalarBuffer::from(vec![0, 1, 2])),
+            non_nullable_items,
+            None,
+        )?);
+
+        let nullable_items: ArrayRef = Arc::new(Int32Array::from(vec![None, Some(3)]));
+        let nullable_list: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(DataType::Int32, true)),
+            OffsetBuffer::new(ScalarBuffer::from(vec![0, 1, 2])),
+            nullable_items,
+            None,
+        )?);
+
+        let result = array(&vec![
+            ColumnarValue::Array(non_nullable_list),
+            ColumnarValue::Array(nullable_list),
+        ])?
+        .into_array(2)?;
+
+        let expected_values: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(DataType::Int32, true)),
+            OffsetBuffer::new(ScalarBuffer::from(vec![0, 1, 2, 3, 4])),
+            Arc::new(Int32Array::from(vec![Some(1), None, Some(2), Some(3)])),
+            None,
+        )?);
+        let expected: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(
+                expected_values.data_type().clone(),
+                true,
+            )),
+            OffsetBuffer::new(ScalarBuffer::from(vec![0, 2, 4])),
+            expected_values,
+            None,
+        )?);
 
         assert_eq!(&result, &expected);
         Ok(())

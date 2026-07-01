@@ -18,12 +18,15 @@ package org.apache.spark.sql
 
 import java.io.File
 
+import scala.annotation.nowarn
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.math3.util.Precision
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
@@ -158,11 +161,14 @@ trait SparkExpressionTestsBase
         logInfo("Offload to native backend in the test.\n")
       } else {
         logInfo("Not supported in Auron, fall back to vanilla spark in the test.\n")
-        shouldNotFallback()
+        shouldNotFallback(
+          expression,
+          resultDF,
+          "expression and children use Auron-supported data types")
       }
     } else {
       logInfo("Has unsupported data type, fall back to vanilla spark.\n")
-      shouldNotFallback()
+      shouldNotFallback(expression, resultDF, "expression or child has unsupported data type")
     }
 
     if (!(checkResult(result.head.get(0), expected, expression.dataType, expression.nullable)
@@ -271,19 +277,42 @@ trait SparkExpressionTestsBase
   }
 
   private def checkDataTypeSupported(expr: Expression): Boolean = {
-    SUPPORTED_DATA_TYPES.acceptsType(expr.dataType)
+    SUPPORTED_DATA_TYPES.acceptsType(expr.dataType) && NativeConverters.isTypeSupported(
+      expr.dataType)
   }
 
   /**
-   * Placeholder for future fallback checks.
-   *
-   * TODO: Implement logic to verify that no unexpected fallbacks occur during expression
-   * evaluation. Currently, this method is intentionally left empty because the Auron engine has
-   * many legitimate fallback cases that are not yet fully handled. Once fallback handling is
-   * stabilized and the expected cases are well defined, implement assertions or checks here to
-   * ensure that only allowed fallbacks occur.
+   * Override this in a suite to keep result checks for known fallback cases.
    */
-  private def shouldNotFallback(): Unit = {}
+  @nowarn("cat=unused")
+  protected def allowNativeExpressionFallback(expression: Expression): Boolean = false
+
+  private def shouldNotFallback(
+      expression: Expression,
+      resultDF: DataFrame,
+      fallbackReason: String): Unit = {
+    if (!allowNativeExpressionFallback(expression) &&
+      canConvertExpressionToNative(expression)) {
+      fail(
+        s"Expression unexpectedly fell back to Spark: $expression\n" +
+          s"Fallback reason: $fallbackReason\n" +
+          s"Executed plan:\n${resultDF.queryExecution.executedPlan}")
+    }
+  }
+
+  private def canConvertExpressionToNative(expression: Expression): Boolean = {
+    try {
+      NativeConverters.convertExprWithFallback(
+        expression,
+        isPruningExpr = false,
+        e => throw new NotImplementedError(s"unsupported expression: (${e.getClass}) $e"))
+      true
+    } catch {
+      case _: NotImplementedError => false
+      case _: AssertionError => false
+      case NonFatal(_) => false
+    }
+  }
 
   /**
    * Whether the input row can be converted a to data frame.

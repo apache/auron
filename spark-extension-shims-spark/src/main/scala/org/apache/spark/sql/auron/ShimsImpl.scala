@@ -109,6 +109,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, StringType}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.storage.FileSegment
+import org.apache.spark.unsafe.types.UTF8String
 
 import org.apache.auron.{protobuf => pb, sparkver}
 import org.apache.auron.common.AuronBuildInfo
@@ -253,6 +254,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       isSkewJoin: Boolean): NativeSortMergeJoinBase =
     NativeSortMergeJoinExecProvider.provide(
       left,
@@ -260,6 +262,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys,
       rightKeys,
       joinType,
+      condition,
       isSkewJoin)
 
   override def createNativeShuffledHashJoinExec(
@@ -268,6 +271,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       buildSide: JoinBuildSide,
       isSkewJoin: Boolean): SparkPlan =
     NativeShuffledHashJoinExecProvider.provide(
@@ -276,6 +280,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys,
       rightKeys,
       joinType,
+      condition,
       buildSide,
       isSkewJoin)
 
@@ -578,17 +583,8 @@ class ShimsImpl extends Shims with Logging {
             .setMonotonicIncreasingIdExpr(pb.MonotonicIncreasingIdExprNode.newBuilder())
             .build())
 
-      case StringSplit(str, pat @ Literal(_, StringType), Literal(-1, IntegerType))
-          // native StringSplit implementation does not support regex, so only most frequently
-          // used cases without regex are supported
-          if Seq(",", ", ", ":", ";", "#", "@", "_", "-", "\\|", "\\.").contains(
-            pat.value.toString) =>
-        val nativePat = pat.value.toString match {
-          case "\\|" => "|"
-          case "\\." => "."
-          case other => other
-        }
-        Some(
+      case StringSplit(str, Literal(pattern: UTF8String, StringType), Literal(-1, IntegerType)) =>
+        literalStringSplitPattern(pattern.toString).map { nativePat =>
           pb.PhysicalExprNode
             .newBuilder()
             .setScalarFunction(
@@ -600,7 +596,8 @@ class ShimsImpl extends Shims with Logging {
                 .addArgs(NativeConverters
                   .convertExprWithFallback(Literal(nativePat), isPruningExpr, fallback))
                 .setReturnType(NativeConverters.convertDataType(ArrayType(StringType))))
-            .build())
+            .build()
+        }
 
       case e: TaggingExpression =>
         Some(NativeConverters.convertExprWithFallback(e.child, isPruningExpr, fallback))
@@ -614,6 +611,42 @@ class ShimsImpl extends Shims with Logging {
           case None =>
         }
         None
+    }
+  }
+
+  private def literalStringSplitPattern(pattern: String): Option[String] = {
+    if (pattern.isEmpty) {
+      return None
+    }
+
+    val regexMetaCharacters = Set('.', '^', '$', '|', '?', '*', '+', '(', ')', '[', ']', '{', '}')
+    val literalPattern = new StringBuilder
+    var index = 0
+    while (index < pattern.length) {
+      val ch = pattern.charAt(index)
+      if (ch == '\\') {
+        if (index + 1 >= pattern.length) {
+          return None
+        }
+        val escaped = pattern.charAt(index + 1)
+        if (regexMetaCharacters.contains(escaped) || escaped == '\\') {
+          literalPattern.append(escaped)
+          index += 2
+        } else {
+          return None
+        }
+      } else if (regexMetaCharacters.contains(ch)) {
+        return None
+      } else {
+        literalPattern.append(ch)
+        index += 1
+      }
+    }
+
+    if (literalPattern.nonEmpty) {
+      Some(literalPattern.toString)
+    } else {
+      None
     }
   }
 

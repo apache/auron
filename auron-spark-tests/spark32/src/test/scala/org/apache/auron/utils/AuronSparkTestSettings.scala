@@ -31,8 +31,6 @@ class AuronSparkTestSettings extends SparkTestSettings {
     .exclude("map with arrays")
     .exclude("map_concat function")
     .exclude("SPARK-24734: Fix containsNull of Concat for array type")
-    // Native flatten can fail when child arrays have different containsNull metadata.
-    .exclude("flatten function")
 
   enableSuite[AuronDateFunctionsSuite]
     // Native execution wraps Spark parsing/format validation exceptions in SparkException.

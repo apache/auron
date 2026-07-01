@@ -16,11 +16,16 @@
 use std::sync::Arc;
 
 use arrow::{
-    array::ArrayRef,
-    compute::SortOptions,
+    array::{Array, ArrayRef, BooleanArray, RecordBatch, RecordBatchOptions},
+    compute::{SortOptions, prep_null_mask_filter},
     datatypes::{DataType, SchemaRef},
 };
-use datafusion::{common::Result, physical_expr::PhysicalExprRef};
+use datafusion::{
+    common::{JoinSide, Result, ScalarValue, cast::as_boolean_array},
+    physical_expr::PhysicalExprRef,
+    physical_plan::ColumnarValue,
+};
+use datafusion_ext_commons::df_execution_err;
 use stream_cursor::StreamCursor;
 
 use crate::joins::join_utils::JoinType;
@@ -45,8 +50,77 @@ pub struct JoinParams {
     pub key_data_types: Vec<DataType>,
     pub sort_options: Vec<SortOptions>,
     pub projection: JoinProjection,
+    pub join_filter: Option<JoinFilter>,
     pub batch_size: usize,
     pub is_null_aware_anti_join: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct JoinFilter {
+    pub expression: PhysicalExprRef,
+    pub column_indices: Vec<ColumnIndex>,
+    pub schema: SchemaRef,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ColumnIndex {
+    pub side: JoinSide,
+    pub index: usize,
+}
+
+impl JoinFilter {
+    pub fn evaluate(
+        &self,
+        left_cols: &[ArrayRef],
+        right_cols: &[ArrayRef],
+        num_rows: usize,
+    ) -> Result<BooleanArray> {
+        let cols = self
+            .column_indices
+            .iter()
+            .map(|col| {
+                Ok(match col.side {
+                    JoinSide::Left => left_cols.get(col.index).cloned().ok_or_else(|| {
+                        datafusion::common::DataFusionError::Execution(format!(
+                            "join filter left column index out of range: {}",
+                            col.index
+                        ))
+                    })?,
+                    JoinSide::Right => right_cols.get(col.index).cloned().ok_or_else(|| {
+                        datafusion::common::DataFusionError::Execution(format!(
+                            "join filter right column index out of range: {}",
+                            col.index
+                        ))
+                    })?,
+                    JoinSide::None => {
+                        df_execution_err!("join filter column side must be left or right")?
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        // Join filters are compiled against a compact schema containing only
+        // columns referenced by the residual condition. Build a temporary
+        // batch with those columns in the same order before evaluating it.
+        let batch = RecordBatch::try_new_with_options(
+            self.schema.clone(),
+            cols,
+            &RecordBatchOptions::new().with_row_count(Some(num_rows)),
+        )?;
+        match self.expression.evaluate(&batch)? {
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))) => {
+                Ok(BooleanArray::from(vec![true; num_rows]))
+            }
+            ColumnarValue::Scalar(_) => Ok(BooleanArray::from(vec![false; num_rows])),
+            ColumnarValue::Array(selected) => {
+                let mut selected = as_boolean_array(&selected)?.clone();
+                // Spark treats a NULL residual predicate as not matched.
+                if selected.null_count() > 0 {
+                    selected = prep_null_mask_filter(&selected);
+                }
+                Ok(selected)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

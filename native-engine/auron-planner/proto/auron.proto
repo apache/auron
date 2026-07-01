@@ -473,6 +473,7 @@ message SortMergeJoinExecNode {
   repeated JoinOn on = 4;
   repeated SortOptions sort_options = 5;
   JoinType join_type = 6;
+  JoinFilter filter = 7;
 }
 
 message HashJoinExecNode {
@@ -482,6 +483,7 @@ message HashJoinExecNode {
   repeated JoinOn on = 4;
   JoinType join_type = 5;
   JoinSide build_side = 6;
+  JoinFilter filter = 7;
 }
 
 message BroadcastJoinBuildHashMapExecNode {
@@ -831,6 +833,8 @@ message Field {
   bool nullable = 3;
   // for complex data types like structs, unions
   repeated Field children = 4;
+  // Iceberg/Parquet field id. Zero means unset.
+  int32 field_id = 5;
 }
 
 message FixedSizeBinary {

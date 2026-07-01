@@ -42,7 +42,7 @@ use crate::{
     },
     cur_forward,
     joins::{
-        JoinParams, JoinProjection,
+        JoinFilter, JoinParams, JoinProjection,
         join_utils::{JoinType, JoinType::*},
         smj::{
             existence_join::ExistenceJoiner,
@@ -60,6 +60,7 @@ pub struct SortMergeJoinExec {
     on: JoinOn,
     join_type: JoinType,
     sort_options: Vec<SortOptions>,
+    join_filter: Option<JoinFilter>,
     join_params: OnceCell<JoinParams>,
     schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
@@ -73,8 +74,12 @@ impl SortMergeJoinExec {
         right: Arc<dyn ExecutionPlan>,
         on: JoinOn,
         join_type: JoinType,
+        join_filter: Option<JoinFilter>,
         sort_options: Vec<SortOptions>,
     ) -> Result<Self> {
+        if join_filter.is_some() && join_type != JoinType::Inner {
+            df_execution_err!("join filter is only supported for inner sort-merge join")?;
+        }
         Ok(Self {
             schema,
             left,
@@ -82,6 +87,7 @@ impl SortMergeJoinExec {
             on,
             join_type,
             sort_options,
+            join_filter,
             join_params: OnceCell::new(),
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
@@ -127,6 +133,7 @@ impl SortMergeJoinExec {
             key_data_types,
             sort_options: self.sort_options.clone(),
             projection,
+            join_filter: self.join_filter.clone(),
             batch_size: batch_size(),
             is_null_aware_anti_join: false,
         })
@@ -150,6 +157,19 @@ impl SortMergeJoinExec {
         );
 
         let poll_time = Time::new();
+        let left_projection;
+        let right_projection;
+        // The residual join condition may reference columns that are not part
+        // of the final projection. Keep full child rows while matching, then
+        // apply the output projection after the filter has selected rows.
+        let (left_output_projection, right_output_projection) = if join_params.join_filter.is_some()
+        {
+            left_projection = (0..join_params.left_schema.fields().len()).collect::<Vec<_>>();
+            right_projection = (0..join_params.right_schema.fields().len()).collect::<Vec<_>>();
+            (&left_projection, &right_projection)
+        } else {
+            (&join_params.projection.left, &join_params.projection.right)
+        };
         let left = exec_ctx.execute_projected_with_key_rows_output(
             &self.left,
             &join_params
@@ -158,7 +178,7 @@ impl SortMergeJoinExec {
                 .zip(&join_params.sort_options)
                 .map(|(k, s)| PhysicalSortExpr::new(k.clone(), s.clone()))
                 .collect::<Vec<_>>(),
-            &join_params.projection.left,
+            left_output_projection,
         )?;
         let right = exec_ctx.execute_projected_with_key_rows_output(
             &self.right,
@@ -168,7 +188,7 @@ impl SortMergeJoinExec {
                 .zip(&join_params.sort_options)
                 .map(|(k, s)| PhysicalSortExpr::new(k.clone(), s.clone()))
                 .collect::<Vec<_>>(),
-            &join_params.projection.right,
+            right_output_projection,
         )?;
 
         let left = StreamCursor::try_new(left, poll_time.clone(), &join_params.key_data_types)?;
@@ -269,6 +289,7 @@ impl ExecutionPlan for SortMergeJoinExec {
             children[1].clone(),
             self.on.clone(),
             self.join_type,
+            self.join_filter.clone(),
             self.sort_options.clone(),
         )?))
     }
