@@ -74,7 +74,8 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
   }
   private lazy val fileSizes: Map[String, Long] = buildFileSizes()
 
-  private lazy val nativeFileSchema: pb.Schema = NativeConverters.convertSchema(fileSchema)
+  private lazy val nativeFileSchema: pb.Schema =
+    NativeConverters.convertSchema(fileSchema, plan.fieldIdsByName)
   private lazy val nativePartitionSchema: pb.Schema =
     NativeConverters.convertSchema(partitionSchema)
 

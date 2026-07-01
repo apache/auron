@@ -25,6 +25,7 @@ import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -48,9 +49,12 @@ final case class IcebergScanPlan(
     readSchema: StructType,
     fileSchema: StructType,
     partitionSchema: StructType,
-    pruningPredicates: Seq[pb.PhysicalExprNode])
+    pruningPredicates: Seq[pb.PhysicalExprNode],
+    fieldIdsByName: Map[String, Int])
 
 object IcebergScanSupport extends Logging {
+  private val scanPlanTag: TreeNodeTag[Option[IcebergScanPlan]] = TreeNodeTag(
+    "auron.iceberg.scan.plan")
 
   private val SparkChangelogScanClassName =
     "org.apache.iceberg.spark.source.SparkChangelogScan"
@@ -79,6 +83,16 @@ object IcebergScanSupport extends Logging {
   }
 
   def plan(exec: BatchScanExec): Option[IcebergScanPlan] = {
+    exec.getTagValue(scanPlanTag) match {
+      case Some(cached) => cached
+      case None =>
+        val planned = planUncached(exec)
+        exec.setTagValue(scanPlanTag, planned)
+        planned
+    }
+  }
+
+  private def planUncached(exec: BatchScanExec): Option[IcebergScanPlan] = {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
@@ -104,6 +118,31 @@ object IcebergScanSupport extends Logging {
     }
     val (fileSchema, partitionSchema) = schemas.get
 
+    val fieldIdsByName =
+      try {
+        AuronIcebergSourceUtil.expectedFieldIds(scan.asInstanceOf[AnyRef])
+      } catch {
+        case NonFatal(t) =>
+          logWarning(s"Failed to inspect Iceberg field ids for $scanClassName.", t)
+          return None
+      }
+
+    val renameOrDrop =
+      try {
+        AuronIcebergSourceUtil.detectRenameOrDrop(scan.asInstanceOf[AnyRef])
+      } catch {
+        case NonFatal(t) =>
+          logWarning(s"Failed to inspect Iceberg schema history for $scanClassName.", t)
+          return None
+      }
+    assert(!renameOrDrop.nested, "Nested Iceberg rename or drop is not supported.")
+
+    val missingFieldIds =
+      fileSchema.fields.filterNot(field => fieldIdsByName.contains(field.name)).map(_.name)
+    assert(
+      missingFieldIds.isEmpty,
+      s"Missing Iceberg field ids for columns: ${missingFieldIds.mkString(", ")}")
+
     val partitions = inputPartitions(exec)
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
     if (partitions.isEmpty) {
@@ -115,7 +154,8 @@ object IcebergScanSupport extends Logging {
           readSchema,
           fileSchema,
           partitionSchema,
-          Seq.empty))
+          Seq.empty,
+          fieldIdsByName))
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
@@ -142,7 +182,11 @@ object IcebergScanSupport extends Logging {
     }
 
     val format = formats.headOption.getOrElse(FileFormat.PARQUET)
-    if (format != FileFormat.PARQUET && format != FileFormat.ORC) {
+    // ORC cannot match Iceberg columns by field-id yet, so any historical top-level
+    // rename/drop may make older ORC files unsafe for native name/position matching.
+    val supportedFormat =
+      format == FileFormat.PARQUET || (format == FileFormat.ORC && !renameOrDrop.topLevel)
+    if (!supportedFormat) {
       return None
     }
 
@@ -155,7 +199,8 @@ object IcebergScanSupport extends Logging {
         readSchema,
         fileSchema,
         partitionSchema,
-        pruningPredicates))
+        pruningPredicates,
+        fieldIdsByName))
   }
 
   private def planChangelogScan(exec: BatchScanExec, scan: Scan): Option[IcebergScanPlan] = {
@@ -175,7 +220,8 @@ object IcebergScanSupport extends Logging {
           readSchema,
           fileSchema,
           partitionSchema,
-          Seq.empty))
+          Seq.empty,
+          Map.empty))
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
@@ -223,7 +269,8 @@ object IcebergScanSupport extends Logging {
         readSchema,
         fileSchema,
         partitionSchema,
-        pruningPredicates))
+        pruningPredicates,
+        Map.empty))
   }
 
   private def supportedSchemas(
