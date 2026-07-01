@@ -37,7 +37,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.util.Using
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, CollectList, CollectSet, Count, DeclarativeAggregate, First, Max, Min, Sum, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, BitAndAgg, BitOrAgg, BitXorAgg, CollectList, CollectSet, Count, DeclarativeAggregate, First, Max, Min, Sum, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.codegen.ExprCode
 import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
@@ -1271,6 +1271,16 @@ object NativeConverters extends Logging {
           pb.AggFunction.FIRST
         })
         aggBuilder.addChildren(convertExpr(child))
+
+      case e: BitAndAgg =>
+        aggBuilder.setAggFunction(pb.AggFunction.BIT_AND)
+        aggBuilder.addChildren(convertExpr(e.child))
+      case e: BitOrAgg =>
+        aggBuilder.setAggFunction(pb.AggFunction.BIT_OR)
+        aggBuilder.addChildren(convertExpr(e.child))
+      case e: BitXorAgg =>
+        aggBuilder.setAggFunction(pb.AggFunction.BIT_XOR)
+        aggBuilder.addChildren(convertExpr(e.child))
 
       case CollectList(child, _, _) =>
         aggBuilder.setAggFunction(pb.AggFunction.COLLECT_LIST)
