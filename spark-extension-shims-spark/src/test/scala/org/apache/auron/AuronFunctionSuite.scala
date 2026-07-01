@@ -19,7 +19,7 @@ package org.apache.auron
 import java.sql.Date
 import java.text.SimpleDateFormat
 
-import org.apache.spark.sql.{AuronQueryTest, DataFrame, Row}
+import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.functions.{col, split}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -1025,7 +1025,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       val query = "SELECT id, randn(42) AS r1, randn(100) AS r2 FROM t1 ORDER BY id"
       val df = sql(query)
       val rows = df.collect()
-      assertFullyNative(df)
+      assertNativeOperator(df)
 
       assert(rows.length == 3)
       assert(rows.forall(r => !r.isNullAt(1) && !r.isNullAt(2)))
@@ -1049,7 +1049,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       val query = "SELECT id, randn(cast(42 as bigint)) AS r FROM t1 ORDER BY id"
       val df = sql(query)
       val rows = df.collect()
-      assertFullyNative(df)
+      assertNativeOperator(df)
 
       assert(rows.length == 3)
       assert(rows.forall(r => !r.isNullAt(1)))
@@ -1058,17 +1058,6 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       val rows2 = sql(query).collect()
       assert(rows.map(_.getDouble(1)).sameElements(rows2.map(_.getDouble(1))))
     }
-  }
-
-  /** Fail if any operator in the executed plan is not native or a pass-through. */
-  private def assertFullyNative(df: DataFrame): Unit = {
-    val plan = stripAQEPlan(df.queryExecution.executedPlan)
-    plan
-      .collectFirst { case op if !isNativeOrPassThrough(op) => op }
-      .foreach(op => fail(s"""
-             |Found non-native operator: ${op.nodeName}
-             |plan:
-             |$plan""".stripMargin))
   }
 
   test("ascii function") {

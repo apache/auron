@@ -63,18 +63,23 @@ abstract class AuronQueryTest
     checkAnswer(dfAuron, expected)
 
     if (requireNative) {
-      val plan = stripAQEPlan(dfAuron.queryExecution.executedPlan)
-      plan
-        .collectFirst { case op if !isNativeOrPassThrough(op) => op }
-        .foreach { op: SparkPlan =>
-          fail(s"""
-               |Found non-native operator: ${op.nodeName}
-               |plan:
-               |${plan}""".stripMargin)
-        }
+      assertNativeOperator(dfAuron)
     }
 
     dfAuron
+  }
+
+  /** Fail if any operator in the executed plan is not native or a pass-through. */
+  protected def assertNativeOperator(df: DataFrame): Unit = {
+    val plan = stripAQEPlan(df.queryExecution.executedPlan)
+    plan
+      .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+      .foreach { op: SparkPlan =>
+        fail(s"""
+             |Found non-native operator: ${op.nodeName}
+             |plan:
+             |${plan}""".stripMargin)
+      }
   }
 
   protected def isNativeOrPassThrough(op: SparkPlan): Boolean = op match {
