@@ -1100,8 +1100,9 @@ mod test {
             Some(6),
             None,
             None,
+            None,
         ]);
-        let offsets = OffsetBuffer::new(vec![0, 3, 5, 8].into());
+        let offsets = OffsetBuffer::new(vec![0, 3, 5, 8, 9].into());
         let list_array: ArrayRef = Arc::new(ListArray::new(
             Arc::new(Field::new("item", DataType::Int32, true)),
             offsets,
@@ -1116,6 +1117,7 @@ mod test {
                 Some("[1, 2, 3]"),
                 Some("[null, 5]"),
                 Some("[6, null, null]"),
+                Some("[null]"),
             ])
         );
     }

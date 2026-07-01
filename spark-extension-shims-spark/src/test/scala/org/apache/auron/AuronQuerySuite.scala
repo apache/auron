@@ -1050,9 +1050,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         sql("""
               |create table t_array_nulls using parquet as
               |select array(cast(null as int), cast(null as int)) as arr
+              |union all select array(cast(null as int))
               |union all select array(1, null, 3)
               |union all select array(null, 2, null, 4)
-              |""".stripMargin)
 
         checkSparkAnswerAndOperator("select cast(arr as string) from t_array_nulls")
       }
