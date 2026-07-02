@@ -116,6 +116,23 @@ print_invalid_option_error() {
     exit 1
 }
 
+run_docker_compose_up() {
+    local compose_args=("-f" "dev/docker-build/docker-compose.yml" "up" "--abort-on-container-exit")
+
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+        echo "[INFO] Using Docker Compose command: docker compose"
+        exec docker compose "${compose_args[@]}"
+    fi
+
+    if command -v docker-compose >/dev/null 2>&1; then
+        echo "[INFO] Using Docker Compose command: docker-compose"
+        exec docker-compose "${compose_args[@]}"
+    fi
+
+    echo "ERROR: Docker Compose is required. Install docker compose (Docker Engine v2) or legacy docker-compose." >&2
+    exit 1
+}
+
 MVN_CMD="$(dirname "$0")/build/mvn"
 
 # -----------------------------------------------------------------------------
@@ -571,7 +588,7 @@ if [[ "$USE_DOCKER" == true ]]; then
     if [[ -z "$AURON_JAVA_VERSION" && "$SPARK_VER" == 4.* ]]; then
         export AURON_JAVA_VERSION="17"
     fi
-    exec docker-compose -f dev/docker-build/docker-compose.yml up --abort-on-container-exit
+    run_docker_compose_up
 else
     echo "[INFO] Compiling locally with maven args: $MVN_CMD ${MVN_ARGS[@]} ${MVN_D_ARGS} $@"
     if [[ -n "$MVN_D_ARGS" ]]; then
