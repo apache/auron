@@ -39,6 +39,7 @@ SUPPORTED_PAIMON_VERSIONS=("1.2")
 SUPPORTED_FLINK_VERSIONS=("1.18")
 SUPPORTED_ICEBERG_VERSIONS=("1.10.1")
 SUPPORTED_HUDI_VERSIONS=("0.15")
+DEFAULT_DOCKER_PLATFORM=("linux/amd64")
 
 # -----------------------------------------------------------------------------
 # Function: print_help
@@ -56,6 +57,7 @@ print_help() {
     echo "  --skiptests <true|false> Skip unit tests (default: true)"
     echo "  --sparktests <true|false> Run spark tests (default: false)"
     echo "  --docker <true|false>    Build in Docker environment (default: false)"
+    echo "  --platform <PLATFORM>    Docker platform to use (default: linux/amd64)"
     echo "  --threads <N|NC>         Maven build threads (e.g. 1, 4, 1C). Default: local unset, docker 8"
     IFS=','; echo "  --image <NAME>           Docker image to use (e.g. ${SUPPORTED_OS_IMAGES[*]}, default: ${SUPPORTED_OS_IMAGES[*]:0:1})"; unset IFS
     IFS=','; echo "  --sparkver <VERSION>     Specify Spark version (e.g. ${SUPPORTED_SPARK_VERSIONS[*]})"; unset IFS
@@ -72,7 +74,7 @@ print_help() {
     echo "Examples:"
     echo "  $0 --pre --sparkver ${SUPPORTED_SPARK_VERSIONS[*]: -1}" \
          "--scalaver ${SUPPORTED_SCALA_VERSIONS[*]: -1} -DskipBuildNative"
-    echo "  $0 --docker true --image ${SUPPORTED_OS_IMAGES[*]:0:1}" \
+    echo "  $0 --docker true --platform ${DEFAULT_DOCKER_PLATFORM[*]: -1} --image ${SUPPORTED_OS_IMAGES[*]:0:1}" \
          "--clean true --skiptests true --release" \
          "--sparkver ${SUPPORTED_SPARK_VERSIONS[*]: -1}" \
          "--flinkver ${SUPPORTED_FLINK_VERSIONS[*]: -1}" \
@@ -125,6 +127,7 @@ MVN_CMD="$(dirname "$0")/build/mvn"
 # -----------------------------------------------------------------------------
 USE_DOCKER=false
 IMAGE_NAME="${SUPPORTED_OS_IMAGES[*]:0:1}"
+DOCKER_PLATFORM="$DEFAULT_DOCKER_PLATFORM"
 PRE_PROFILE=false
 RELEASE_PROFILE=false
 CLEAN=true
@@ -162,6 +165,19 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "ERROR: --docker requires true/false" >&2
+                exit 1
+            fi
+            ;;
+        --platform)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                DOCKER_PLATFORM="$2"
+                if [[ ! "$DOCKER_PLATFORM" =~ ^[a-z0-9_.-]+/[a-z0-9_.-]+(/[a-z0-9_.-]+)?$ ]]; then
+                    echo "ERROR: Invalid --platform value '$DOCKER_PLATFORM'. Expected Docker platform format, e.g. linux/amd64." >&2
+                    exit 1
+                fi
+                shift 2
+            else
+                echo "ERROR: --platform requires a value (e.g. linux/amd64)" >&2
                 exit 1
             fi
             ;;
@@ -566,6 +582,7 @@ if [[ "$USE_DOCKER" == true ]]; then
 
     echo "[INFO] Compiling inside Docker container..."
     export AURON_BUILD_ARGS="${BUILD_ARGS[*]}"
+    export AURON_DOCKER_PLATFORM="$DOCKER_PLATFORM"
     export BUILD_CONTEXT="./${IMAGE_NAME}"
     # Spark 4.x requires JDK 17+, auto-set if not specified
     if [[ -z "$AURON_JAVA_VERSION" && "$SPARK_VER" == 4.* ]]; then
@@ -580,4 +597,3 @@ else
         "$MVN_CMD" "${MVN_ARGS[@]}" "$@"
     fi
 fi
-
