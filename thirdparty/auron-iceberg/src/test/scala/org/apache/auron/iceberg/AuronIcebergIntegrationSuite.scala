@@ -533,7 +533,7 @@ class AuronIcebergIntegrationSuite
       }
     }
   }
-        
+
   test("iceberg changelog scan falls back when delete changes exist") {
     withTable("local.db.t_changelog_delete") {
       withTempView("t_changelog_delete_changes") {
