@@ -55,7 +55,8 @@ class IcebergConvertProvider extends AuronConvertProvider with Logging {
       case e: BatchScanExec =>
         IcebergScanSupport.plan(e) match {
           case Some(plan) =>
-            AuronConverters.addRenameColumnsExec(NativeIcebergTableScanExec(e, plan))
+            AuronConverters.addRenameColumnsExec(
+              NativeIcebergTableScanExec(e, plan, e.runtimeFilters))
           case None =>
             IcebergScanSupport.fallbackReason(e) match {
               case Some(reason) => throw new AssertionError(reason)

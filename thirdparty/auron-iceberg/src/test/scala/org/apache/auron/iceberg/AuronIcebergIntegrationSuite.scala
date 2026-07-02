@@ -16,7 +16,7 @@
  */
 package org.apache.auron.iceberg
 
-import java.util.UUID
+import java.util.{Locale, UUID}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -32,6 +32,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.ExplainUtils.collectFirst
+import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
@@ -172,6 +173,38 @@ class AuronIcebergIntegrationSuite
       checkAnswer(df, Seq(Row(1, "a", "p1")))
       val plan = df.queryExecution.executedPlan.toString()
       assert(plan.contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg native scan preserves dynamic pruning runtime filters") {
+    withTable("local.db.t_dpp_fact", "local.db.t_dpp_dim") {
+      sql("""
+            |create table local.db.t_dpp_fact (id int, v string, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_dpp_fact values (1, 'a', 1), (2, 'b', 2), (3, 'c', 3)")
+      sql("create table local.db.t_dpp_dim using iceberg as select 2 as p")
+
+      withSQLConf(
+        "spark.auron.enable" -> "true",
+        "spark.auron.enable.iceberg.scan" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+        val df = sql("""
+            |select f.id, f.v, f.p
+            |from local.db.t_dpp_fact f
+            |join local.db.t_dpp_dim d
+            |on f.p = d.p
+            |""".stripMargin)
+
+        checkAnswer(df, Seq(Row(2, "b", 2)))
+
+        val explain = df.queryExecution.explainString(FormattedMode)
+        assert(explain.contains("NativeIcebergTableScan"), explain)
+        assert(explain.toLowerCase(Locale.ROOT).contains("dynamicpruning"), explain)
+      }
     }
   }
 

@@ -31,9 +31,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.auron.{EmptyNativeRDD, NativeConverters, NativeHelper, NativeRDD, NativeSupports, Shims}
-import org.apache.spark.sql.auron.iceberg.{IcebergNativeScanTask, IcebergScanPlan}
+import org.apache.spark.sql.auron.iceberg.{IcebergNativeScanTask, IcebergScanPlan, IcebergScanSupport}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
@@ -47,7 +47,10 @@ import org.apache.auron.{protobuf => pb}
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.metric.SparkMetricNode
 
-case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergScanPlan)
+case class NativeIcebergTableScanExec(
+    basedScan: BatchScanExec,
+    staticPlan: IcebergScanPlan,
+    runtimeFilters: Seq[Expression])
     extends LeafExecNode
     with NativeSupports
     with Logging {
@@ -59,6 +62,15 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
 
   override val output = basedScan.output
   override val outputPartitioning = basedScan.outputPartitioning
+
+  private lazy val plan: IcebergScanPlan = {
+    if (runtimeFilters.nonEmpty) {
+      val filteredScan = IcebergScanSupport.withRuntimeFilters(basedScan, runtimeFilters)
+      IcebergScanSupport.plan(filteredScan, useRuntimeFilters = true).getOrElse(staticPlan)
+    } else {
+      staticPlan
+    }
+  }
 
   private lazy val fileSchema: StructType = plan.fileSchema
   private lazy val partitionSchema: StructType = plan.partitionSchema
@@ -212,6 +224,16 @@ case class NativeIcebergTableScanExec(basedScan: BatchScanExec, plan: IcebergSca
   }
 
   override val nodeName: String = "NativeIcebergTableScan"
+
+  override def simpleString(maxFields: Int): String = {
+    val runtimeFilterString =
+      if (runtimeFilters.isEmpty) {
+        ""
+      } else {
+        s", runtimeFilters=[${runtimeFilters.map(_.toString).mkString(", ")}]"
+      }
+    s"$nodeName$output$runtimeFilterString"
+  }
 
   // Delegate canonicalization to the original scan to keep plan equivalence checks consistent.
   override protected def doCanonicalize(): SparkPlan = basedScan.canonicalized

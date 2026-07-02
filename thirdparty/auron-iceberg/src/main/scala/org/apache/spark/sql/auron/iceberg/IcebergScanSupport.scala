@@ -19,6 +19,7 @@ package org.apache.spark.sql.auron.iceberg
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.iceberg.{AddedRowsScanTask, ChangelogOperation, ChangelogScanTask, FileFormat, FileScanTask, MetadataColumns, ScanTask}
 import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
 import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
@@ -55,6 +56,8 @@ final case class IcebergScanPlan(
 object IcebergScanSupport extends Logging {
   private val scanPlanTag: TreeNodeTag[Option[IcebergScanPlan]] = TreeNodeTag(
     "auron.iceberg.scan.plan")
+  private val runtimeFilteredScanPlanTag: TreeNodeTag[Option[IcebergScanPlan]] = TreeNodeTag(
+    "auron.iceberg.runtime.filtered.scan.plan")
 
   private val SparkChangelogScanClassName =
     "org.apache.iceberg.spark.source.SparkChangelogScan"
@@ -82,17 +85,41 @@ object IcebergScanSupport extends Logging {
     }
   }
 
-  def plan(exec: BatchScanExec): Option[IcebergScanPlan] = {
-    exec.getTagValue(scanPlanTag) match {
+  def plan(exec: BatchScanExec, useRuntimeFilters: Boolean = false): Option[IcebergScanPlan] = {
+    val tag = if (useRuntimeFilters) runtimeFilteredScanPlanTag else scanPlanTag
+    exec.getTagValue(tag) match {
       case Some(cached) => cached
       case None =>
-        val planned = planUncached(exec)
-        exec.setTagValue(scanPlanTag, planned)
+        val planned = planUncached(exec, useRuntimeFilters)
+        exec.setTagValue(tag, planned)
         planned
     }
   }
 
-  private def planUncached(exec: BatchScanExec): Option[IcebergScanPlan] = {
+  def withRuntimeFilters(
+      exec: BatchScanExec,
+      runtimeFilters: Seq[SparkExpression]): BatchScanExec = {
+    val params = exec.productIterator.toArray
+    assert(params.length >= 3, s"Unexpected BatchScanExec shape: ${exec.getClass.getName}")
+    params(2) = runtimeFilters
+    try {
+      exec.getClass.getMethods
+        .find(method => method.getName == "copy" && method.getParameterCount == params.length)
+        .getOrElse {
+          throw new NoSuchMethodException(
+            s"Cannot find compatible BatchScanExec.copy with ${params.length} parameters.")
+        }
+        .invoke(exec, params.map(_.asInstanceOf[AnyRef]): _*)
+        .asInstanceOf[BatchScanExec]
+    } catch {
+      case NonFatal(t) =>
+        throw new IllegalStateException("Failed to copy BatchScanExec with runtime filters.", t)
+    }
+  }
+
+  private def planUncached(
+      exec: BatchScanExec,
+      useRuntimeFilters: Boolean): Option[IcebergScanPlan] = {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
@@ -104,13 +131,14 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    planFileScan(exec, scan, scanClassName)
+    planFileScan(exec, scan, scanClassName, useRuntimeFilters)
   }
 
   private def planFileScan(
       exec: BatchScanExec,
       scan: Scan,
-      scanClassName: String): Option[IcebergScanPlan] = {
+      scanClassName: String,
+      useRuntimeFilters: Boolean): Option[IcebergScanPlan] = {
     val readSchema = scan.readSchema
     val schemas = supportedSchemas(readSchema, isChangelogScan = false)
     if (schemas.isEmpty) {
@@ -143,7 +171,7 @@ object IcebergScanSupport extends Logging {
       missingFieldIds.isEmpty,
       s"Missing Iceberg field ids for columns: ${missingFieldIds.mkString(", ")}")
 
-    val partitions = inputPartitions(exec)
+    val partitions = inputPartitions(exec, useRuntimeFilters)
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
     if (partitions.isEmpty) {
       logWarning(s"Native Iceberg scan planned with empty partitions for $scanClassName.")
@@ -326,7 +354,13 @@ object IcebergScanSupport extends Logging {
   private def deletesEmpty(deletes: java.util.List[_]): Boolean =
     deletes == null || deletes.isEmpty
 
-  private def inputPartitions(exec: BatchScanExec): Seq[InputPartition] = {
+  private def inputPartitions(
+      exec: BatchScanExec,
+      useRuntimeFilters: Boolean = false): Seq[InputPartition] = {
+    if (useRuntimeFilters) {
+      return runtimeFilteredPartitions(exec)
+    }
+
     // Prefer DataSource V2 batch API; if not available, fallback to exec methods via reflection.
     val fromBatch =
       try {
@@ -380,6 +414,36 @@ object IcebergScanSupport extends Logging {
           t)
         Seq.empty
     }
+  }
+
+  private def runtimeFilteredPartitions(exec: BatchScanExec): Seq[InputPartition] = {
+    try {
+      MethodUtils.invokeMethod(exec, true, "prepare")
+      MethodUtils.invokeMethod(exec, true, "waitForSubqueries")
+      invokeDeclaredMethod(exec, "filteredPartitions") match {
+        case Some(seq: scala.collection.Seq[_]) =>
+          flattenPartitions(seq)
+        case _ =>
+          Seq.empty
+      }
+    } catch {
+      case NonFatal(t) =>
+        logWarning(
+          s"Failed to obtain runtime-filtered input partitions for ${exec.getClass.getName}.",
+          t)
+        Seq.empty
+    }
+  }
+
+  private def flattenPartitions(seq: scala.collection.Seq[_]): Seq[InputPartition] = {
+    seq.flatMap {
+      case partition: InputPartition =>
+        Seq(partition)
+      case nested: scala.collection.Seq[_] =>
+        flattenPartitions(nested)
+      case _ =>
+        Seq.empty
+    }.toSeq
   }
 
   private case class IcebergPartitionView(tasks: Seq[ScanTask])
