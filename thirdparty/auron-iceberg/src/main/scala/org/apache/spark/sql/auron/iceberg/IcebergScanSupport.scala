@@ -211,6 +211,31 @@ object IcebergScanSupport extends Logging {
     }
     val (fileSchema, partitionSchema) = schemas.get
 
+    val fieldIdsByName =
+      try {
+        AuronIcebergSourceUtil.expectedFieldIdsForChangelogScan(scan.asInstanceOf[AnyRef])
+      } catch {
+        case NonFatal(t) =>
+          logWarning(s"Failed to inspect Iceberg changelog field ids for $scan.", t)
+          return None
+      }
+
+    val renameOrDrop =
+      try {
+        AuronIcebergSourceUtil.detectRenameOrDropForChangelogScan(scan.asInstanceOf[AnyRef])
+      } catch {
+        case NonFatal(t) =>
+          logWarning(s"Failed to inspect Iceberg changelog schema history for $scan.", t)
+          return None
+      }
+    assert(!renameOrDrop.nested, "Nested Iceberg rename or drop is not supported.")
+
+    val missingFieldIds =
+      fileSchema.fields.filterNot(field => fieldIdsByName.contains(field.name)).map(_.name)
+    assert(
+      missingFieldIds.isEmpty,
+      s"Missing Iceberg field ids for columns: ${missingFieldIds.mkString(", ")}")
+
     val partitions = inputPartitions(exec)
     if (partitions.isEmpty) {
       return Some(
@@ -221,7 +246,7 @@ object IcebergScanSupport extends Logging {
           fileSchema,
           partitionSchema,
           Seq.empty,
-          Map.empty))
+          fieldIdsByName))
     }
 
     val icebergPartitions = partitions.flatMap(icebergPartition)
@@ -256,7 +281,9 @@ object IcebergScanSupport extends Logging {
     }
 
     val format = formats.headOption.getOrElse(FileFormat.PARQUET)
-    if (format != FileFormat.PARQUET && format != FileFormat.ORC) {
+    val supportedFormat =
+      format == FileFormat.PARQUET || (format == FileFormat.ORC && !renameOrDrop.topLevel)
+    if (!supportedFormat) {
       return None
     }
 
@@ -270,7 +297,7 @@ object IcebergScanSupport extends Logging {
         fileSchema,
         partitionSchema,
         pruningPredicates,
-        Map.empty))
+        fieldIdsByName))
   }
 
   private def supportedSchemas(
