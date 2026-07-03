@@ -33,6 +33,8 @@ import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.ExplainUtils.collectFirst
 import org.apache.spark.sql.execution.FormattedMode
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
@@ -184,26 +186,55 @@ class AuronIcebergIntegrationSuite
             |partitioned by (p)
             |""".stripMargin)
       sql("insert into local.db.t_dpp_fact values (1, 'a', 1), (2, 'b', 2), (3, 'c', 3)")
-      sql("create table local.db.t_dpp_dim using iceberg as select 2 as p")
+      sql("create table local.db.t_dpp_dim using iceberg as select 1 as id, 2 as p")
 
       withSQLConf(
         "spark.auron.enable" -> "true",
         "spark.auron.enable.iceberg.scan" -> "true",
         "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
-        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "false",
-        "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "1024") {
         val df = sql("""
-            |select f.id, f.v, f.p
+            |select /*+ BROADCAST(d) */ f.id, f.v, f.p
             |from local.db.t_dpp_fact f
             |join local.db.t_dpp_dim d
             |on f.p = d.p
+            |where d.id = 1
             |""".stripMargin)
 
-        checkAnswer(df, Seq(Row(2, "b", 2)))
+        checkNativeDppScan(df, Seq(Row(2, "b", 2)), "t_dpp_fact", 1L, 1L)
+      }
+    }
+  }
 
-        val explain = df.queryExecution.explainString(FormattedMode)
-        assert(explain.contains("NativeIcebergTableScan"), explain)
-        assert(explain.toLowerCase(Locale.ROOT).contains("dynamicpruning"), explain)
+  test("iceberg native scan handles dynamic pruning to empty partitions") {
+    withTable("local.db.t_dpp_empty_fact", "local.db.t_dpp_empty_dim") {
+      sql("""
+            |create table local.db.t_dpp_empty_fact (id int, v string, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("""
+            |insert into local.db.t_dpp_empty_fact
+            |values (1, 'a', 1), (2, 'b', 2), (3, 'c', 3)
+            |""".stripMargin)
+      sql("create table local.db.t_dpp_empty_dim using iceberg as select 1 as id, 9 as p")
+
+      withSQLConf(
+        "spark.auron.enable" -> "true",
+        "spark.auron.enable.iceberg.scan" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "1024") {
+        val df = sql("""
+            |select /*+ BROADCAST(d) */ f.id, f.v, f.p
+            |from local.db.t_dpp_empty_fact f
+            |join local.db.t_dpp_empty_dim d
+            |on f.p = d.p
+            |where d.id = 1
+            |""".stripMargin)
+
+        checkNativeDppScan(df, Seq.empty[Row], "t_dpp_empty_fact", 0L, 0L)
       }
     }
   }
@@ -220,6 +251,39 @@ class AuronIcebergIntegrationSuite
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
       val plan = df.queryExecution.executedPlan.toString()
       assert(plan.contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("iceberg native ORC scan applies dynamic pruning runtime filters") {
+    withTable("local.db.t_orc_dpp_fact", "local.db.t_orc_dpp_dim") {
+      sql("""
+            |create table local.db.t_orc_dpp_fact (id int, v string, p int)
+            |using iceberg
+            |partitioned by (p)
+            |tblproperties ('write.format.default' = 'orc')
+            |""".stripMargin)
+      sql("""
+            |insert into local.db.t_orc_dpp_fact
+            |values (1, 'a', 1), (2, 'b', 2), (3, 'c', 3)
+            |""".stripMargin)
+      sql("create table local.db.t_orc_dpp_dim using iceberg as select 1 as id, 2 as p")
+
+      withSQLConf(
+        "spark.auron.enable" -> "true",
+        "spark.auron.enable.iceberg.scan" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "1024") {
+        val df = sql("""
+            |select /*+ BROADCAST(d) */ f.id, f.v, f.p
+            |from local.db.t_orc_dpp_fact f
+            |join local.db.t_orc_dpp_dim d
+            |on f.p = d.p
+            |where d.id = 1
+            |""".stripMargin)
+
+        checkNativeDppScan(df, Seq(Row(2, "b", 2)), "t_orc_dpp_fact", 1L, 1L)
+      }
     }
   }
 
@@ -508,6 +572,50 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native changelog scan remains correct in dynamic pruning join") {
+    withTable("local.db.t_changelog_dpp", "local.db.t_changelog_dpp_dim") {
+      withTempView("t_changelog_dpp_changes") {
+        sql("""
+              |create table local.db.t_changelog_dpp (id int, v string, p int)
+              |using iceberg
+              |partitioned by (p)
+              |tblproperties ('format-version' = '2')
+              |""".stripMargin)
+        sql("insert into local.db.t_changelog_dpp values (0, 'seed', 0)")
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_dpp")
+        sql("""
+              |insert into local.db.t_changelog_dpp
+              |values (1, 'a', 1), (2, 'b', 2), (3, 'c', 3)
+              |""".stripMargin)
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_dpp")
+        createChangelogView(
+          "local.db.t_changelog_dpp",
+          "t_changelog_dpp_changes",
+          startSnapshotId,
+          endSnapshotId)
+        sql("create table local.db.t_changelog_dpp_dim using iceberg as select 1 as id, 2 as p")
+
+        withSQLConf(
+          "spark.auron.enable" -> "true",
+          "spark.auron.enable.iceberg.scan" -> "true",
+          "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
+          "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "true",
+          "spark.sql.autoBroadcastJoinThreshold" -> "1024") {
+          val df = sql("""
+              |select /*+ BROADCAST(d) */ c.id, c.v, c.p, c._change_type
+              |from t_changelog_dpp_changes c
+              |join local.db.t_changelog_dpp_dim d
+              |on c.p = d.p
+              |where d.id = 1
+              |""".stripMargin)
+
+          checkAnswer(df, Seq(Row(2, "b", 2, "INSERT")))
+          executedNativeIcebergTableScanExec(df)
+        }
+      }
+    }
+  }
+
   test("iceberg changelog scan falls back when delete changes exist") {
     withTable("local.db.t_changelog_delete") {
       withTempView("t_changelog_delete_changes") {
@@ -680,17 +788,61 @@ class AuronIcebergIntegrationSuite
     }
     df
   }
+
+  private def checkNativeDppScan(
+      df: DataFrame,
+      expected: Seq[Row],
+      tableName: String,
+      expectedFiles: Long,
+      expectedPartitions: Long): NativeIcebergTableScanExec = {
+    checkAnswer(df, expected)
+
+    val nativeScan = executedNativeIcebergTableScanExec(df, tableName)
+    assert(nativeScan.runtimeFilters.nonEmpty, df.queryExecution.explainString(FormattedMode))
+    assert(nativeScan.metrics("numFiles").value === expectedFiles)
+    assert(nativeScan.metrics("numPartitions").value === expectedPartitions)
+
+    val explain = df.queryExecution.explainString(FormattedMode)
+    assert(explain.contains("NativeIcebergTableScan"), explain)
+    assert(explain.toLowerCase(Locale.ROOT).contains("dynamicpruning"), explain)
+
+    nativeScan
+  }
+
   private def icebergScanPlan(df: DataFrame) =
     df.queryExecution.sparkPlan.collectFirst { case scan: BatchScanExec =>
       IcebergScanSupport.plan(scan)
     }.flatten
 
-  private def executedNativeIcebergTableScanExec(df: DataFrame): NativeIcebergTableScanExec = {
-    val nativeScan = df.queryExecution.executedPlan.collectFirst {
-      case scan: NativeIcebergTableScanExec => scan
+  private def executedNativeIcebergTableScanExec(
+      df: DataFrame,
+      tableName: String = ""): NativeIcebergTableScanExec = {
+    val plan = df.queryExecution.executedPlan match {
+      case adaptive: AdaptiveSparkPlanExec => adaptive.executedPlan
+      case other => other
     }
-    assert(nativeScan.nonEmpty)
+    val nativeScan = collectMaterializedPlans(plan).collectFirst {
+      case scan: NativeIcebergTableScanExec
+          if tableName.isEmpty || scan.basedScan.scan.description().contains(tableName) =>
+        scan
+    }
+    assert(
+      nativeScan.nonEmpty,
+      s"""
+         |No NativeIcebergTableScanExec found.
+         |
+         |Materialized plan:
+         |${plan.treeString}
+         |""".stripMargin)
     nativeScan.get
+  }
+
+  private def collectMaterializedPlans(plan: SparkPlan): Seq[SparkPlan] = {
+    val actualPlan = plan match {
+      case stage: QueryStageExec => stage.plan
+      case other => other
+    }
+    actualPlan +: actualPlan.children.flatMap(collectMaterializedPlans)
   }
 
   test("native iceberg scan respects SinglePartition for global sort correctness") {
