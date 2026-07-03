@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeBroadcastJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.auron.shuffle.RssPartitionWriterBase
 import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -124,6 +125,10 @@ abstract class Shims {
       outer: Boolean,
       generatorOutput: Seq[Attribute],
       child: SparkPlan): NativeGenerateBase
+
+  def copyBatchScanExecWithRuntimeFilters(
+      exec: BatchScanExec,
+      runtimeFilters: Seq[Expression]): BatchScanExec
 
   def getLimitAndOffset(plan: GlobalLimitExec): (Int, Int) = (plan.limit, 0)
 
