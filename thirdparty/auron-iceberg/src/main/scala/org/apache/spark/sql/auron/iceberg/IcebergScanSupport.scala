@@ -86,7 +86,12 @@ object IcebergScanSupport extends Logging {
   }
 
   def plan(exec: BatchScanExec, useRuntimeFilters: Boolean = false): Option[IcebergScanPlan] = {
-    val tag = if (useRuntimeFilters) runtimeFilteredScanPlanTag else scanPlanTag
+    val tag =
+      if (useRuntimeFilters && exec.runtimeFilters.nonEmpty) {
+        runtimeFilteredScanPlanTag
+      } else {
+        scanPlanTag
+      }
     exec.getTagValue(tag) match {
       case Some(cached) => cached
       case None =>
@@ -124,7 +129,7 @@ object IcebergScanSupport extends Logging {
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
     if (scanClassName == SparkChangelogScanClassName) {
-      return planChangelogScan(exec, scan)
+      return planChangelogScan(exec, scan, useRuntimeFilters)
     }
 
     if (!AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan)) {
@@ -231,7 +236,10 @@ object IcebergScanSupport extends Logging {
         fieldIdsByName))
   }
 
-  private def planChangelogScan(exec: BatchScanExec, scan: Scan): Option[IcebergScanPlan] = {
+  private def planChangelogScan(
+      exec: BatchScanExec,
+      scan: Scan,
+      useRuntimeFilters: Boolean): Option[IcebergScanPlan] = {
     val readSchema = scan.readSchema
     val schemas = supportedSchemas(readSchema, isChangelogScan = true)
     if (schemas.isEmpty) {
@@ -239,7 +247,7 @@ object IcebergScanSupport extends Logging {
     }
     val (fileSchema, partitionSchema) = schemas.get
 
-    val partitions = inputPartitions(exec)
+    val partitions = inputPartitions(exec, useRuntimeFilters)
     if (partitions.isEmpty) {
       return Some(
         IcebergScanPlan(
@@ -356,9 +364,12 @@ object IcebergScanSupport extends Logging {
 
   private def inputPartitions(
       exec: BatchScanExec,
-      useRuntimeFilters: Boolean = false): Seq[InputPartition] = {
+      useRuntimeFilters: Boolean): Seq[InputPartition] = {
     if (useRuntimeFilters) {
-      return runtimeFilteredPartitions(exec)
+      runtimeFilteredPartitions(exec) match {
+        case Some(partitions) => return partitions
+        case None =>
+      }
     }
 
     // Prefer DataSource V2 batch API; if not available, fallback to exec methods via reflection.
@@ -416,22 +427,26 @@ object IcebergScanSupport extends Logging {
     }
   }
 
-  private def runtimeFilteredPartitions(exec: BatchScanExec): Seq[InputPartition] = {
+  private def runtimeFilteredPartitions(exec: BatchScanExec): Option[Seq[InputPartition]] = {
+    if (exec.runtimeFilters.isEmpty) {
+      return None
+    }
+
     try {
       MethodUtils.invokeMethod(exec, true, "prepare")
       MethodUtils.invokeMethod(exec, true, "waitForSubqueries")
       invokeDeclaredMethod(exec, "filteredPartitions") match {
         case Some(seq: scala.collection.Seq[_]) =>
-          flattenPartitions(seq)
+          Some(flattenPartitions(seq))
         case _ =>
-          Seq.empty
+          None
       }
     } catch {
       case NonFatal(t) =>
         logWarning(
           s"Failed to obtain runtime-filtered input partitions for ${exec.getClass.getName}.",
           t)
-        Seq.empty
+        None
     }
   }
 
