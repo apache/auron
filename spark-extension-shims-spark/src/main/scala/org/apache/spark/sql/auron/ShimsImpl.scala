@@ -97,6 +97,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeWindowBase
 import org.apache.spark.sql.execution.auron.plan.NativeWindowExec
 import org.apache.spark.sql.execution.auron.shuffle.{AuronBlockStoreShuffleReaderBase, AuronRssShuffleManagerBase, RssPartitionWriterBase}
 import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
@@ -300,6 +301,45 @@ class ShimsImpl extends Shims with Logging {
       generatorOutput: Seq[Attribute],
       child: SparkPlan): NativeGenerateBase =
     NativeGenerateExec(generator, requiredChildOutput, outer, generatorOutput, child)
+
+  @sparkver("3.0 / 3.1")
+  override def copyBatchScanExecWithRuntimeFilters(
+      exec: BatchScanExec,
+      runtimeFilters: Seq[Expression]): BatchScanExec =
+    exec.copy(exec.output, exec.scan)
+
+  @sparkver("3.2")
+  override def copyBatchScanExecWithRuntimeFilters(
+      exec: BatchScanExec,
+      runtimeFilters: Seq[Expression]): BatchScanExec =
+    exec.copy(exec.output, exec.scan, runtimeFilters)
+
+  @sparkver("3.3")
+  override def copyBatchScanExecWithRuntimeFilters(
+      exec: BatchScanExec,
+      runtimeFilters: Seq[Expression]): BatchScanExec =
+    exec.copy(exec.output, exec.scan, runtimeFilters, exec.keyGroupedPartitioning)
+
+  @sparkver("3.4")
+  override def copyBatchScanExecWithRuntimeFilters(
+      exec: BatchScanExec,
+      runtimeFilters: Seq[Expression]): BatchScanExec =
+    exec.copy(
+      exec.output,
+      exec.scan,
+      runtimeFilters,
+      exec.keyGroupedPartitioning,
+      exec.ordering,
+      exec.table,
+      exec.commonPartitionValues,
+      exec.applyPartialClustering,
+      exec.replicatePartitions)
+
+  @sparkver("3.5 / 4.0 / 4.1")
+  override def copyBatchScanExecWithRuntimeFilters(
+      exec: BatchScanExec,
+      runtimeFilters: Seq[Expression]): BatchScanExec =
+    exec.copy(exec.output, exec.scan, runtimeFilters, exec.ordering, exec.table, exec.spjParams)
 
   @sparkver("3.4 / 3.5 / 4.0 / 4.1")
   private def effectiveLimit(rawLimit: Int): Int =
