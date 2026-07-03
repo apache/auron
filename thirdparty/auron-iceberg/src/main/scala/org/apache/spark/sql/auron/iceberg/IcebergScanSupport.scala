@@ -24,7 +24,7 @@ import org.apache.iceberg.{AddedRowsScanTask, ChangelogOperation, ChangelogScanT
 import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
 import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.auron.NativeConverters
+import org.apache.spark.sql.auron.{NativeConverters, Shims}
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
@@ -104,21 +104,10 @@ object IcebergScanSupport extends Logging {
   def withRuntimeFilters(
       exec: BatchScanExec,
       runtimeFilters: Seq[SparkExpression]): BatchScanExec = {
-    val params = exec.productIterator.toArray
-    assert(params.length >= 3, s"Unexpected BatchScanExec shape: ${exec.getClass.getName}")
-    params(2) = runtimeFilters
-    try {
-      exec.getClass.getMethods
-        .find(method => method.getName == "copy" && method.getParameterCount == params.length)
-        .getOrElse {
-          throw new NoSuchMethodException(
-            s"Cannot find compatible BatchScanExec.copy with ${params.length} parameters.")
-        }
-        .invoke(exec, params.map(_.asInstanceOf[AnyRef]): _*)
-        .asInstanceOf[BatchScanExec]
-    } catch {
-      case NonFatal(t) =>
-        throw new IllegalStateException("Failed to copy BatchScanExec with runtime filters.", t)
+    if (exec.runtimeFilters == runtimeFilters) {
+      exec
+    } else {
+      Shims.get.copyBatchScanExecWithRuntimeFilters(exec, runtimeFilters)
     }
   }
 
