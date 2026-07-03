@@ -100,14 +100,12 @@ pub struct PbDeserializer {
     output_array_builders: Vec<SharedArrayBuilder>,
     ensure_size: Box<dyn FnMut(usize) + Send>,
     value_handlers: ValueHandlers,
+    /// O(n)/O(1)-read cache of `value_handlers.len()`, computed once in
+    /// `try_new`. The `Vec` variant of `len()` is an O(max_tag) scan, so
+    /// recomputing it per batch (as `total_handlers`) is wasteful — it is
+    /// constant for the deserializer's lifetime.
+    handler_count: u32,
     msg_mapping: Vec<Vec<usize>>,
-    /// O10 optimization: precomputed tag → top-level builder index, used to
-    /// track at runtime which top columns were ever written. After parsing,
-    /// columns with `false` in `top_builders_touched` can short-circuit the
-    /// `null_count() == len()` scan and emit a `new_null_array` directly.
-    /// Uses Vec for tags 0..=63 (fast path) and HashMap for larger tags.
-    tag_to_top_idx_vec: Vec<Option<u16>>,
-    tag_to_top_idx_map: HashMap<u32, u16>,
     /// C1 fix: whether any top-level pb_schema column is a List or Map. The O3
     /// ensure_size skip is only sound for scalar/struct columns, which finalize
     /// their own per-row slot. List/Map builders rely on ensure_size to append
@@ -144,12 +142,8 @@ impl FlinkDeserializer for PbDeserializer {
         // NOTE: we cannot use a simple counter because protobuf repeated
         // fields (non-packed) emit multiple tag-value pairs for the same tag,
         // which would over-count. The bitmap correctly records unique tags.
-        let total_handlers = self.value_handlers.len() as u32;
+        let total_handlers = self.handler_count;
         let ensure_size_every_row = self.top_level_has_list_or_map;
-        // O10: track whether each top-level pb_schema column was ever written.
-        // Columns that stay false short-circuit the null_count() scan after
-        // finish(), since we know the array will be entirely null.
-        let mut top_builders_touched: Vec<bool> = vec![false; self.pb_schema.fields().len()];
         for (row_idx, opt_bytes) in messages.iter().enumerate() {
             let bytes = opt_bytes.ok_or_else(|| {
                 DataFusionError::Execution("message bytes must not be null".to_string())
@@ -166,12 +160,6 @@ impl FlinkDeserializer for PbDeserializer {
                     // Tags >= 64 fall through to ensure_size (always safe).
                     if tag < 64 {
                         seen_tags |= 1u64 << tag;
-                    }
-                    // O10: mark the top column as touched.
-                    if let Some(Some(top_idx)) = self.tag_to_top_idx_vec.get(tag as usize) {
-                        top_builders_touched[*top_idx as usize] = true;
-                    } else if let Some(&top_idx) = self.tag_to_top_idx_map.get(&tag) {
-                        top_builders_touched[top_idx as usize] = true;
                     }
                 } else {
                     // O1/C1 fix: skip unknown tags so the cursor stays in sync.
@@ -198,13 +186,6 @@ impl FlinkDeserializer for PbDeserializer {
         output_arrays.push(Arc::new(kafka_timestamp.clone()));
         for (field_idx, field) in self.output_schema_without_meta.fields().iter().enumerate() {
             let mapping = &self.msg_mapping[field_idx];
-            // O10: if the (top-level) column was never written, the entire
-            // resulting array is null — skip the lazy bitmap scan entirely.
-            let top_idx = mapping[0];
-            if mapping.len() == 1 && !top_builders_touched[top_idx] {
-                output_arrays.push(new_null_array(field.data_type(), messages.len()));
-                continue;
-            }
             let array_ref: ArrayRef = get_output_array_from_top(&pb_top_arrays, mapping)?;
             if array_ref.null_count() == array_ref.len() {
                 output_arrays.push(new_null_array(field.data_type(), array_ref.len()));
@@ -286,8 +267,7 @@ impl PbDeserializer {
             &output_schema_without_meta,
             nested_msg_mapping,
             &skip_fields,
-        )
-        .expect("Failed to transfer output schema to pb schema");
+        )?;
 
         let tag_to_output_mapping =
             create_tag_to_output_mapping(message_descriptor.clone(), &pb_schema);
@@ -313,6 +293,9 @@ impl PbDeserializer {
             .collect::<Result<hashbrown::HashMap<_, _, foldhash::fast::RandomState>>>()?;
         // O2 optimization: switch to Vec<Option<_>> when tags are dense.
         let value_handlers = ValueHandlers::from_map(value_handlers_map);
+        // Precompute the handler count once (the Vec variant's `len()` is an
+        // O(max_tag) scan); the per-batch hot path reads `handler_count` instead.
+        let handler_count = value_handlers.len() as u32;
 
         // precompute message mappings
         let msg_mapping = output_schema_without_meta
@@ -351,26 +334,6 @@ impl PbDeserializer {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // O10 optimization: build tag → top-level pb_schema column index lookup.
-        // Tags 0..=63 use Vec for O(1) access matching the O3 seen_tags bitmap;
-        // tags beyond 63 use a HashMap so all output columns are tracked.
-        let max_tag_for_vec = tag_to_output_mapping
-            .keys()
-            .copied()
-            .max()
-            .unwrap_or(0)
-            .min(63);
-        let mut tag_to_top_idx_vec: Vec<Option<u16>> =
-            (0..=max_tag_for_vec as usize).map(|_| None).collect();
-        let mut tag_to_top_idx_map: HashMap<u32, u16> = HashMap::new();
-        for (&tag, &idx) in tag_to_output_mapping.iter() {
-            if tag as usize <= max_tag_for_vec as usize {
-                tag_to_top_idx_vec[tag as usize] = Some(idx as u16);
-            } else {
-                tag_to_top_idx_map.insert(tag, idx as u16);
-            }
-        }
-
         // C1 fix: detect top-level List/Map columns that require ensure_size
         // every row (their per-row slots are finalized only inside ensure_size).
         let top_level_has_list_or_map = pb_schema
@@ -385,9 +348,8 @@ impl PbDeserializer {
             output_array_builders,
             ensure_size,
             value_handlers,
+            handler_count,
             msg_mapping,
-            tag_to_top_idx_vec,
-            tag_to_top_idx_map,
             top_level_has_list_or_map,
         })
     }
@@ -399,15 +361,6 @@ fn transfer_output_schema_to_pb_schema(
     nested_msg_mapping: &HashMap<String, String>,
     skip_fields: &[String],
 ) -> Result<SchemaRef> {
-    log::debug!(
-        "transfer_output_schema_to_pb_schema nested_msg_mapping: {:?}, output_schema fields: {:?}",
-        nested_msg_mapping,
-        output_schema
-            .fields()
-            .iter()
-            .map(|f| f.name().clone())
-            .collect::<Vec<_>>()
-    );
     let mut pb_schema_fields: Vec<Field> = vec![];
     let mut sub_pb_nested_msg_mapping: HashMap<String, String> = HashMap::new();
     let mut sub_pb_schema_mapping: HashMap<String, Vec<Field>> = HashMap::new();
@@ -461,8 +414,7 @@ fn transfer_output_schema_to_pb_schema(
                             // call.
                             &sub_pb_nested_msg_mapping,
                             skip_fields,
-                        )
-                        .expect("transfer_output_schema_to_pb_schema failed");
+                        )?;
                         pb_schema_fields.push(Field::new(
                             msg_field_name,
                             DataType::Struct(sub_pb_schema.fields.clone()),
@@ -1128,7 +1080,12 @@ fn create_value_handler(
                         return df_execution_err!("buffer underflow");
                     }
                     let value = &cursor.get_mut()[cursor.position() as usize..][..len as usize];
-                    $handle_fn(value);
+                    // O7/C3 fix: propagate handle_fn errors instead of
+                    // discarding them, so an invalid UTF-8 string (or any other
+                    // handle_fn failure) surfaces to the caller rather than
+                    // aborting the JVM via JNI.
+                    let res: Result<()> = $handle_fn(value);
+                    res?;
                     cursor.advance(len as usize);
                     Ok(())
                 })
@@ -1276,32 +1233,30 @@ fn create_value_handler(
                         .values()
                         .get_mut::<StringBuilder>()?;
                     return Ok(impl_for_bytes_builder!(string, |value: &[u8]| {
-                        // O11/SAFETY: protobuf 3 specifies that fields of
-                        // type `string` must contain UTF-8 encoded bytes.
-                        // Conformant producers therefore guarantee `value` is
-                        // valid UTF-8. We trade the validity check for
-                        // throughput here, accepting that a malformed
-                        // upstream message could surface invalid UTF-8 in the
-                        // resulting StringArray (downstream Arrow consumers
-                        // typically tolerate this).
-                        debug_assert!(
-                            str::from_utf8(value).is_ok(),
-                            "protobuf string field contains invalid UTF-8"
-                        );
-                        let s = unsafe { str::from_utf8_unchecked(value) };
+                        // SAFETY: validate on the release path. protobuf 3 says
+                        // `string` fields are UTF-8, but Kafka payloads may come
+                        // from non-conformant producers; an unchecked decode
+                        // would construct an invalid `&str` and violate Arrow's
+                        // UTF-8 invariant (UB). Surface the error instead.
+                        let s = std::str::from_utf8(value).map_err(|e| {
+                            DataFusionError::Execution(format!(
+                                "protobuf string field contains invalid UTF-8: {e}"
+                            ))
+                        })?;
                         array_builder.get_mut().append_value(s);
+                        Ok(())
                     }));
                 } else {
                     let array_builder = output_array_builder.get_mut::<StringBuilder>()?;
                     return Ok(impl_for_bytes_builder!(string, |value: &[u8]| {
-                        // O11/SAFETY: see above — protobuf 3 guarantees
-                        // `string` payloads are UTF-8.
-                        debug_assert!(
-                            str::from_utf8(value).is_ok(),
-                            "protobuf string field contains invalid UTF-8"
-                        );
-                        let s = unsafe { str::from_utf8_unchecked(value) };
+                        // SAFETY: see above — validate UTF-8 on the release path.
+                        let s = std::str::from_utf8(value).map_err(|e| {
+                            DataFusionError::Execution(format!(
+                                "protobuf string field contains invalid UTF-8: {e}"
+                            ))
+                        })?;
                         array_builder.get_mut().append_value(s);
+                        Ok(())
                     }));
                 }
             }
@@ -1410,11 +1365,10 @@ fn create_value_handler(
                 }
             }
             Kind::Enum(enum_descriptor) => {
-                // O8 optimization: build the enum number→name map as Arc<HashMap>
-                // so multiple handlers (e.g. when the same enum type is used in
-                // several fields) share a single immutable instance. We still
-                // build per handler here, but the closure captures the Arc and
-                // avoids cloning the inner HashMap on every value lookup.
+                // Build the enum number→name map once for this field and move it
+                // into the value-handler closure. It is per-field (not shared
+                // across handlers), so a plain owned HashMap is enough — no Arc
+                // refcount overhead.
                 let mut enum_string_mapping: HashMap<i32, String> = HashMap::new();
                 for enum_value_descriptor in enum_descriptor.values() {
                     enum_string_mapping.insert(
@@ -1422,7 +1376,6 @@ fn create_value_handler(
                         get_content_after_last_dot(enum_value_descriptor.name()).to_string(),
                     );
                 }
-                let enum_string_mapping = Arc::new(enum_string_mapping);
                 if field.is_list() {
                     let array_builder = output_array_builder
                         .get_mut::<SharedListArrayBuilder>()
@@ -1431,29 +1384,32 @@ fn create_value_handler(
                         .values()
                         .get_mut::<StringBuilder>()?;
                     if field.is_packed() {
-                        let mapping = enum_string_mapping;
                         return Ok(impl_for_repeated_builder!(int32, |values: &Vec<i32>| {
                             for value in values {
                                 array_builder.get_mut().append_value(
-                                    mapping.get(value).map_or("Unknown", |v| v.as_str()),
+                                    enum_string_mapping
+                                        .get(value)
+                                        .map_or("Unknown", |v| v.as_str()),
                                 );
                             }
                         }));
                     } else {
-                        let mapping = enum_string_mapping;
                         return Ok(impl_for_builder!(int32, |value: &i32| {
-                            array_builder
-                                .get_mut()
-                                .append_value(mapping.get(value).map_or("Unknown", |v| v.as_str()));
+                            array_builder.get_mut().append_value(
+                                enum_string_mapping
+                                    .get(value)
+                                    .map_or("Unknown", |v| v.as_str()),
+                            );
                         }));
                     }
                 } else {
                     let array_builder = output_array_builder.get_mut::<StringBuilder>()?;
-                    let mapping = enum_string_mapping;
                     return Ok(impl_for_builder!(int32, |value: &i32| {
-                        array_builder
-                            .get_mut()
-                            .append_value(mapping.get(value).map_or("Unknown", |v| v.as_str()));
+                        array_builder.get_mut().append_value(
+                            enum_string_mapping
+                                .get(value)
+                                .map_or("Unknown", |v| v.as_str()),
+                        );
                     }));
                 }
             }
@@ -1503,22 +1459,7 @@ fn create_value_handler(
                             (sub_ensure_size.borrow_mut())(struct_builder.get_mut().len() + 1);
                             struct_builder.get_mut().append(false);
                         } else {
-                            let mut sub_cursor = Cursor::new(buf);
-                            while sub_cursor.has_remaining() {
-                                let (sub_tag, sub_wire_type) =
-                                    prost::encoding::decode_key(&mut sub_cursor).map_err(|e| {
-                                        DataFusionError::Execution(format!(
-                                            "Failed to decode sub key: {e}"
-                                        ))
-                                    })?;
-                                if let Some(sub_value_handler) = sub_value_handlers.get(&sub_tag) {
-                                    // O7/C3 fix: propagate error instead of expect()
-                                    (*sub_value_handler)(&mut sub_cursor, sub_tag, sub_wire_type)?;
-                                } else {
-                                    // C1 fix: skip unknown sub-tags
-                                    skip_pb_value(&mut sub_cursor, sub_tag, sub_wire_type)?;
-                                }
-                            }
+                            decode_sub_message(buf, &sub_value_handlers)?;
                             (sub_ensure_size.borrow_mut())(struct_builder.get_mut().len() + 1);
                             struct_builder.get_mut().append(true);
                         }
@@ -1579,30 +1520,7 @@ fn create_value_handler(
                                 struct_builder.get_mut().append(false);
                             } else {
                                 // 解析嵌套的 message
-                                let mut sub_cursor = Cursor::new(buf);
-                                while sub_cursor.has_remaining() {
-                                    let (sub_tag, sub_wire_type) = prost::encoding::decode_key(
-                                        &mut sub_cursor,
-                                    )
-                                    .map_err(|e| {
-                                        DataFusionError::Execution(format!(
-                                            "Failed to decode sub key: {e}"
-                                        ))
-                                    })?;
-                                    if let Some(sub_value_handler) =
-                                        sub_value_handlers.get(&sub_tag)
-                                    {
-                                        // O7/C3 fix: propagate error
-                                        (*sub_value_handler)(
-                                            &mut sub_cursor,
-                                            sub_tag,
-                                            sub_wire_type,
-                                        )?;
-                                    } else {
-                                        // C1 fix: skip unknown sub-tags
-                                        skip_pb_value(&mut sub_cursor, sub_tag, sub_wire_type)?;
-                                    }
-                                }
+                                decode_sub_message(buf, &sub_value_handlers)?;
                                 (sub_ensure_size.borrow_mut())(struct_builder.get_mut().len() + 1);
                                 struct_builder.get_mut().append(true);
                             }
@@ -1656,30 +1574,7 @@ fn create_value_handler(
                             if buf.is_empty() {
                                 map_builder.get_mut().append(true);
                             } else {
-                                let mut sub_cursor = Cursor::new(buf);
-                                while sub_cursor.has_remaining() {
-                                    let (sub_tag, sub_wire_type) = prost::encoding::decode_key(
-                                        &mut sub_cursor,
-                                    )
-                                    .map_err(|e| {
-                                        DataFusionError::Execution(format!(
-                                            "Failed to decode sub key: {e}"
-                                        ))
-                                    })?;
-                                    if let Some(sub_value_handler) =
-                                        sub_value_handlers.get(&sub_tag)
-                                    {
-                                        // O7/C3 fix: propagate error
-                                        (*sub_value_handler)(
-                                            &mut sub_cursor,
-                                            sub_tag,
-                                            sub_wire_type,
-                                        )?;
-                                    } else {
-                                        // C1 fix: skip unknown sub-tags
-                                        skip_pb_value(&mut sub_cursor, sub_tag, sub_wire_type)?;
-                                    }
-                                }
+                                decode_sub_message(buf, &sub_value_handlers)?;
                             }
                             Ok(())
                         }));
@@ -1781,6 +1676,25 @@ fn skip_pb_value(cursor: &mut Cursor<&[u8]>, tag: u32, wire_type: WireType) -> R
     Ok(())
 }
 
+/// Decode a length-delimited sub-message body, dispatching each known tag to
+/// its value handler and skipping unknown tags (C1) with error propagation
+/// (O7). Shared by the Struct / List-of-Struct / Map sub-message handlers,
+/// which were previously three near-verbatim copies of this loop.
+fn decode_sub_message(buf: &[u8], handlers: &ValueHandlerMap) -> Result<()> {
+    let mut sub_cursor = Cursor::new(buf);
+    while sub_cursor.has_remaining() {
+        let (sub_tag, sub_wire_type) = prost::encoding::decode_key(&mut sub_cursor)
+            .map_err(|e| DataFusionError::Execution(format!("Failed to decode sub key: {e}")))?;
+        if let Some(sub_value_handler) = handlers.get(&sub_tag) {
+            (*sub_value_handler)(&mut sub_cursor, sub_tag, sub_wire_type)?;
+        } else {
+            // C1 fix: skip unknown sub-tags so the cursor stays in sync.
+            skip_pb_value(&mut sub_cursor, sub_tag, sub_wire_type)?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn adaptive_append_children(
     builder: &SharedArrayBuilder,
 ) -> Option<Box<dyn FnMut(usize) + Send + Sync>> {
@@ -1813,7 +1727,7 @@ mod tests {
     use prost::Message as ProstMessage;
     use prost_reflect::prost_types::{DescriptorProto, FileDescriptorProto, FileDescriptorSet};
     use prost_types::{
-        FieldDescriptorProto,
+        FieldDescriptorProto, MessageOptions,
         field_descriptor_proto::{Label, Type},
     };
 
@@ -2099,6 +2013,138 @@ mod tests {
         descriptor_set
             .encode(&mut buf)
             .expect("Failed to encode FileDescriptorSet");
+        buf
+    }
+
+    /// Descriptor for a message with a single top-level `map<string, int32>`
+    /// field `kv` (number 1). The map entry is a nested message `KvEntry`
+    /// with the `[map_entry = true]` option, which is what `prost_reflect`
+    /// keys on to report `field.is_map()` == true (and thus produce an
+    /// Arrow `DataType::Map` rather than a `DataType::List` of struct).
+    fn create_map_test_descriptor() -> Vec<u8> {
+        let kv_entry_fields = vec![
+            // string key = 1;
+            FieldDescriptorProto {
+                name: Some("key".to_string()),
+                number: Some(1),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::String as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("key".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+            // int32 value = 2;
+            FieldDescriptorProto {
+                name: Some("value".to_string()),
+                number: Some(2),
+                label: Some(Label::Optional as i32),
+                r#type: Some(Type::Int32 as i32),
+                type_name: None,
+                extendee: None,
+                default_value: None,
+                oneof_index: None,
+                json_name: Some("value".to_string()),
+                options: None,
+                proto3_optional: None,
+            },
+        ];
+
+        let kv_entry_descriptor = DescriptorProto {
+            name: Some("KvEntry".to_string()),
+            field: kv_entry_fields,
+            extension: vec![],
+            nested_type: vec![],
+            enum_type: vec![],
+            extension_range: vec![],
+            oneof_decl: vec![],
+            // The marker that makes prost_reflect treat `kv` as a map.
+            options: Some(MessageOptions {
+                map_entry: Some(true),
+                ..Default::default()
+            }),
+            reserved_range: vec![],
+            reserved_name: vec![],
+        };
+
+        // map<string, int32> kv = 1; — desugars to `repeated KvEntry kv = 1`.
+        let kv_field = FieldDescriptorProto {
+            name: Some("kv".to_string()),
+            number: Some(1),
+            label: Some(Label::Repeated as i32),
+            r#type: Some(Type::Message as i32),
+            type_name: Some(".test.MapMessage.KvEntry".to_string()),
+            extendee: None,
+            default_value: None,
+            oneof_index: None,
+            json_name: Some("kv".to_string()),
+            options: None,
+            proto3_optional: None,
+        };
+
+        let map_message_descriptor = DescriptorProto {
+            name: Some("MapMessage".to_string()),
+            field: vec![kv_field],
+            extension: vec![],
+            nested_type: vec![kv_entry_descriptor],
+            enum_type: vec![],
+            extension_range: vec![],
+            oneof_decl: vec![],
+            options: None,
+            reserved_range: vec![],
+            reserved_name: vec![],
+        };
+
+        let file_descriptor = FileDescriptorProto {
+            name: Some("map_test.proto".to_string()),
+            package: Some("test".to_string()),
+            dependency: vec![],
+            public_dependency: vec![],
+            weak_dependency: vec![],
+            message_type: vec![map_message_descriptor],
+            enum_type: vec![],
+            service: vec![],
+            extension: vec![],
+            options: None,
+            source_code_info: None,
+            syntax: Some("proto3".to_string()),
+        };
+
+        let descriptor_set = FileDescriptorSet {
+            file: vec![file_descriptor],
+        };
+
+        let mut buf = Vec::new();
+        descriptor_set
+            .encode(&mut buf)
+            .expect("Failed to encode FileDescriptorSet");
+        buf
+    }
+
+    /// Encode a `MapMessage` with the given `kv` entries. An empty `entries`
+    /// slice yields a message with the `kv` field entirely absent (no tag-1
+    /// pairs), exercising the absent-map path.
+    fn create_map_test_message(entries: &[(&str, i32)]) -> Vec<u8> {
+        use prost::encoding::*;
+
+        let mut buf = Vec::new();
+        for (k, v) in entries {
+            let mut entry = Vec::new();
+            // key (entry field 1, string)
+            encode_key(1, WireType::LengthDelimited, &mut entry);
+            encode_varint(k.len() as u64, &mut entry);
+            entry.extend_from_slice(k.as_bytes());
+            // value (entry field 2, int32)
+            encode_key(2, WireType::Varint, &mut entry);
+            encode_varint(*v as u64, &mut entry);
+            // map field 1 (length-delimited entry)
+            encode_key(1, WireType::LengthDelimited, &mut buf);
+            encode_varint(entry.len() as u64, &mut buf);
+            buf.extend_from_slice(&entry);
+        }
         buf
     }
 
@@ -2626,5 +2672,165 @@ mod tests {
         assert_eq!(id_array.value(1), 2);
         assert_eq!(id_array.value(2), 3);
         assert_eq!(id_array.value(3), 4);
+    }
+
+    /// Pin the row-alignment invariant for a top-level `DataType::Map` column.
+    ///
+    /// A top-level Map is structurally different from List: the per-row
+    /// offset/null slot is finalized only inside `ensure_size` (which runs
+    /// every row because `top_level_has_list_or_map` is true), while the
+    /// per-entry key/value pushes go to the child builders via
+    /// `decode_sub_message`. This test covers both the present (≥1 entry)
+    /// and absent (no `kv` tag) cases and asserts `map.len() == num_rows`
+    /// plus the per-row entry counts, so a regression where the map column
+    /// ever desyncs from the batch row count
+    /// (e.g. if `top_level_has_list_or_map` stopped matching `DataType::Map`)
+    /// fails loudly instead of silently corrupting offsets.
+    #[test]
+    fn test_parse_messages_with_top_level_map() {
+        let descriptor_data = create_map_test_descriptor();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("serialized_kafka_records_partition", DataType::Int32, false),
+            Field::new("serialized_kafka_records_offset", DataType::Int64, false),
+            Field::new("serialized_kafka_records_timestamp", DataType::Int64, false),
+            Field::new(
+                "kv",
+                DataType::Map(
+                    Arc::new(Field::new(
+                        "entries",
+                        DataType::Struct(Fields::from(vec![
+                            Field::new("key", DataType::Utf8, true),
+                            Field::new("value", DataType::Int32, true),
+                        ])),
+                        false,
+                    )),
+                    false,
+                ),
+                true,
+            ),
+        ]));
+
+        let mut deserializer =
+            PbDeserializer::new(descriptor_data, "MapMessage", schema, &HashMap::new(), &[])
+                .expect("Failed to create deserializer");
+
+        // row0: two entries; row1: map absent (no kv tag at all).
+        let messages = create_binary_array(vec![
+            create_map_test_message(&[("a", 1), ("b", 2)]),
+            create_map_test_message(&[]),
+        ]);
+        let partitions = create_partition_array(vec![0, 1]);
+        let offsets = create_offset_array(vec![10, 20]);
+        let timestamps = create_timestamp_array(vec![100, 200]);
+
+        let batch = deserializer
+            .parse_messages_with_kafka_meta(&messages, &partitions, &offsets, &timestamps)
+            .expect("Failed to deserialize map message");
+
+        assert_eq!(batch.num_rows(), 2);
+        let map_array = batch
+            .column(3)
+            .as_any()
+            .downcast_ref::<MapArray>()
+            .expect("Failed to downcast kv column to MapArray");
+
+        // Row-alignment invariant: the map column has exactly one slot per row.
+        assert_eq!(map_array.len(), 2);
+
+        // row0: present with 2 entries → non-null, offsets span 2 entries.
+        assert!(!map_array.is_null(0));
+        let row0 = map_array.value(0);
+        let row0_entries = row0
+            .as_any()
+            .downcast_ref::<StructArray>()
+            .expect("map entries are a StructArray");
+        assert_eq!(row0_entries.len(), 2);
+        let row0_keys = row0_entries
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("map keys are StringArray");
+        let row0_values = row0_entries
+            .column(1)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("map values are Int32Array");
+        assert_eq!(row0_keys.value(0), "a");
+        assert_eq!(row0_values.value(0), 1);
+        assert_eq!(row0_keys.value(1), "b");
+        assert_eq!(row0_values.value(1), 2);
+
+        // row1: absent map → ensure_size finalizes one non-null slot with
+        // 0 entries (current behavior). Pin it so an absent-vs-null change is
+        // conscious.
+        assert!(!map_array.is_null(1));
+        let row1 = map_array.value(1);
+        let row1_entries = row1
+            .as_any()
+            .downcast_ref::<StructArray>()
+            .expect("map entries are a StructArray");
+        assert_eq!(row1_entries.len(), 0);
+    }
+
+    /// Regression test for the #2320 boolean bug, in the specific
+    /// "top-level field absent from EVERY row of the batch" shape that the
+    /// dropped O10 short-circuit used to mis-handle.
+    ///
+    /// With O10 present, a column never touched in any row short-circuited to
+    /// `new_null_array`, emitting all-NULL — re-introducing #2320 for the
+    /// all-absent case (and similarly for int/string/float/binary). With O10
+    /// removed, the column falls through to the cast path on a builder that
+    /// `ensure_size` filled with the proto3 default `false`, so it is
+    /// non-null all-false. This test pins that: if O10 (or an equivalent
+    /// all-null short-circuit) is ever re-introduced for a top-level field,
+    /// `null_count()` would be 2 and the test would fail.
+    #[test]
+    fn test_parse_messages_top_level_boolean_absent_in_all_rows() {
+        let descriptor_data = create_test_descriptor();
+        // Schema exposes only `active` (field 4, bool). The messages below
+        // carry only `id` (field 1), so `active` (tag 4) is never decoded.
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("serialized_kafka_records_partition", DataType::Int32, false),
+            Field::new("serialized_kafka_records_offset", DataType::Int64, false),
+            Field::new("serialized_kafka_records_timestamp", DataType::Int64, false),
+            Field::new("active", DataType::Boolean, true),
+        ]));
+
+        let mut deserializer =
+            PbDeserializer::new(descriptor_data, "TestMessage", schema, &HashMap::new(), &[])
+                .expect("Failed to create deserializer");
+
+        // Each message encodes ONLY `id` (tag 1); `active` (tag 4) is absent
+        // in every row of the batch — the exact shape O10 mishandled.
+        let only_id_message = |id: i32| {
+            use prost::encoding::*;
+            let mut buf = Vec::new();
+            encode_key(1, WireType::Varint, &mut buf);
+            encode_varint(id as u64, &mut buf);
+            buf
+        };
+        let messages = create_binary_array(vec![only_id_message(1), only_id_message(2)]);
+        let partitions = create_partition_array(vec![0, 0]);
+        let offsets = create_offset_array(vec![100, 101]);
+        let timestamps = create_timestamp_array(vec![1000, 1001]);
+
+        let batch = deserializer
+            .parse_messages_with_kafka_meta(&messages, &partitions, &offsets, &timestamps)
+            .expect("Failed to deserialize");
+
+        assert_eq!(batch.num_rows(), 2);
+        let active_array = batch
+            .column(3)
+            .as_any()
+            .downcast_ref::<BooleanArray>()
+            .expect("Failed to downcast active array to BooleanArray");
+
+        // All-absent boolean must be the proto3 default `false`, NON-null —
+        // NOT all-NULL (which is the #2320 regression this PR fixes).
+        assert_eq!(active_array.null_count(), 0);
+        assert!(!active_array.is_null(0));
+        assert!(!active_array.is_null(1));
+        assert!(!active_array.value(0));
+        assert!(!active_array.value(1));
     }
 }
