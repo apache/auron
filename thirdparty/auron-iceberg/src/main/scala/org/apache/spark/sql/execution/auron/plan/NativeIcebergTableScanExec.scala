@@ -226,17 +226,28 @@ case class NativeIcebergTableScanExec(
   override val nodeName: String = "NativeIcebergTableScan"
 
   override def simpleString(maxFields: Int): String = {
-    val runtimeFilterString =
-      if (runtimeFilters.isEmpty) {
-        ""
+    val runtimeFiltersString =
+      if (runtimeFilters.nonEmpty) {
+        s", runtimeFilters=${runtimeFilters.mkString("[", ", ", "]")}"
       } else {
-        s", runtimeFilters=[${runtimeFilters.map(_.toString).mkString(", ")}]"
+        ""
       }
-    s"$nodeName$output$runtimeFilterString"
+    s"$nodeName (${basedScan.simpleString(maxFields)}$runtimeFiltersString)"
   }
 
-  // Delegate canonicalization to the original scan to keep plan equivalence checks consistent.
-  override protected def doCanonicalize(): SparkPlan = basedScan.canonicalized
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |$formattedNodeName
+       |Output: ${output.mkString("[", ", ", "]")}
+       |${basedScan.scan.description()}
+       |RuntimeFilters: ${runtimeFilters.mkString("[", ", ", "]")}
+       |""".stripMargin
+  }
+
+  // Keep canonicalization aligned with Spark's BatchScanExec, but first make sure it sees
+  // the top-level runtime filters carried by this native scan.
+  override protected def doCanonicalize(): SparkPlan =
+    IcebergScanSupport.withRuntimeFilters(basedScan, runtimeFilters).canonicalized
 
   private def buildFileSizes(): Map[String, Long] = {
     // Map file path to full file size; tasks may split a file into multiple ranges.
