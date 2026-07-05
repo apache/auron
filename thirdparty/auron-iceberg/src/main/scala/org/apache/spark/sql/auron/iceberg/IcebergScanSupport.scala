@@ -421,20 +421,12 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    try {
-      MethodUtils.invokeMethod(exec, true, "prepare")
-      MethodUtils.invokeMethod(exec, true, "waitForSubqueries")
-      invokeDeclaredMethod(exec, "filteredPartitions") match {
-        case Some(seq: scala.collection.Seq[_]) =>
-          Some(flattenPartitions(seq))
-        case _ =>
-          None
-      }
-    } catch {
-      case NonFatal(t) =>
-        logWarning(
-          s"Failed to obtain runtime-filtered input partitions for ${exec.getClass.getName}.",
-          t)
+    exec.prepare()
+    MethodUtils.invokeMethod(exec, true, "waitForSubqueries")
+    invokeDeclaredMethod(exec, "filteredPartitions") match {
+      case Some(seq: scala.collection.Seq[_]) =>
+        Some(flattenPartitions(seq))
+      case _ =>
         None
     }
   }
