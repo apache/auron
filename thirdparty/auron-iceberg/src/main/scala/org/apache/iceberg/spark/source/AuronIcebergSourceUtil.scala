@@ -40,6 +40,8 @@ object AuronIcebergSourceUtil {
   }
 
   def expectedFieldIdsForChangelogScan(scan: AnyRef): Map[String, Int] = {
+    // SparkChangelogScan does not expose Iceberg expectedSchema/table accessors.
+    // Keep the internal field-name assumptions localized here; callers fallback if they change.
     val expectedSchema =
       FieldUtils.readField(scan, "expectedSchema", true).asInstanceOf[org.apache.iceberg.Schema]
     expectedSchema.columns().asScala.map(field => field.name() -> field.fieldId()).toMap
@@ -51,6 +53,7 @@ object AuronIcebergSourceUtil {
   }
 
   def detectRenameOrDropForChangelogScan(scan: AnyRef): RenameOrDrop = {
+    // SparkChangelogScan does not expose its Iceberg table.
     val table = FieldUtils.readField(scan, "table", true).asInstanceOf[Table]
     detectRenameOrDrop(table)
   }
