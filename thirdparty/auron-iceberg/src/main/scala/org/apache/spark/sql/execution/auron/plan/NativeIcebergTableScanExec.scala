@@ -252,8 +252,7 @@ case class NativeIcebergTableScanExec(
        |""".stripMargin
   }
 
-  // Keep canonicalization aligned with Spark's BatchScanExec, but first make sure it sees
-  // the top-level runtime filters carried by this native scan.
+  // Canonicalize with the native scan's runtime filters.
   override protected def doCanonicalize(): SparkPlan =
     IcebergScanSupport.withRuntimeFilters(basedScan, runtimeFilters).canonicalized
 
