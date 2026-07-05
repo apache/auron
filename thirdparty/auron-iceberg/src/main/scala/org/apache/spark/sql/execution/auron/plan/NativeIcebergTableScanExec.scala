@@ -65,8 +65,16 @@ case class NativeIcebergTableScanExec(
 
   private lazy val plan: IcebergScanPlan = {
     if (runtimeFilters.nonEmpty) {
-      val filteredScan = IcebergScanSupport.withRuntimeFilters(basedScan, runtimeFilters)
-      IcebergScanSupport.plan(filteredScan, useRuntimeFilters = true).getOrElse(staticPlan)
+      val runtimeFilteredScan = IcebergScanSupport.withRuntimeFilters(basedScan, runtimeFilters)
+      IcebergScanSupport.plan(runtimeFilteredScan, useRuntimeFilters = true) match {
+        case Some(runtimeFilteredPlan) =>
+          runtimeFilteredPlan
+        case None =>
+          logWarning(
+            "Runtime-filtered Iceberg scan planning was unavailable; " +
+              "falling back to the unfiltered Iceberg scan plan.")
+          staticPlan
+      }
     } else {
       staticPlan
     }
