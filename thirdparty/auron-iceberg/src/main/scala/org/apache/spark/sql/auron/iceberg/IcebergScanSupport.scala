@@ -101,6 +101,8 @@ object IcebergScanSupport extends Logging {
     }
   }
 
+  // Native scans carry runtime filters explicitly, independent from the underlying BatchScanExec.
+  // If they differ, rebuild the BatchScanExec before asking Spark for filtered partitions.
   def withRuntimeFilters(
       exec: BatchScanExec,
       runtimeFilters: Seq[SparkExpression]): BatchScanExec = {
