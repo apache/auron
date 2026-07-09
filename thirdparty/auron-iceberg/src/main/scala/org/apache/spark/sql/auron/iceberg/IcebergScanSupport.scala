@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.auron.iceberg
 
+import java.lang.reflect.InvocationTargetException
+
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
@@ -460,9 +462,35 @@ object IcebergScanSupport extends Logging {
     }
 
     exec.prepare()
-    MethodUtils.invokeMethod(exec, true, "waitForSubqueries")
-    invokeDeclaredMethod(exec, "filteredPartitions") match {
-      case Some(seq: scala.collection.Seq[_]) =>
+    try {
+      MethodUtils.invokeMethod(exec, true, "waitForSubqueries")
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+      case e: InvocationTargetException =>
+        throw e
+      case NonFatal(t) =>
+        logDebug(
+          s"Runtime-filter hook waitForSubqueries is unavailable on ${exec.getClass.getName}.",
+          t)
+        return None
+    }
+
+    val partitions = try {
+      MethodUtils.invokeMethod(exec, true, "filteredPartitions")
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+      case e: InvocationTargetException =>
+        throw e
+      case NonFatal(t) =>
+        logDebug(
+          s"Runtime-filter hook filteredPartitions is unavailable on ${exec.getClass.getName}.",
+          t)
+        return None
+    }
+    partitions match {
+      case seq: scala.collection.Seq[_] =>
         Some(flattenPartitions(seq))
       case _ =>
         None
