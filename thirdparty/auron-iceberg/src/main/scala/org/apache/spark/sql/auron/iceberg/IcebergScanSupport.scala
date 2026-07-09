@@ -476,19 +476,20 @@ object IcebergScanSupport extends Logging {
         return None
     }
 
-    val partitions = try {
-      MethodUtils.invokeMethod(exec, true, "filteredPartitions")
-    } catch {
-      case e: InvocationTargetException if e.getCause != null =>
-        throw e.getCause
-      case e: InvocationTargetException =>
-        throw e
-      case NonFatal(t) =>
-        logDebug(
-          s"Runtime-filter hook filteredPartitions is unavailable on ${exec.getClass.getName}.",
-          t)
-        return None
-    }
+    val partitions =
+      try {
+        MethodUtils.invokeMethod(exec, true, "filteredPartitions")
+      } catch {
+        case e: InvocationTargetException if e.getCause != null =>
+          throw e.getCause
+        case e: InvocationTargetException =>
+          throw e
+        case NonFatal(t) =>
+          logDebug(
+            s"Runtime-filter hook filteredPartitions is unavailable on ${exec.getClass.getName}.",
+            t)
+          return None
+      }
     partitions match {
       case seq: scala.collection.Seq[_] =>
         Some(flattenPartitions(seq))
