@@ -18,6 +18,8 @@ package org.apache.iceberg.spark.source
 
 import scala.collection.JavaConverters._
 
+import org.apache.commons.lang3.reflect.FieldUtils
+import org.apache.iceberg.Table
 import org.apache.iceberg.types.TypeUtil
 
 object AuronIcebergSourceUtil {
@@ -37,8 +39,26 @@ object AuronIcebergSourceUtil {
     expectedSchema.columns().asScala.map(field => field.name() -> field.fieldId()).toMap
   }
 
+  def expectedFieldIdsForChangelogScan(scan: AnyRef): Map[String, Int] = {
+    // SparkChangelogScan does not expose Iceberg expectedSchema/table accessors.
+    // Keep the internal field-name assumptions localized here; callers fallback if they change.
+    val expectedSchema =
+      FieldUtils.readField(scan, "expectedSchema", true).asInstanceOf[org.apache.iceberg.Schema]
+    expectedSchema.columns().asScala.map(field => field.name() -> field.fieldId()).toMap
+  }
+
   def detectRenameOrDrop(scan: AnyRef): RenameOrDrop = {
     val table = asBatchQueryScan(scan).table()
+    detectRenameOrDrop(table)
+  }
+
+  def detectRenameOrDropForChangelogScan(scan: AnyRef): RenameOrDrop = {
+    // SparkChangelogScan does not expose its Iceberg table.
+    val table = FieldUtils.readField(scan, "table", true).asInstanceOf[Table]
+    detectRenameOrDrop(table)
+  }
+
+  private def detectRenameOrDrop(table: Table): RenameOrDrop = {
     val currentFields = collectFieldIdToName(table.schema())
 
     table
