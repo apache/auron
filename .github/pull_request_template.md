@@ -11,14 +11,9 @@ Closes #<issue_number>
 # How was this patch tested?
 
 # Was this patch authored or co-authored using generative AI tooling?
+- [ ] Yes
+- [ ] No
 
-<!--
-If generative AI tooling was used while authoring this patch, include:
-Generated-by: <tool name and version>
+If yes, include: `Generated-by: <tool name and version>`
 
-If not, write:
-No
-
-See ASF guidance:
-https://www.apache.org/legal/generative-tooling.html
--->
+ASF guidance: https://www.apache.org/legal/generative-tooling.html
