@@ -28,9 +28,10 @@ import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.{NativeConverters, Shims}
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
+import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceRDDPartition}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, DecimalType, StringType, StructField, StructType}
 
@@ -53,7 +54,8 @@ final case class IcebergScanPlan(
     fileSchema: StructType,
     partitionSchema: StructType,
     pruningPredicates: Seq[pb.PhysicalExprNode],
-    fieldIdsByName: Map[String, Int])
+    fieldIdsByName: Map[String, Int],
+    groupedScanTasks: Option[Seq[Seq[IcebergNativeScanTask]]] = None)
 
 object IcebergScanSupport extends Logging {
   private val scanPlanTag: TreeNodeTag[Option[IcebergScanPlan]] = TreeNodeTag(
@@ -154,7 +156,11 @@ object IcebergScanSupport extends Logging {
         case None => return None
       }
 
-    val partitions = inputPartitions(exec, useRuntimeFilters)
+    val (partitions, partitionGroups) =
+      plannedInputPartitions(exec, useRuntimeFilters) match {
+        case Some(plannedPartitions) => plannedPartitions
+        case None => return None
+      }
     // Empty scan (e.g. empty table) should still build a plan to return no rows.
     if (partitions.isEmpty) {
       logWarning(s"Native Iceberg scan planned with empty partitions for $scanClassName.")
@@ -166,10 +172,14 @@ object IcebergScanSupport extends Logging {
           fileSchema,
           partitionSchema,
           Seq.empty,
-          fieldIdsByName))
+          fieldIdsByName,
+          partitionGroups.map(_.map(_ => Seq.empty))))
     }
 
-    val icebergPartitions = partitions.flatMap(icebergPartition)
+    val icebergPartitionGroups =
+      partitionGroups.map(_.map(_.flatMap(icebergPartition)))
+    val icebergPartitions =
+      icebergPartitionGroups.map(_.flatten).getOrElse(partitions.flatMap(icebergPartition))
     // All partitions must be Iceberg SparkInputPartition with file scan tasks; otherwise fallback.
     if (icebergPartitions.size != partitions.size) {
       return None
@@ -204,6 +214,11 @@ object IcebergScanSupport extends Logging {
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
     val nativeTasks = fileTasks.map(task => toNativeScanTask(task, partitionSchema))
+    val groupedNativeTasks = icebergPartitionGroups.map(_.map { group =>
+      group
+        .flatMap(_.tasks)
+        .collect { case task: FileScanTask => toNativeScanTask(task, partitionSchema) }
+    })
     Some(
       IcebergScanPlan(
         nativeTasks,
@@ -212,7 +227,8 @@ object IcebergScanSupport extends Logging {
         fileSchema,
         partitionSchema,
         pruningPredicates,
-        fieldIdsByName))
+        fieldIdsByName,
+        groupedNativeTasks))
   }
 
   private def planChangelogScan(
@@ -236,7 +252,11 @@ object IcebergScanSupport extends Logging {
         case None => return None
       }
 
-    val partitions = inputPartitions(exec, useRuntimeFilters)
+    val (partitions, partitionGroups) =
+      plannedInputPartitions(exec, useRuntimeFilters) match {
+        case Some(plannedPartitions) => plannedPartitions
+        case None => return None
+      }
     if (partitions.isEmpty) {
       return Some(
         IcebergScanPlan(
@@ -246,10 +266,14 @@ object IcebergScanSupport extends Logging {
           fileSchema,
           partitionSchema,
           Seq.empty,
-          fieldIdsByName))
+          fieldIdsByName,
+          partitionGroups.map(_.map(_ => Seq.empty))))
     }
 
-    val icebergPartitions = partitions.flatMap(icebergPartition)
+    val icebergPartitionGroups =
+      partitionGroups.map(_.map(_.flatMap(icebergPartition)))
+    val icebergPartitions =
+      icebergPartitionGroups.map(_.flatten).getOrElse(partitions.flatMap(icebergPartition))
     if (icebergPartitions.size != partitions.size) {
       return None
     }
@@ -292,6 +316,11 @@ object IcebergScanSupport extends Logging {
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
     val nativeTasks = addedRowsTasks.map(task => toNativeScanTask(task, partitionSchema))
+    val groupedNativeTasks = icebergPartitionGroups.map(_.map { group =>
+      group
+        .flatMap(_.tasks)
+        .collect { case task: AddedRowsScanTask => toNativeScanTask(task, partitionSchema) }
+    })
     Some(
       IcebergScanPlan(
         nativeTasks,
@@ -300,7 +329,8 @@ object IcebergScanSupport extends Logging {
         fileSchema,
         partitionSchema,
         pruningPredicates,
-        fieldIdsByName))
+        fieldIdsByName,
+        groupedNativeTasks))
   }
 
   private def inspectFieldIdSupport(
@@ -390,6 +420,57 @@ object IcebergScanSupport extends Logging {
 
   private def deletesEmpty(deletes: java.util.List[_]): Boolean =
     deletes == null || deletes.isEmpty
+
+  private def plannedInputPartitions(exec: BatchScanExec, useRuntimeFilters: Boolean)
+      : Option[(Seq[InputPartition], Option[Seq[Seq[InputPartition]]])] = {
+    exec.outputPartitioning match {
+      case partitioning: KeyGroupedPartitioning =>
+        // Runtime filtering can change the final groups after static planning. Keep this
+        // combination on Spark until native execution can preserve those dynamic groups.
+        if (exec.runtimeFilters.nonEmpty) {
+          None
+        } else {
+          keyGroupedInputPartitions(exec, partitioning)
+            .map(groups => groups.flatten -> Some(groups))
+        }
+      case _ =>
+        Some(inputPartitions(exec, useRuntimeFilters) -> None)
+    }
+  }
+
+  private def keyGroupedInputPartitions(
+      exec: BatchScanExec,
+      partitioning: KeyGroupedPartitioning): Option[Seq[Seq[InputPartition]]] = {
+    try {
+      // BatchScanExec.inputRDD contains Spark's final partition groups, including empty groups
+      // introduced while aligning both sides of a storage-partitioned join.
+      val rddPartitions = exec.inputRDD.partitions.toSeq
+      val dataSourcePartitions = rddPartitions.collect { case partition: DataSourceRDDPartition =>
+        partition
+      }
+      if (dataSourcePartitions.size != rddPartitions.size) {
+        logWarning(
+          s"Expected DataSourceRDDPartition for every key-grouped Iceberg partition in " +
+            s"${exec.getClass.getName}.")
+        return None
+      }
+
+      val groups = dataSourcePartitions.map(_.inputPartitions.toSeq)
+      if (groups.size != partitioning.numPartitions) {
+        logWarning(
+          s"Key-grouped Iceberg partition count mismatch: planned ${groups.size}, " +
+            s"declared ${partitioning.numPartitions}.")
+        return None
+      }
+      Some(groups)
+    } catch {
+      case NonFatal(t) =>
+        logWarning(
+          s"Failed to obtain final key-grouped input partitions for ${exec.getClass.getName}.",
+          t)
+        None
+    }
+  }
 
   private def inputPartitions(
       exec: BatchScanExec,
