@@ -213,12 +213,14 @@ object IcebergScanSupport extends Logging {
     }
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
-    val nativeTasks = fileTasks.map(task => toNativeScanTask(task, partitionSchema))
     val groupedNativeTasks = icebergPartitionGroups.map(_.map { group =>
       group
         .flatMap(_.tasks)
         .collect { case task: FileScanTask => toNativeScanTask(task, partitionSchema) }
     })
+    val nativeTasks = groupedNativeTasks
+      .map(_.flatten)
+      .getOrElse(fileTasks.map(task => toNativeScanTask(task, partitionSchema)))
     Some(
       IcebergScanPlan(
         nativeTasks,
@@ -315,12 +317,14 @@ object IcebergScanSupport extends Logging {
     }
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
-    val nativeTasks = addedRowsTasks.map(task => toNativeScanTask(task, partitionSchema))
     val groupedNativeTasks = icebergPartitionGroups.map(_.map { group =>
       group
         .flatMap(_.tasks)
         .collect { case task: AddedRowsScanTask => toNativeScanTask(task, partitionSchema) }
     })
+    val nativeTasks = groupedNativeTasks
+      .map(_.flatten)
+      .getOrElse(addedRowsTasks.map(task => toNativeScanTask(task, partitionSchema)))
     Some(
       IcebergScanPlan(
         nativeTasks,
