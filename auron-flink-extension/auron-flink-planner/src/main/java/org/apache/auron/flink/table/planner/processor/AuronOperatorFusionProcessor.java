@@ -202,6 +202,18 @@ public class AuronOperatorFusionProcessor implements ExecNodeGraphProcessor {
             return;
         }
 
+        // Fusion needs the shadowed StreamExecCalc, which implements FlinkAuronCalcNode. If the
+        // classpath resolves to Flink's stock StreamExecCalc (a shadow/exclusion misconfiguration),
+        // skip fusion rather than failing the job, so fusion stays a best-effort optimization.
+        if (!(calc instanceof FlinkAuronCalcNode)) {
+            LOG.warn(
+                    "StreamExecCalc {} is not a FlinkAuronCalcNode (Auron's shadowed StreamExecCalc is "
+                            + "not on the classpath); skipping source-Calc fusion for scan {}.",
+                    calc.getId(),
+                    scan.getId());
+            return;
+        }
+
         final DynamicTableSource tableSource = sourceResolver.apply(scan);
 
         final FlinkAuronCalcNode calcNode = (FlinkAuronCalcNode) calc;
