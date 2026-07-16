@@ -28,7 +28,7 @@ import java.util.function.Function;
 import org.apache.auron.flink.connector.kafka.KafkaConstants;
 import org.apache.auron.flink.runtime.operator.FlinkAuronDynamicTableSource;
 import org.apache.auron.flink.table.planner.FlinkAuronCalcNode;
-import org.apache.auron.flink.table.planner.converter.NativeCalcPlanBuilder;
+import org.apache.auron.flink.table.planner.converter.NativePlanFusionBuilder;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.calcite.rex.RexNode;
 import org.apache.flink.configuration.ReadableConfig;
@@ -77,9 +77,9 @@ import org.slf4j.LoggerFactory;
  *       metadata column).
  * </ul>
  */
-public class AuronSourceCalcFusionProcessor implements ExecNodeGraphProcessor {
+public class AuronOperatorFusionProcessor implements ExecNodeGraphProcessor {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AuronSourceCalcFusionProcessor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AuronOperatorFusionProcessor.class);
 
     @Override
     public ExecNodeGraph process(ExecNodeGraph graph, ProcessorContext context) {
@@ -261,7 +261,7 @@ public class AuronSourceCalcFusionProcessor implements ExecNodeGraphProcessor {
             return false;
         }
 
-        final Optional<PhysicalPlanNode> plan = NativeCalcPlanBuilder.buildNativeCalcPlan(
+        final Optional<PhysicalPlanNode> plan = NativePlanFusionBuilder.buildNativeCalcPlan(
                 tableConfig, projection, condition, calcInputRowType, calcOutputRowType);
         if (!plan.isPresent()) {
             // Not convertible to native: the standalone native Calc path handles convertibility and

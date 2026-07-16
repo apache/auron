@@ -58,7 +58,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for {@link AuronSourceCalcFusionProcessor}.
+ * Unit tests for {@link AuronOperatorFusionProcessor}.
  *
  * <p>Two seams are covered directly: the reverse fan-out consumer count (a pure graph walk) and the
  * source-dependent staging decision {@code stagePlanIfFusible} (resolved-source + row-type inputs, no
@@ -67,7 +67,7 @@ import org.junit.jupiter.api.Test;
  * regression in any gate is caught. The full graph-walk + planner resolution path is exercised
  * end-to-end by the Kafka source IT.
  */
-class AuronSourceCalcFusionProcessorTest {
+class AuronOperatorFusionProcessorTest {
 
     private static final RelDataTypeFactory TYPE_FACTORY = new JavaTypeFactoryImpl();
     private static final RexBuilder REX_BUILDER = new RexBuilder(TYPE_FACTORY);
@@ -97,7 +97,7 @@ class AuronSourceCalcFusionProcessorTest {
         edge(source, calc);
         ExecNodeGraph graph = new ExecNodeGraph(Collections.singletonList(calc));
 
-        Map<Integer, Integer> counts = AuronSourceCalcFusionProcessor.buildConsumerCount(graph);
+        Map<Integer, Integer> counts = AuronOperatorFusionProcessor.buildConsumerCount(graph);
 
         assertEquals(1, counts.get(source.getId()));
     }
@@ -113,7 +113,7 @@ class AuronSourceCalcFusionProcessorTest {
         edge(source, calcB);
         ExecNodeGraph graph = new ExecNodeGraph(Arrays.asList(calcA, calcB));
 
-        Map<Integer, Integer> counts = AuronSourceCalcFusionProcessor.buildConsumerCount(graph);
+        Map<Integer, Integer> counts = AuronOperatorFusionProcessor.buildConsumerCount(graph);
 
         assertEquals(2, counts.get(source.getId()), "A source feeding two Calcs must count 2 consumers");
     }
@@ -129,7 +129,7 @@ class AuronSourceCalcFusionProcessorTest {
         edge(calc1, calc2);
         ExecNodeGraph graph = new ExecNodeGraph(Collections.singletonList(calc2));
 
-        Map<Integer, Integer> counts = AuronSourceCalcFusionProcessor.buildConsumerCount(graph);
+        Map<Integer, Integer> counts = AuronOperatorFusionProcessor.buildConsumerCount(graph);
 
         assertEquals(1, counts.get(source.getId()));
         assertEquals(1, counts.get(calc1.getId()));
@@ -156,7 +156,7 @@ class AuronSourceCalcFusionProcessorTest {
         edge(scan, calc);
         ExecNodeGraph graph = new ExecNodeGraph(Collections.singletonList(calc));
 
-        new AuronSourceCalcFusionProcessor().process(graph, s -> source, tableConfig);
+        new AuronOperatorFusionProcessor().process(graph, s -> source, tableConfig);
 
         assertTrue(source.isMergedCalcPlanSet(), "A sole-consumer native source must fuse through process()");
     }
@@ -174,7 +174,7 @@ class AuronSourceCalcFusionProcessorTest {
         edge(scan, calcB);
         ExecNodeGraph graph = new ExecNodeGraph(Arrays.asList(calcA, calcB));
 
-        new AuronSourceCalcFusionProcessor().process(graph, s -> source, tableConfig);
+        new AuronOperatorFusionProcessor().process(graph, s -> source, tableConfig);
 
         assertFalse(
                 source.isMergedCalcPlanSet(),
@@ -202,7 +202,7 @@ class AuronSourceCalcFusionProcessorTest {
     void testNonAuronSourceNotStaged() {
         FakeNonAuronSource source = new FakeNonAuronSource();
 
-        boolean staged = AuronSourceCalcFusionProcessor.stagePlanIfFusible(
+        boolean staged = AuronOperatorFusionProcessor.stagePlanIfFusible(
                 source, 1, TWO_INT_INPUT, TWO_INT_OUTPUT, identityProjection(), null, tableConfig);
 
         assertFalse(staged, "A non-Auron source must never be a fusion target");
@@ -285,7 +285,7 @@ class AuronSourceCalcFusionProcessorTest {
             RowType output,
             List<RexNode> projection,
             RexNode condition) {
-        return AuronSourceCalcFusionProcessor.stagePlanIfFusible(
+        return AuronOperatorFusionProcessor.stagePlanIfFusible(
                 (DynamicTableSource) source, 1, input, output, projection, condition, tableConfig);
     }
 

@@ -17,7 +17,7 @@
 package org.apache.auron.flink.table.planner.delegation;
 
 import java.util.Collections;
-import org.apache.auron.flink.table.planner.processor.AuronSourceCalcFusionProcessor;
+import org.apache.auron.flink.table.planner.processor.AuronOperatorFusionProcessor;
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.catalog.FunctionCatalog;
@@ -31,7 +31,7 @@ import scala.collection.Seq;
 /**
  * Streaming {@link StreamPlanner} subclass that installs Auron's graph-level processors. Stock
  * streaming {@code StreamPlanner.getExecNodeGraphProcessors()} returns an empty {@code Seq}, so
- * appending {@link AuronSourceCalcFusionProcessor} displaces nothing. Auron's shadowed {@code
+ * appending {@link AuronOperatorFusionProcessor} displaces nothing. Auron's shadowed {@code
  * DefaultPlannerFactory} constructs this subclass for streaming mode so the processor runs over the
  * {@code ExecNodeGraph} before Transformation translation.
  */
@@ -61,7 +61,7 @@ public class AuronStreamPlanner extends StreamPlanner {
     public Seq<ExecNodeGraphProcessor> getExecNodeGraphProcessors() {
         // Stream mode ships no processors; install Auron's fusion pass as the sole processor.
         return JavaConverters.asScalaBufferConverter(
-                        Collections.<ExecNodeGraphProcessor>singletonList(new AuronSourceCalcFusionProcessor()))
+                        Collections.<ExecNodeGraphProcessor>singletonList(new AuronOperatorFusionProcessor()))
                 .asScala()
                 .toSeq();
     }

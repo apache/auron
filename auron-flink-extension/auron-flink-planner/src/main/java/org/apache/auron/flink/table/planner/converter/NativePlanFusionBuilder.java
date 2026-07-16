@@ -43,11 +43,11 @@ import org.slf4j.LoggerFactory;
  * build the same sub-plan through {@link #buildNativeCalcPlan}; keeping it here avoids duplicating
  * the converter-framework walk and the {@code FFIReader} leaf assembly.
  */
-public final class NativeCalcPlanBuilder {
+public final class NativePlanFusionBuilder {
 
-    private static final Logger LOG = LoggerFactory.getLogger(NativeCalcPlanBuilder.class);
+    private static final Logger LOG = LoggerFactory.getLogger(NativePlanFusionBuilder.class);
 
-    private NativeCalcPlanBuilder() {
+    private NativePlanFusionBuilder() {
         // utility class
     }
 

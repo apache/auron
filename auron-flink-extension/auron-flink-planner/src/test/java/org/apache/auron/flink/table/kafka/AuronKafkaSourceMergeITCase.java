@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * End-to-end IT cases for the graph-level fusion of a convertible Calc into the native Auron Kafka
- * source. The {@code AuronSourceCalcFusionProcessor} (installed by the shadowed planner factory)
+ * source. The {@code AuronOperatorFusionProcessor} (installed by the shadowed planner factory)
  * counts each source's consumers over the whole exec-node graph and, for a sole-consumer native
  * source with no event-time watermark, stages the Calc's {@code Project[Filter?]} sub-plan onto the
  * source; the shadowed {@code StreamExecCalc} then emits no standalone operator and the source runs

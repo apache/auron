@@ -27,7 +27,7 @@ import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
 import org.apache.auron.flink.runtime.operator.FlinkAuronDynamicTableSource;
 import org.apache.auron.flink.table.planner.FlinkAuronCalcNode;
 import org.apache.auron.flink.table.planner.FlinkAuronExecNode;
-import org.apache.auron.flink.table.planner.converter.NativeCalcPlanBuilder;
+import org.apache.auron.flink.table.planner.converter.NativePlanFusionBuilder;
 import org.apache.auron.jni.AuronAdaptor;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.calcite.rex.RexNode;
@@ -258,7 +258,7 @@ public class StreamExecCalc extends CommonExecCalc
 
     /**
      * Attempts to compose a native {@code Project[Filter?[FFIReader-placeholder]]} plan from this
-     * node's projection and condition, delegating to {@link NativeCalcPlanBuilder}. Returns {@link
+     * node's projection and condition, delegating to {@link NativePlanFusionBuilder}. Returns {@link
      * Optional#empty()} if any {@link RexNode} is unsupported by the converter framework, or if plan
      * composition throws — both signals are the same for the caller: fall back to Flink's codegen
      * Calc.
@@ -268,7 +268,7 @@ public class StreamExecCalc extends CommonExecCalc
      * @return a composed plan, or empty if conversion failed
      */
     private Optional<PhysicalPlanNode> tryBuildAuronPlan(RowType inputRowType, RowType outputRowType) {
-        return NativeCalcPlanBuilder.buildNativeCalcPlan(
+        return NativePlanFusionBuilder.buildNativeCalcPlan(
                 getPersistedConfig(), projection, condition, inputRowType, outputRowType);
     }
 
