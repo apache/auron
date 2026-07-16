@@ -236,14 +236,14 @@ class AuronIcebergIntegrationSuite
             |using iceberg
             |partitioned by (p)
             |""".stripMargin)
-      sql("insert into local.db.t_grouped_left values (0, 0), (2, 2)")
+      sql("insert into local.db.t_grouped_left values (0, 0), (1, 1), (2, 2)")
 
       sql("""
             |create table local.db.t_grouped_right (value int, p int)
             |using iceberg
             |partitioned by (p)
             |""".stripMargin)
-      sql("insert into local.db.t_grouped_right values (12, 2)")
+      sql("insert into local.db.t_grouped_right values (11, 1), (12, 2)")
 
       withSQLConf(
         "spark.sql.adaptive.enabled" -> "false",
@@ -269,7 +269,7 @@ class AuronIcebergIntegrationSuite
           e
         }.isEmpty)
 
-        checkAnswer(df, Seq(Row(2, 2, 12)))
+        checkAnswer(df, Seq(Row(1, 1, 11), Row(2, 2, 12)))
         nativeScans.foreach { scan =>
           val partitioning = scan.outputPartitioning.asInstanceOf[KeyGroupedPartitioning]
           assert(scan.metrics("numPartitions").value === partitioning.numPartitions)
