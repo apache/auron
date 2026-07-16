@@ -172,6 +172,9 @@ public class AuronKafkaDynamicTableSource
 
     @Override
     public void setMergedCalcPlan(PhysicalPlanNode logicalCalcSubPlan, RowType projectedOutputType) {
+        Preconditions.checkNotNull(logicalCalcSubPlan, "Merged Calc plan must not be null");
+        Preconditions.checkNotNull(projectedOutputType, "Projected output type must not be null");
+        Preconditions.checkState(!isMergedCalcPlanSet(), "A merged Calc plan is already staged on this source");
         this.mergedCalcPlan = logicalCalcSubPlan;
         this.mergedProjectedOutputType = projectedOutputType;
     }

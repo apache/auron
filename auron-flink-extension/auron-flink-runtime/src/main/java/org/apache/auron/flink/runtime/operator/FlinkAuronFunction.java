@@ -34,8 +34,13 @@ public interface FlinkAuronFunction extends SupportsAuronNative {
      * to be fused into this source's native scan. When set, the source runs the fused plan and emits
      * the projected rows in place of its original output.
      *
+     * <p>Both arguments must be non-null, and a source may be registered at most once: a second
+     * registration is rejected so a second downstream Calc cannot overwrite the first. Callers guard
+     * this upstream by checking {@link #isMergedCalcPlanSet()} before registering.
+     *
      * @param logicalCalcSubPlan the {@code Project[Filter?]} tree over the logical input columns
      * @param projectedOutputType the projected logical output row type emitted downstream
+     * @throws IllegalStateException if a merged Calc plan is already registered
      */
     void setMergedCalcPlan(PhysicalPlanNode logicalCalcSubPlan, RowType projectedOutputType);
 

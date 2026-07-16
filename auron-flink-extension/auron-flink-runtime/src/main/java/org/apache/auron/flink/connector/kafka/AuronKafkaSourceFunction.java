@@ -591,6 +591,9 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
      */
     @Override
     public void setMergedCalcPlan(PhysicalPlanNode logicalCalcSubPlan, RowType projectedOutputType) {
+        Preconditions.checkArgument(logicalCalcSubPlan != null, "Merged Calc plan must not be null");
+        Preconditions.checkArgument(projectedOutputType != null, "Projected output type must not be null");
+        Preconditions.checkState(!isMergedCalcPlanSet(), "A merged Calc plan is already staged on this source");
         this.mergedCalcPlan = logicalCalcSubPlan;
         this.mergedProjectedOutputType = projectedOutputType;
     }

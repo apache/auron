@@ -36,8 +36,13 @@ public interface FlinkAuronDynamicTableSource {
      * source forwards it into its source function at build time. The function splices the sub-plan
      * onto its native scan and emits the projected rows directly.
      *
+     * <p>Both arguments must be non-null, and a source may be staged at most once: a second
+     * registration is rejected so one Calc cannot silently discard another's staged plan. The fusion
+     * pass enforces this upstream by checking {@link #isMergedCalcPlanSet()} before staging.
+     *
      * @param logicalCalcSubPlan the {@code Project[Filter?]} tree over the logical input columns
      * @param projectedOutputType the projected logical output row type emitted downstream
+     * @throws IllegalStateException if a merged Calc plan is already staged on this source
      */
     void setMergedCalcPlan(PhysicalPlanNode logicalCalcSubPlan, RowType projectedOutputType);
 
