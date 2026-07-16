@@ -175,14 +175,13 @@ class AuronKafkaSourceFunctionMergeTest {
         // metadata column shifts them automatically rather than misreading every row.
         assertEquals(
                 -metaCount,
-                AuronKafkaSourceFunction.metaFieldNegativeIndex(
-                        KafkaConstants.KAFKA_AURON_META_PARTITION_ID, metaCount));
+                AuronKafkaSourceFunction.metaFieldNegativeIndex(KafkaConstants.KAFKA_AURON_META_PARTITION_ID));
         assertEquals(
                 -metaCount + 1,
-                AuronKafkaSourceFunction.metaFieldNegativeIndex(KafkaConstants.KAFKA_AURON_META_OFFSET, metaCount));
+                AuronKafkaSourceFunction.metaFieldNegativeIndex(KafkaConstants.KAFKA_AURON_META_OFFSET));
         assertEquals(
                 -metaCount + 2,
-                AuronKafkaSourceFunction.metaFieldNegativeIndex(KafkaConstants.KAFKA_AURON_META_TIMESTAMP, metaCount));
+                AuronKafkaSourceFunction.metaFieldNegativeIndex(KafkaConstants.KAFKA_AURON_META_TIMESTAMP));
     }
 
     @Test

@@ -366,9 +366,9 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         // Negative indices of the metadata columns relative to the row end: a meta field at
         // physical position p sits at (p - metaCount). The accessor type per field (INT vs BIGINT)
         // is intrinsic to that field; only the offset magnitude comes from the constant.
-        final int partitionIdx = metaFieldNegativeIndex(KAFKA_AURON_META_PARTITION_ID, metaCount);
-        final int offsetIdx = metaFieldNegativeIndex(KAFKA_AURON_META_OFFSET, metaCount);
-        final int timestampIdx = metaFieldNegativeIndex(KAFKA_AURON_META_TIMESTAMP, metaCount);
+        final int partitionIdx = metaFieldNegativeIndex(KAFKA_AURON_META_PARTITION_ID);
+        final int offsetIdx = metaFieldNegativeIndex(KAFKA_AURON_META_OFFSET);
+        final int timestampIdx = metaFieldNegativeIndex(KAFKA_AURON_META_TIMESTAMP);
 
         // Pre-check watermark flag to avoid per-record null checks in the hot path
         final boolean enableWatermark = partitionWatermarkTrackers != null && !partitionWatermarkTrackers.isEmpty();
@@ -741,15 +741,15 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
 
     /**
      * Resolves the negative (row-end-relative) index of the metadata column named {@code fieldName}.
-     * Metadata columns occupy the leading {@code metaCount} positions of every native output row, so
-     * a field at physical position {@code p} reads back at {@code p - metaCount}.
+     * Metadata columns occupy the leading positions of every native output row, so a field at
+     * physical position {@code p} reads back at {@code p - KAFKA_AURON_META_FIELDS.size()}.
      *
      * @param fieldName the metadata column name, declared in {@link KafkaConstants#KAFKA_AURON_META_FIELDS}
-     * @param metaCount the number of leading metadata columns
      * @return the negative index to pass to the row accessors for this metadata column
      */
     @VisibleForTesting
-    static int metaFieldNegativeIndex(String fieldName, int metaCount) {
+    static int metaFieldNegativeIndex(String fieldName) {
+        final int metaCount = KAFKA_AURON_META_FIELDS.size();
         for (int p = 0; p < KAFKA_AURON_META_FIELDS.size(); p++) {
             if (KAFKA_AURON_META_FIELDS.get(p).getName().equals(fieldName)) {
                 return p - metaCount;
