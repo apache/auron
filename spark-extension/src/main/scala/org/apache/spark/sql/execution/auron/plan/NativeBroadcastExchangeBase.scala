@@ -290,7 +290,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
     }
   }
 
-  @sparkver("4.0 / 4.1")
+  @sparkver("4.0 / 4.1 / 4.2")
   private def getRelationFuture = {
     SQLExecution.withThreadLocalCaptured[Broadcast[Any]](
       this.session.sqlContext.sparkSession,
