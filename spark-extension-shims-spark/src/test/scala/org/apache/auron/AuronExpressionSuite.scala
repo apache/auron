@@ -33,16 +33,35 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("UnaryMinus") {
-    // Negating Int.MinValue overflows. Under ANSI mode (default in Spark 4.x) vanilla Spark
-    // throws while the native engine wraps, so the comparison diverges. Disable ANSI so both
-    // engines wrap consistently and the boundary value can still be exercised.
-    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
       withTable("t1") {
         sql("create table t1(col1 int) using parquet")
-        sql(
-          "insert into t1 values(1), (2), (3), (3), (-1), (0), (null), (2147483647), (-2147483648)")
-        checkSparkAnswerAndOperator("SELECT negative(col1), -(col1) FROM t1")
+        sql("insert into t1 values(1), (0), (-2147483648)")
+
+        withSQLConf("spark.auron.enable" -> "false") {
+          assertArithmeticOverflow(sql("SELECT negative(col1), -(col1) FROM t1"))
+        }
+        withSQLConf("spark.auron.enable" -> "true") {
+          assertArithmeticOverflow(sql("SELECT negative(col1), -(col1) FROM t1"))
+        }
       }
     }
+  }
+
+  private def assertArithmeticOverflow(df: => org.apache.spark.sql.DataFrame): Unit = {
+    val err = intercept[Exception] {
+      df.collect()
+    }
+    assert(allCauseMessages(err).contains("[ARITHMETIC_OVERFLOW]"))
+  }
+
+  private def allCauseMessages(err: Throwable): String = {
+    val messages = scala.collection.mutable.ArrayBuffer.empty[String]
+    var current = err
+    while (current != null) {
+      Option(current.getMessage).foreach(messages += _)
+      current = current.getCause
+    }
+    messages.mkString(" | caused by: ")
   }
 }
