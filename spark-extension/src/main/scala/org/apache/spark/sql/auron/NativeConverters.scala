@@ -1291,12 +1291,12 @@ object NativeConverters extends Logging {
         })
         aggBuilder.addChildren(convertExpr(child))
 
-      case CollectList(child, _, _) =>
+      case c: CollectList =>
         aggBuilder.setAggFunction(pb.AggFunction.COLLECT_LIST)
-        aggBuilder.addChildren(convertExpr(child))
-      case CollectSet(child, _, _) =>
+        aggBuilder.addChildren(convertExpr(c.child))
+      case c: CollectSet =>
         aggBuilder.setAggFunction(pb.AggFunction.COLLECT_SET)
-        aggBuilder.addChildren(convertExpr(child))
+        aggBuilder.addChildren(convertExpr(c.child))
 
       // brickhouse UDAFs
       case udaf
