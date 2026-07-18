@@ -114,14 +114,6 @@ object NativeConverters extends Logging {
     }
   }
 
-  private def shouldFallbackUnaryMinusToSpark(unaryMinus: UnaryMinus): Boolean = {
-    val ansiEnabled = SQLConf.get.getConfString("spark.sql.ansi.enabled", "false").toBoolean
-    ansiEnabled && unaryMinus.child.dataType match {
-      case ByteType | ShortType | IntegerType | LongType => true
-      case _ => false
-    }
-  }
-
   def existTimestampType(dataType: DataType): Boolean = {
     dataType match {
       case TimestampType =>
@@ -571,16 +563,14 @@ object NativeConverters extends Logging {
               .setExpr(convertExprWithFallback(child, isPruningExpr, fallback))
               .build())
         }
-      // Spark ANSI mode requires overflow to raise, so use the Spark expression path for
-      // integral negation instead of the native wrapping implementation.
-      case unaryMinus: UnaryMinus if shouldFallbackUnaryMinusToSpark(unaryMinus) =>
-        buildSparkUdfWrapperExpr(unaryMinus, fallback)
       case unaryMinus: UnaryMinus =>
         buildExprNode {
           _.setNegative(
             pb.PhysicalNegativeNode
               .newBuilder()
               .setExpr(convertExprWithFallback(unaryMinus.child, isPruningExpr, fallback))
+              .setAnsiEnabled(
+                SQLConf.get.getConfString("spark.sql.ansi.enabled", "false").toBoolean)
               .build())
         }
 

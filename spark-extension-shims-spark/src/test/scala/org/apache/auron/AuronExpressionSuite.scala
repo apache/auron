@@ -36,13 +36,43 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     withSQLConf("spark.sql.ansi.enabled" -> "true") {
       withTable("t1") {
         sql("create table t1(col1 int) using parquet")
-        sql("insert into t1 values(1), (0), (-2147483648)")
+        sql("""
+            |insert into t1 values
+            |  (1),
+            |  (0),
+            |  (-2147483648)
+            |""".stripMargin)
 
         withSQLConf("spark.auron.enable" -> "false") {
           assertArithmeticOverflow(sql("SELECT negative(col1), -(col1) FROM t1"))
         }
         withSQLConf("spark.auron.enable" -> "true") {
+          val df = sql("SELECT negative(col1), -(col1) FROM t1")
+          assertArithmeticOverflow(df)
+          assertNativePlan(df)
+        }
+      }
+    }
+  }
+
+  test("UnaryMinusLong") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1(col1 bigint) using parquet")
+        sql("""
+            |insert into t1 values
+            |  (1),
+            |  (0),
+            |  (cast(-9223372036854775808 as bigint))
+            |""".stripMargin)
+
+        withSQLConf("spark.auron.enable" -> "false") {
           assertArithmeticOverflow(sql("SELECT negative(col1), -(col1) FROM t1"))
+        }
+        withSQLConf("spark.auron.enable" -> "true") {
+          val df = sql("SELECT negative(col1), -(col1) FROM t1")
+          assertArithmeticOverflow(df)
+          assertNativePlan(df)
         }
       }
     }
@@ -63,5 +93,17 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       current = current.getCause
     }
     messages.mkString(" | caused by: ")
+  }
+
+  private def assertNativePlan(df: org.apache.spark.sql.DataFrame): Unit = {
+    val plan = stripAQEPlan(df.queryExecution.executedPlan)
+    plan
+      .collectFirst { case op if !isNativeOrPassThrough(op) => op }
+      .foreach { op =>
+        fail(s"""
+             |Found non-native operator: ${op.nodeName}
+             |plan:
+             |${plan}""".stripMargin)
+      }
   }
 }

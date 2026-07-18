@@ -315,6 +315,7 @@ message PhysicalCastNode {
 
 message PhysicalNegativeNode {
   PhysicalExprNode expr = 1;
+  bool ansi_enabled = 2;
 }
 
 message PhysicalLikeExprNode {
