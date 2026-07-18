@@ -42,8 +42,8 @@ use datafusion::{
     physical_plan::{
         ColumnStatistics, ExecutionPlan, Statistics, expressions as phys_expr,
         expressions::{
-            BinaryExpr, CaseExpr, CastExpr, Column, IsNotNullExpr, IsNullExpr, Literal,
-            NegativeExpr, NotExpr, PhysicalSortExpr,
+            BinaryExpr, CaseExpr, CastExpr, Column, IsNotNullExpr, IsNullExpr, Literal, NotExpr,
+            PhysicalSortExpr,
         },
         metrics::ExecutionPlanMetricsSet,
     },
@@ -963,22 +963,10 @@ impl PhysicalPlanner {
             ExprType::NotExpr(e) => Arc::new(NotExpr::new(
                 self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
             )),
-            ExprType::Negative(e) => {
-                let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
-                if e.ansi_enabled {
-                    match expr.data_type(input_schema)? {
-                        datafusion::arrow::datatypes::DataType::Int8
-                        | datafusion::arrow::datatypes::DataType::Int16
-                        | datafusion::arrow::datatypes::DataType::Int32
-                        | datafusion::arrow::datatypes::DataType::Int64 => {
-                            Arc::new(SparkNegativeExpr::new(expr))
-                        }
-                        _ => Arc::new(NegativeExpr::new(expr)),
-                    }
-                } else {
-                    Arc::new(NegativeExpr::new(expr))
-                }
-            }
+            ExprType::Negative(e) => Arc::new(SparkNegativeExpr::new(
+                self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
+                e.ansi_enabled,
+            )),
             ExprType::InList(e) => {
                 let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
                 let dt = expr.data_type(input_schema)?;
