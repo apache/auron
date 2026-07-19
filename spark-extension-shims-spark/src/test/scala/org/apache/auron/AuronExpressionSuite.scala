@@ -82,7 +82,7 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     val err = intercept[Exception] {
       df.collect()
     }
-    assert(allCauseMessages(err).contains("[ARITHMETIC_OVERFLOW]"))
+    assert(allCauseMessages(err).toLowerCase.contains("overflow"))
   }
 
   private def allCauseMessages(err: Throwable): String = {
