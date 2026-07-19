@@ -27,7 +27,7 @@ import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expres
 import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.{NativeConverters, Shims}
-import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
+import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, DynamicPruningExpression, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
 import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
@@ -431,7 +431,9 @@ object IcebergScanSupport extends Logging {
       case partitioning: KeyGroupedPartitioning =>
         // Runtime filtering can change the final groups after static planning. Keep this
         // combination on Spark until native execution can preserve those dynamic groups.
-        if (exec.runtimeFilters.nonEmpty) {
+        val hasEffectiveRuntimeFilters = exec.runtimeFilters
+          .exists(_ != DynamicPruningExpression(Literal.TrueLiteral))
+        if (hasEffectiveRuntimeFilters) {
           None
         } else {
           keyGroupedInputPartitions(exec, partitioning)

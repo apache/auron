@@ -30,6 +30,7 @@ import org.apache.iceberg.spark.Spark3Util
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.ExplainUtils.collectFirst
@@ -274,6 +275,101 @@ class AuronIcebergIntegrationSuite
           val partitioning = scan.outputPartitioning.asInstanceOf[KeyGroupedPartitioning]
           assert(scan.metrics("numPartitions").value === partitioning.numPartitions)
         }
+      }
+    }
+  }
+
+  test("native iceberg scan ignores ineffective runtime filters for key grouped partitions") {
+    withTable("local.db.t_ineffective_dpp_fact", "local.db.t_ineffective_dpp_dim") {
+      sql("""
+            |create table local.db.t_ineffective_dpp_fact (id int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_ineffective_dpp_fact values (1, 1), (2, 2), (3, 3)")
+
+      sql("""
+            |create table local.db.t_ineffective_dpp_dim (value int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_ineffective_dpp_dim values (10, 1), (20, 2), (30, 3)")
+
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "true",
+        "spark.sql.sources.v2.bucketing.enabled" -> "true",
+        "spark.sql.sources.v2.bucketing.pushPartValues.enabled" -> "true",
+        "spark.sql.iceberg.planning.preserve-data-grouping" -> "true") {
+        val df = sql("""
+                       |select f.id, f.p, d.value
+                       |from local.db.t_ineffective_dpp_fact f
+                       |join local.db.t_ineffective_dpp_dim d on f.p = d.p
+                       |where d.value = 20
+                       |""".stripMargin)
+
+        checkAnswer(df, Seq(Row(2, 2, 20)))
+        val factScan = executedNativeIcebergTableScanExec(df, "t_ineffective_dpp_fact")
+        val explain = df.queryExecution.explainString(FormattedMode)
+        assert(factScan.runtimeFilters.nonEmpty, explain)
+        assert(
+          factScan.runtimeFilters.forall(_ == DynamicPruningExpression(Literal.TrueLiteral)),
+          explain)
+        assert(factScan.outputPartitioning.isInstanceOf[KeyGroupedPartitioning], explain)
+      }
+    }
+  }
+
+  test("iceberg scan falls back for effective runtime filters on key grouped partitions") {
+    withTable("local.db.t_effective_dpp_fact", "local.db.t_effective_dpp_dim") {
+      sql("""
+            |create table local.db.t_effective_dpp_fact (id int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_effective_dpp_fact values (1, 1), (2, 2), (3, 3)")
+
+      sql("""
+            |create table local.db.t_effective_dpp_dim (value int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_effective_dpp_dim values (10, 1), (20, 2), (30, 3)")
+
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "false",
+        "spark.sql.sources.v2.bucketing.enabled" -> "true",
+        "spark.sql.sources.v2.bucketing.pushPartValues.enabled" -> "true",
+        "spark.sql.iceberg.planning.preserve-data-grouping" -> "true") {
+        val df = sql("""
+                       |select f.id, f.p, d.value
+                       |from local.db.t_effective_dpp_fact f
+                       |join local.db.t_effective_dpp_dim d on f.p = d.p
+                       |where d.value = 20
+                       |""".stripMargin)
+
+        checkAnswer(df, Seq(Row(2, 2, 20)))
+        val materializedPlan = collectMaterializedPlans(df.queryExecution.executedPlan)
+        val factScan = materializedPlan
+          .collectFirst {
+            case scan: BatchScanExec
+                if scan.scan.description().contains("t_effective_dpp_fact") =>
+              scan
+          }
+          .getOrElse {
+            fail(df.queryExecution.explainString(FormattedMode))
+          }
+        val explain = df.queryExecution.explainString(FormattedMode)
+        assert(
+          factScan.runtimeFilters
+            .exists(_ != DynamicPruningExpression(Literal.TrueLiteral)),
+          explain)
+        assert(factScan.outputPartitioning.isInstanceOf[KeyGroupedPartitioning], explain)
       }
     }
   }
