@@ -114,7 +114,7 @@ Auron provides a unified build script `auron-build.sh` that supports both local 
 
 ```bash
 # Build inside Docker container
-./auron-build.sh --docker true --image centos7 --release \
+./auron-build.sh --docker true --image rockylinux8 --release \
   --sparkver 3.5 --scalaver 2.12
 ```
 
@@ -123,12 +123,34 @@ Auron provides a unified build script `auron-build.sh` that supports both local 
 Run `./auron-build.sh --help` to see all available options, including:
 
 - `--pre` or `--release`: Build profile
-- `--sparkver`: Spark version (3.0, 3.1, 3.2, 3.3, 3.4, 3.5)
+- `--sparkver`: Spark version (3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 4.0, 4.1)
 - `--scalaver`: Scala version (2.12, 2.13)
 - `--celeborn`, `--uniffle`, `--paimon`, `--iceberg`: Optional integrations
 - `--skiptests`: Skip unit tests (default: true)
 - `--sparktests`: Run Spark integration tests
 - `--threads`: Maven build threads (e.g. 1, 4, 1C). Defaults to single-threaded local builds; Docker defaults to 8 unless overridden.
+
+### Build Compatibility Matrix
+
+The examples printed by `./auron-build.sh --help` use the following documented build
+configurations based on the current compatibility checks. A dash (`—`) means that the
+integration is not supported for that Spark version and must not be passed to
+`auron-build.sh`.
+
+| Spark | Scala | JDK | Docker image | Flink | Celeborn | Uniffle | Paimon | Iceberg | Hudi |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 3.5 | 2.12 | 8+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | 1.10.1 | 0.15 |
+| 4.0 | 2.13 | 17+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | 1.10.1 | — |
+| 4.1 | 2.13 | 17+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | — | — |
+
+Spark 4.x requires Scala 2.13 and JDK 17 or later. In Docker mode,
+`auron-build.sh` selects JDK 17 for Spark 4.x, and the `rockylinux8` image applies that
+selection. The `centos7` image only provides JDK 8 and must not be used for Spark 4.x.
+
+Iceberg 1.10.1 supports Spark 3.4, 3.5, and 4.0 in Auron. Spark 4.1 support requires a
+future upgrade to Iceberg 1.11.0 or later. Hudi 0.15 supports Spark 3.0 through 3.5.
+When a supported version or compatibility rule changes, update this matrix and the
+examples in `auron-build.sh` together.
 
 ### Running Tests
 

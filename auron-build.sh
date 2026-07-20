@@ -72,16 +72,33 @@ print_help() {
     echo "Examples:"
     echo "  $0 --pre --sparkver ${SUPPORTED_SPARK_VERSIONS[*]: -1}" \
          "--scalaver ${SUPPORTED_SCALA_VERSIONS[*]: -1} -DskipBuildNative"
-    echo "  $0 --docker true --image ${SUPPORTED_OS_IMAGES[*]:0:1}" \
+    echo "  # Spark 3.5 with all supported third-party integrations"
+    echo "  $0 --docker true --image rockylinux8" \
          "--clean true --skiptests true --release" \
-         "--sparkver ${SUPPORTED_SPARK_VERSIONS[*]: -1}" \
-         "--flinkver ${SUPPORTED_FLINK_VERSIONS[*]: -1}" \
-         "--scalaver ${SUPPORTED_SCALA_VERSIONS[*]: -1}" \
-         "--celeborn ${SUPPORTED_CELEBORN_VERSIONS[*]: -1}" \
-         "--uniffle ${SUPPORTED_UNIFFLE_VERSIONS[*]: -1}" \
-         "--paimon ${SUPPORTED_PAIMON_VERSIONS[*]: -1}" \
-         "--iceberg ${SUPPORTED_ICEBERG_VERSIONS[*]: -1}" \
-         "--hudi ${SUPPORTED_HUDI_VERSIONS[*]: -1}"
+         "--sparkver 3.5 --scalaver 2.12" \
+         "--flinkver 1.18" \
+         "--celeborn 0.6" \
+         "--uniffle 0.10" \
+         "--paimon 1.2" \
+         "--iceberg 1.10.1" \
+         "--hudi 0.15"
+    echo "  # Spark 4.0 (Hudi is not supported)"
+    echo "  $0 --docker true --image rockylinux8" \
+         "--clean true --skiptests true --release" \
+         "--sparkver 4.0 --scalaver 2.13" \
+         "--flinkver 1.18" \
+         "--celeborn 0.6" \
+         "--uniffle 0.10" \
+         "--paimon 1.2" \
+         "--iceberg 1.10.1"
+    echo "  # Spark 4.1 (Iceberg and Hudi are not supported)"
+    echo "  $0 --docker true --image rockylinux8" \
+         "--clean true --skiptests true --release" \
+         "--sparkver 4.1 --scalaver 2.13" \
+         "--flinkver 1.18" \
+         "--celeborn 0.6" \
+         "--uniffle 0.10" \
+         "--paimon 1.2"
     exit 0
 }
 
