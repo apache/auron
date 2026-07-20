@@ -44,11 +44,11 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
             |""".stripMargin)
 
         withSQLConf("spark.auron.enable" -> "false") {
-          assertArithmeticOverflow(sql("SELECT negative(col1), -(col1) FROM t1"))
+          assertArithmeticOverflow(sql("SELECT negative(col1), -(col1) FROM t1"), "overflow")
         }
         withSQLConf("spark.auron.enable" -> "true") {
           val df = sql("SELECT negative(col1), -(col1) FROM t1")
-          assertArithmeticOverflow(df)
+          assertArithmeticOverflow(df, "[ARITHMETIC_OVERFLOW]")
           assertNativePlan(df)
         }
       }
@@ -67,22 +67,50 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
             |""".stripMargin)
 
         withSQLConf("spark.auron.enable" -> "false") {
-          assertArithmeticOverflow(sql("SELECT negative(col1), -(col1) FROM t1"))
+          assertArithmeticOverflow(sql("SELECT negative(col1), -(col1) FROM t1"), "overflow")
         }
         withSQLConf("spark.auron.enable" -> "true") {
           val df = sql("SELECT negative(col1), -(col1) FROM t1")
-          assertArithmeticOverflow(df)
+          assertArithmeticOverflow(df, "[ARITHMETIC_OVERFLOW]")
           assertNativePlan(df)
         }
       }
     }
   }
 
-  private def assertArithmeticOverflow(df: => org.apache.spark.sql.DataFrame): Unit = {
+  test("UnaryMinus without ANSI") {
+    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+      withTable("t1") {
+        sql("create table t1(col1 int) using parquet")
+        sql(
+          "insert into t1 values(1), (2), (3), (3), (-1), (0), (null), (2147483647), (-2147483648)")
+        checkSparkAnswerAndOperator("SELECT negative(col1), -(col1) FROM t1")
+      }
+    }
+  }
+
+  test("UnaryMinus honors Spark's default ANSI setting") {
+    withTable("t1") {
+      sql("create table t1(col1 int) using parquet")
+      sql("insert into t1 values(-2147483648)")
+
+      if (spark.conf.get("spark.sql.ansi.enabled").toBoolean) {
+        val df = sql("SELECT negative(col1), -(col1) FROM t1")
+        assertArithmeticOverflow(df, "[ARITHMETIC_OVERFLOW]")
+        assertNativePlan(df)
+      } else {
+        checkSparkAnswerAndOperator("SELECT negative(col1), -(col1) FROM t1")
+      }
+    }
+  }
+
+  private def assertArithmeticOverflow(
+      df: => org.apache.spark.sql.DataFrame,
+      expectedMessage: String): Unit = {
     val err = intercept[Exception] {
       df.collect()
     }
-    assert(allCauseMessages(err).toLowerCase.contains("overflow"))
+    assert(allCauseMessages(err).toLowerCase.contains(expectedMessage.toLowerCase))
   }
 
   private def allCauseMessages(err: Throwable): String = {

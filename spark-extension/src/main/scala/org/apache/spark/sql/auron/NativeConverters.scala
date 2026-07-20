@@ -569,8 +569,7 @@ object NativeConverters extends Logging {
             pb.PhysicalNegativeNode
               .newBuilder()
               .setExpr(convertExprWithFallback(unaryMinus.child, isPruningExpr, fallback))
-              .setAnsiEnabled(
-                SQLConf.get.getConfString("spark.sql.ansi.enabled", "false").toBoolean)
+              .setAnsiEnabled(SQLConf.get.ansiEnabled)
               .build())
         }
 
