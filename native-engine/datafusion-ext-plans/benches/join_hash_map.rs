@@ -104,11 +104,16 @@ fn bench_lookup_many(c: &mut Criterion) {
         for &(rate_label, hit_rate) in hit_rates {
             let probe = make_probe_hashes(&build_hashes, build_size, hit_rate);
             let label = format!("{size_label}/{rate_label}");
+            // `lookup_many` takes the probe `Vec<u32>` by value, so each
+            // measured iteration needs a fresh owned copy. Use `iter_batched`
+            // so the clone happens in setup (outside the timer) and only the
+            // `lookup_many` call itself is measured.
             group.bench_with_input(BenchmarkId::from_parameter(&label), &label, |b, _| {
-                b.iter(|| {
-                    let result = map.lookup_many(black_box(probe.clone()));
-                    black_box(result)
-                });
+                b.iter_batched(
+                    || probe.clone(),
+                    |probe| map.lookup_many(black_box(probe)),
+                    criterion::BatchSize::LargeInput,
+                );
             });
         }
     }

@@ -48,6 +48,7 @@ use unchecked_index::UncheckedIndex;
 // range:  lead=0, value=start, mapped_indices[start-1]=len
 // single: lead=1, value=idx
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct MapValue(u32);
 
 impl MapValue {
@@ -282,14 +283,22 @@ impl Table {
                 let group_hashes = u32x8::from_slice(simd, &self.map[e].hashes);
                 let hash_matched = group_hashes.simd_eq(u32x8::splat(simd, hashes[i]));
 
-                // Fast path: check hash match first (common case)
+                // Fast path: check hash match first (common case).
+                //
+                // Checking the hash-match mask before the empty mask is
+                // valid because of a build-time invariant: within a
+                // `MapValueGroup`, occupied lanes are packed into a prefix —
+                // there is never an empty lane before a later occupied lane.
+                // This holds because insertion always fills the lowest empty
+                // lane (see `create_from_key_columns_and_hashes_impl`), so
+                // the first occupied lane is also the first non-empty lane.
+                // A future change that introduces tombstones/deletes or a
+                // different insertion strategy must preserve this, otherwise
+                // a hash match past a gap would be missed here.
                 let matched_bits = hash_matched.to_bitmask();
                 if matched_bits != 0 {
                     let pos = matched_bits.trailing_zeros() as usize;
-                    hashes[i] = unsafe {
-                        // safety: transmute MapValue(u32) to u32
-                        std::mem::transmute(self.map[e].values[pos])
-                    };
+                    hashes[i] = self.map[e].values[pos].0;
                     break;
                 }
 
