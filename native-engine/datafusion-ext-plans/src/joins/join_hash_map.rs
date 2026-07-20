@@ -41,6 +41,7 @@ use unchecked_index::UncheckedIndex;
 // range:  lead=0, value=start, mapped_indices[start-1]=len
 // single: lead=1, value=idx
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct MapValue(u32);
 
 impl MapValue {
@@ -254,12 +255,20 @@ impl Table {
             loop {
                 let hash_matched = self.map[e].hashes.simd_eq(Simd::splat(hashes[i]));
 
-                // Fast path: check hash match first (common case)
+                // Fast path: check hash match first (common case).
+                //
+                // Checking `hash_matched.first_set()` before the empty mask is
+                // valid because of a build-time invariant: within a
+                // `MapValueGroup`, occupied lanes are packed into a prefix —
+                // there is never an empty lane before a later occupied lane.
+                // This holds because insertion always fills the lowest empty
+                // lane via `empty.first_set()` (see `create_from_key_columns`),
+                // so the first occupied lane is also the first non-empty lane.
+                // A future change that introduces tombstones/deletes or a
+                // different insertion strategy must preserve this, otherwise
+                // a hash match past a gap would be missed here.
                 if let Some(pos) = hash_matched.first_set() {
-                    hashes[i] = unsafe {
-                        // safety: transmute MapValue(u32) to u32
-                        std::mem::transmute(self.map[e].values[pos])
-                    };
+                    hashes[i] = self.map[e].values[pos].0;
                     break;
                 }
 
