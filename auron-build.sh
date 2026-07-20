@@ -57,7 +57,6 @@ print_help() {
     echo "  --skiptests <true|false> Skip unit tests (default: true)"
     echo "  --sparktests <true|false> Run spark tests (default: false)"
     echo "  --docker <true|false>    Build in Docker environment (default: false)"
-    echo "  --platform <PLATFORM>    Docker platform to use (default: linux/amd64)"
     echo "  --threads <N|NC>         Maven build threads (e.g. 1, 4, 1C). Default: local unset, docker 8"
     IFS=','; echo "  --image <NAME>           Docker image to use (e.g. ${SUPPORTED_OS_IMAGES[*]}, default: ${SUPPORTED_OS_IMAGES[*]:0:1})"; unset IFS
     IFS=','; echo "  --sparkver <VERSION>     Specify Spark version (e.g. ${SUPPORTED_SPARK_VERSIONS[*]})"; unset IFS
@@ -74,7 +73,7 @@ print_help() {
     echo "Examples:"
     echo "  $0 --pre --sparkver ${SUPPORTED_SPARK_VERSIONS[*]: -1}" \
          "--scalaver ${SUPPORTED_SCALA_VERSIONS[*]: -1} -DskipBuildNative"
-    echo "  $0 --docker true --platform ${DEFAULT_DOCKER_PLATFORM[*]: -1} --image ${SUPPORTED_OS_IMAGES[*]:0:1}" \
+    echo "  $0 --docker true --image ${SUPPORTED_OS_IMAGES[*]:0:1}" \
          "--clean true --skiptests true --release" \
          "--sparkver ${SUPPORTED_SPARK_VERSIONS[*]: -1}" \
          "--flinkver ${SUPPORTED_FLINK_VERSIONS[*]: -1}" \
@@ -165,19 +164,6 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "ERROR: --docker requires true/false" >&2
-                exit 1
-            fi
-            ;;
-        --platform)
-            if [[ -n "$2" && "$2" != -* ]]; then
-                DOCKER_PLATFORM="$2"
-                if [[ ! "$DOCKER_PLATFORM" =~ ^[a-z0-9_.-]+/[a-z0-9_.-]+(/[a-z0-9_.-]+)?$ ]]; then
-                    echo "ERROR: Invalid --platform value '$DOCKER_PLATFORM'. Expected Docker platform format, e.g. linux/amd64." >&2
-                    exit 1
-                fi
-                shift 2
-            else
-                echo "ERROR: --platform requires a value (e.g. linux/amd64)" >&2
                 exit 1
             fi
             ;;
