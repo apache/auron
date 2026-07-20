@@ -39,7 +39,6 @@ SUPPORTED_PAIMON_VERSIONS=("1.2")
 SUPPORTED_FLINK_VERSIONS=("1.18")
 SUPPORTED_ICEBERG_VERSIONS=("1.10.1")
 SUPPORTED_HUDI_VERSIONS=("0.15")
-DEFAULT_DOCKER_PLATFORM=("linux/amd64")
 
 # -----------------------------------------------------------------------------
 # Function: print_help
@@ -126,7 +125,6 @@ MVN_CMD="$(dirname "$0")/build/mvn"
 # -----------------------------------------------------------------------------
 USE_DOCKER=false
 IMAGE_NAME="${SUPPORTED_OS_IMAGES[*]:0:1}"
-DOCKER_PLATFORM="$DEFAULT_DOCKER_PLATFORM"
 PRE_PROFILE=false
 RELEASE_PROFILE=false
 CLEAN=true
@@ -568,7 +566,6 @@ if [[ "$USE_DOCKER" == true ]]; then
 
     echo "[INFO] Compiling inside Docker container..."
     export AURON_BUILD_ARGS="${BUILD_ARGS[*]}"
-    export AURON_DOCKER_PLATFORM="$DOCKER_PLATFORM"
     export BUILD_CONTEXT="./${IMAGE_NAME}"
     # Spark 4.x requires JDK 17+, auto-set if not specified
     if [[ -z "$AURON_JAVA_VERSION" && "$SPARK_VER" == 4.* ]]; then
