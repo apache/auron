@@ -105,7 +105,7 @@ jobs:
           - sparkver: spark-4.2
             scalaver: '2.13'
             javaver: '21'
-            auronver: 8.0.0-incubating
+            auronver: 9.0.0-SNAPSHOT
             runner: ubuntu-24.04
             image: rockylinux8
 
