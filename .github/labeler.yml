@@ -17,119 +17,102 @@
 
 infra:
   - changed-files:
-    - any-glob-to-any-file: [
-        ".github/**",
-        ".asf.yaml",
-        ".rat-excludes",
-        ".gitattributes",
-        ".gitignore",
-        ".gitmodules"
-      ]
+    - any-glob-to-any-file:
+        - ".github/**"
+        - ".asf.yaml"
+        - ".rat-excludes"
+        - ".gitattributes"
+        - ".gitignore"
+        - ".gitmodules"
 
 build:
   - changed-files:
-    - any-glob-to-any-file: [
-        "build/**",
-        "**/*pom.xml",
-        "Cargo.toml",
-        "Cargo.lock",
-        "auron-build.sh",
-        "rust-toolchain.toml",
-        "rustfmt.toml",
-        "scalafix.conf",
-        "scalafmt.conf"
-      ]
+    - any-glob-to-any-file:
+        - "build/**"
+        - "**/*pom.xml"
+        - "Cargo.toml"
+        - "Cargo.lock"
+        - "auron-build.sh"
+        - "rust-toolchain.toml"
+        - "rustfmt.toml"
+        - "scalafix.conf"
+        - "scalafmt.conf"
 
 documentation:
   - changed-files:
-    - any-glob-to-any-file: [
-        "**/*.md",
-        "LICENSE"
-      ]
+    - any-glob-to-any-file:
+        - "**/*.md"
+        - "LICENSE"
 
 core:
   - changed-files:
-    - any-glob-to-any-file: [
-        "auron-core/**"
-      ]
+    - any-glob-to-any-file:
+        - "auron-core/**"
 
 common:
   - changed-files:
-    - any-glob-to-any-file: [
-        "common/**"
-      ]
+    - any-glob-to-any-file:
+        - "common/**"
 
 native:
   - changed-files:
-    - any-glob-to-any-file: [
-        "native-engine/**"
-      ]
+    - any-glob-to-any-file:
+        - "native-engine/**"
 
 hadoop:
   - changed-files:
-    - any-glob-to-any-file: [
-        "hadoop-shim/**"
-      ]
+    - any-glob-to-any-file:
+        - "hadoop-shim/**"
 
 spark:
   - changed-files:
-    - any-glob-to-any-file: [
-        "spark-extension/**",
-        "spark-extension-shims-spark/**",
-        "spark-version-annotation-macros/**"
-      ]
+    - any-glob-to-any-file:
+        - "spark-extension/**"
+        - "spark-extension-shims-spark/**"
+        - "spark-version-annotation-macros/**"
 
 spark-ui:
   - changed-files:
-    - any-glob-to-any-file: [
-        "auron-spark-ui/**"
-      ]
+    - any-glob-to-any-file:
+        - "auron-spark-ui/**"
 
 spark-tests:
   - changed-files:
-    - any-glob-to-any-file: [
-        "auron-spark-tests/**"
-      ]
+    - any-glob-to-any-file:
+        - "auron-spark-tests/**"
 
 flink:
   - changed-files:
-    - any-glob-to-any-file: [
-        "auron-flink-extension/**"
-      ]
+    - any-glob-to-any-file:
+        - "auron-flink-extension/**"
 
 thirdparty-celeborn:
   - changed-files:
-    - any-glob-to-any-file: [
-        "thirdparty/auron-celeborn-*/**"
-      ]
+    - any-glob-to-any-file:
+        - "thirdparty/auron-celeborn-*/**"
 
 thirdparty-uniffle:
   - changed-files:
-    - any-glob-to-any-file: [
-        "thirdparty/auron-uniffle/**"
-      ]
+    - any-glob-to-any-file:
+        - "thirdparty/auron-uniffle/**"
 
 thirdparty-paimon:
   - changed-files:
-    - any-glob-to-any-file: [
-        "thirdparty/auron-paimon/**"
-      ]
+    - any-glob-to-any-file:
+        - "thirdparty/auron-paimon/**"
 
 thirdparty-iceberg:
   - changed-files:
-    - any-glob-to-any-file: [
-        "thirdparty/auron-iceberg/**"
-      ]
+    - any-glob-to-any-file:
+        - "thirdparty/auron-iceberg/**"
 
 dev-tools:
   - changed-files:
-    - any-glob-to-any-file: [
-        "dev/**",
-        ".idea/**"
-      ]
+    - any-glob-to-any-file:
+        - "dev/**"
+        - ".idea/**"
 
 benchmark:
   - changed-files:
-    - any-glob-to-any-file: [
-        "benchmark-results/**"
-      ]
+    - any-glob-to-any-file:
+        - "benchmark-results/**"
