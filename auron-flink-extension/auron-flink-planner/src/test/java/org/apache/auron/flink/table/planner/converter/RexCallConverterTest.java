@@ -18,12 +18,22 @@ package org.apache.auron.flink.table.planner.converter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.Arrays;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.ipc.ArrowStreamReader;
+import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.PhysicalExprNode;
+import org.apache.auron.protobuf.PhysicalScalarFunctionNode;
 import org.apache.auron.protobuf.PhysicalWhenThen;
+import org.apache.auron.protobuf.ScalarFunction;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -505,7 +515,90 @@ class RexCallConverterTest {
         assertFalse(converter.isSupported(escapeLike, context));
     }
 
+    // ---- UNIX_TIMESTAMP ----
+
+    @Test
+    void testUnixTimestampNodeShape() throws IOException {
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
+
+        PhysicalExprNode result = converter.convert(call, context);
+
+        assertTrue(result.hasScalarFunction());
+        PhysicalScalarFunctionNode fn = result.getScalarFunction();
+        assertEquals("Flink_UnixTimestamp", fn.getName());
+        assertEquals(ScalarFunction.AuronExtFunctions, fn.getFun());
+        assertEquals(3, fn.getArgsCount(), "Args are always [value, chronoFormat, zoneId]");
+        assertEquals(ArrowType.ArrowTypeEnumCase.INT64, fn.getReturnType().getArrowTypeEnumCase());
+        assertTrue(fn.getArgs(0).hasColumn(), "First arg is the converted value operand");
+        assertTrue(fn.getArgs(1).hasLiteral(), "Second arg is the format literal");
+        assertTrue(fn.getArgs(2).hasLiteral(), "Third arg is the zone literal");
+        // The default single-arg format translates to the native specifier string.
+        assertEquals("%Y-%m-%d %H:%M:%S", decodeStringLiteral(fn.getArgs(1)));
+    }
+
+    @Test
+    void testUnixTimestampLiteralFormatIsSupportedAndTranslated() throws IOException {
+        RexNode fmt = REX_BUILDER.makeLiteral("yyyy/MM/dd");
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5), fmt);
+
+        assertTrue(converter.isSupported(call, context));
+        PhysicalExprNode result = converter.convert(call, context);
+        assertEquals("%Y/%m/%d", decodeStringLiteral(result.getScalarFunction().getArgs(1)));
+    }
+
+    /** The session timezone read from {@code TableConfig} reaches the node's third argument. This is
+     * the converter-level half of the config-propagation contract the shadowed {@code StreamExecCalc}
+     * enables. */
+    @Test
+    void testUnixTimestampTimezonePropagatesToNode() throws IOException {
+        Configuration conf = new Configuration();
+        conf.setString("table.local-time-zone", "Asia/Shanghai");
+        ConverterContext tzContext =
+                new ConverterContext(conf, null, getClass().getClassLoader(), context.getInputType());
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
+
+        PhysicalExprNode result = converter.convert(call, tzContext);
+
+        assertEquals(
+                "Asia/Shanghai", decodeStringLiteral(result.getScalarFunction().getArgs(2)));
+    }
+
+    /** The zero-argument form never reaches the native function: the gate rejects it so the Calc
+     * falls back, and the builder refuses it outright rather than reading an absent value operand. */
+    @Test
+    void testUnixTimestampZeroArgFallsBack() {
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP);
+
+        assertFalse(converter.isSupported(call, context));
+        assertThrows(IllegalArgumentException.class, () -> converter.convert(call, context));
+    }
+
+    @Test
+    void testUnixTimestampNonLiteralFormatFallsBack() {
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5), strRef(6));
+
+        assertFalse(converter.isSupported(call, context));
+    }
+
+    @Test
+    void testUnixTimestampUnsupportedFormatTokenFallsBack() {
+        RexNode fmt = REX_BUILDER.makeLiteral("yyyy-MM-dd z");
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5), fmt);
+
+        assertFalse(converter.isSupported(call, context));
+    }
+
     // ---- Helpers ----
+
+    private static String decodeStringLiteral(PhysicalExprNode node) throws IOException {
+        byte[] bytes = node.getLiteral().getIpcBytes().toByteArray();
+        try (BufferAllocator alloc = new RootAllocator(Long.MAX_VALUE);
+                ArrowStreamReader reader = new ArrowStreamReader(new ByteArrayInputStream(bytes), alloc)) {
+            reader.loadNextBatch();
+            VarCharVector vec = (VarCharVector) reader.getVectorSchemaRoot().getVector(0);
+            return vec.getObject(0).toString();
+        }
+    }
 
     private void assertComparison(org.apache.calcite.sql.SqlOperator op, String expectedOp) {
         RexNode call = makeCall(boolType(), op, makeIntRef(0), makeIntRef(0));

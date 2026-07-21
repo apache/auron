@@ -16,10 +16,14 @@
  */
 package org.apache.auron.flink.table.planner.converter;
 
+import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.apache.auron.protobuf.ArrowType;
+import org.apache.auron.protobuf.EmptyMessage;
 import org.apache.auron.protobuf.PhysicalBinaryExprNode;
 import org.apache.auron.protobuf.PhysicalCaseNode;
 import org.apache.auron.protobuf.PhysicalExprNode;
@@ -31,11 +35,13 @@ import org.apache.auron.protobuf.PhysicalNot;
 import org.apache.auron.protobuf.PhysicalWhenThen;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlLikeOperator;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
+import org.apache.flink.table.planner.utils.TableConfigUtils;
 
 /**
  * Converts a Calcite {@link RexCall} (operator expression) to an Auron native
@@ -65,12 +71,22 @@ import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
  * <p>{@code CASE WHEN} (searched form) becomes a {@link PhysicalCaseNode} with
  * one {@link PhysicalWhenThen} per branch and a trailing else; each then/else
  * result is cast to the call's result type so all branches share one type.
+ *
+ * <p>{@code UNIX_TIMESTAMP} (matched by operator identity, like {@code TRY_CAST})
+ * maps to a native {@code Flink_UnixTimestamp} ext-function call with arguments
+ * {@code [value, chronoFormat, zoneId]}. The single-argument form uses Flink's
+ * default format; the two-argument form is supported only when the format operand
+ * is a literal whose pattern {@link FlinkDateTimeFormatConverter} can translate,
+ * and the zero-argument form falls back.
  */
 public class RexCallConverter implements FlinkRexNodeConverter {
 
     /** Binary arithmetic kinds that require numeric result type. */
     private static final Set<SqlKind> BINARY_ARITHMETIC_KINDS =
             EnumSet.of(SqlKind.PLUS, SqlKind.MINUS, SqlKind.TIMES, SqlKind.DIVIDE, SqlKind.MOD);
+
+    /** Flink's default format for the single-argument {@code UNIX_TIMESTAMP(string)} form. */
+    private static final String DEFAULT_UNIX_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
     /** All supported SqlKinds including unary and cast. */
     private static final Set<SqlKind> SUPPORTED_KINDS = EnumSet.of(
@@ -127,10 +143,13 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     @Override
     public boolean isSupported(RexNode node, ConverterContext context) {
         RexCall call = (RexCall) node;
-        // TRY_CAST has SqlKind OTHER_FUNCTION (not in SUPPORTED_KINDS), so it is
-        // matched by operator identity before the kind checks.
+        // TRY_CAST and UNIX_TIMESTAMP have SqlKind OTHER_FUNCTION (not in SUPPORTED_KINDS), so they
+        // are matched by operator identity before the kind checks.
         if (call.getOperator() == FlinkSqlOperatorTable.TRY_CAST) {
             return isCastTypeSupported(call.getOperands().get(0).getType(), call.getType());
+        }
+        if (call.getOperator() == FlinkSqlOperatorTable.UNIX_TIMESTAMP) {
+            return isUnixTimestampSupported(call);
         }
         SqlKind kind = call.getKind();
         if (!SUPPORTED_KINDS.contains(kind)) {
@@ -215,10 +234,13 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     @Override
     public PhysicalExprNode convert(RexNode node, ConverterContext context) {
         RexCall call = (RexCall) node;
-        // TRY_CAST has SqlKind OTHER_FUNCTION, which the switch below would route
-        // to the throwing default; match it by operator identity beforehand.
+        // TRY_CAST and UNIX_TIMESTAMP have SqlKind OTHER_FUNCTION, which the switch below would route
+        // to the throwing default; match them by operator identity beforehand.
         if (call.getOperator() == FlinkSqlOperatorTable.TRY_CAST) {
             return buildTryCast(call, context);
+        }
+        if (call.getOperator() == FlinkSqlOperatorTable.UNIX_TIMESTAMP) {
+            return buildUnixTimestamp(call, context);
         }
         SqlKind kind = call.getKind();
         switch (kind) {
@@ -388,6 +410,80 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     private PhysicalExprNode buildTryCast(RexCall call, ConverterContext context) {
         PhysicalExprNode operand = convertOperand(call.getOperands().get(0), context);
         return FlinkNodeConverterUtils.wrapInTryCast(operand, call.getType());
+    }
+
+    /**
+     * Returns {@code true} if this {@code UNIX_TIMESTAMP} call can run natively. The single-argument
+     * form always can (it uses Flink's default format). The two-argument form can only when the
+     * format operand is a compile-time literal whose pattern the native parser handles identically
+     * (see {@link FlinkDateTimeFormatConverter}).
+     *
+     * <p>The zero-argument form is rejected here so it always falls back to Flink. It is a
+     * different function rather than a defaulted arity: it parses no input at all, and instead
+     * reads the wall clock once per record, so the operator is not deterministic and is never
+     * folded to a literal at plan time. It also has no value operand, which the native
+     * ext-function path needs to size its output against the batch.
+     */
+    private static boolean isUnixTimestampSupported(RexCall call) {
+        List<RexNode> operands = call.getOperands();
+        if (operands.isEmpty()) {
+            return false;
+        }
+        if (operands.size() == 1) {
+            return true;
+        }
+        if (operands.size() == 2) {
+            RexNode format = operands.get(1);
+            if (!(format instanceof RexLiteral)) {
+                return false;
+            }
+            String javaFormat = ((RexLiteral) format).getValueAs(String.class);
+            return javaFormat != null
+                    && FlinkDateTimeFormatConverter.translate(javaFormat).isPresent();
+        }
+        return false;
+    }
+
+    /**
+     * Builds a native {@code Flink_UnixTimestamp} ext-function call. The native argument list is
+     * always {@code [value, chronoFormat, zoneId]}, and both of Flink's string-parsing arities are
+     * normalized onto that shape here: the value operand is converted recursively, the format is
+     * translated to the native specifier string (defaulting to Flink's
+     * {@code yyyy-MM-dd HH:mm:ss} when the call carries no format operand), and the session
+     * timezone is resolved at plan time. The native function therefore never has to default a
+     * missing format or timezone itself, and treats any other arity as a plumbing bug.
+     *
+     * @throws IllegalArgumentException if the call carries an arity this converter does not
+     *     normalize, or a format literal outside the natively supported surface (both unreachable
+     *     via the factory, which gates on {@link #isSupported} first)
+     */
+    private PhysicalExprNode buildUnixTimestamp(RexCall call, ConverterContext context) {
+        List<RexNode> operands = call.getOperands();
+        if (operands.isEmpty() || operands.size() > 2) {
+            throw new IllegalArgumentException(
+                    "UNIX_TIMESTAMP is native only in its 1-argument and 2-argument forms, got " + operands.size()
+                            + " arguments");
+        }
+        PhysicalExprNode value = convertOperand(operands.get(0), context);
+
+        String javaFormat = operands.size() > 1
+                ? ((RexLiteral) operands.get(1)).getValueAs(String.class)
+                : DEFAULT_UNIX_TIMESTAMP_FORMAT;
+        String chronoFormat = FlinkDateTimeFormatConverter.translate(javaFormat)
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported UNIX_TIMESTAMP format: " + javaFormat));
+
+        ZoneId zone = TableConfigUtils.getLocalTimeZone(context.getTableConfig());
+
+        ArrowType bigIntType = ArrowType.newBuilder()
+                .setINT64(EmptyMessage.getDefaultInstance())
+                .build();
+        return FlinkNodeConverterUtils.buildExtScalarFunctionNode(
+                "Flink_UnixTimestamp",
+                Arrays.asList(
+                        value,
+                        RexLiteralConverter.stringLiteral(chronoFormat),
+                        RexLiteralConverter.stringLiteral(zone.getId())),
+                bigIntType);
     }
 
     /**

@@ -113,6 +113,37 @@ public class RexLiteralConverter implements FlinkRexNodeConverter {
     }
 
     /**
+     * Builds a literal expression node from a plain {@link String} that is not backed by a
+     * {@link RexNode}. Used for plan-time constants (such as a session timezone read from
+     * configuration) that must travel to the native side as a string argument. The value is
+     * serialized as a single-element {@code Utf8} Arrow record batch in IPC stream format, matching
+     * the encoding {@link #convert} produces for CHAR/VARCHAR {@link RexLiteral}s.
+     *
+     * @param value the constant string to encode
+     * @return a {@link PhysicalExprNode} carrying the value as a native literal
+     */
+    public static PhysicalExprNode stringLiteral(String value) {
+        RowType rowType = RowType.of(new VarCharType(VarCharType.MAX_LENGTH));
+        try (BufferAllocator allocator =
+                        FlinkArrowUtils.getRootAllocator().newChildAllocator("literal", 0, Long.MAX_VALUE);
+                VectorSchemaRoot root = VectorSchemaRoot.create(FlinkArrowUtils.toArrowSchema(rowType), allocator)) {
+
+            GenericRowData rowData = new GenericRowData(1);
+            rowData.setField(0, StringData.fromString(value));
+
+            FlinkArrowWriter writer = FlinkArrowWriter.create(root, rowType);
+            writer.write(rowData);
+            writer.finish();
+
+            return PhysicalExprNode.newBuilder()
+                    .setLiteral(ScalarValue.newBuilder().setIpcBytes(ByteString.copyFrom(writeIpcBytes(root))))
+                    .build();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to serialize literal to Arrow IPC", e);
+        }
+    }
+
+    /**
      * Serializes the literal value as a single-element Arrow record batch in IPC stream format.
      *
      * <p>Uses Flink's {@link GenericRowData} and {@link FlinkArrowWriter} for type-aware
