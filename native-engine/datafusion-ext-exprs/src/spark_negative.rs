@@ -194,7 +194,7 @@ mod test {
     use std::{error::Error, sync::Arc};
 
     use arrow::{
-        array::{ArrayRef, Float64Array, Int32Array, Int64Array},
+        array::{ArrayRef, Float64Array, Int8Array, Int16Array, Int32Array, Int64Array},
         datatypes::{DataType, Field, Schema},
         record_batch::RecordBatch,
     };
@@ -204,13 +204,32 @@ mod test {
 
     #[test]
     fn test_ansi_checked_negation() -> Result<(), Box<dyn Error>> {
-        let batch = batch(
-            DataType::Int64,
-            Arc::new(Int64Array::from(vec![Some(i64::MIN)])),
-        )?;
-        let expr = expression(true);
-        let err = expr.evaluate(&batch).expect_err("expected overflow");
-        assert!(err.to_string().contains("[ARITHMETIC_OVERFLOW]"));
+        let cases: Vec<(DataType, ArrayRef)> = vec![
+            (
+                DataType::Int8,
+                Arc::new(Int8Array::from(vec![Some(i8::MIN)])),
+            ),
+            (
+                DataType::Int16,
+                Arc::new(Int16Array::from(vec![Some(i16::MIN)])),
+            ),
+            (
+                DataType::Int32,
+                Arc::new(Int32Array::from(vec![Some(i32::MIN)])),
+            ),
+            (
+                DataType::Int64,
+                Arc::new(Int64Array::from(vec![Some(i64::MIN)])),
+            ),
+        ];
+
+        for (data_type, array) in cases {
+            let batch = batch(data_type, array)?;
+            let err = expression(true)
+                .evaluate(&batch)
+                .expect_err("expected overflow");
+            assert!(err.to_string().contains("[ARITHMETIC_OVERFLOW]"));
+        }
         Ok(())
     }
 
