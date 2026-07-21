@@ -99,6 +99,6 @@ pub fn create_auron_ext_function(
         }
         "Spark_IsNaN" => Arc::new(spark_isnan::spark_isnan),
         "Flink_UnixTimestamp" => Arc::new(flink_datetime::flink_unix_timestamp),
-        _ => df_unimplemented_err!("spark ext function not implemented: {name}")?,
+        _ => df_unimplemented_err!("auron ext function not implemented: {name}")?,
     })
 }

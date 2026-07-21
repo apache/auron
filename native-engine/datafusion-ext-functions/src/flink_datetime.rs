@@ -27,9 +27,9 @@ use datafusion::{
 };
 use datafusion_ext_commons::arrow::cast::cast;
 
-/// Flink `UNIX_TIMESTAMP(value, format)`: parse a formatted date-time string to
-/// a Unix timestamp in seconds, replicating `java.text.SimpleDateFormat`
-/// lenient semantics.
+/// Native implementation of Flink SQL `UNIX_TIMESTAMP(value, format)`: parse a
+/// formatted date-time string to a Unix timestamp in seconds, replicating
+/// `java.text.SimpleDateFormat` lenient semantics.
 ///
 /// Arguments are always `[value, chronoFormat, zoneId]` (arity 3). `value` is
 /// the column of strings to parse; `chronoFormat` and `zoneId` are literal
