@@ -146,12 +146,13 @@ public class AuronKafkaSourceMergeITCase extends AuronKafkaSourceTestBase {
      * #testSharedSourceUnionAllDoesNotFuseUnderDefaultReuse}, but with object reuse enabled. Under
      * object reuse Flink hands the <em>same</em> {@code AuronColumnarRowData} reference to both
      * standalone Calc consumers with no defensive copy in between (the sibling test runs with reuse
-     * off, where Flink deep-copies the row to heap per consumer). The fan-out still produces the
-     * correct row set because each Calc eagerly copies every column out of the shared columnar view
-     * into its own Arrow batch before returning, so neither consumer retains a reference to the
-     * reused row. If the consumers instead aliased the shared row id or read the batch after it was
-     * recycled, the row set would collapse or corrupt (all rows folding onto the last row of a
-     * batch) or fault on freed off-heap buffers.
+     * off, where Flink deep-copies the row to heap per consumer). The row set is the empirical
+     * guarantee here: the projections and filters convert, so each consumer runs as a standalone
+     * native Auron Calc that eagerly copies every column out of the shared columnar view into its
+     * own Arrow batch before returning, and neither consumer retains a reference to the reused row.
+     * If a native Calc instead aliased the shared row id or read the batch after it was recycled,
+     * the row set would collapse or corrupt (all rows folding onto the last row of a batch) or fault
+     * on freed off-heap buffers, so the row-set assertion below is what pins that native path safe.
      *
      * <p>The gate assertion still holds under object reuse: a multi-consumer source is never fused,
      * so both Calcs remain standalone operators and {@code calcOperatorCount} is 2.
