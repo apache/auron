@@ -197,7 +197,12 @@ public class AuronOperatorFusionProcessor implements ExecNodeGraphProcessor {
             Map<Integer, Integer> consumerCount,
             Function<StreamExecTableSourceScan, DynamicTableSource> sourceResolver,
             ReadableConfig tableConfig) {
-        // Sole-consumer gate: multi-consumer fusion is out of scope (tracked separately).
+        // Sole-consumer gate: a source feeding more than one consumer is deliberately not fused.
+        // The native source runtime is single-plan / single-output — one source runs exactly one
+        // PhysicalPlanNode and emits one stream, so N distinct per-consumer Calc plans cannot share
+        // a single source. Declining loses nothing structurally: each consumer instead runs as a
+        // standalone native Calc over the source's shared row stream, copying every column out of
+        // the shared columnar RowData view, so the fan-out is safe.
         if (consumerCount.getOrDefault(scan.getId(), 0) != 1) {
             return;
         }
