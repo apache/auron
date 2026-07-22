@@ -661,37 +661,54 @@ impl ExternalSorter {
 
         // NOTE: we use stable merge sort for longer keys due to less comparison
         let (keys, batch) = self.prune_sort_keys_from_batch.prune(batch)?;
+        // On the fast path the batch is already sorted (and limited) above, so
+        // the key rows from `prune` are in final order — we can append them
+        // sequentially and skip allocating an identity `Vec<u32>`. The non-fast
+        // path needs an actual sorted-index vector for both key appending and
+        // the `take_batch` below.
         let sorted_indices = if is_fast_path {
-            // the batch was already sorted (and limited) above, so the key rows
-            // produced by `prune` are in final order — use identity indices.
-            (0..keys.num_rows() as u32).collect::<Vec<_>>()
+            None
         } else if keys.size() / keys.num_rows() <= 8 {
-            (0..keys.num_rows() as u32)
-                .sorted_unstable_by_key(|&row_idx| unsafe {
-                    // safety: bypass boundary and lifetime checking
-                    std::mem::transmute::<_, &'static [u8]>(
-                        keys.row_unchecked(row_idx as usize).as_ref(),
-                    )
-                })
-                .take(self.limit)
-                .collect::<Vec<_>>()
+            Some(
+                (0..keys.num_rows() as u32)
+                    .sorted_unstable_by_key(|&row_idx| unsafe {
+                        // safety: bypass boundary and lifetime checking
+                        std::mem::transmute::<_, &'static [u8]>(
+                            keys.row_unchecked(row_idx as usize).as_ref(),
+                        )
+                    })
+                    .take(self.limit)
+                    .collect::<Vec<_>>(),
+            )
         } else {
-            (0..keys.num_rows() as u32)
-                .sorted_by_key(|&row_idx| unsafe {
-                    // safety: bypass boundary and lifetime checking
-                    std::mem::transmute::<_, &'static [u8]>(
-                        keys.row_unchecked(row_idx as usize).as_ref(),
-                    )
-                })
-                .take(self.limit)
-                .collect::<Vec<_>>()
+            Some(
+                (0..keys.num_rows() as u32)
+                    .sorted_by_key(|&row_idx| unsafe {
+                        // safety: bypass boundary and lifetime checking
+                        std::mem::transmute::<_, &'static [u8]>(
+                            keys.row_unchecked(row_idx as usize).as_ref(),
+                        )
+                    })
+                    .take(self.limit)
+                    .collect::<Vec<_>>(),
+            )
         };
 
         // build keys
         let mut key_collector = InMemRowsKeyCollector::default();
         key_collector.reserve(keys.num_rows(), keys.size());
-        for &row_idx in &sorted_indices {
-            key_collector.add_key(keys.row(row_idx as usize).as_ref());
+        match sorted_indices.as_deref() {
+            Some(indices) => {
+                for &row_idx in indices {
+                    key_collector.add_key(keys.row(row_idx as usize).as_ref());
+                }
+            }
+            // fast path: rows are already in final order, append sequentially.
+            None => {
+                for row_idx in 0..keys.num_rows() as u32 {
+                    key_collector.add_key(keys.row(row_idx as usize).as_ref());
+                }
+            }
         }
         key_collector.freeze();
 
@@ -702,7 +719,7 @@ impl ExternalSorter {
                 // avoid an extra `take_batch` copy.
                 batch
             } else {
-                take_batch(batch, sorted_indices)?
+                take_batch(batch, sorted_indices.expect("non-fast-path indices"))?
             }
         } else {
             create_zero_column_batch(batch.num_rows())
@@ -1262,13 +1279,13 @@ impl PruneSortKeysFromBatch {
             descending: key.sort_expr.options.descending,
             nulls_first: key.sort_expr.options.nulls_first,
         };
-        let indices = sort_to_indices(&array, Some(options), None)?;
-        let indices = indices
-            .values()
-            .iter()
-            .copied()
-            .take(limit)
-            .collect::<Vec<_>>();
+        // Pass `limit` straight to `sort_to_indices` so Arrow uses partial
+        // sorting (it only emits the top-`limit` indices); when `limit`
+        // covers the whole batch Arrow internally falls back to a full sort,
+        // so this is never worse than `None`. The returned `UInt32Array` is
+        // handed directly to `take_batch` (which accepts a `PrimitiveArray`)
+        // instead of being copied through an intermediate `Vec<u32>`.
+        let indices = sort_to_indices(&array, Some(options), Some(limit))?;
         take_batch(batch, indices)
     }
 
@@ -1718,6 +1735,18 @@ mod fuzztest {
     }
 
     async fn bench_sort_repeat(repeat: usize, mem: usize, use_auron: bool) -> Result<(usize, f64)> {
+        bench_sort_repeat_with_limit(repeat, mem, use_auron, None).await
+    }
+
+    /// Variant of `bench_sort_repeat` that can pass a Top-N `limit` to the
+    /// Auron `SortExec`, so the `sort_to_indices(limit)` partial-sort path
+    /// can be exercised (vs. a full sort when `limit` is `None`).
+    async fn bench_sort_repeat_with_limit(
+        repeat: usize,
+        mem: usize,
+        use_auron: bool,
+        limit: Option<usize>,
+    ) -> Result<(usize, f64)> {
         MemManager::init(mem);
         let session_ctx =
             SessionContext::new_with_config(SessionConfig::new().with_batch_size(10000));
@@ -1736,12 +1765,15 @@ mod fuzztest {
             None,
         )?);
         let sort: Arc<dyn ExecutionPlan> = if use_auron {
-            Arc::new(SortExec::new(input, sort_exprs.clone(), None, 0))
+            Arc::new(SortExec::new(input, sort_exprs.clone(), limit, 0))
         } else {
-            Arc::new(datafusion::physical_plan::sorts::sort::SortExec::new(
-                LexOrdering::new(sort_exprs.iter().cloned()).expect("invalid sort exprs"),
-                input,
-            ))
+            Arc::new(
+                datafusion::physical_plan::sorts::sort::SortExec::new(
+                    LexOrdering::new(sort_exprs.iter().cloned()).expect("invalid sort exprs"),
+                    input,
+                )
+                .with_fetch(limit),
+            )
         };
         let start = Instant::now();
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
@@ -1769,16 +1801,37 @@ mod fuzztest {
 
     #[tokio::test]
     #[ignore = "manual benchmark"]
+    async fn bench_native_sort_topn_limit_in_mem() -> Result<()> {
+        // Top-N scenario: limit=10000 << num_rows=1M, so the primitive fast
+        // path's `sort_to_indices(Some(limit))` partial sort should be cheaper
+        // than a full sort. Compares Auron vs DataFusion, both with limit.
+        let limit = 10_000usize;
+        for repeat in [1usize, 100] {
+            let (_, elapsed_auron) =
+                bench_sort_repeat_with_limit(repeat, 1_000_000_000, true, Some(limit)).await?;
+            let (_, elapsed_df) =
+                bench_sort_repeat_with_limit(repeat, 1_000_000_000, false, Some(limit)).await?;
+            eprintln!(
+                "[sort top-N limit={limit}] repeat={repeat:>3}, auron={elapsed_auron:.3}s, datafusion={elapsed_df:.3}s, speedup(df/auron)={:.2}x",
+                elapsed_auron / elapsed_df
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "manual benchmark"]
     async fn bench_native_sort_varying_repeat_external() -> Result<()> {
+        // NOTE: this measures Auron's external (spilling) sort in isolation.
+        // DataFusion's native SortExec has no spilling path, so under the same
+        // 2 MB `MemManager` limit Auron spills while DataFusion keeps sorting
+        // fully in memory — the two are not comparable. We therefore report
+        // Auron's spill cost on its own; use the in-mem group for a fair
+        // Auron-vs-DataFusion comparison (both stay in memory at 1 GB).
         for repeat in [1usize, 4, 20, 100] {
             let (_, elapsed_auron) = bench_sort_repeat(repeat, 2_000_000, true).await?;
-            let (_, elapsed_df) = bench_sort_repeat(repeat, 2_000_000, false).await?;
             eprintln!(
-                "[sort external] repeat={:>3}, auron={:.3}s, datafusion={:.3}s, speedup(df/auron)={:.2}x",
-                repeat,
-                elapsed_auron,
-                elapsed_df,
-                elapsed_auron / elapsed_df
+                "[sort external/spill, auron-only] repeat={repeat:>3}, auron={elapsed_auron:.3}s"
             );
         }
         Ok(())
