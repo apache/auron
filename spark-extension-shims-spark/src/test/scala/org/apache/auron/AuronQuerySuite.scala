@@ -1014,4 +1014,23 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         |FROM t_filter_agg_2289""".stripMargin)
     }
   }
+
+  test("test not null filter for orc table") {
+    withTable("orc_string_filter") {
+      sql("create table orc_string_filter(id int, b string) using orc")
+      sql("insert into orc_string_filter values (1, 'abc'), (2, null), (3, 'def')")
+      checkSparkAnswerAndOperator("select * from orc_string_filter where b is not null")
+    }
+  }
+
+  test("test string filter for orc table with truncated stats") {
+    withTable("orc_string_trunc") {
+      sql("create table orc_string_trunc(id int, b string) using orc")
+      val longA = "a" * 2000 // > 1024 bytes -> min/max truncated (lower_bound set)
+      val longB = "b" * 2000 // > 1024 bytes -> upper_bound set
+      sql(s"insert into orc_string_trunc values (1, '$longA'), (2, '$longB'), (3, 'mid')")
+      checkSparkAnswerAndOperator(s"select * from orc_string_trunc where b = '$longA'")
+      checkSparkAnswerAndOperator("select * from orc_string_trunc where b > 'a'")
+    }
+  }
 }
