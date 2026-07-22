@@ -200,9 +200,10 @@ public class AuronOperatorFusionProcessor implements ExecNodeGraphProcessor {
         // Sole-consumer gate: a source feeding more than one consumer is deliberately not fused.
         // The native source runtime is single-plan / single-output — one source runs exactly one
         // PhysicalPlanNode and emits one stream, so N distinct per-consumer Calc plans cannot share
-        // a single source. Declining loses nothing structurally: each consumer instead runs as a
-        // standalone native Calc over the source's shared row stream, copying every column out of
-        // the shared columnar RowData view, so the fan-out is safe.
+        // a single source. Declining loses nothing structurally: each consumer instead translates
+        // on its own over the source's shared row stream (a standalone native Calc when the Calc
+        // converts, otherwise Flink's codegen Calc), so no per-consumer plan is ever staged onto the
+        // shared source and there is no last-write-wins between consumers.
         if (consumerCount.getOrDefault(scan.getId(), 0) != 1) {
             return;
         }
