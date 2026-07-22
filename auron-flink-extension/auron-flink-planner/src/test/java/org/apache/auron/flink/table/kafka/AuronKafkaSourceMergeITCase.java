@@ -160,6 +160,7 @@ public class AuronKafkaSourceMergeITCase extends AuronKafkaSourceTestBase {
     @Test
     public void testSharedSourceUnionAllFanOutSafeWithObjectReuse() {
         environment.setParallelism(1);
+        boolean prevObjectReuse = environment.getConfig().isObjectReuseEnabled();
         environment.getConfig().enableObjectReuse();
         try {
             String sql =
@@ -175,7 +176,11 @@ public class AuronKafkaSourceMergeITCase extends AuronKafkaSourceTestBase {
             rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
             assertThat(rows).isEqualTo(Arrays.asList(Row.of(21), Row.of(21), Row.of(22), Row.of(22), Row.of(23)));
         } finally {
-            environment.getConfig().disableObjectReuse();
+            if (prevObjectReuse) {
+                environment.getConfig().enableObjectReuse();
+            } else {
+                environment.getConfig().disableObjectReuse();
+            }
         }
     }
 }
