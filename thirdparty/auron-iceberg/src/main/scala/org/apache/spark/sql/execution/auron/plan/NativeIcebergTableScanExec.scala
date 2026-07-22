@@ -34,7 +34,7 @@ import org.apache.spark.sql.auron.{EmptyNativeRDD, NativeConverters, NativeHelpe
 import org.apache.spark.sql.auron.iceberg.{IcebergNativeScanTask, IcebergScanPlan, IcebergScanSupport}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Literal}
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -278,6 +278,25 @@ case class NativeIcebergTableScanExec(
   }
 
   private def buildFilePartitions(): Array[FilePartition] = {
+    outputPartitioning match {
+      case partitioning: KeyGroupedPartitioning =>
+        val taskGroups = plan.groupedScanTasks.getOrElse {
+          throw new IllegalStateException(
+            "Missing grouped Iceberg scan tasks for KeyGroupedPartitioning.")
+        }
+        require(
+          taskGroups.size == partitioning.numPartitions,
+          s"Key-grouped Iceberg task count ${taskGroups.size} did not match declared " +
+            s"partition count ${partitioning.numPartitions}.")
+        require(
+          taskGroups.flatten == scanTasks,
+          "Key-grouped Iceberg tasks did not flatten to the planned scan tasks.")
+        return taskGroups.zipWithIndex.map { case (tasks, index) =>
+          FilePartition(index, tasks.map(partitionedFile).toArray)
+        }.toArray
+      case _ =>
+    }
+
     // Convert Iceberg scan tasks into Spark FilePartition groups for execution.
     if (scanTasks.isEmpty) {
       return Array.empty
@@ -286,13 +305,7 @@ case class NativeIcebergTableScanExec(
     val sparkSession = Shims.get.getSqlContext(basedScan).sparkSession
     val maxSplitBytes = getMaxSplitBytes(sparkSession, scanTasks)
     val partitionedFiles = scanTasks
-      .map { task =>
-        Shims.get.getPartitionedFile(
-          partitionValuesRow(task),
-          task.location,
-          task.start,
-          task.length)
-      }
+      .map(partitionedFile)
       .sortBy(_.length)(Ordering[Long].reverse)
       .toSeq
 
@@ -302,6 +315,10 @@ case class NativeIcebergTableScanExec(
     } else {
       FilePartition.getFilePartitions(sparkSession, partitionedFiles, maxSplitBytes).toArray
     }
+  }
+
+  private def partitionedFile(task: IcebergNativeScanTask): PartitionedFile = {
+    Shims.get.getPartitionedFile(partitionValuesRow(task), task.location, task.start, task.length)
   }
 
   private def partitionValuesRow(task: IcebergNativeScanTask): InternalRow = {

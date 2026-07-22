@@ -30,6 +30,8 @@ import org.apache.iceberg.spark.Spark3Util
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Literal}
+import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.ExplainUtils.collectFirst
 import org.apache.spark.sql.execution.FormattedMode
@@ -37,6 +39,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 
 class AuronIcebergIntegrationSuite
@@ -175,6 +178,199 @@ class AuronIcebergIntegrationSuite
       checkAnswer(df, Seq(Row(1, "a", "p1")))
       val plan = df.queryExecution.executedPlan.toString()
       assert(plan.contains("NativeIcebergTableScan"))
+    }
+  }
+
+  test("native iceberg scan preserves key grouped partitioning") {
+    withTable("local.db.t_partitioned_join_left", "local.db.t_partitioned_join_right") {
+      sql("""
+            |create table local.db.t_partitioned_join_left (id int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_partitioned_join_left values (0, 0)")
+      sql("insert into local.db.t_partitioned_join_left values (1, 1)")
+
+      sql("""
+            |create table local.db.t_partitioned_join_right (value int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_partitioned_join_right values (10, 0)")
+      sql("insert into local.db.t_partitioned_join_right values (11, 0)")
+      sql("insert into local.db.t_partitioned_join_right values (12, 1)")
+
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.sources.v2.bucketing.enabled" -> "true",
+        "spark.sql.sources.v2.bucketing.pushPartValues.enabled" -> "true",
+        "spark.sql.iceberg.planning.preserve-data-grouping" -> "true",
+        "spark.sql.files.maxPartitionBytes" -> "1") {
+        val df = sql("""
+                       |select l.id, l.p, r.value
+                       |from local.db.t_partitioned_join_left l
+                       |join local.db.t_partitioned_join_right r on l.p = r.p
+                       |""".stripMargin)
+
+        val sourceScans = df.queryExecution.sparkPlan.collect { case scan: BatchScanExec => scan }
+        assert(sourceScans.size === 2)
+        assert(sourceScans.forall(_.outputPartitioning.isInstanceOf[KeyGroupedPartitioning]))
+
+        val nativeScans = df.queryExecution.executedPlan.collect {
+          case scan: NativeIcebergTableScanExec => scan
+        }
+        assert(nativeScans.size === 2)
+        assert(df.queryExecution.executedPlan.collect { case e: ShuffleExchangeLike =>
+          e
+        }.isEmpty)
+
+        checkAnswer(df, Seq(Row(0, 0, 10), Row(0, 0, 11), Row(1, 1, 12)))
+      }
+    }
+  }
+
+  test("native iceberg scan preserves empty key grouped partitions") {
+    withTable("local.db.t_grouped_left", "local.db.t_grouped_right") {
+      sql("""
+            |create table local.db.t_grouped_left (id int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_grouped_left values (0, 0), (1, 1), (2, 2)")
+
+      sql("""
+            |create table local.db.t_grouped_right (value int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_grouped_right values (11, 1), (12, 2)")
+
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.sources.v2.bucketing.enabled" -> "true",
+        "spark.sql.sources.v2.bucketing.pushPartValues.enabled" -> "true",
+        "spark.sql.iceberg.planning.preserve-data-grouping" -> "true") {
+        val df = sql("""
+                       |select l.id, l.p, r.value
+                       |from local.db.t_grouped_left l
+                       |join local.db.t_grouped_right r on l.p = r.p
+                       |""".stripMargin)
+
+        val sourceScans = df.queryExecution.sparkPlan.collect { case scan: BatchScanExec => scan }
+        assert(sourceScans.size === 2)
+        assert(sourceScans.forall(_.outputPartitioning.isInstanceOf[KeyGroupedPartitioning]))
+
+        val nativeScans = df.queryExecution.executedPlan.collect {
+          case scan: NativeIcebergTableScanExec => scan
+        }
+        assert(nativeScans.size === 2)
+        assert(df.queryExecution.executedPlan.collect { case e: ShuffleExchangeLike =>
+          e
+        }.isEmpty)
+
+        checkAnswer(df, Seq(Row(1, 1, 11), Row(2, 2, 12)))
+        nativeScans.foreach { scan =>
+          val partitioning = scan.outputPartitioning.asInstanceOf[KeyGroupedPartitioning]
+          assert(scan.metrics("numPartitions").value === partitioning.numPartitions)
+        }
+      }
+    }
+  }
+
+  test("native iceberg scan ignores ineffective runtime filters for key grouped partitions") {
+    withTable("local.db.t_ineffective_dpp_fact", "local.db.t_ineffective_dpp_dim") {
+      sql("""
+            |create table local.db.t_ineffective_dpp_fact (id int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_ineffective_dpp_fact values (1, 1), (2, 2), (3, 3)")
+
+      sql("""
+            |create table local.db.t_ineffective_dpp_dim (value int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_ineffective_dpp_dim values (10, 1), (20, 2), (30, 3)")
+
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "true",
+        "spark.sql.sources.v2.bucketing.enabled" -> "true",
+        "spark.sql.sources.v2.bucketing.pushPartValues.enabled" -> "true",
+        "spark.sql.iceberg.planning.preserve-data-grouping" -> "true") {
+        val df = sql("""
+                       |select f.id, f.p, d.value
+                       |from local.db.t_ineffective_dpp_fact f
+                       |join local.db.t_ineffective_dpp_dim d on f.p = d.p
+                       |where d.value = 20
+                       |""".stripMargin)
+
+        checkAnswer(df, Seq(Row(2, 2, 20)))
+        val factScan = executedNativeIcebergTableScanExec(df, "t_ineffective_dpp_fact")
+        val explain = df.queryExecution.explainString(FormattedMode)
+        assert(factScan.runtimeFilters.nonEmpty, explain)
+        assert(
+          factScan.runtimeFilters.forall(_ == DynamicPruningExpression(Literal.TrueLiteral)),
+          explain)
+        assert(factScan.outputPartitioning.isInstanceOf[KeyGroupedPartitioning], explain)
+      }
+    }
+  }
+
+  test("iceberg scan falls back for effective runtime filters on key grouped partitions") {
+    withTable("local.db.t_effective_dpp_fact", "local.db.t_effective_dpp_dim") {
+      sql("""
+            |create table local.db.t_effective_dpp_fact (id int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_effective_dpp_fact values (1, 1), (2, 2), (3, 3)")
+
+      sql("""
+            |create table local.db.t_effective_dpp_dim (value int, p int)
+            |using iceberg
+            |partitioned by (p)
+            |""".stripMargin)
+      sql("insert into local.db.t_effective_dpp_dim values (10, 1), (20, 2), (30, 3)")
+
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        "spark.sql.optimizer.dynamicPartitionPruning.enabled" -> "true",
+        "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly" -> "false",
+        "spark.sql.sources.v2.bucketing.enabled" -> "true",
+        "spark.sql.sources.v2.bucketing.pushPartValues.enabled" -> "true",
+        "spark.sql.iceberg.planning.preserve-data-grouping" -> "true") {
+        val df = sql("""
+                       |select f.id, f.p, d.value
+                       |from local.db.t_effective_dpp_fact f
+                       |join local.db.t_effective_dpp_dim d on f.p = d.p
+                       |where d.value = 20
+                       |""".stripMargin)
+
+        checkAnswer(df, Seq(Row(2, 2, 20)))
+        val materializedPlan = collectMaterializedPlans(df.queryExecution.executedPlan)
+        val factScan = materializedPlan
+          .collectFirst {
+            case scan: BatchScanExec
+                if scan.scan.description().contains("t_effective_dpp_fact") =>
+              scan
+          }
+          .getOrElse {
+            fail(df.queryExecution.explainString(FormattedMode))
+          }
+        val explain = df.queryExecution.explainString(FormattedMode)
+        assert(
+          factScan.runtimeFilters
+            .exists(_ != DynamicPruningExpression(Literal.TrueLiteral)),
+          explain)
+        assert(factScan.outputPartitioning.isInstanceOf[KeyGroupedPartitioning], explain)
+      }
     }
   }
 
