@@ -15,12 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow::{buffer::NullBuffer, row::Rows};
+use arrow::{
+    array::Array,
+    buffer::NullBuffer,
+    row::{RowConverter, Rows, SortField},
+};
 use arrow_schema::{DataType, Field, SchemaRef, SortOptions};
 
 /// Utility class for checking if a Row contains null values
 pub struct RowNullChecker {
     field_configs: Vec<FieldConfig>,
+    row_converter: RowConverter,
 }
 
 impl RowNullChecker {
@@ -39,7 +44,10 @@ impl RowNullChecker {
             field_configs.push(field_config);
         }
 
-        Self { field_configs }
+        Self {
+            field_configs,
+            row_converter: Self::create_row_converter(fields),
+        }
     }
 
     /// Check if multiple rows contain null values and return a NullBuffer
@@ -52,15 +60,32 @@ impl RowNullChecker {
     ///   - `false` bits indicate rows that contain at least one null value
     ///   - `true` bits indicate rows where all fields are non-null
     pub fn has_nulls(&self, rows: &Rows) -> NullBuffer {
-        // Create NullBuffer from the collected bits
-        NullBuffer::from_iter((0..rows.num_rows()).map(|row_index| {
-            let row_data = rows.row(row_index);
-            // Check if this row has any null values
-            let has_null = self.has_null(row_data.as_ref());
-            // NullBuffer uses true for valid (non-null) and false for null
-            // So we need to invert the result since has_null returns true for "has nulls"
-            !has_null
-        }))
+        let parser = self.row_converter.parser();
+        let parsed_rows = rows
+            .iter()
+            .map(|row| parser.parse(row.data()))
+            .collect::<Vec<_>>();
+        let key_columns = self
+            .row_converter
+            .convert_rows(parsed_rows)
+            .expect("failed to decode row data in RowNullChecker");
+
+        NullBuffer::from_iter(
+            (0..rows.num_rows())
+                .map(|row_index| key_columns.iter().all(|column| !column.is_null(row_index))),
+        )
+    }
+
+    fn create_row_converter(fields: &[(DataType, SortOptions)]) -> RowConverter {
+        RowConverter::new(
+            fields
+                .iter()
+                .map(|(data_type, sort_options)| {
+                    SortField::new_with_options(data_type.clone(), *sort_options)
+                })
+                .collect(),
+        )
+        .expect("failed to create RowConverter in RowNullChecker")
     }
 
     /// Create a FieldConfig from DataType and SortOptions
@@ -136,6 +161,11 @@ impl RowNullChecker {
     /// compatibility)
     pub fn from_schema(schema: &SchemaRef) -> Self {
         let mut field_configs = Vec::new();
+        let fields = schema
+            .fields()
+            .iter()
+            .map(|field| (field.data_type().clone(), SortOptions::default()))
+            .collect::<Vec<_>>();
 
         for field in schema.fields() {
             let sort_options = SortOptions::default(); // Use default sort options
@@ -143,7 +173,10 @@ impl RowNullChecker {
             field_configs.push(field_config);
         }
 
-        Self { field_configs }
+        Self {
+            field_configs,
+            row_converter: Self::create_row_converter(&fields),
+        }
     }
 
     /// Create a FieldConfig from an Arrow Field (for backward compatibility)
@@ -452,10 +485,14 @@ mod tests {
     use std::{error::Error, sync::Arc};
 
     use arrow::{
-        array::{ArrayRef, BooleanArray, Int32Array, RecordBatch, StringArray},
+        array::{
+            Array, ArrayRef, BooleanArray, DictionaryArray, Int32Array, ListArray, RecordBatch,
+            StringArray, StructArray,
+        },
+        datatypes::{Int16Type, Int32Type},
         row::{RowConverter, SortField},
     };
-    use arrow_schema::{DataType, Field, Schema};
+    use arrow_schema::{DataType, Field, Fields, Schema};
 
     use super::*;
 
@@ -858,6 +895,88 @@ mod tests {
         for i in 0..3 {
             assert!(null_buffer.is_valid(i));
         }
+        Ok(())
+    }
+
+    fn assert_validity(null_buffer: &NullBuffer, expected: &[bool]) {
+        assert_eq!(null_buffer.len(), expected.len());
+        for (idx, expected_valid) in expected.iter().enumerate() {
+            assert_eq!(
+                null_buffer.is_valid(idx),
+                *expected_valid,
+                "unexpected validity at row {idx}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_has_nulls_with_complex_rows() -> Result<(), Box<dyn Error>> {
+        let child_fields = Fields::from(vec![
+            Field::new("id", DataType::Int32, true),
+            Field::new("name", DataType::Utf8, true),
+        ]);
+        let struct_type = DataType::Struct(child_fields.clone());
+        let struct_array = StructArray::new(
+            child_fields,
+            vec![
+                Arc::new(Int32Array::from(vec![
+                    Some(1),
+                    Some(2),
+                    Some(3),
+                    Some(4),
+                    None,
+                ])) as ArrayRef,
+                Arc::new(StringArray::from(vec![
+                    None,
+                    Some("b"),
+                    Some("c"),
+                    Some("d"),
+                    Some("e"),
+                ])) as ArrayRef,
+            ],
+            Some(NullBuffer::from_iter([true, false, true, true, true])),
+        );
+        let list_array = ListArray::from_iter_primitive::<Int32Type, _, _>(vec![
+            Some(vec![Some(1), None]),
+            Some(vec![Some(2)]),
+            None,
+            Some(vec![]),
+            Some(vec![None]),
+        ]);
+        let dictionary = vec![
+            Some("alpha"),
+            Some("beta"),
+            Some("gamma"),
+            None,
+            Some("alpha"),
+        ]
+        .into_iter()
+        .collect::<DictionaryArray<Int16Type>>();
+        let field_configs = vec![
+            (struct_type, SortOptions::default()),
+            (list_array.data_type().clone(), SortOptions::default()),
+            (dictionary.data_type().clone(), SortOptions::default()),
+        ];
+        let sort_fields = field_configs
+            .iter()
+            .map(|(data_type, sort_options)| {
+                SortField::new_with_options(data_type.clone(), *sort_options)
+            })
+            .collect::<Vec<_>>();
+        let columns: Vec<ArrayRef> = vec![
+            Arc::new(struct_array),
+            Arc::new(list_array),
+            Arc::new(dictionary),
+        ];
+        let converter = RowConverter::new(sort_fields)?;
+        let rows = converter.convert_columns(&columns)?;
+
+        let checker = RowNullChecker::new(&field_configs);
+        let null_buffer = checker.has_nulls(&rows);
+
+        // Child/null elements in rows 0 and 4 should not make top-level keys
+        // null. Rows 1, 2, and 3 have a null struct/list/dictionary key.
+        assert_validity(&null_buffer, &[true, false, false, false, true]);
         Ok(())
     }
 }
