@@ -167,7 +167,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "atoi",
- "base64",
+ "base64 0.22.1",
  "chrono",
  "comfy-table",
  "half",
@@ -404,7 +404,7 @@ name = "auron-planner"
 version = "8.0.0"
 dependencies = [
  "arrow",
- "base64",
+ "base64 0.23.0",
  "datafusion",
  "datafusion-ext-exprs",
  "datafusion-ext-functions",
@@ -464,6 +464,12 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "base64"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b25655df2c3cdd83c5e5b293b88acd880332b2ddadd7c30ac43144fdc0033da9"
 
 [[package]]
 name = "bigdecimal"
@@ -930,7 +936,7 @@ dependencies = [
  "ahash",
  "arrow",
  "arrow-ipc",
- "base64",
+ "base64 0.22.1",
  "chrono",
  "half",
  "hashbrown 0.14.5",
@@ -1200,7 +1206,7 @@ dependencies = [
  "async-trait",
  "auron-jni-bridge",
  "auron-memmgr",
- "base64",
+ "base64 0.23.0",
  "bitvec",
  "byteorder",
  "bytes 1.12.1",
@@ -1245,7 +1251,7 @@ source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034
 dependencies = [
  "arrow",
  "arrow-buffer",
- "base64",
+ "base64 0.22.1",
  "blake2",
  "blake3",
  "chrono",
@@ -1941,7 +1947,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3314d5adb5d94bcdf56771f2e50dbbc80bb4bdf88967526706205ac9eff24eb"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes 1.12.1",
  "headers-core",
  "http",
@@ -2847,7 +2853,7 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
- "base64",
+ "base64 0.22.1",
  "brotli",
  "bytes 1.12.1",
  "chrono",
@@ -4027,7 +4033,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix 1.0.8",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.1",
 ]
 
 [[package]]
