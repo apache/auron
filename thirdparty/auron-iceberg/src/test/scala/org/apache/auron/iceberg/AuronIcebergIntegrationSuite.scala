@@ -466,6 +466,31 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg scan pushes STARTS_WITH filters into native scan pruning predicates") {
+    withTable("local.db.t_residual_starts_with") {
+      sql("create table local.db.t_residual_starts_with (id int, v string) using iceberg")
+      sql("""
+          |insert into local.db.t_residual_starts_with
+          |values (1, 'alpha'), (2, 'beta'), (3, 'atom'), (4, null)
+          |""".stripMargin)
+      val df = sql("""
+          |select * from local.db.t_residual_starts_with
+          |where v like 'a%'
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "alpha"), Row(3, "atom")))
+      val nativeScanPlan = icebergScanPlan(df)
+      assert(nativeScanPlan.nonEmpty)
+      val pruningPredicateText = nativeScanPlan.get.pruningPredicates.mkString("\n")
+      assert(
+        pruningPredicateText.contains("name: \"starts_with\"") &&
+          pruningPredicateText.contains("fun: StartsWith"),
+        pruningPredicateText)
+      val plan = df.queryExecution.executedPlan.toString()
+      assert(plan.contains("NativeIcebergTableScan"))
+      assert(plan.contains("NativeFilter"))
+    }
+  }
+
   test("iceberg scan keeps native post-scan filter when only part of the predicate is pushed") {
     withTable("local.db.t_residual_partial_pushdown") {
       sql("create table local.db.t_residual_partial_pushdown (id int, v string) using iceberg")

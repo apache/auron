@@ -27,7 +27,7 @@ import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expres
 import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.{NativeConverters, Shims}
-import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr}
+import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr, StartsWith}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -752,6 +752,15 @@ object IcebergScanSupport extends Logging {
       dataType: DataType,
       op: org.apache.iceberg.expressions.Expression.Operation,
       literalValue: Any): Option[SparkExpression] = {
+    if (op == org.apache.iceberg.expressions.Expression.Operation.STARTS_WITH) {
+      if (dataType == StringType) {
+        return toLiteral(literalValue, StringType)
+          .filter(_.value != null)
+          .map(StartsWith(attr, _))
+      }
+      return None
+    }
+
     if (!supportsScanPruningLiteralType(dataType)) {
       return None
     }
