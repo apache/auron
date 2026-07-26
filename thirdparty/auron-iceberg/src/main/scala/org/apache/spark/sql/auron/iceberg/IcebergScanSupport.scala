@@ -83,7 +83,14 @@ object IcebergScanSupport extends Logging {
     if (collectUnsupportedMetadataColumns(scan.readSchema, isChangelogScan).nonEmpty) {
       Some("Has per-row materialization (for example _pos).")
     } else {
-      None
+      val unsupportedFields = collectUnsupportedDataTypeFields(scan.readSchema, isChangelogScan)
+      if (unsupportedFields.nonEmpty) {
+        Some(
+          s"Unsupported Iceberg scan schema. Unsupported fields/types: " +
+            s"${unsupportedFields.mkString(", ")}.")
+      } else {
+        None
+      }
     }
   }
 
@@ -376,6 +383,16 @@ object IcebergScanSupport extends Logging {
             !isSupportedMetadataColumn(field, isChangelogScan) =>
         field.name
     }
+
+  private def collectUnsupportedDataTypeFields(
+      schema: StructType,
+      isChangelogScan: Boolean): Seq[String] =
+    schema.fields
+      .filterNot(field =>
+        isIcebergMetadataColumn(field.name, isChangelogScan) &&
+          !isSupportedMetadataColumn(field, isChangelogScan))
+      .filterNot(field => NativeConverters.isTypeSupported(field.dataType))
+      .map(field => s"${field.name}: ${field.dataType.catalogString}")
 
   private def isIcebergMetadataColumn(name: String, isChangelogScan: Boolean): Boolean =
     MetadataColumns.isMetadataColumn(name) ||

@@ -733,6 +733,12 @@ class AuronIcebergIntegrationSuite
       checkAnswer(df, Seq(Row(1, new java.math.BigDecimal("123.4500000000"))))
       val plan = df.queryExecution.executedPlan.toString()
       assert(!plan.contains("NativeIcebergTableScan"))
+      val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
+      assert(
+        collectFirst(df.queryExecution.executedPlan) { case batchScanExec: BatchScanExec =>
+          batchScanExec.getTagValue(neverConvertReasonTag)
+        }.get.get.equals(
+          "Unsupported Iceberg scan schema. Unsupported fields/types: amount: decimal(38,10)."))
     }
   }
 
