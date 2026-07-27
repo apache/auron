@@ -204,7 +204,18 @@ impl Fields {
 
 /// Walk the tokens over `input`. Returns the Unix timestamp in seconds, or
 /// `None` on any parse failure (mapped to `i64::MIN` by the caller).
+///
+/// An empty token list consumes no input and is a failure, not a match on the
+/// epoch defaults: `DateFormat.parse` throws whenever parsing advances the
+/// position by zero characters, so Flink yields `Long.MIN_VALUE` for an empty
+/// format. Every other token consumes at least one byte — a literal matches
+/// one, a field needs at least one digit — so an empty token list is the only
+/// way to finish having consumed nothing.
 fn parse_datetime(input: &str, tokens: &[Token], tz: Tz) -> Option<i64> {
+    if tokens.is_empty() {
+        return None;
+    }
+
     let bytes = input.as_bytes();
     let mut pos = 0usize;
     let mut fields = Fields::default();
@@ -634,6 +645,15 @@ mod tests {
             ColumnarValue::Scalar(ScalarValue::Utf8(Some("Mars/Olympus".to_string()))),
         ];
         assert!(flink_unix_timestamp(&args).is_err());
+    }
+
+    // An empty format consumes nothing, so it matches no input at all rather
+    // than matching everything at the epoch defaults.
+    #[test]
+    fn empty_format_never_matches() {
+        assert_eq!(run("2020-10-10 00:00:01", "", "UTC"), MIN);
+        assert_eq!(run("2020-10-10 00:00:01", "", "Asia/Shanghai"), MIN);
+        assert_eq!(run("", "", "UTC"), MIN);
     }
 
     #[test]
