@@ -1,0 +1,49 @@
+From ed4ace347da4acfe0c3453e1b34ede067de894e2 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Sun, 15 Sep 2024 20:54:37 +0800
+Subject: [PATCH] blaze: fix NaN comparison semantic
+
+---
+ arrow-array/src/arithmetic.rs | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/arrow-array/src/arithmetic.rs b/arrow-array/src/arithmetic.rs
+index b5f4a106f..c4e88b91a 100644
+--- a/arrow-array/src/arithmetic.rs
++++ b/arrow-array/src/arithmetic.rs
+@@ -390,7 +390,18 @@ macro_rules! native_type_float_op {
+ 
+             #[inline]
+             fn compare(self, rhs: Self) -> Ordering {
+-                <$t>::total_cmp(&self, &rhs)
++                // blaze:
++                // nan-safe version according to semantics where NaN == NaN and
++                // NaN is greater than any non-NaN double.
++                if self.is_nan() && rhs.is_nan() {
++                    Ordering::Equal
++                } else if self.is_nan() {
++                    Ordering::Greater
++                } else if rhs.is_nan() {
++                    Ordering::Less
++                } else {
++                    <$t>::total_cmp(&self, &rhs)
++                }
+             }
+ 
+             #[inline]
+@@ -398,6 +409,12 @@ macro_rules! native_type_float_op {
+                 // Equivalent to `self.total_cmp(&rhs).is_eq()`
+                 // but LLVM isn't able to realise this is bitwise equality
+                 // https://rust.godbolt.org/z/347nWGxoW
++                // blaze:
++                // nan-safe version according to semantics where NaN == NaN and
++                // NaN is greater than any non-NaN double.
++                if self.is_nan() && rhs.is_nan() {
++                    return true;
++                }
+                 self.to_bits() == rhs.to_bits()
+             }
+         }
+-- 
+2.50.1
+

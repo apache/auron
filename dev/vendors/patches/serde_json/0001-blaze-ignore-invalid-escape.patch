@@ -1,0 +1,46 @@
+From 11ac9a213d7e8dedfe7e94af30d93dfa823b3217 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Wed, 17 May 2023 15:48:45 +0800
+Subject: [PATCH] blaze: ignore invalid escape
+
+---
+ src/read.rs | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/read.rs b/src/read.rs
+index fc3a3ca..cac8132 100644
+--- a/src/read.rs
++++ b/src/read.rs
+@@ -849,6 +849,15 @@ fn parse_escape<'de, R: Read<'de>>(
+     validate: bool,
+     scratch: &mut Vec<u8>,
+ ) -> Result<()> {
++
++    // blaze:
++    // invalid escape case: decode the backslash char as b'\\'
++    let peek_ch = tri!(peek_or_eof(read));
++    if ![b'"', b'\\', b'/', b'b', b'f', b'n', b'r', b't', b'u'].contains(&peek_ch) {
++        scratch.push(b'\\');
++        return Ok(());
++    }
++
+     let ch = tri!(next_or_eof(read));
+ 
+     match ch {
+@@ -950,6 +959,13 @@ fn ignore_escape<'de, R>(read: &mut R) -> Result<()>
+ where
+     R: ?Sized + Read<'de>,
+ {
++    // blaze:
++    // invalid escape case: decode the backslash char as b'\\'
++    let peek_ch = tri!(peek_or_eof(read));
++    if ![b'"', b'\\', b'/', b'b', b'f', b'n', b'r', b't', b'u'].contains(&peek_ch) {
++        return Ok(());
++    }
++
+     let ch = tri!(next_or_eof(read));
+ 
+     match ch {
+-- 
+2.50.1
+

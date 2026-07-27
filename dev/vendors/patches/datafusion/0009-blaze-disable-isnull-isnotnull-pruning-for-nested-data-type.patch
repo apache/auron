@@ -1,0 +1,26 @@
+From 4d8a76a18ae3eeef66e9d064fa29eae13ee7c2c9 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Mon, 16 Sep 2024 11:22:36 +0800
+Subject: [PATCH] blaze: disable isnull/isnotnull pruning for nested data type
+
+---
+ datafusion/pruning/src/pruning_predicate.rs | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/datafusion/pruning/src/pruning_predicate.rs b/datafusion/pruning/src/pruning_predicate.rs
+index f8818292b..43e3d616f 100644
+--- a/datafusion/pruning/src/pruning_predicate.rs
++++ b/datafusion/pruning/src/pruning_predicate.rs
+@@ -1449,6 +1449,9 @@ fn build_is_null_column_expr(
+ ) -> Option<Arc<dyn PhysicalExpr>> {
+     if let Some(col) = expr.as_any().downcast_ref::<phys_expr::Column>() {
+         let field = schema.field_with_name(col.name()).ok()?;
++        if field.data_type().is_nested() {
++            return None;
++        }
+ 
+         let null_count_field = &Field::new(field.name(), DataType::UInt64, true);
+         if with_not {
+-- 
+2.50.1
+

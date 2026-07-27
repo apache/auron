@@ -1,0 +1,75 @@
+From 948d5bc4cd7e4a63c99d0927dc8070420534ba0d Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Tue, 17 Sep 2024 21:01:01 +0800
+Subject: [PATCH] blaze: make parquet reader components public
+
+---
+ datafusion/datasource-parquet/src/mod.rs    | 4 ++--
+ datafusion/datasource-parquet/src/opener.rs | 4 ++--
+ datafusion/datasource/src/schema_adapter.rs | 6 +++---
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/datafusion/datasource-parquet/src/mod.rs b/datafusion/datasource-parquet/src/mod.rs
+index 0b4e86240..78152459f 100644
+--- a/datafusion/datasource-parquet/src/mod.rs
++++ b/datafusion/datasource-parquet/src/mod.rs
+@@ -22,8 +22,8 @@
+ pub mod access_plan;
+ pub mod file_format;
+ mod metrics;
+-mod opener;
+-mod page_filter;
++pub mod opener;
++pub mod page_filter;
+ mod reader;
+ mod row_filter;
+ mod row_group_filter;
+diff --git a/datafusion/datasource-parquet/src/opener.rs b/datafusion/datasource-parquet/src/opener.rs
+index e31e33cfa..914e40074 100644
+--- a/datafusion/datasource-parquet/src/opener.rs
++++ b/datafusion/datasource-parquet/src/opener.rs
+@@ -52,7 +52,7 @@ use parquet::arrow::{ParquetRecordBatchStreamBuilder, ProjectionMask};
+ use parquet::file::metadata::ParquetMetaDataReader;
+ 
+ /// Implements [`FileOpener`] for a parquet file
+-pub(super) struct ParquetOpener {
++pub struct ParquetOpener {
+     /// Execution partition index
+     pub partition_index: usize,
+     /// Column indexes in `table_schema` needed by the query
+@@ -95,7 +95,7 @@ pub(super) struct ParquetOpener {
+     /// Optional parquet FileDecryptionProperties
+     pub file_decryption_properties: Option<Arc<FileDecryptionProperties>>,
+     /// Rewrite expressions in the context of the file schema
+-    pub(crate) expr_adapter_factory: Option<Arc<dyn PhysicalExprAdapterFactory>>,
++    pub expr_adapter_factory: Option<Arc<dyn PhysicalExprAdapterFactory>>,
+ }
+ 
+ impl FileOpener for ParquetOpener {
+diff --git a/datafusion/datasource/src/schema_adapter.rs b/datafusion/datasource/src/schema_adapter.rs
+index 12722b433..1773b6011 100644
+--- a/datafusion/datasource/src/schema_adapter.rs
++++ b/datafusion/datasource/src/schema_adapter.rs
+@@ -355,16 +355,16 @@ where
+ pub struct SchemaMapping {
+     /// The schema of the table. This is the expected schema after conversion
+     /// and it should match the schema of the query result.
+-    projected_table_schema: SchemaRef,
++    pub projected_table_schema: SchemaRef,
+     /// Mapping from field index in `projected_table_schema` to index in
+     /// projected file_schema.
+     ///
+     /// They are Options instead of just plain `usize`s because the table could
+     /// have fields that don't exist in the file.
+-    field_mappings: Vec<Option<usize>>,
++    pub field_mappings: Vec<Option<usize>>,
+     /// Function used to adapt a column from the file schema to the table schema
+     /// when it exists in both schemas
+-    cast_column: Arc<CastColumnFn>,
++    pub cast_column: Arc<CastColumnFn>,
+ }
+ 
+ impl Debug for SchemaMapping {
+-- 
+2.50.1
+

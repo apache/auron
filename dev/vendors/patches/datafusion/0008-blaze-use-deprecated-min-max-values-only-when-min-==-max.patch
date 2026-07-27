@@ -1,0 +1,70 @@
+From da84929cc253eeb4b14b20f6f141145da2a14d05 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Mon, 16 Sep 2024 11:15:48 +0800
+Subject: [PATCH] blaze: use deprecated min/max values only when min == max
+
+---
+ .../src/row_group_filter.rs                   | 40 +++++++++++++++++--
+ 1 file changed, 36 insertions(+), 4 deletions(-)
+
+diff --git a/datafusion/datasource-parquet/src/row_group_filter.rs b/datafusion/datasource-parquet/src/row_group_filter.rs
+index 982eed293..0453ffa29 100644
+--- a/datafusion/datasource-parquet/src/row_group_filter.rs
++++ b/datafusion/datasource-parquet/src/row_group_filter.rs
+@@ -417,17 +417,49 @@ impl<'a, T: AsyncFileReader + Send + 'static> RowGroupPruningStatistics<'a, T> {
+     }
+ }
+ 
++macro_rules! is_min_max_deprecated {
++    ($self:expr, $column:expr) => {{
++        $self.row_group_metadatas
++            .iter()
++            .any(|row_group_metadata| row_group_metadata
++                .columns()
++                .iter()
++                .find(|c| c.column_path().string().eq_ignore_ascii_case(&$column.flat_name()))
++                .and_then(|c| c.statistics())
++                .map(|stat| stat.is_min_max_deprecated())
++                .unwrap_or(false))
++    }}
++}
++
+ impl<'a, T: AsyncFileReader + Send + 'static> PruningStatistics for RowGroupPruningStatistics<'a, T> {
+     fn min_values(&self, column: &Column) -> Option<ArrayRef> {
+-        self.statistics_converter(column)
++        let min_values = self.statistics_converter(column)
+             .and_then(|c| Ok(c.row_group_mins(self.metadata_iter())?))
+-            .ok()
++            .ok();
++        if is_min_max_deprecated!(self, column) {
++            let max_values = self.statistics_converter(column)
++                .and_then(|c| Ok(c.row_group_maxes(self.metadata_iter())?))
++                .ok();
++            if min_values != max_values {
++                return None;
++            }
++        }
++        min_values
+     }
+ 
+     fn max_values(&self, column: &Column) -> Option<ArrayRef> {
+-        self.statistics_converter(column)
++        let max_values = self.statistics_converter(column)
+             .and_then(|c| Ok(c.row_group_maxes(self.metadata_iter())?))
+-            .ok()
++            .ok();
++        if is_min_max_deprecated!(self, column) {
++            let min_values = self.statistics_converter(column)
++                .and_then(|c| Ok(c.row_group_mins(self.metadata_iter())?))
++                .ok();
++            if min_values != max_values {
++                return None;
++            }
++        }
++        max_values
+     }
+ 
+     fn num_containers(&self) -> usize {
+-- 
+2.50.1
+

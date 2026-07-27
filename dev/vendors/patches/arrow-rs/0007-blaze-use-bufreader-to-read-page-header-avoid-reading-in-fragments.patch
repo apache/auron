@@ -1,0 +1,41 @@
+From 417f165b72b99a25cc8f910fde9b43c1d5e06587 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Tue, 19 Nov 2024 10:52:22 +0800
+Subject: [PATCH] blaze: use bufreader to read page header, avoid reading in
+ fragments
+
+---
+ parquet/src/arrow/async_reader/metadata.rs | 2 +-
+ parquet/src/bin/parquet-layout.rs          | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/parquet/src/arrow/async_reader/metadata.rs b/parquet/src/arrow/async_reader/metadata.rs
+index 9a985e885..2c994b9f0 100644
+--- a/parquet/src/arrow/async_reader/metadata.rs
++++ b/parquet/src/arrow/async_reader/metadata.rs
+@@ -87,7 +87,7 @@ pub trait MetadataSuffixFetch: MetadataFetch {
+ 
+     /// Sync version of get_bytes
+     /// this is only used by blaze, for reading dictionary values for row group pruning
+-    fn get_bytes_sync(&mut self, range: Range<usize>) -> Result<Bytes> {
++    fn get_bytes_sync(&mut self, range: Range<u64>) -> Result<Bytes> {
+         unimplemented!("blaze only")
+     }
+ }
+diff --git a/parquet/src/bin/parquet-layout.rs b/parquet/src/bin/parquet-layout.rs
+index 46a231a7d..26e22e1b2 100644
+--- a/parquet/src/bin/parquet-layout.rs
++++ b/parquet/src/bin/parquet-layout.rs
+@@ -174,7 +174,8 @@ fn read_page_header<C: ChunkReader>(reader: &C, offset: u64) -> Result<(usize, P
+         }
+     }
+ 
+-    let input = reader.get_read(offset)?;
++    // blaze: use BufReader to avoid reading in fragments
++    let input = std::io::BufReader::new(reader.get_read(offset)?);
+     let mut tracked = TrackedRead(input, 0);
+     let mut prot = TCompactInputProtocol::new(&mut tracked);
+     let header = PageHeader::read_from_in_protocol(&mut prot)?;
+-- 
+2.50.1
+

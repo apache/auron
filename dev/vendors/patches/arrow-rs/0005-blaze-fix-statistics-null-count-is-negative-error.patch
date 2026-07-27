@@ -1,0 +1,26 @@
+From 308b3c77cd28c654a84b38df46871cf0a88444f3 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Sun, 15 Sep 2024 21:24:51 +0800
+Subject: [PATCH] blaze: fix 'Statistics null count is negative (-1)' error
+
+---
+ parquet/src/file/statistics.rs | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/parquet/src/file/statistics.rs b/parquet/src/file/statistics.rs
+index b7522a76f..b7849e4f9 100644
+--- a/parquet/src/file/statistics.rs
++++ b/parquet/src/file/statistics.rs
+@@ -129,7 +129,8 @@ pub fn from_thrift(
+             // Number of nulls recorded, when it is not available, we just mark it as 0.
+             // TODO this should be `None` if there is no information about NULLS.
+             // see https://github.com/apache/arrow-rs/pull/6216/files
+-            let null_count = stats.null_count.unwrap_or(0);
++            let null_count = stats.null_count.unwrap_or(0)
++                .max(0); // blaze - fix 'Statistics null count is negative (-1)' error
+ 
+             if null_count < 0 {
+                 return Err(ParquetError::General(format!(
+-- 
+2.50.1
+
