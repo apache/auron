@@ -37,6 +37,17 @@ use datafusion_ext_commons::arrow::cast::cast;
 /// the JVM-side converter from `%Y %m %d %H %M %S` plus literal characters
 /// (`%%` for a literal percent) — it is not the original Java pattern.
 ///
+/// Arity 3 is the normalized form of Flink's two string-parsing arities: the
+/// JVM-side converter supplies Flink's default `yyyy-MM-dd HH:mm:ss` for the
+/// single-argument call, translates the literal pattern for the two-argument
+/// call, and resolves the session time zone at plan time. A non-literal or
+/// untranslatable format is rejected there and evaluated by Flink instead, so
+/// every call reaching this function carries all three arguments already bound.
+///
+/// Flink's no-argument `UNIX_TIMESTAMP()` parses nothing and yields the current
+/// wall-clock time per record. It is not routed here: it has no input column to
+/// size the output against, and it shares none of the parsing contract below.
+///
 /// An unparseable value yields `i64::MIN` (Flink's `Long.MIN_VALUE`), never
 /// NULL and never an error; a NULL value yields NULL. Arity, format and
 /// timezone problems are hard errors rather than silent defaults, so a plumbing
