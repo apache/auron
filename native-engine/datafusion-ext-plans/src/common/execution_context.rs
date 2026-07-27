@@ -267,7 +267,7 @@ impl ExecutionContext {
         }
 
         let output_schema = self.output_schema();
-        let key_converter = RowConverter::new(
+        let key_converter = Arc::new(Mutex::new(RowConverter::new(
             keys.iter()
                 .map(|k| {
                     Ok(SortField::new_with_options(
@@ -276,7 +276,7 @@ impl ExecutionContext {
                     ))
                 })
                 .collect::<Result<_>>()?,
-        )?;
+        )?));
         let key_exprs = keys.iter().map(|k| k.expr.clone()).collect::<Vec<_>>();
 
         let elapsed_compute = self.baseline_metrics.elapsed_compute().clone();
@@ -291,8 +291,12 @@ impl ExecutionContext {
                             .and_then(|r| r.into_array(batch.num_rows()))
                     })
                     .collect::<Result<Vec<_>>>()?;
-                let key_rows = key_converter.convert_columns(&keys)?;
-                Ok(RecordBatchWithKeyRows::new(batch, Arc::new(key_rows)))
+                let key_rows = key_converter.lock().convert_columns(&keys)?;
+                Ok(RecordBatchWithKeyRows::new(
+                    batch,
+                    Arc::new(key_rows),
+                    key_converter.clone(),
+                ))
             })
         });
         Ok(Box::pin(RecordBatchWithKeyRowsStreamAdapter::new(
@@ -319,7 +323,7 @@ impl ExecutionContext {
         }
 
         let input_schema = input.schema();
-        let key_converter = RowConverter::new(
+        let key_converter = Arc::new(Mutex::new(RowConverter::new(
             keys.iter()
                 .map(|k| {
                     Ok(SortField::new_with_options(
@@ -328,7 +332,7 @@ impl ExecutionContext {
                     ))
                 })
                 .collect::<Result<_>>()?,
-        )?;
+        )?));
 
         let projection = projection.to_vec();
         let mut projection_with_keys = projection.clone();
@@ -354,7 +358,7 @@ impl ExecutionContext {
                             .and_then(|r| r.into_array(batch.num_rows()))
                     })
                     .collect::<Result<Vec<_>>>()?;
-                let key_rows = key_converter.convert_columns(&keys)?;
+                let key_rows = key_converter.lock().convert_columns(&keys)?;
                 if projection.len() < projection_with_keys.len() {
                     batch = RecordBatch::try_new_with_options(
                         projected_schema_cloned.clone(),
@@ -362,7 +366,11 @@ impl ExecutionContext {
                         &RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
                     )?;
                 }
-                Ok(RecordBatchWithKeyRows::new(batch, Arc::new(key_rows)))
+                Ok(RecordBatchWithKeyRows::new(
+                    batch,
+                    Arc::new(key_rows),
+                    key_converter.clone(),
+                ))
             })
         });
         Ok(Box::pin(RecordBatchWithKeyRowsStreamAdapter::new(

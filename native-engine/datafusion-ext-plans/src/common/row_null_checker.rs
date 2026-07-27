@@ -18,14 +18,14 @@
 use arrow::{
     array::Array,
     buffer::NullBuffer,
-    row::{RowConverter, Rows, SortField},
+    row::{RowConverter, Rows},
 };
 use arrow_schema::{DataType, Field, SchemaRef, SortOptions};
 
 /// Utility class for checking if a Row contains null values
 pub struct RowNullChecker {
     field_configs: Vec<FieldConfig>,
-    row_converter: RowConverter,
+    needs_decoded_nulls: bool,
 }
 
 impl RowNullChecker {
@@ -44,9 +44,10 @@ impl RowNullChecker {
             field_configs.push(field_config);
         }
 
+        let needs_decoded_nulls = Self::needs_decoded_nulls(&field_configs);
         Self {
             field_configs,
-            row_converter: Self::create_row_converter(fields),
+            needs_decoded_nulls,
         }
     }
 
@@ -59,33 +60,31 @@ impl RowNullChecker {
     /// * `NullBuffer` - Buffer indicating which rows contain null values
     ///   - `false` bits indicate rows that contain at least one null value
     ///   - `true` bits indicate rows where all fields are non-null
-    pub fn has_nulls(&self, rows: &Rows) -> NullBuffer {
-        let parser = self.row_converter.parser();
-        let parsed_rows = rows
-            .iter()
-            .map(|row| parser.parse(row.data()))
-            .collect::<Vec<_>>();
-        let key_columns = self
-            .row_converter
-            .convert_rows(parsed_rows)
-            .expect("failed to decode row data in RowNullChecker");
+    pub fn has_nulls(&self, rows: &Rows, row_converter: &RowConverter) -> NullBuffer {
+        if !self.needs_decoded_nulls {
+            return NullBuffer::from_iter(rows.iter().map(|row| !self.has_null(row.data())));
+        }
 
-        NullBuffer::from_iter(
-            (0..rows.num_rows())
-                .map(|row_index| key_columns.iter().all(|column| !column.is_null(row_index))),
-        )
+        let key_columns = row_converter
+            .convert_rows(rows.iter())
+            .expect("failed to decode row data in RowNullChecker");
+        let logical_nulls = key_columns
+            .iter()
+            .map(|column| column.logical_nulls())
+            .collect::<Vec<_>>();
+
+        NullBuffer::from_iter((0..rows.num_rows()).map(|row_index| {
+            logical_nulls.iter().all(|nulls| match nulls {
+                Some(nulls) => nulls.is_valid(row_index),
+                None => true,
+            })
+        }))
     }
 
-    fn create_row_converter(fields: &[(DataType, SortOptions)]) -> RowConverter {
-        RowConverter::new(
-            fields
-                .iter()
-                .map(|(data_type, sort_options)| {
-                    SortField::new_with_options(data_type.clone(), *sort_options)
-                })
-                .collect(),
-        )
-        .expect("failed to create RowConverter in RowNullChecker")
+    fn needs_decoded_nulls(field_configs: &[FieldConfig]) -> bool {
+        field_configs
+            .iter()
+            .any(|field_config| field_config.data_type.needs_decoded_nulls())
     }
 
     /// Create a FieldConfig from DataType and SortOptions
@@ -161,11 +160,6 @@ impl RowNullChecker {
     /// compatibility)
     pub fn from_schema(schema: &SchemaRef) -> Self {
         let mut field_configs = Vec::new();
-        let fields = schema
-            .fields()
-            .iter()
-            .map(|field| (field.data_type().clone(), SortOptions::default()))
-            .collect::<Vec<_>>();
 
         for field in schema.fields() {
             let sort_options = SortOptions::default(); // Use default sort options
@@ -173,9 +167,10 @@ impl RowNullChecker {
             field_configs.push(field_config);
         }
 
+        let needs_decoded_nulls = Self::needs_decoded_nulls(&field_configs);
         Self {
             field_configs,
-            row_converter: Self::create_row_converter(&fields),
+            needs_decoded_nulls,
         }
     }
 
@@ -415,6 +410,12 @@ enum DataTypeInfo {
     Dictionary,      // Dictionary type
 }
 
+impl DataTypeInfo {
+    fn needs_decoded_nulls(&self) -> bool {
+        matches!(self, Self::Struct | Self::List | Self::Dictionary)
+    }
+}
+
 impl FieldConfig {
     /// Create configuration for primitive numeric types
     fn new_primitive(sort_options: SortOptions, encoded_length: usize) -> Self {
@@ -486,8 +487,8 @@ mod tests {
 
     use arrow::{
         array::{
-            Array, ArrayRef, BooleanArray, DictionaryArray, Int32Array, ListArray, RecordBatch,
-            StringArray, StructArray,
+            Array, ArrayRef, BooleanArray, DictionaryArray, Int32Array, ListArray, NullArray,
+            RecordBatch, StringArray, StructArray,
         },
         datatypes::{Int16Type, Int32Type},
         row::{RowConverter, SortField},
@@ -775,7 +776,7 @@ mod tests {
         let checker = RowNullChecker::new(&field_configs);
 
         // Test has_nulls method
-        let null_buffer = checker.has_nulls(&rows);
+        let null_buffer = checker.has_nulls(&rows, &converter);
 
         // Verify results
         // Row 0: (1, "Alice") - no nulls -> should be true (valid)
@@ -815,7 +816,7 @@ mod tests {
         let converter = RowConverter::new(sort_fields.clone())?;
         let rows = converter.convert_columns(&batch.columns())?;
 
-        let null_buffer = checker.has_nulls(&rows);
+        let null_buffer = checker.has_nulls(&rows, &converter);
         assert_eq!(null_buffer.len(), 0);
         Ok(())
     }
@@ -847,7 +848,7 @@ mod tests {
             .collect();
 
         let checker = RowNullChecker::new(&field_configs);
-        let null_buffer = checker.has_nulls(&rows);
+        let null_buffer = checker.has_nulls(&rows, &converter);
 
         // All rows should be invalid (false) since they all contain nulls
         assert_eq!(null_buffer.len(), 3);
@@ -888,7 +889,7 @@ mod tests {
             .collect();
 
         let checker = RowNullChecker::new(&field_configs);
-        let null_buffer = checker.has_nulls(&rows);
+        let null_buffer = checker.has_nulls(&rows, &converter);
 
         // All rows should be valid (true) since none contain nulls
         assert_eq!(null_buffer.len(), 3);
@@ -907,6 +908,36 @@ mod tests {
                 "unexpected validity at row {idx}"
             );
         }
+    }
+
+    #[test]
+    fn test_has_nulls_with_null_type_on_decoded_path() -> Result<(), Box<dyn Error>> {
+        let child_fields = Fields::from(vec![Field::new("id", DataType::Int32, true)]);
+        let struct_type = DataType::Struct(child_fields.clone());
+        let struct_array = StructArray::new(
+            child_fields,
+            vec![Arc::new(Int32Array::from(vec![Some(1), Some(2)])) as ArrayRef],
+            None,
+        );
+        let field_configs = vec![
+            (DataType::Null, SortOptions::default()),
+            (struct_type, SortOptions::default()),
+        ];
+        let sort_fields = field_configs
+            .iter()
+            .map(|(data_type, sort_options)| {
+                SortField::new_with_options(data_type.clone(), *sort_options)
+            })
+            .collect::<Vec<_>>();
+        let columns: Vec<ArrayRef> = vec![Arc::new(NullArray::new(2)), Arc::new(struct_array)];
+        let converter = RowConverter::new(sort_fields)?;
+        let rows = converter.convert_columns(&columns)?;
+
+        let checker = RowNullChecker::new(&field_configs);
+        let null_buffer = checker.has_nulls(&rows, &converter);
+
+        assert_validity(&null_buffer, &[false, false]);
+        Ok(())
     }
 
     #[test]
@@ -972,7 +1003,7 @@ mod tests {
         let rows = converter.convert_columns(&columns)?;
 
         let checker = RowNullChecker::new(&field_configs);
-        let null_buffer = checker.has_nulls(&rows);
+        let null_buffer = checker.has_nulls(&rows, &converter);
 
         // Child/null elements in rows 0 and 4 should not make top-level keys
         // null. Rows 1, 2, and 3 have a null struct/list/dictionary key.

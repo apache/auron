@@ -19,21 +19,35 @@ use std::{
     task::{Context, Poll},
 };
 
-use arrow::{datatypes::SchemaRef, record_batch::RecordBatch, row::Rows};
+use arrow::{
+    datatypes::SchemaRef,
+    record_batch::RecordBatch,
+    row::{RowConverter, Rows},
+};
 use datafusion::{common::Result, physical_expr::PhysicalSortExpr};
 use futures::Stream;
 use futures_util::StreamExt;
+use parking_lot::Mutex;
 
 /// A batch with associated key rows for optimization
 #[derive(Debug)]
 pub struct RecordBatchWithKeyRows {
     pub batch: RecordBatch,
     pub key_rows: Arc<Rows>,
+    pub key_row_converter: Arc<Mutex<RowConverter>>,
 }
 
 impl RecordBatchWithKeyRows {
-    pub fn new(batch: RecordBatch, key_rows: Arc<Rows>) -> Self {
-        Self { batch, key_rows }
+    pub fn new(
+        batch: RecordBatch,
+        key_rows: Arc<Rows>,
+        key_row_converter: Arc<Mutex<RowConverter>>,
+    ) -> Self {
+        Self {
+            batch,
+            key_rows,
+            key_row_converter,
+        }
     }
 }
 

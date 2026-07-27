@@ -805,7 +805,11 @@ async fn send_output_batch(
         let batch =
             prune_sort_keys_from_batch.restore_from_existed_key_rows(pruned_batch, &key_rows)?;
         sender
-            .send(RecordBatchWithKeyRows { batch, key_rows })
+            .send(RecordBatchWithKeyRows::new(
+                batch,
+                key_rows,
+                prune_sort_keys_from_batch.sort_row_converter.clone(),
+            ))
             .await;
     }
     Ok(())
