@@ -16,13 +16,12 @@
  */
 package org.apache.spark.sql.execution.auron.plan
 
-import java.net.URI
 import java.security.PrivilegedExceptionAction
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.MapPartitionsRDD
 import org.apache.spark.sql.auron.NativeConverters
@@ -114,7 +113,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
       }
       pb.PartitionedFile
         .newBuilder()
-        .setPath(s"${file.filePath}")
+        .setPath(Shims.get.getPartitionedFilePathString(file))
         .setSize(fileSizes(file.filePath))
         .addAllPartitionValues(nativePartitionValues.asJava)
         .setLastModifiedNs(0)
@@ -149,7 +148,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
         val currentTimeMillis = System.currentTimeMillis()
         val fs = NativeHelper.currentUser.doAs(new PrivilegedExceptionAction[FileSystem] {
           override def run(): FileSystem = {
-            FileSystem.get(new URI(location), sharedConf)
+            FileSystem.get(new Path(location).toUri, sharedConf)
           }
         })
         getFsTimeMetric.add((System.currentTimeMillis() - currentTimeMillis) * 1000000)

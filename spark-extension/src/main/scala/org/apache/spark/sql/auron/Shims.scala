@@ -290,6 +290,8 @@ abstract class Shims {
       offset: Long,
       size: Long): PartitionedFile
 
+  def getPartitionedFilePathString(file: PartitionedFile): String
+
   def getMinPartitionNum(sparkSession: SparkSession): Int
 
   @nowarn("cat=unused") // Some params temporarily unused
