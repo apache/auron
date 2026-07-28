@@ -694,6 +694,150 @@ mod test {
         Ok(())
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_agg_last() -> Result<()> {
+        MemManager::init(10000);
+
+        // group key "k", a nullable int column "v" and a nullable string column
+        // "s". rows are visited in order, so within each group the last visited
+        // row wins. "s" also exercises the utf8 `take_value` move-out path in
+        // partial_merge that the primitive "v" column never touches.
+        //   k=1: v = [10, null, 40],   s = ["a", null, "c"]
+        //        -> last(v)=40,   last(v,ign)=40, last(s)="c",  last(s,ign)="c"
+        //   k=2: v = [20, null],       s = ["x", null]
+        //        -> last(v)=null, last(v,ign)=20, last(s)=null, last(s,ign)="x"
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("k", DataType::Int32, false),
+            Field::new("v", DataType::Int32, true),
+            Field::new("s", DataType::Utf8, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int32Array::from(vec![1, 2, 1, 2, 1])),
+                Arc::new(Int32Array::from(vec![
+                    Some(10),
+                    Some(20),
+                    None,
+                    None,
+                    Some(40),
+                ])),
+                Arc::new(StringArray::from(vec![
+                    Some("a"),
+                    Some("x"),
+                    None,
+                    None,
+                    Some("c"),
+                ])),
+            ],
+        )?;
+        let input: Arc<dyn ExecutionPlan> =
+            Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?);
+
+        let agg_expr_last = create_agg(
+            AggFunction::Last,
+            &[phys_expr::col("v", &input.schema())?],
+            &input.schema(),
+            DataType::Int32,
+        )?;
+
+        let agg_expr_last_ign = create_agg(
+            AggFunction::LastIgnoresNull,
+            &[phys_expr::col("v", &input.schema())?],
+            &input.schema(),
+            DataType::Int32,
+        )?;
+
+        let agg_expr_last_s = create_agg(
+            AggFunction::Last,
+            &[phys_expr::col("s", &input.schema())?],
+            &input.schema(),
+            DataType::Utf8,
+        )?;
+
+        let agg_expr_last_s_ign = create_agg(
+            AggFunction::LastIgnoresNull,
+            &[phys_expr::col("s", &input.schema())?],
+            &input.schema(),
+            DataType::Utf8,
+        )?;
+
+        let aggs_agg_expr = vec![
+            AggExpr {
+                field_name: "agg_expr_last".to_string(),
+                mode: Partial,
+                filter: None,
+                agg: agg_expr_last,
+            },
+            AggExpr {
+                field_name: "agg_expr_last_ign".to_string(),
+                mode: Partial,
+                filter: None,
+                agg: agg_expr_last_ign,
+            },
+            AggExpr {
+                field_name: "agg_expr_last_s".to_string(),
+                mode: Partial,
+                filter: None,
+                agg: agg_expr_last_s,
+            },
+            AggExpr {
+                field_name: "agg_expr_last_s_ign".to_string(),
+                mode: Partial,
+                filter: None,
+                agg: agg_expr_last_s_ign,
+            },
+        ];
+
+        let agg_exec_partial = AggExec::try_new(
+            HashAgg,
+            vec![GroupingExpr {
+                field_name: "k".to_string(),
+                expr: Arc::new(Column::new("k", 0)),
+            }],
+            aggs_agg_expr.clone(),
+            false,
+            input,
+        )?;
+
+        let agg_exec_final = AggExec::try_new(
+            HashAgg,
+            vec![GroupingExpr {
+                field_name: "k".to_string(),
+                expr: Arc::new(Column::new("k", 0)),
+            }],
+            aggs_agg_expr
+                .into_iter()
+                .map(|mut agg| {
+                    agg.agg = agg
+                        .agg
+                        .with_new_exprs(vec![Arc::new(phys_expr::Literal::new(
+                            ScalarValue::Null,
+                        ))])?;
+                    agg.mode = Final;
+                    Ok(agg)
+                })
+                .collect::<Result<_>>()?,
+            false,
+            Arc::new(agg_exec_partial),
+        )?;
+
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+        let output_final = agg_exec_final.execute(0, task_ctx)?;
+        let batches = datafusion::physical_plan::common::collect(output_final).await?;
+        let expected = vec![
+            "+---+---------------+-------------------+-----------------+---------------------+",
+            "| k | agg_expr_last | agg_expr_last_ign | agg_expr_last_s | agg_expr_last_s_ign |",
+            "+---+---------------+-------------------+-----------------+---------------------+",
+            "| 1 | 40            | 40                | c               | c                   |",
+            "| 2 |               | 20                |                 | x                   |",
+            "+---+---------------+-------------------+-----------------+---------------------+",
+        ];
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_agg_with_filter() -> Result<()> {
         MemManager::init(1000);

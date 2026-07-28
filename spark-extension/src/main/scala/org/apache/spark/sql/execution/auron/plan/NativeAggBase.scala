@@ -308,6 +308,8 @@ object NativeAggBase extends Logging {
       case f: Average => Seq(f.dataType, LongType)
       case f @ First(_, true) => Seq(f.dataType)
       case f @ First(_, false) => Seq(f.dataType, BooleanType)
+      case f @ Last(_, true) => Seq(f.dataType)
+      case f @ Last(_, false) => Seq(f.dataType, BooleanType)
       case _ => Seq(BinaryType)
     }
   }
