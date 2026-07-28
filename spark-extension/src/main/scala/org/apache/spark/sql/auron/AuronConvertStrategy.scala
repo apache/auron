@@ -169,6 +169,8 @@ object AuronConvertStrategy extends Logging {
         e.setTagValue(convertStrategyTag, AlwaysConvert)
       case e: GenerateExec if isNative(e.child) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
+      case e: CoalesceExec if isNative(e.child) =>
+        e.setTagValue(convertStrategyTag, AlwaysConvert)
       case e: ObjectHashAggregateExec if isNative(e.child) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
       case e: LocalTableScanExec =>
