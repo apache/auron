@@ -100,7 +100,6 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 [[package]]
 name = "arrow"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-arith",
  "arrow-array",
@@ -120,7 +119,6 @@ dependencies = [
 [[package]]
 name = "arrow-arith"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -133,7 +131,6 @@ dependencies = [
 [[package]]
 name = "arrow-array"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "ahash",
  "arrow-buffer",
@@ -149,7 +146,6 @@ dependencies = [
 [[package]]
 name = "arrow-buffer"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "bytes 1.12.1",
  "half",
@@ -159,7 +155,6 @@ dependencies = [
 [[package]]
 name = "arrow-cast"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -179,7 +174,6 @@ dependencies = [
 [[package]]
 name = "arrow-csv"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-array",
  "arrow-cast",
@@ -193,7 +187,6 @@ dependencies = [
 [[package]]
 name = "arrow-data"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-buffer",
  "arrow-schema",
@@ -204,7 +197,6 @@ dependencies = [
 [[package]]
 name = "arrow-ipc"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -218,7 +210,6 @@ dependencies = [
 [[package]]
 name = "arrow-json"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -239,7 +230,6 @@ dependencies = [
 [[package]]
 name = "arrow-ord"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -251,7 +241,6 @@ dependencies = [
 [[package]]
 name = "arrow-row"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -263,7 +252,6 @@ dependencies = [
 [[package]]
 name = "arrow-schema"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "bitflags 2.9.1",
  "serde",
@@ -273,7 +261,6 @@ dependencies = [
 [[package]]
 name = "arrow-select"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "ahash",
  "arrow-array",
@@ -286,7 +273,6 @@ dependencies = [
 [[package]]
 name = "arrow-string"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -697,11 +683,12 @@ dependencies = [
 
 [[package]]
 name = "comfy-table"
-version = "7.1.4"
+version = "7.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a65ebfec4fb190b6f90e944a817d60499ee0744e582530e2c9900a22e591d9a"
+checksum = "e0d05af1e006a2407bedef5af410552494ce5be9090444dbbcb57258c1af3d56"
 dependencies = [
- "unicode-segmentation",
+ "strum",
+ "strum_macros",
  "unicode-width",
 ]
 
@@ -830,7 +817,6 @@ dependencies = [
 [[package]]
 name = "datafusion"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "arrow-ipc",
@@ -884,7 +870,6 @@ dependencies = [
 [[package]]
 name = "datafusion-catalog"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-trait",
@@ -909,7 +894,6 @@ dependencies = [
 [[package]]
 name = "datafusion-catalog-listing"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-trait",
@@ -931,7 +915,6 @@ dependencies = [
 [[package]]
 name = "datafusion-common"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "ahash",
  "arrow",
@@ -956,7 +939,6 @@ dependencies = [
 [[package]]
 name = "datafusion-common-runtime"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "futures",
  "log",
@@ -966,7 +948,6 @@ dependencies = [
 [[package]]
 name = "datafusion-datasource"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-compression",
@@ -1001,7 +982,6 @@ dependencies = [
 [[package]]
 name = "datafusion-datasource-csv"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-trait",
@@ -1025,7 +1005,6 @@ dependencies = [
 [[package]]
 name = "datafusion-datasource-json"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-trait",
@@ -1049,7 +1028,6 @@ dependencies = [
 [[package]]
 name = "datafusion-datasource-parquet"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-trait",
@@ -1081,12 +1059,10 @@ dependencies = [
 [[package]]
 name = "datafusion-doc"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 
 [[package]]
 name = "datafusion-execution"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "dashmap",
@@ -1104,7 +1080,6 @@ dependencies = [
 [[package]]
 name = "datafusion-expr"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-trait",
@@ -1125,7 +1100,6 @@ dependencies = [
 [[package]]
 name = "datafusion-expr-common"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "datafusion-common",
@@ -1247,7 +1221,6 @@ dependencies = [
 [[package]]
 name = "datafusion-functions"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "arrow-buffer",
@@ -1275,7 +1248,6 @@ dependencies = [
 [[package]]
 name = "datafusion-functions-aggregate"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "ahash",
  "arrow",
@@ -1295,7 +1267,6 @@ dependencies = [
 [[package]]
 name = "datafusion-functions-aggregate-common"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "ahash",
  "arrow",
@@ -1307,7 +1278,6 @@ dependencies = [
 [[package]]
 name = "datafusion-functions-nested"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "arrow-ord",
@@ -1328,7 +1298,6 @@ dependencies = [
 [[package]]
 name = "datafusion-functions-table"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-trait",
@@ -1343,7 +1312,6 @@ dependencies = [
 [[package]]
 name = "datafusion-functions-window"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "datafusion-common",
@@ -1360,7 +1328,6 @@ dependencies = [
 [[package]]
 name = "datafusion-functions-window-common"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "datafusion-common",
  "datafusion-physical-expr-common",
@@ -1369,7 +1336,6 @@ dependencies = [
 [[package]]
 name = "datafusion-macros"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "datafusion-expr",
  "quote",
@@ -1379,7 +1345,6 @@ dependencies = [
 [[package]]
 name = "datafusion-optimizer"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "chrono",
@@ -1398,7 +1363,6 @@ dependencies = [
 [[package]]
 name = "datafusion-physical-expr"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "ahash",
  "arrow",
@@ -1419,7 +1383,6 @@ dependencies = [
 [[package]]
 name = "datafusion-physical-expr-common"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "ahash",
  "arrow",
@@ -1432,7 +1395,6 @@ dependencies = [
 [[package]]
 name = "datafusion-physical-optimizer"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "datafusion-common",
@@ -1451,7 +1413,6 @@ dependencies = [
 [[package]]
 name = "datafusion-physical-plan"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "ahash",
  "arrow",
@@ -1480,7 +1441,6 @@ dependencies = [
 [[package]]
 name = "datafusion-pruning"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "arrow-schema",
@@ -1500,7 +1460,6 @@ dependencies = [
 [[package]]
 name = "datafusion-session"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "async-trait",
@@ -1523,7 +1482,6 @@ dependencies = [
 [[package]]
 name = "datafusion-spark"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "datafusion-catalog",
@@ -1538,7 +1496,6 @@ dependencies = [
 [[package]]
 name = "datafusion-sql"
 version = "49.0.0"
-source = "git+https://github.com/auron-project/datafusion.git?rev=9034aeffb#9034aeffbc280ab11e81f670efec4e7217dc357a"
 dependencies = [
  "arrow",
  "bigdecimal",
@@ -2777,8 +2734,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "orc-rust"
-version = "0.7.0"
-source = "git+https://github.com/auron-project/datafusion-orc.git?rev=9beb12c#9beb12cbff3de5a6b8b4f6e4f4b602f9a762c9c7"
+version = "0.7.1"
 dependencies = [
  "arrow",
  "async-trait",
@@ -2790,8 +2746,6 @@ dependencies = [
  "flate2",
  "futures",
  "futures-util",
- "iana-time-zone",
- "log",
  "lz4_flex 0.11.5",
  "lzokay-native",
  "num",
@@ -2843,7 +2797,6 @@ dependencies = [
 [[package]]
 name = "parquet"
 version = "55.2.0"
-source = "git+https://github.com/auron-project/arrow-rs.git?rev=5de02520c#5de02520ca6c9f8f092b4b364906dc0507002cbb"
 dependencies = [
  "ahash",
  "arrow-array",
@@ -3702,7 +3655,6 @@ dependencies = [
 [[package]]
 name = "serde_json"
 version = "1.0.96"
-source = "git+https://github.com/auron-project/json?rev=95fa6cb#95fa6cbac6b7146a8883f5ce761316d11282399b"
 dependencies = [
  "itoa",
  "ryu",
@@ -3934,6 +3886,25 @@ name = "strength_reduce"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
+
+[[package]]
+name = "strum"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.104",
+]
 
 [[package]]
 name = "subtle"

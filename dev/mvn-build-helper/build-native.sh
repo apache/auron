@@ -25,6 +25,9 @@ _CALLING_DIR="$(pwd)"
 PROJECT_DIR="$(cd "`dirname "$0"`/../.."; pwd)"
 cd "$PROJECT_DIR"
 
+# Ensure vendored third-party source trees are ready before building.
+./dev/vendors/setup-vendors.sh all
+
 profile="$1"
 features_arg=""
 if [ -n "$2" ]; then

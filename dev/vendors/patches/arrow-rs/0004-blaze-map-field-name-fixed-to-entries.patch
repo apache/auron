@@ -1,0 +1,43 @@
+From ac1cb670bf1d82289c9a7aacca46a438905a8fcd Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Sun, 15 Sep 2024 21:21:14 +0800
+Subject: [PATCH] blaze: map_field's name fixed to 'entries'
+
+---
+ parquet/src/arrow/async_reader/metadata.rs | 6 ++++++
+ parquet/src/arrow/schema/complex.rs        | 2 +-
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/parquet/src/arrow/async_reader/metadata.rs b/parquet/src/arrow/async_reader/metadata.rs
+index e0f7bdbbe..9a985e885 100644
+--- a/parquet/src/arrow/async_reader/metadata.rs
++++ b/parquet/src/arrow/async_reader/metadata.rs
+@@ -84,6 +84,12 @@ pub trait MetadataSuffixFetch: MetadataFetch {
+     /// Note the returned type is a boxed future, often created by
+     /// [FutureExt::boxed]. See the trait documentation for an example
+     fn fetch_suffix(&mut self, suffix: usize) -> BoxFuture<'_, Result<Bytes>>;
++
++    /// Sync version of get_bytes
++    /// this is only used by blaze, for reading dictionary values for row group pruning
++    fn get_bytes_sync(&mut self, range: Range<usize>) -> Result<Bytes> {
++        unimplemented!("blaze only")
++    }
+ }
+ 
+ /// An asynchronous interface to load [`ParquetMetaData`] from an async source
+diff --git a/parquet/src/arrow/schema/complex.rs b/parquet/src/arrow/schema/complex.rs
+index 16d46bd85..af70b8684 100644
+--- a/parquet/src/arrow/schema/complex.rs
++++ b/parquet/src/arrow/schema/complex.rs
+@@ -365,7 +365,7 @@ impl Visitor {
+                 };
+ 
+                 let map_field = Field::new_struct(
+-                    map_key_value.name(),
++                    "entries", // blaze: map_field's name fixed to 'entries'
+                     [key_field, value_field],
+                     false, // The inner map field is always non-nullable (#1697)
+                 )
+-- 
+2.50.1
+

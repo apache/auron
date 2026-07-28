@@ -1,0 +1,49 @@
+From 5de02520ca6c9f8f092b4b364906dc0507002cbb Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Sat, 21 Dec 2024 02:16:53 +0800
+Subject: [PATCH] blaze: parquet supports processing old-style
+ array<struct<..>> represented as `REPEATED group field_nme {..}`
+
+---
+ parquet/src/arrow/schema/complex.rs | 25 +++++++++++++++++++++----
+ 1 file changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/parquet/src/arrow/schema/complex.rs b/parquet/src/arrow/schema/complex.rs
+index af70b8684..bf497fb77 100644
+--- a/parquet/src/arrow/schema/complex.rs
++++ b/parquet/src/arrow/schema/complex.rs
+@@ -185,10 +185,27 @@ impl Visitor {
+                 Some(fields)
+             }
+             Some(d) => {
+-                return Err(arrow_err!(
+-                    "incompatible arrow schema, expected struct got {}",
+-                    d
+-                ))
++                // blaze: match old-style array<struct<..>> represented as
++                // `REPEATED group field_nme {..}`
++                let mut old_style_fields = None;
++                if let DataType::List(f) = d {
++                    if f.name() == struct_type.name() {
++                        if let DataType::Struct(fields) = &f.data_type() {
++                            if fields.len() == parquet_fields.len() {
++                                old_style_fields = Some(fields);
++                            }
++                        }
++                    }
++                }
++                match old_style_fields {
++                    Some(fields) => Some(fields),
++                    None => {
++                        return Err(arrow_err!(
++                            "incompatible arrow schema, expected struct got {}",
++                            d
++                        ));
++                    }
++                }
+             }
+             None => None,
+         };
+-- 
+2.50.1
+

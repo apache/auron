@@ -1,0 +1,30 @@
+From 534651739be8f95b6dedf34b06fe7c355611af70 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Mon, 16 Sep 2024 10:03:29 +0800
+Subject: [PATCH] blaze: allow nullable parquet scan partition key
+
+---
+ datafusion/datasource/src/file_scan_config.rs | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/datafusion/datasource/src/file_scan_config.rs b/datafusion/datasource/src/file_scan_config.rs
+index 959a2dd33..2606c5387 100644
+--- a/datafusion/datasource/src/file_scan_config.rs
++++ b/datafusion/datasource/src/file_scan_config.rs
+@@ -770,9 +770,10 @@ impl FileScanConfig {
+                     self.file_schema.field(idx).clone()
+                 } else {
+                     let partition_idx = idx - self.file_schema.fields().len();
+-                    Arc::unwrap_or_clone(Arc::clone(
+-                        &self.table_partition_cols[partition_idx],
+-                    ))
++                    self.table_partition_cols[partition_idx]
++                        .as_ref()
++                        .clone()
++                        .with_nullable(true) // blaze: allow nullable parquet scan partition key
+                 }
+             })
+             .collect();
+-- 
+2.50.1
+

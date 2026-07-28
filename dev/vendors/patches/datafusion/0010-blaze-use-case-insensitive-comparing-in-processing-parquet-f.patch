@@ -1,0 +1,43 @@
+From 80f119b76b2e6a24b5eb7f4dd1639dff838caa97 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Mon, 16 Sep 2024 11:27:42 +0800
+Subject: [PATCH] blaze: use case-insensitive comparing in processing parquet
+ file schema
+
+---
+ datafusion/common/src/dfschema.rs           | 2 +-
+ datafusion/datasource/src/schema_adapter.rs | 5 ++++-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/datafusion/common/src/dfschema.rs b/datafusion/common/src/dfschema.rs
+index 88303bbcd..1e9b71ac2 100644
+--- a/datafusion/common/src/dfschema.rs
++++ b/datafusion/common/src/dfschema.rs
+@@ -571,7 +571,7 @@ impl DFSchema {
+             .fields
+             .iter()
+             .zip(arrow_schema.fields().iter())
+-            .all(|(dffield, arrowfield)| dffield.name() == arrowfield.name())
++            .all(|(dffield, arrowfield)| dffield.name().eq_ignore_ascii_case(arrowfield.name()))
+     }
+ 
+     /// Check to see if fields in 2 Arrow schemas are compatible
+diff --git a/datafusion/datasource/src/schema_adapter.rs b/datafusion/datasource/src/schema_adapter.rs
+index 5e743a3f0..12722b433 100644
+--- a/datafusion/datasource/src/schema_adapter.rs
++++ b/datafusion/datasource/src/schema_adapter.rs
+@@ -276,7 +276,10 @@ impl SchemaAdapter for DefaultSchemaAdapter {
+     /// Panics if index is not in range for the table schema
+     fn map_column_index(&self, index: usize, file_schema: &Schema) -> Option<usize> {
+         let field = self.projected_table_schema.field(index);
+-        Some(file_schema.fields.find(field.name())?.0)
++        file_schema
++            .fields
++            .iter()
++            .position(|f| f.name().eq_ignore_ascii_case(field.name()))
+     }
+ 
+     /// Creates a `SchemaMapping` for casting or mapping the columns from the
+-- 
+2.50.1
+

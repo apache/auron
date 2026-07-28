@@ -1,0 +1,51 @@
+From feeca02d670231014a2144293331e311494e31c6 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Sun, 15 Sep 2024 18:43:15 +0800
+Subject: [PATCH] blaze: supports parquet scan with adaptive batch size
+
+---
+ datafusion/datasource-parquet/src/opener.rs | 28 +++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/datafusion/datasource-parquet/src/opener.rs b/datafusion/datasource-parquet/src/opener.rs
+index 7c208d142..ffeaaf63c 100644
+--- a/datafusion/datasource-parquet/src/opener.rs
++++ b/datafusion/datasource-parquet/src/opener.rs
+@@ -393,6 +393,34 @@ impl FileOpener for ParquetOpener {
+                 builder = builder.with_limit(limit)
+             }
+ 
++            // blaze:
++            // target batch size is usually 1MB ~ 16MB as there are lightweight compressions
++            // like RLE/DICT encodings
++            let adaptive_mem_size = 1048576;
++            let total_uncompressed_size = builder
++                .metadata()
++                .row_groups()
++                .iter()
++                .map(|rg| rg
++                    .columns()
++                    .iter()
++                    .enumerate()
++                    .filter(|(idx, _)| mask.leaf_included(*idx))
++                    .map(|(_, col)| col.uncompressed_size())
++                    .sum::<i64>())
++                .sum::<i64>();
++            let total_num_rows = builder
++                .metadata()
++                .row_groups()
++                .iter()
++                .map(|rg| rg.num_rows())
++                .sum::<i64>();
++            let adaptive_batch_size = batch_size
++                .min((adaptive_mem_size * total_num_rows / total_uncompressed_size.max(1)) as usize)
++                .max(1);
++            log::info!("executing parquet scan with adaptive batch size: {adaptive_batch_size}");
++            let batch_size = adaptive_batch_size;
++
+             let stream = builder
+                 .with_projection(mask)
+                 .with_batch_size(batch_size)
+-- 
+2.50.1
+

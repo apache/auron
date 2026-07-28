@@ -1,0 +1,454 @@
+From a887b7659f10ec62ed9102aa9a3e9fd5d2e9ea0c Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Sun, 15 Sep 2024 22:02:24 +0800
+Subject: [PATCH] blaze: supports parquet dictionary filtering
+
+---
+ datafusion-examples/examples/pruning.rs       |   4 +
+ datafusion/common/src/pruning.rs              |   5 +
+ datafusion/datasource-parquet/src/opener.rs   |   2 +-
+ .../datasource-parquet/src/page_filter.rs     |   4 +
+ .../src/row_group_filter.rs                   | 151 +++++++++++++-----
+ datafusion/pruning/Cargo.toml                 |   2 +
+ datafusion/pruning/src/pruning_predicate.rs   |  62 ++++++-
+ 7 files changed, 189 insertions(+), 41 deletions(-)
+
+diff --git a/datafusion-examples/examples/pruning.rs b/datafusion-examples/examples/pruning.rs
+index b2d2fa13b..430520e73 100644
+--- a/datafusion-examples/examples/pruning.rs
++++ b/datafusion-examples/examples/pruning.rs
+@@ -184,6 +184,10 @@ impl PruningStatistics for MyCatalog {
+         // but we do not illustrate that here
+         None
+     }
++
++    fn dictionary_values(&self, column: &Column) -> Option<ArrayRef> {
++        None
++    }
+ }
+ 
+ fn create_pruning_predicate(expr: Expr, schema: &SchemaRef) -> PruningPredicate {
+diff --git a/datafusion/common/src/pruning.rs b/datafusion/common/src/pruning.rs
+index 48750e3c9..151a99abb 100644
+--- a/datafusion/common/src/pruning.rs
++++ b/datafusion/common/src/pruning.rs
+@@ -126,6 +126,11 @@ pub trait PruningStatistics {
+         column: &Column,
+         values: &HashSet<ScalarValue>,
+     ) -> Option<BooleanArray>;
++
++    /// return dictionary values for the named column as ListArray<?>
++    fn dictionary_values(&self, _column: &Column) -> Option<ArrayRef> {
++        None
++    }
+ }
+ 
+ /// Prune files based on their partition values.
+diff --git a/datafusion/datasource-parquet/src/opener.rs b/datafusion/datasource-parquet/src/opener.rs
+index ffeaaf63c..e31e33cfa 100644
+--- a/datafusion/datasource-parquet/src/opener.rs
++++ b/datafusion/datasource-parquet/src/opener.rs
+@@ -345,8 +345,8 @@ impl FileOpener for ParquetOpener {
+             if let Some(predicate) = predicate.as_ref() {
+                 if enable_row_group_stats_pruning {
+                     row_groups.prune_by_statistics(
++                        &mut builder,
+                         &physical_file_schema,
+-                        builder.parquet_schema(),
+                         rg_metadata,
+                         predicate,
+                         &file_metrics,
+diff --git a/datafusion/datasource-parquet/src/page_filter.rs b/datafusion/datasource-parquet/src/page_filter.rs
+index 5f3e05747..c01f6f277 100644
+--- a/datafusion/datasource-parquet/src/page_filter.rs
++++ b/datafusion/datasource-parquet/src/page_filter.rs
+@@ -507,4 +507,8 @@ impl PruningStatistics for PagesPruningStatistics<'_> {
+     ) -> Option<BooleanArray> {
+         None
+     }
++
++    fn dictionary_values(&self, _column: &datafusion_common::Column) -> Option<ArrayRef> {
++        None
++    }
+ }
+diff --git a/datafusion/datasource-parquet/src/row_group_filter.rs b/datafusion/datasource-parquet/src/row_group_filter.rs
+index 51d50d780..982eed293 100644
+--- a/datafusion/datasource-parquet/src/row_group_filter.rs
++++ b/datafusion/datasource-parquet/src/row_group_filter.rs
+@@ -15,12 +15,15 @@
+ // specific language governing permissions and limitations
+ // under the License.
+ 
++use std::cell::{OnceCell, RefCell};
+ use std::collections::{HashMap, HashSet};
+ use std::sync::Arc;
+ 
+ use super::{ParquetAccessPlan, ParquetFileMetrics};
+-use arrow::array::{ArrayRef, BooleanArray};
+-use arrow::datatypes::Schema;
++use arrow::array::{Array, ArrayRef, BooleanArray, ListArray};
++use arrow::buffer::{OffsetBuffer, ScalarBuffer};
++use arrow::datatypes::{Field, Schema};
++use parking_lot::Mutex;
+ use datafusion_common::pruning::PruningStatistics;
+ use datafusion_common::{Column, Result, ScalarValue};
+ use datafusion_datasource::FileRange;
+@@ -29,7 +32,6 @@ use parquet::arrow::arrow_reader::statistics::StatisticsConverter;
+ use parquet::arrow::parquet_column;
+ use parquet::basic::Type;
+ use parquet::data_type::Decimal;
+-use parquet::schema::types::SchemaDescriptor;
+ use parquet::{
+     arrow::{async_reader::AsyncFileReader, ParquetRecordBatchStreamBuilder},
+     bloom_filter::Sbbf,
+@@ -102,10 +104,10 @@ impl RowGroupAccessPlanFilter {
+     ///
+     /// # Panics
+     /// if `groups.len() != self.len()`
+-    pub fn prune_by_statistics(
++    pub fn prune_by_statistics<T: AsyncFileReader + Send + 'static>(
+         &mut self,
++        builder: &mut ParquetRecordBatchStreamBuilder<T>,
+         arrow_schema: &Schema,
+-        parquet_schema: &SchemaDescriptor,
+         groups: &[RowGroupMetaData],
+         predicate: &PruningPredicate,
+         metrics: &ParquetFileMetrics,
+@@ -115,35 +117,47 @@ impl RowGroupAccessPlanFilter {
+ 
+         assert_eq!(groups.len(), self.access_plan.len());
+         // Indexes of row groups still to scan
++        // blaze: for less reading of dictionary pages, we still prune in separated passes
+         let row_group_indexes = self.access_plan.row_group_indexes();
+-        let row_group_metadatas = row_group_indexes
+-            .iter()
+-            .map(|&i| &groups[i])
+-            .collect::<Vec<_>>();
+-
+-        let pruning_stats = RowGroupPruningStatistics {
+-            parquet_schema,
+-            row_group_metadatas,
+-            arrow_schema,
+-        };
++        for &rg_idx in &row_group_indexes {
++            let row_group_metadatas = vec![&groups[rg_idx]];
++            let mut pruning_stats = RowGroupPruningStatistics {
++                row_group_metadatas,
++                arrow_schema,
++                use_dictionary_filtering: false,
++                cached_dictionaries: Mutex::new(vec![]),
++                builder: RefCell::new(builder),
++            };
+ 
+-        // try to prune the row groups in a single call
+-        match predicate.prune(&pruning_stats) {
+-            Ok(values) => {
+-                // values[i] is false means the predicate could not be true for row group i
+-                for (idx, &value) in row_group_indexes.iter().zip(values.iter()) {
+-                    if !value {
+-                        self.access_plan.skip(*idx);
+-                        metrics.row_groups_pruned_statistics.add(1);
+-                    } else {
+-                        metrics.row_groups_matched_statistics.add(1);
++            // prune using two runs because pruning with dictionary filtering is more expensive
++            // first run: prune without dictionary filtering
++            match predicate.prune(&pruning_stats) {
++                Ok(values) => {
++                    if !values[0] {
++                        self.access_plan.skip(rg_idx);
++                        continue; // no need to prune with dictionary
+                     }
+                 }
++                Err(e) => {
++                    log::info!("Error evaluating row group predicate values without dictionary {e}");
++                    metrics.predicate_evaluation_errors.add(1);
++                    continue; // no need to prune with dictionary
++                }
+             }
+-            // stats filter array could not be built, so we can't prune
+-            Err(e) => {
+-                log::debug!("Error evaluating row group predicate values {e}");
+-                metrics.predicate_evaluation_errors.add(1);
++
++            // second run: prune with dictionary filtering
++            pruning_stats.use_dictionary_filtering = true;
++            pruning_stats.cached_dictionaries = Mutex::new(vec![]);
++            match predicate.prune(&pruning_stats) {
++                Ok(values) => {
++                    if !values[0] {
++                        self.access_plan.skip(rg_idx);
++                    }
++                }
++                Err(e) => {
++                    log::info!("Error evaluating row group predicate values with dictionary {e}");
++                    metrics.predicate_evaluation_errors.add(1);
++                }
+             }
+         }
+     }
+@@ -359,34 +373,51 @@ impl PruningStatistics for BloomFilterStatistics {
+ 
+         Some(BooleanArray::from(vec![contains]))
+     }
++
++    fn dictionary_values(&self, _column: &Column) -> Option<ArrayRef> {
++        None
++    }
+ }
+ 
+ /// Wraps a slice of [`RowGroupMetaData`] in a way that implements [`PruningStatistics`]
+-struct RowGroupPruningStatistics<'a> {
+-    parquet_schema: &'a SchemaDescriptor,
++struct RowGroupPruningStatistics<'a, T: AsyncFileReader + Send + 'static> {
+     row_group_metadatas: Vec<&'a RowGroupMetaData>,
+     arrow_schema: &'a Schema,
++    use_dictionary_filtering: bool,
++    cached_dictionaries: Mutex<Vec<OnceCell<Option<ArrayRef>>>>,
++    builder: RefCell<&'a mut ParquetRecordBatchStreamBuilder<T>>,
+ }
+ 
+-impl<'a> RowGroupPruningStatistics<'a> {
++impl<'a, T: AsyncFileReader + Send + 'static> RowGroupPruningStatistics<'a, T> {
+     /// Return an iterator over the row group metadata
+-    fn metadata_iter(&'a self) -> impl Iterator<Item = &'a RowGroupMetaData> + 'a {
+-        self.row_group_metadatas.iter().copied()
++    fn metadata_iter(&self) -> impl Iterator<Item = &'a RowGroupMetaData> + 'a {
++        // blaze: bypass lifetime checker
++        let unchecked_self: &'a Self = unsafe {
++            std::mem::transmute(self)
++        };
++        unchecked_self.row_group_metadatas.iter().copied()
+     }
+ 
+     fn statistics_converter<'b>(
+-        &'a self,
++        &self,
+         column: &'b Column,
+     ) -> Result<StatisticsConverter<'a>> {
++        // blaze: bypass lifetime checker
++        let unchecked_self: &'a Self = unsafe {
++            std::mem::transmute(self)
++        };
+         Ok(StatisticsConverter::try_new(
+             &column.name,
+-            self.arrow_schema,
+-            self.parquet_schema,
++            unchecked_self.arrow_schema,
++            unsafe {
++                // blaze: bypass lifetime checker
++                std::mem::transmute(unchecked_self.builder.borrow_mut().parquet_schema())
++            }
+         )?)
+     }
+ }
+ 
+-impl PruningStatistics for RowGroupPruningStatistics<'_> {
++impl<'a, T: AsyncFileReader + Send + 'static> PruningStatistics for RowGroupPruningStatistics<'a, T> {
+     fn min_values(&self, column: &Column) -> Option<ArrayRef> {
+         self.statistics_converter(column)
+             .and_then(|c| Ok(c.row_group_mins(self.metadata_iter())?))
+@@ -426,6 +457,50 @@ impl PruningStatistics for RowGroupPruningStatistics<'_> {
+     ) -> Option<BooleanArray> {
+         None
+     }
++
++    fn dictionary_values(&self, column: &Column) -> Option<ArrayRef> {
++        if !self.use_dictionary_filtering {
++            return None;
++        }
++
++        let col_idx = self
++            .row_group_metadatas
++            .first()
++            .unwrap()
++            .columns()
++            .iter()
++            .position(|c| c.column_path().string().eq_ignore_ascii_case(&column.flat_name()))?;
++
++        let mut cached_dictionaries = self.cached_dictionaries.lock();
++        cached_dictionaries.resize_with(col_idx + 1, || Default::default());
++        cached_dictionaries[col_idx].get_or_init(|| {
++            let mut values = vec![];
++            for row_group_metadata in self.metadata_iter() {
++                let dict_values =
++                    parquet::blaze::get_dictionary_for_pruning(
++                        &mut self.builder.borrow_mut().input.0,
++                        row_group_metadata,
++                        col_idx,
++                    )
++                    .ok()
++                    .flatten()?;
++
++                let dict_array =
++                    ListArray::try_new(
++                        Arc::new(Field::new("item", dict_values.data_type().clone(), true)),
++                        OffsetBuffer::new(ScalarBuffer::from(vec![0, dict_values.len() as i32])),
++                        dict_values,
++                        None,
++                    )
++                    .ok()?;
++                values.push(dict_array);
++            }
++            arrow::compute::concat(&values.iter()
++                .map(|c| c as &dyn Array)
++                .collect::<Vec<_>>()
++            ).ok()
++        }).as_ref().cloned()
++    }
+ }
+ 
+ #[cfg(test)]
+diff --git a/datafusion/pruning/Cargo.toml b/datafusion/pruning/Cargo.toml
+index 6acf178e4..90b31b933 100644
+--- a/datafusion/pruning/Cargo.toml
++++ b/datafusion/pruning/Cargo.toml
+@@ -16,7 +16,9 @@ arrow = { workspace = true }
+ arrow-schema = { workspace = true }
+ datafusion-common = { workspace = true, default-features = true }
+ datafusion-datasource = { workspace = true }
++datafusion-expr = { workspace = true }
+ datafusion-expr-common = { workspace = true, default-features = true }
++datafusion-functions-nested = { workspace = true }
+ datafusion-physical-expr = { workspace = true }
+ datafusion-physical-expr-common = { workspace = true }
+ datafusion-physical-plan = { workspace = true }
+diff --git a/datafusion/pruning/src/pruning_predicate.rs b/datafusion/pruning/src/pruning_predicate.rs
+index e8e404862..f8818292b 100644
+--- a/datafusion/pruning/src/pruning_predicate.rs
++++ b/datafusion/pruning/src/pruning_predicate.rs
+@@ -45,8 +45,10 @@ use datafusion_common::{
+ use datafusion_common::{Column, DFSchema};
+ use datafusion_common::cast::{as_float32_array, as_float64_array};
+ use datafusion_expr_common::operator::Operator;
++use datafusion_expr::ScalarUDF;
++use datafusion_functions_nested::array_has::ArrayHas;
+ use datafusion_physical_expr::utils::{collect_columns, Guarantee, LiteralGuarantee};
+-use datafusion_physical_expr::{expressions as phys_expr, PhysicalExprRef};
++use datafusion_physical_expr::{expressions as phys_expr, PhysicalExprRef, ScalarFunctionExpr};
+ use datafusion_physical_expr_common::physical_expr::snapshot_physical_expr;
+ use datafusion_physical_plan::{ColumnarValue, PhysicalExpr};
+ 
+@@ -814,6 +816,7 @@ impl RequiredColumns {
+             StatisticsType::Max => format!("{column_name}_max"),
+             StatisticsType::NullCount => format!("{column_name}_null_count"),
+             StatisticsType::RowCount => "row_count".to_string(),
++            StatisticsType::Dictionary => "dict".to_string(),
+         };
+ 
+         let stat_column = phys_expr::Column::new(&stat_column_name, idx);
+@@ -868,6 +871,26 @@ impl RequiredColumns {
+     ) -> Result<Arc<dyn PhysicalExpr>> {
+         self.stat_column_expr(column, column_expr, field, StatisticsType::RowCount)
+     }
++
++
++    /// rewrite col --> col_dict
++    fn dict_column_expr(
++        &mut self,
++        column: &phys_expr::Column,
++        column_expr: &Arc<dyn PhysicalExpr>,
++        field: &Field,
++    ) -> Result<Arc<dyn PhysicalExpr>> {
++
++        let list_type = DataType::List(Arc::new(
++            Field::new("item", field.data_type().clone(), true)
++        ));
++        self.stat_column_expr(
++            column,
++            column_expr,
++            &field.clone().with_data_type(list_type),
++            StatisticsType::Dictionary,
++        )
++    }
+ }
+ 
+ impl From<Vec<(phys_expr::Column, StatisticsType, Field)>> for RequiredColumns {
+@@ -918,6 +941,7 @@ fn build_statistics_record_batch<S: PruningStatistics + ?Sized>(
+             StatisticsType::Max => statistics.max_values(&column),
+             StatisticsType::NullCount => statistics.null_counts(&column),
+             StatisticsType::RowCount => statistics.row_counts(&column),
++            StatisticsType::Dictionary => statistics.dictionary_values(&column),
+         };
+ 
+         let array = array.and_then(|array| -> Option<ArrayRef> {
+@@ -1190,6 +1214,20 @@ impl<'a> PruningExpressionBuilder<'a> {
+             row_count_field,
+         )
+     }
++
++    fn dict_column_expr(&mut self) -> Result<Arc<dyn PhysicalExpr>> {
++        self.required_columns
++            .dict_column_expr(&self.column, &self.column_expr, self.field)
++    }
++
++    fn dict_column_contains_expr(&mut self) -> Result<Arc<dyn PhysicalExpr>> {
++        Ok(Arc::new(ScalarFunctionExpr::new(
++            "array_has",
++            Arc::new(ScalarUDF::from(ArrayHas::new())),
++            vec![self.dict_column_expr()?, self.scalar_expr().clone()],
++            Arc::new(Field::new("result", DataType::Boolean, true)),
++        )))
++    }
+ }
+ 
+ /// This function is designed to rewrite the column_expr to
+@@ -1689,7 +1727,7 @@ fn build_statistics_expr(
+             // (column / 2) = 4 => (column_min / 2) <= 4 && 4 <= (column_max / 2)
+             let min_column_expr = expr_builder.min_column_expr()?;
+             let max_column_expr = expr_builder.max_column_expr()?;
+-            Arc::new(phys_expr::BinaryExpr::new(
++            let stat_pred_expr = Arc::new(phys_expr::BinaryExpr::new(
+                 Arc::new(phys_expr::BinaryExpr::new(
+                     min_column_expr,
+                     Operator::LtEq,
+@@ -1701,6 +1739,17 @@ fn build_statistics_expr(
+                     Operator::LtEq,
+                     max_column_expr,
+                 )),
++            ));
++
++            // append dict_pred expr (stat && dictionary_contains(column))
++            let dict = expr_builder.dict_column_expr()?;
++            let has_no_stat_pred = Arc::new(phys_expr::IsNullExpr::new(stat_pred_expr.clone()));
++            let has_no_dict = Arc::new(phys_expr::IsNullExpr::new(dict));
++            let dict_contained = expr_builder.dict_column_contains_expr()?;
++            Arc::new(phys_expr::BinaryExpr::new(
++                Arc::new(phys_expr::BinaryExpr::new(has_no_stat_pred, Operator::Or, stat_pred_expr)),
++                Operator::And,
++                Arc::new(phys_expr::BinaryExpr::new(has_no_dict, Operator::Or, dict_contained)),
+             ))
+         }
+         Operator::NotLikeMatch => build_not_like_match(expr_builder)?,
+@@ -1989,6 +2038,7 @@ pub(crate) enum StatisticsType {
+     Max,
+     NullCount,
+     RowCount,
++    Dictionary,
+ }
+ 
+ #[cfg(test)]
+@@ -2350,6 +2400,10 @@ mod tests {
+                 .get(column)
+                 .and_then(|container_stats| container_stats.contained(values))
+         }
++
++        fn dictionary_values(&self, column: &Column) -> Option<ArrayRef> {
++            None
++        }
+     }
+ 
+     /// Returns the specified min/max container values
+@@ -2387,6 +2441,10 @@ mod tests {
+         ) -> Option<BooleanArray> {
+             None
+         }
++
++        fn dictionary_values(&self, column: &Column) -> Option<ArrayRef> {
++            None
++        }
+     }
+ 
+     /// Row count should only be referenced once in the pruning expression, even if we need the row count
+-- 
+2.50.1
+

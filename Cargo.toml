@@ -27,6 +27,11 @@ members = [
     "native-engine/auron-planner",
     "native-engine/auron-memmgr",
 ]
+exclude = [
+    "dev/vendors/packages/datafusion",
+    "dev/vendors/packages/arrow-rs",
+    "dev/vendors/packages/serde_json",
+]
 
 [workspace.package]
 version = "8.0.0"
@@ -198,31 +203,31 @@ rdkafka = { version = "0.36.0", features = ["tokio"] }
 
 [patch.crates-io]
 # datafusion: branch=v49.0.0-blaze
-datafusion = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-datafusion-common = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-datafusion-expr = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-datafusion-datasource = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-datafusion-datasource-parquet = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-datafusion-execution = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-datafusion-optimizer = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-datafusion-physical-expr = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-datafusion-spark = { git = "https://github.com/auron-project/datafusion.git", rev = "9034aeffb"}
-orc-rust = { git = "https://github.com/auron-project/datafusion-orc.git", rev = "9beb12c"}
+datafusion = { path = "./dev/vendors/packages/datafusion/datafusion/core"}
+datafusion-common = { path = "./dev/vendors/packages/datafusion/datafusion/common"}
+datafusion-expr = { path = "./dev/vendors/packages/datafusion/datafusion/expr"}
+datafusion-datasource = { path = "./dev/vendors/packages/datafusion/datafusion/datasource"}
+datafusion-datasource-parquet = { path = "./dev/vendors/packages/datafusion/datafusion/datasource-parquet"}
+datafusion-execution = { path = "./dev/vendors/packages/datafusion/datafusion/execution"}
+datafusion-optimizer = { path = "./dev/vendors/packages/datafusion/datafusion/optimizer"}
+datafusion-physical-expr = { path = "./dev/vendors/packages/datafusion/datafusion/physical-expr"}
+datafusion-spark = { path = "./dev/vendors/packages/datafusion/datafusion/spark"}
+orc-rust = { path = "./dev/vendors/packages/orc-rust"}
 
 # arrow: branch=v55.2.0-blaze
-arrow = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-arith = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-array = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-buffer = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-cast = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-data = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-ipc = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-ord = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-row = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-schema = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-select = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-arrow-string = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
-parquet = { git = "https://github.com/auron-project/arrow-rs.git", rev = "5de02520c"}
+arrow = { path = "./dev/vendors/packages/arrow-rs/arrow"}
+arrow-arith = { path = "./dev/vendors/packages/arrow-rs/arrow-arith"}
+arrow-array = { path = "./dev/vendors/packages/arrow-rs/arrow-array"}
+arrow-buffer = { path = "./dev/vendors/packages/arrow-rs/arrow-buffer"}
+arrow-cast = { path = "./dev/vendors/packages/arrow-rs/arrow-cast"}
+arrow-data = { path = "./dev/vendors/packages/arrow-rs/arrow-data"}
+arrow-ipc = { path = "./dev/vendors/packages/arrow-rs/arrow-ipc"}
+arrow-ord = { path = "./dev/vendors/packages/arrow-rs/arrow-ord"}
+arrow-row = { path = "./dev/vendors/packages/arrow-rs/arrow-row"}
+arrow-schema = { path = "./dev/vendors/packages/arrow-rs/arrow-schema"}
+arrow-select = { path = "./dev/vendors/packages/arrow-rs/arrow-select"}
+arrow-string = { path = "./dev/vendors/packages/arrow-rs/arrow-string"}
+parquet = { path = "./dev/vendors/packages/arrow-rs/parquet"}
 
 # serde_json: branch=v1.0.96-blaze
-serde_json = { git = "https://github.com/auron-project/json", rev = "95fa6cb" }
+serde_json = { path = "./dev/vendors/packages/serde_json" }

@@ -57,6 +57,11 @@ jobs:
             rustfmt
             clippy
 
+      - name: Setup vendors
+        shell: bash
+        run: |
+          dev/vendors/setup-vendors.sh
+
       - name: Cargo fmt
         shell: bash
         run: |

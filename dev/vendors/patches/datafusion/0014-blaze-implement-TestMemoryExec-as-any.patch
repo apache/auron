@@ -1,0 +1,25 @@
+From 833c0abf2721625258ed9cc08bb8546cdc7fdb64 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@zhangli20deMacBook-Pro.local>
+Date: Tue, 12 Aug 2025 16:45:29 +0800
+Subject: [PATCH] blaze: implement TestMemoryExec.as_any()
+
+---
+ datafusion/physical-plan/src/test.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/datafusion/physical-plan/src/test.rs b/datafusion/physical-plan/src/test.rs
+index be921e058..349f9955b 100644
+--- a/datafusion/physical-plan/src/test.rs
++++ b/datafusion/physical-plan/src/test.rs
+@@ -131,7 +131,7 @@ impl ExecutionPlan for TestMemoryExec {
+     }
+ 
+     fn as_any(&self) -> &dyn Any {
+-        unimplemented!()
++        self
+     }
+ 
+     fn properties(&self) -> &PlanProperties {
+-- 
+2.50.1
+

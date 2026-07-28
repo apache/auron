@@ -1,0 +1,36 @@
+From de680c77ada706215ef25b9a2c8c949fb0315bd0 Mon Sep 17 00:00:00 2001
+From: zhangli20 <zhangli20@kuaishou.com>
+Date: Mon, 27 Jul 2026 02:04:47 +0800
+Subject: [PATCH] blaze: adapt arrow dependency to v55.2.0-blaze
+
+---
+ Cargo.toml | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 3c2683a..e9ffa4c 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -32,7 +32,7 @@ rust-version = "1.73"
+ all-features = true
+ 
+ [dependencies]
+-arrow = { version = "57.0", features = ["prettyprint", "chrono-tz", "ipc_compression"] }
++arrow = { version = "55.2.0", features = ["prettyprint", "chrono-tz", "ipc_compression"] }
+ bytemuck = { version = "1.22.0", features = ["must_cast"] }
+ bytes = "1.10.1"
+ chrono = { version = "0.4.41", default-features = false, features = ["std"] }
+@@ -68,8 +68,8 @@ clap = { version = "4.5.4", features = ["derive"], optional = true }
+ opendal = { version = "0.53", optional = true, default-features = false }
+ 
+ [dev-dependencies]
+-arrow-ipc = { version = "57.0", features = ["lz4"] }
+-arrow-json = "57.0"
++arrow-ipc = { version = "55.2.0", features = ["lz4"] }
++arrow-json = "55.2.0"
+ criterion = { version = "0.5", default-features = false, features = ["async_tokio"] }
+ opendal = { version = "0.53", default-features = false, features = ["services-memory"] }
+ pretty_assertions = "1.3.0"
+-- 
+2.50.1
+
