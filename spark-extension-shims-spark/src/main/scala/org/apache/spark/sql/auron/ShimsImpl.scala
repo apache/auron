@@ -237,6 +237,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       broadcastSide: JoinBuildSide,
       isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase =
     NativeBroadcastJoinExec(
@@ -246,6 +247,7 @@ class ShimsImpl extends Shims with Logging {
       leftKeys,
       rightKeys,
       joinType,
+      condition,
       broadcastSide,
       isNullAwareAntiJoin)
 

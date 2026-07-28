@@ -373,7 +373,7 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withKey("auron.enable.native.join.condition")
             .withCategory("Operator Supports")
             .withDescription(
-                    "Enable native SMJ/SHJ residual join condition evaluation. Disable this to fall back to Spark "
+                    "Enable native SMJ/SHJ/BHJ residual join condition evaluation. Disable this to fall back to Spark "
                             + "for joins with residual conditions when native evaluation is not desirable.")
             .withDefaultValue(true);
 
