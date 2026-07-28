@@ -74,7 +74,7 @@ case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
         if (AuronConverters.enableShuffleExechange) {
           assert(
             AuronConverters.supportedShuffleManager,
-            "spark.auron.enable.shuffleExchange=true requires an Auron shuffle manager. " +
+            s"spark.${SparkAuronConfiguration.ENABLE_SHUFFLE_EXCHANGE.key()}=true requires an Auron shuffle manager. " +
               "Set spark.shuffle.manager to one of: " +
               "org.apache.spark.sql.execution.auron.shuffle.AuronShuffleManager, " +
               "org.apache.spark.sql.execution.auron.shuffle.AuronUniffleShuffleManager, " +
