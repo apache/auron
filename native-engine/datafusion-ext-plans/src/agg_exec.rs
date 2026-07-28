@@ -694,6 +694,128 @@ mod test {
         Ok(())
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_agg_bitwise() -> Result<()> {
+        MemManager::init(10000);
+
+        // group key "k" and a nullable integer column "v". bit_* skip nulls and
+        // are order-independent (associative + commutative).
+        //   k=1: v = [3, 5, 1]      -> bit_and=1,    bit_or=7,    bit_xor=7
+        //   k=2: v = [12, null, 10] -> bit_and=8,    bit_or=14,   bit_xor=6
+        //   k=3: v = [null, null]   -> bit_and=null, bit_or=null, bit_xor=null
+        //        (the all-null group pins the "skip nulls, never seed" invariant)
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("k", DataType::Int32, false),
+            Field::new("v", DataType::Int32, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int32Array::from(vec![1, 2, 1, 2, 1, 2, 3, 3])),
+                Arc::new(Int32Array::from(vec![
+                    Some(3),
+                    Some(12),
+                    Some(5),
+                    None,
+                    Some(1),
+                    Some(10),
+                    None,
+                    None,
+                ])),
+            ],
+        )?;
+        let input: Arc<dyn ExecutionPlan> =
+            Arc::new(TestMemoryExec::try_new(&[vec![batch]], schema, None)?);
+
+        let agg_bit_and = create_agg(
+            AggFunction::BitAnd,
+            &[phys_expr::col("v", &input.schema())?],
+            &input.schema(),
+            DataType::Int32,
+        )?;
+        let agg_bit_or = create_agg(
+            AggFunction::BitOr,
+            &[phys_expr::col("v", &input.schema())?],
+            &input.schema(),
+            DataType::Int32,
+        )?;
+        let agg_bit_xor = create_agg(
+            AggFunction::BitXor,
+            &[phys_expr::col("v", &input.schema())?],
+            &input.schema(),
+            DataType::Int32,
+        )?;
+        let aggs_agg_expr = vec![
+            AggExpr {
+                field_name: "agg_bit_and".to_string(),
+                mode: Partial,
+                filter: None,
+                agg: agg_bit_and,
+            },
+            AggExpr {
+                field_name: "agg_bit_or".to_string(),
+                mode: Partial,
+                filter: None,
+                agg: agg_bit_or,
+            },
+            AggExpr {
+                field_name: "agg_bit_xor".to_string(),
+                mode: Partial,
+                filter: None,
+                agg: agg_bit_xor,
+            },
+        ];
+
+        let agg_exec_partial = AggExec::try_new(
+            HashAgg,
+            vec![GroupingExpr {
+                field_name: "k".to_string(),
+                expr: Arc::new(Column::new("k", 0)),
+            }],
+            aggs_agg_expr.clone(),
+            false,
+            input,
+        )?;
+
+        let agg_exec_final = AggExec::try_new(
+            HashAgg,
+            vec![GroupingExpr {
+                field_name: "k".to_string(),
+                expr: Arc::new(Column::new("k", 0)),
+            }],
+            aggs_agg_expr
+                .into_iter()
+                .map(|mut agg| {
+                    agg.agg = agg
+                        .agg
+                        .with_new_exprs(vec![Arc::new(phys_expr::Literal::new(
+                            ScalarValue::Null,
+                        ))])?;
+                    agg.mode = Final;
+                    Ok(agg)
+                })
+                .collect::<Result<_>>()?,
+            false,
+            Arc::new(agg_exec_partial),
+        )?;
+
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+        let output_final = agg_exec_final.execute(0, task_ctx)?;
+        let batches = datafusion::physical_plan::common::collect(output_final).await?;
+        let expected = vec![
+            "+---+-------------+------------+-------------+",
+            "| k | agg_bit_and | agg_bit_or | agg_bit_xor |",
+            "+---+-------------+------------+-------------+",
+            "| 1 | 1           | 7          | 7           |",
+            "| 2 | 8           | 14         | 6           |",
+            "| 3 |             |            |             |",
+            "+---+-------------+------------+-------------+",
+        ];
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_agg_with_filter() -> Result<()> {
         MemManager::init(1000);

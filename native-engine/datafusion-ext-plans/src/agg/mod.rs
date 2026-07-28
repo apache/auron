@@ -19,6 +19,7 @@ pub mod agg_ctx;
 pub mod agg_hash_map;
 pub mod agg_table;
 pub mod avg;
+pub mod bitwise;
 pub mod bloom_filter;
 pub mod brickhouse;
 pub mod collect;
@@ -69,6 +70,9 @@ pub enum AggFunction {
     Min,
     First,
     FirstIgnoresNull,
+    BitAnd,
+    BitOr,
+    BitXor,
     CollectList,
     CollectSet,
     BloomFilter,
