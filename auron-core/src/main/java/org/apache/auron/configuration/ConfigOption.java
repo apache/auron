@@ -18,7 +18,9 @@ package org.apache.auron.configuration;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import org.apache.auron.jni.AuronAdaptor;
 
 /**
@@ -52,6 +54,12 @@ public class ConfigOption<T> {
 
     /** The function to compute the default value. */
     private Function<AuronConfiguration, T> dynamicDefaultValueFunction;
+
+    /**
+     * Optional validator. Returns a non-empty error message (wrapped in {@link Optional}) when the
+     * value is invalid, or an empty {@link Optional} when it is valid.
+     */
+    private Function<T, Optional<String>> validator;
 
     /**
      * Type of the value that this ConfigOption describes.
@@ -96,6 +104,35 @@ public class ConfigOption<T> {
     public ConfigOption<T> withDynamicDefaultValue(Function<AuronConfiguration, T> dynamicDefaultValueFunction) {
         this.dynamicDefaultValueFunction = dynamicDefaultValueFunction;
         return this;
+    }
+
+    /**
+     * Registers a validator that rejects values for which {@code check} returns {@code false}. When
+     * the engine-side configuration backend reads a user-supplied value that fails the check, it
+     * fails fast with an {@link IllegalArgumentException} carrying {@code errorMsg}.
+     *
+     * @param check predicate that returns {@code true} for valid values.
+     * @param errorMsg human-readable message used when the check fails.
+     * @return this {@code ConfigOption} for chaining.
+     */
+    public ConfigOption<T> checkValue(Predicate<T> check, String errorMsg) {
+        this.validator = v -> check.test(v) ? Optional.empty() : Optional.of(errorMsg);
+        return this;
+    }
+
+    /**
+     * Validates a resolved value against the registered validator, if any. Called by the
+     * engine-side configuration backend  when it reads a user-supplied value.
+     *
+     * @param value the value to validate.
+     * @return an empty {@link Optional} if valid or no validator is registered, otherwise an
+     *     {@link Optional} carrying the error message.
+     */
+    public Optional<String> validate(T value) {
+        if (validator == null) {
+            return Optional.empty();
+        }
+        return validator.apply(value);
     }
 
     /**
