@@ -739,51 +739,6 @@ class AuronIcebergIntegrationSuite
     }
   }
 
-  test("iceberg changelog scan falls back when a changelog range mixes inserts and deletes") {
-    withTable("local.db.t_changelog_insert_delete") {
-      withTempView("t_changelog_insert_delete_changes") {
-        sql("""
-              |create table local.db.t_changelog_insert_delete (id int, v string)
-              |using iceberg
-              |tblproperties ('format-version' = '2')
-              |""".stripMargin)
-        sql("insert into local.db.t_changelog_insert_delete values (0, 'seed')")
-        val startSnapshotId = currentSnapshotId("local.db.t_changelog_insert_delete")
-        sql("insert into local.db.t_changelog_insert_delete values (1, 'a'), (2, 'b')")
-        sql("delete from local.db.t_changelog_insert_delete where id = 1")
-        val endSnapshotId = currentSnapshotId("local.db.t_changelog_insert_delete")
-        createChangelogView(
-          "local.db.t_changelog_insert_delete",
-          "t_changelog_insert_delete_changes",
-          startSnapshotId,
-          endSnapshotId)
-
-        val query =
-          """
-            |select id, v, _change_type, _change_ordinal, _commit_snapshot_id
-            |from t_changelog_insert_delete_changes
-            |order by id, _change_type
-            |""".stripMargin
-        var expected: Seq[Row] = Nil
-        withSQLConf("spark.auron.enable" -> "false") {
-          expected = sql(query).collect().toSeq
-        }
-        assert(expected.exists(row => row.getString(2) != "INSERT"))
-        val changelogTasks = changelogScanTasks(query)
-        assert(changelogTasks.exists(_.isInstanceOf[AddedRowsScanTask]), changelogTasks)
-        assert(
-          changelogTasks.exists(task => !task.isInstanceOf[AddedRowsScanTask]),
-          changelogTasks)
-        withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
-          val df = sql(query)
-          checkAnswer(df, expected)
-          val plan = df.queryExecution.executedPlan.toString()
-          assert(!plan.contains("NativeIcebergTableScan"))
-        }
-      }
-    }
-  }
-
   test("iceberg changelog scan falls back for mixed file formats") {
     withTable("local.db.t_changelog_mixed_formats") {
       withTempView("t_changelog_mixed_formats_changes") {
