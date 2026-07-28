@@ -30,6 +30,7 @@ on:
     paths:
       - '.github/workflows/build-amd64-releases.yml'
       - 'auron-build.sh'
+      - 'dev/docker-build/centos7/Dockerfile'
 
 jobs:
   build-snapshot:
