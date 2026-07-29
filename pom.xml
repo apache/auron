@@ -57,6 +57,8 @@
     <javaVersion>8</javaVersion>
     <maven.compiler.source>${javaVersion}</maven.compiler.source>
     <maven.compiler.target>${javaVersion}</maven.compiler.target>
+    <semanticdb.version>4.14.5</semanticdb.version>
+    <scalafmtVersion>3.9.9</scalafmtVersion>
     <scalaVersion>2.12</scalaVersion>
     <scalaLongVersion>2.12.18</scalaLongVersion>
     <scala-xml.version>2.1.0</scala-xml.version>
@@ -1162,8 +1164,6 @@
       <properties>
         <javaVersion>8</javaVersion>
         <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.14.5</semanticdb.version>
-        <scalafmtVersion>3.0.0</scalafmtVersion>
       </properties>
     </profile>
 
@@ -1175,8 +1175,6 @@
       <properties>
         <javaVersion>11</javaVersion>
         <spotless.plugin.version>2.30.0</spotless.plugin.version>
-        <semanticdb.version>4.14.5</semanticdb.version>
-        <scalafmtVersion>3.0.0</scalafmtVersion>
       </properties>
     </profile>
 
@@ -1188,8 +1186,6 @@
       <properties>
         <javaVersion>17</javaVersion>
         <spotless.plugin.version>2.45.0</spotless.plugin.version>
-        <semanticdb.version>4.14.5</semanticdb.version>
-        <scalafmtVersion>3.9.9</scalafmtVersion>
       </properties>
     </profile>
 
@@ -1201,8 +1197,6 @@
       <properties>
         <javaVersion>21</javaVersion>
         <spotless.plugin.version>2.45.0</spotless.plugin.version>
-        <semanticdb.version>4.14.5</semanticdb.version>
-        <scalafmtVersion>3.9.9</scalafmtVersion>
       </properties>
     </profile>
 
