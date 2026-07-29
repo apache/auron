@@ -95,7 +95,7 @@ apply_patches() {
   for patch in "${patches[@]}"; do
     i=$((i + 1))
     echo "  [${i}/${#patches[@]}] $(basename "${patch}")"
-    git -C "${target_dir}" apply --3way "${patch}"
+    (cd "${target_dir}" && git apply --3way "${patch}")
   done
 }
 
