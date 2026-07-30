@@ -55,13 +55,16 @@ impl RowNullChecker {
     ///
     /// # Parameters
     /// * `rows` - Collection of row data to check
-    /// * `row_converter` - The `RowConverter` that produced `rows`; using a different converter
-    ///   violates the precondition of `RowConverter::convert_rows` and may panic
+    /// * `row_converter` - The `RowConverter` that produced `rows`; using a
+    ///   different converter violates the precondition of
+    ///   `RowConverter::convert_rows` and may panic
     ///
     /// # Returns
     /// * `NullBuffer` - Buffer indicating which rows contain null values
-    ///   - `false` bits indicate rows that contain at least one null top-level key field
-    ///   - `true` bits indicate rows where all top-level key fields are non-null
+    ///   - `false` bits indicate rows that contain at least one null top-level
+    ///     key field
+    ///   - `true` bits indicate rows where all top-level key fields are
+    ///     non-null
     pub fn has_nulls(&self, rows: &Rows, row_converter: &RowConverter) -> NullBuffer {
         if !self.needs_decoded_nulls {
             return NullBuffer::from_iter(rows.iter().map(|row| !self.has_null(row.data())));
