@@ -30,7 +30,7 @@ RUN sed -i "s/^mirrorlist/#mirrorlist/g" /etc/yum.repos.d/*.repo
 RUN sed -i "s|^metalink=|#metalink=|g" /etc/yum.repos.d/epel.repo
 RUN sed -i "s|https://download.fedoraproject.org/pub/epel|https://archives.fedoraproject.org/pub/archive/epel|g" /etc/yum.repos.d/epel.repo
 RUN yum clean all && yum makecache
-RUN yum install -y libzip unzip openssl-devel
+RUN yum install -y libzip unzip openssl-devel git
 
 # install gcc-11
 RUN yum install -y devtoolset-11-gcc devtoolset-11-gcc-c++
