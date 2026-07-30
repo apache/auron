@@ -94,7 +94,7 @@ impl BufferedData {
 
         let suggested_batch_size =
             compute_suggested_batch_size_for_output(self.staging_mem_used, self.staging_num_rows);
-        if self.staging_mem_used > suggested_batch_size {
+        if self.staging_num_rows >= suggested_batch_size {
             self.flush_staging()?;
         }
         Ok(())
@@ -397,6 +397,37 @@ mod test {
             ],
         )?;
         Ok(batch)
+    }
+
+    #[test]
+    fn test_add_batch_flushes_by_row_count() -> Result<()> {
+        let values = (0..1000).collect::<Vec<_>>();
+        let record_batch = build_table_i32(("a", &values), ("b", &values), ("c", &values))?;
+        let batch_mem_used = record_batch.get_batch_mem_size() * 2;
+        let suggested_batch_size =
+            compute_suggested_batch_size_for_output(batch_mem_used, record_batch.num_rows());
+
+        // Ensure this fixture distinguishes byte count from row count.
+        assert!(batch_mem_used > suggested_batch_size);
+        assert!(record_batch.num_rows() < suggested_batch_size);
+
+        let num_batches = suggested_batch_size.div_ceil(record_batch.num_rows());
+        let mut buffered_data =
+            BufferedData::new(Partitioning::RoundRobinPartitioning(4), 0, Time::new());
+
+        for _ in 1..num_batches {
+            buffered_data.add_batch(record_batch.clone())?;
+        }
+        assert!(buffered_data.sorted_batches.is_empty());
+
+        buffered_data.add_batch(record_batch)?;
+        assert_eq!(buffered_data.sorted_batches.len(), 1);
+        assert_eq!(
+            buffered_data.sorted_batches[0].num_rows(),
+            num_batches * values.len()
+        );
+        assert!(buffered_data.staging_batches.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
