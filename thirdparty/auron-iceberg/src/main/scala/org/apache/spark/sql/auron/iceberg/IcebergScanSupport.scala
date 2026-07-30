@@ -565,8 +565,7 @@ object IcebergScanSupport extends Logging {
             deletesEmpty(added.deletes()) =>
         Some(NativeChangelogDataFileTask(added.file(), added.start(), added.length(), added))
       case deleted: DeletedDataFileScanTask
-          if deleted.operation() == ChangelogOperation.DELETE &&
-            deletesEmpty(deleted.existingDeletes()) =>
+          if deletesEmpty(deleted.existingDeletes()) =>
         Some(
           NativeChangelogDataFileTask(deleted.file(), deleted.start(), deleted.length(), deleted))
       case _ =>
