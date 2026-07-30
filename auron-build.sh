@@ -529,6 +529,8 @@ mkdir -p "$(dirname "$BUILD_INFO_FILE")"
 JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk '{print $3}' | tr -d '"')
 PROJECT_VERSION=$(./build/mvn help:evaluate -N -Dexpression=project.version -Pspark-${SPARK_VER} -q -DforceStdout 2>/dev/null)
 RUST_VERSION=$(rustc --version | awk '{print $2}')
+BUILD_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+BUILD_REVISION=$(git rev-parse HEAD 2>/dev/null)
 
 get_build_info() {
   case "$1" in
@@ -543,6 +545,8 @@ get_build_info() {
     "flink.version") echo "${FLINK_VER}" ;;
     "iceberg.version") echo "${ICEBERG_VER}" ;;
     "hudi.version") echo "${HUDI_VER}" ;;
+    "build.branch") echo "${BUILD_BRANCH}" ;;
+    "build.revision") echo "${BUILD_REVISION}" ;;
     "build.timestamp") echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" ;;
     *) echo "" ;;
   esac
@@ -560,6 +564,8 @@ for key in \
   "paimon.version" \
   "flink.version" \
   "iceberg.version" \
+  "build.branch" \
+  "build.revision" \
   "build.timestamp"; do
   value="$(get_build_info "$key")"
   if [[ -n "$value" ]]; then
