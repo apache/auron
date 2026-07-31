@@ -22,8 +22,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
-import org.apache.iceberg.{FileFormat, FileScanTask, MetadataColumns}
+import org.apache.iceberg.{AddedRowsScanTask, ChangelogScanTask, FileFormat, FileScanTask, MetadataColumns, ScanTask}
 import org.apache.iceberg.data.{GenericAppenderFactory, Record}
 import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
@@ -738,6 +739,55 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg changelog scan falls back for mixed file formats") {
+    withTable("local.db.t_changelog_mixed_formats") {
+      withTempView("t_changelog_mixed_formats_changes") {
+        sql("""
+              |create table local.db.t_changelog_mixed_formats (id int, v string)
+              |using iceberg
+              |tblproperties ('format-version' = '2')
+              |""".stripMargin)
+        sql("insert into local.db.t_changelog_mixed_formats values (0, 'seed')")
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_mixed_formats")
+        sql("insert into local.db.t_changelog_mixed_formats values (1, 'parquet')")
+        sql("""
+              |alter table local.db.t_changelog_mixed_formats
+              |set tblproperties ('write.format.default' = 'orc')
+              |""".stripMargin)
+        sql("insert into local.db.t_changelog_mixed_formats values (2, 'orc')")
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_mixed_formats")
+        createChangelogView(
+          "local.db.t_changelog_mixed_formats",
+          "t_changelog_mixed_formats_changes",
+          startSnapshotId,
+          endSnapshotId)
+
+        val query =
+          """
+            |select id, v, _change_type, _change_ordinal, _commit_snapshot_id
+            |from t_changelog_mixed_formats_changes
+            |order by id
+            |""".stripMargin
+        var expected: Seq[Row] = Nil
+        withSQLConf("spark.auron.enable" -> "false") {
+          expected = sql(query).collect().toSeq
+        }
+        val changelogTasks = changelogScanTasks(query)
+        assert(changelogTasks.forall(_.isInstanceOf[AddedRowsScanTask]), changelogTasks)
+        val formats = changelogTasks.collect { case task: AddedRowsScanTask =>
+          task.file().format()
+        }
+        assert(formats.toSet == Set(FileFormat.PARQUET, FileFormat.ORC), formats)
+        withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+          val df = sql(query)
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan.toString()
+          assert(!plan.contains("NativeIcebergTableScan"))
+        }
+      }
+    }
+  }
+
   test("iceberg scan falls back when reading unsupported metadata columns") {
     withTable("local.db.t4_pos") {
       sql("create table local.db.t4_pos using iceberg as select 1 as id, 'a' as v")
@@ -897,6 +947,51 @@ class AuronIcebergIntegrationSuite
     assert(explain.toLowerCase(Locale.ROOT).contains("dynamicpruning"), explain)
 
     nativeScan
+  }
+
+  private def changelogScanTasks(sqlText: String): Seq[ChangelogScanTask] = {
+    val scan = sql(sqlText).queryExecution.sparkPlan
+      .collectFirst {
+        case batchScan: BatchScanExec if isChangelogScan(batchScan.scan) =>
+          batchScan
+      }
+      .getOrElse {
+        throw new AssertionError(s"Cannot find changelog BatchScanExec for query: $sqlText")
+      }
+
+    val tasks =
+      scan.scan.toBatch.planInputPartitions().toSeq.flatMap { partition =>
+        icebergScanTasks(partition)
+      }
+    assert(tasks.forall(_.isInstanceOf[ChangelogScanTask]), tasks)
+    tasks.collect { case task: ChangelogScanTask => task }
+  }
+
+  private def isChangelogScan(scan: org.apache.spark.sql.connector.read.Scan): Boolean =
+    scan.getClass.getName == "org.apache.iceberg.spark.source.SparkChangelogScan"
+
+  private def icebergScanTasks(partition: AnyRef): Seq[ScanTask] = {
+    try {
+      val taskGroupField = partition.getClass.getDeclaredField("taskGroup")
+      taskGroupField.setAccessible(true)
+      val taskGroup = taskGroupField.get(partition)
+
+      val tasksMethod = taskGroup.getClass.getDeclaredMethod("tasks")
+      tasksMethod.setAccessible(true)
+      tasksMethod
+        .invoke(taskGroup)
+        .asInstanceOf[java.util.Collection[_]]
+        .asScala
+        .collect { case task: ScanTask =>
+          task
+        }
+        .toSeq
+    } catch {
+      case NonFatal(t) =>
+        throw new AssertionError(
+          s"Cannot read Iceberg scan tasks from ${partition.getClass.getName}",
+          t)
+    }
   }
 
   private def icebergScanPlan(df: DataFrame) =
