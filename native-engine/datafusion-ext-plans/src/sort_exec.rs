@@ -1853,6 +1853,158 @@ mod fuzztest {
         Ok(())
     }
 
+    /// Builds `num_batches` Int64-keyed batches for exercising the primitive
+    /// fast path (single direct `Column` key, so `PrimitiveSortKey::try_new`
+    /// applies).
+    ///
+    /// Without a payload column, keys are drawn from a small domain with ~5%
+    /// nulls, so duplicates and nulls are heavily exercised while tied rows
+    /// stay indistinguishable (full-output comparison is meaningful). With a
+    /// payload column, keys are unique global ids (no nulls) so the total
+    /// order is well-defined even though rows carry distinct payload values.
+    fn build_i64_fast_path_batches(
+        num_batches: usize,
+        rows_per_batch: usize,
+        with_payload: bool,
+        seed: u64,
+    ) -> Vec<RecordBatch> {
+        use rand::{Rng, SeedableRng, seq::SliceRandom};
+        let total = num_batches * rows_per_batch;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        let keys: Vec<Option<i64>> = if with_payload {
+            let mut ids: Vec<Option<i64>> = (0..total as i64).map(Some).collect();
+            ids.shuffle(&mut rng);
+            ids
+        } else {
+            std::iter::repeat_with(|| {
+                if rng.random_ratio(1, 20) {
+                    None
+                } else {
+                    Some(rng.random_range(0..1000))
+                }
+            })
+            .take(total)
+            .collect()
+        };
+        let schema = Arc::new(arrow::datatypes::Schema::new(
+            std::iter::once(arrow::datatypes::Field::new(
+                "c0",
+                arrow::datatypes::DataType::Int64,
+                true,
+            ))
+            .chain(with_payload.then(|| {
+                arrow::datatypes::Field::new("v", arrow::datatypes::DataType::UInt32, true)
+            }))
+            .collect::<Vec<_>>(),
+        ));
+        keys.chunks(rows_per_batch)
+            .map(|chunk| {
+                let mut columns: Vec<ArrayRef> = vec![Arc::new(Int64Array::from(chunk.to_vec()))];
+                if with_payload {
+                    let payload: UInt32Array = std::iter::repeat_with(|| rng.random::<u32>())
+                        .take(chunk.len())
+                        .collect();
+                    columns.push(Arc::new(payload));
+                }
+                RecordBatch::try_new(schema.clone(), columns).expect("failed to create test batch")
+            })
+            .collect()
+    }
+
+    /// Runs a single-column Int64 sort with the given options/limit through
+    /// Auron's `SortExec` (primitive fast path) or DataFusion's `SortExec`,
+    /// and returns the concatenated output batch.
+    async fn collect_i64_sort_output(
+        batches: &[RecordBatch],
+        options: SortOptions,
+        limit: Option<usize>,
+        use_auron: bool,
+    ) -> Result<RecordBatch> {
+        let session_ctx =
+            SessionContext::new_with_config(SessionConfig::new().with_batch_size(10000));
+        let task_ctx = session_ctx.task_ctx();
+        let schema = batches[0].schema();
+        let sort_exprs = vec![PhysicalSortExpr {
+            expr: Arc::new(Column::new("c0", 0)),
+            options,
+        }];
+        let input = Arc::new(TestMemoryExec::try_new(
+            &[batches.to_vec()],
+            schema.clone(),
+            None,
+        )?);
+        let sort: Arc<dyn ExecutionPlan> = if use_auron {
+            Arc::new(SortExec::new(input, sort_exprs.clone(), limit, 0))
+        } else {
+            Arc::new(
+                datafusion::physical_plan::sorts::sort::SortExec::new(
+                    LexOrdering::new(sort_exprs.iter().cloned()).expect("invalid sort exprs"),
+                    input,
+                )
+                .with_fetch(limit),
+            )
+        };
+        let output = datafusion::physical_plan::collect(sort, task_ctx).await?;
+        Ok(concat_batches(&schema, &output)?)
+    }
+
+    /// Correctness coverage for the primitive fast path (single-column
+    /// primitive key sorted via Arrow `sort_to_indices`). The fuzz tests
+    /// above use string keys and therefore only exercise the RowConverter
+    /// path, while the benchmarks above are `#[ignore]`d and only measure
+    /// elapsed time. These tests feed multiple batches (so the K-way merge
+    /// is exercised), cover ascending/descending and nulls-first/nulls-last
+    /// orderings as well as a Top-N limit, and compare the complete output
+    /// with DataFusion's `SortExec`.
+    async fn fuzztest_primitive_fast_path_with_conf(
+        mem: usize,
+        limit: Option<usize>,
+        with_payload: bool,
+    ) -> Result<()> {
+        MemManager::init(mem);
+        let batches = build_i64_fast_path_batches(51, 10000, with_payload, 42);
+        let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let options = SortOptions {
+                    descending,
+                    nulls_first,
+                };
+                let a = collect_i64_sort_output(&batches, options, limit, true).await?;
+                let b = collect_i64_sort_output(&batches, options, limit, false).await?;
+                assert!(
+                    a == b,
+                    "primitive fast path output mismatch: descending={descending}, \
+                     nulls_first={nulls_first}, limit={limit:?}, with_payload={with_payload}"
+                );
+                assert_eq!(a.num_rows(), limit.unwrap_or(usize::MAX).min(total_rows));
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_in_mem_sorting() -> Result<()> {
+        fuzztest_primitive_fast_path_with_conf(1000000000, None, false).await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_in_mem_sorting_with_payload() -> Result<()> {
+        fuzztest_primitive_fast_path_with_conf(1000000000, None, true).await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_external_sorting() -> Result<()> {
+        fuzztest_primitive_fast_path_with_conf(10000, None, false).await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_topn() -> Result<()> {
+        // Top-N: limit is much smaller than the total row count, so the fast
+        // path takes the `sort_to_indices(Some(limit))` partial-sort branch.
+        fuzztest_primitive_fast_path_with_conf(1000000000, Some(9999), false).await
+    }
+
     async fn fuzztest_with_mem_conf(mem: usize) -> Result<()> {
         MemManager::init(mem);
         let session_ctx =
