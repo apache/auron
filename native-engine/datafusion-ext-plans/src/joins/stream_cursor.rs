@@ -114,9 +114,12 @@ impl StreamCursor {
                     }
 
                     let keys = batch_with_keys.key_rows.clone();
+                    let key_has_nulls = Some(
+                        self.key_null_checker
+                            .has_nulls(&keys, &batch_with_keys.key_row_converter.lock()),
+                    )
+                    .filter(|nb| nb.null_count() > 0);
                     let batch = batch_with_keys.batch;
-                    let key_has_nulls = Some(self.key_null_checker.has_nulls(&keys))
-                        .filter(|nb| nb.null_count() > 0);
 
                     self.batches.push(batch);
                     self.key_has_nulls.push(key_has_nulls);
