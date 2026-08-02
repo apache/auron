@@ -1180,7 +1180,7 @@
                 </goals>
                 <configuration>
                   <rules>
-                    <!-- Spark 4.1 requires JDK 17+ and Scala 2.13.x -->
+                    <!-- Spark 4.2 requires JDK 17+ and Scala 2.13.x -->
                     <requireJavaVersion>
                       <version>[17,)</version>
                       <message>Spark 4.2 requires JDK 17 or higher. Current: ${java.version}</message>
