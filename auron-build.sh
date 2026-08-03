@@ -69,6 +69,10 @@ print_help() {
 
     echo "  -h, --help               Show this help message"
     echo
+    echo "Environment variables:"
+    echo "  AURON_BUILD_BRANCH       Override detected Git branch in generated build info"
+    echo "  AURON_BUILD_REVISION     Override detected Git revision in generated build info"
+    echo
     echo "Examples:"
     echo "  $0 --pre --sparkver ${SUPPORTED_SPARK_VERSIONS[*]: -1}" \
          "--scalaver ${SUPPORTED_SCALA_VERSIONS[*]: -1} -DskipBuildNative"
@@ -529,8 +533,8 @@ mkdir -p "$(dirname "$BUILD_INFO_FILE")"
 JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk '{print $3}' | tr -d '"')
 PROJECT_VERSION=$(./build/mvn help:evaluate -N -Dexpression=project.version -Pspark-${SPARK_VER} -q -DforceStdout 2>/dev/null)
 RUST_VERSION=$(rustc --version | awk '{print $2}')
-BUILD_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
-BUILD_REVISION=$(git rev-parse HEAD 2>/dev/null)
+BUILD_BRANCH="${AURON_BUILD_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null)}"
+BUILD_REVISION="${AURON_BUILD_REVISION:-$(git rev-parse HEAD 2>/dev/null)}"
 
 get_build_info() {
   case "$1" in
@@ -606,6 +610,8 @@ if [[ "$USE_DOCKER" == true ]]; then
 
     echo "[INFO] Compiling inside Docker container..."
     export AURON_BUILD_ARGS="${BUILD_ARGS[*]}"
+    export AURON_BUILD_BRANCH="${BUILD_BRANCH}"
+    export AURON_BUILD_REVISION="${BUILD_REVISION}"
     export BUILD_CONTEXT="./${IMAGE_NAME}"
     # Spark 4.x requires JDK 17+, auto-set if not specified
     if [[ -z "$AURON_JAVA_VERSION" && "$SPARK_VER" == 4.* ]]; then
