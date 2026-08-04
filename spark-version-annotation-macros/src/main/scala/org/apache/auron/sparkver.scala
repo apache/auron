@@ -86,6 +86,40 @@ object sparkver {
         c.Expr(q"$head; ..${annottees.tail}")
       }
     }
+
+    def verExcludeParents(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] = {
+      import c.universe._
+
+      val (versions, excludes) = c.macroApplication match {
+        case Apply(Select(Apply(_, List(vs, ps)), _), _) =>
+          (c.eval(c.Expr[String](q"$vs")), c.eval(c.Expr[String](q"$ps")))
+      }
+
+      if (!matchVersion(versions)) {
+        return c.Expr[Any](q"..$annottees")
+      }
+
+      val excluded = excludes.split("/").map(_.trim.split('.').last).toSet
+
+      def writtenName(t: Tree): String = t match {
+        case Ident(name) => name.toString
+        case Select(qual, name) => writtenName(qual) + "." + name
+        case Apply(fun, _) => writtenName(fun)
+        case AppliedTypeTree(tpt, _) => writtenName(tpt)
+        case _ => t.toString
+      }
+
+      val head = annottees.head.tree match {
+        case ClassDef(mods, name, tparams, Template(parents, self, body)) =>
+          val kept = parents.filterNot(p => excluded.contains(writtenName(p).split('.').last))
+          ClassDef(mods, name, tparams, Template(kept, self, body))
+        case other =>
+          c.abort(
+            c.enclosingPosition,
+            s"@sparkverExcludeParents can only annotate a class, got: $other")
+      }
+      c.Expr[Any](q"$head; ..${annottees.tail}")
+    }
   }
 }
 
@@ -105,4 +139,10 @@ final class sparkverEnableMembers(vers: String) extends StaticAnnotation {
 @compileTimeOnly("enable macro paradise to expand macro annotations")
 final class sparkverEnableOverride(vers: String) extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verEnableOverride
+}
+
+@nowarn("cat=unused") // 'vers' and 'parents' are used by macro
+@compileTimeOnly("enable macro paradise to expand macro annotations")
+final class sparkverExcludeParents(vers: String, parents: String) extends StaticAnnotation {
+  def macroTransform(annottees: Any*): Any = macro sparkver.Macros.verExcludeParents
 }

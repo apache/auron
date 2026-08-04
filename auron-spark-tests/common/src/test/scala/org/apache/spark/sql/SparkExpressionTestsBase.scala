@@ -386,7 +386,7 @@ trait SparkExpressionTestsBase
     Column(expression)
   }
 
-  @sparkver("4.0 / 4.1")
+  @sparkver("4.0 / 4.1 / 4.2")
   private def columnFromExpression(expression: Expression): Column = {
     new Column(org.apache.spark.sql.classic.ExpressionColumnNode(expression))
   }
@@ -398,7 +398,7 @@ trait SparkExpressionTestsBase
     _spark.internalCreateDataFrame(rows, schema)
   }
 
-  @sparkver("4.0 / 4.1")
+  @sparkver("4.0 / 4.1 / 4.2")
   private def internalCreateDataFrame(
       rows: org.apache.spark.rdd.RDD[InternalRow],
       schema: StructType): org.apache.spark.sql.classic.DataFrame = {

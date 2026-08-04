@@ -123,7 +123,7 @@ Auron provides a unified build script `auron-build.sh` that supports both local 
 Run `./auron-build.sh --help` to see all available options, including:
 
 - `--pre` or `--release`: Build profile
-- `--sparkver`: Spark version (3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 4.0, 4.1)
+- `--sparkver`: Spark version (3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 4.0, 4.1, 4.2)
 - `--scalaver`: Scala version (2.12, 2.13)
 - `--celeborn`, `--uniffle`, `--paimon`, `--iceberg`: Optional integrations
 - `--skiptests`: Skip unit tests (default: true)
@@ -142,6 +142,7 @@ integration is not supported for that Spark version and must not be passed to
 | 3.5 | 2.12 | 8+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | 1.10.1 | 0.15 |
 | 4.0 | 2.13 | 17+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | 1.10.1 | — |
 | 4.1 | 2.13 | 17+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | — | — |
+| 4.2 | 2.13 | 17+ | `rockylinux8` | - | - | - | - | — | — |
 
 Spark 4.x requires Scala 2.13 and JDK 17 or later. In Docker mode,
 `auron-build.sh` selects JDK 17 for Spark 4.x, and the `rockylinux8` image applies that
