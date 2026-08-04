@@ -122,6 +122,12 @@ jobs:
       scalaver: '2.13'
       hadoop-profile: 'hadoop3'
       sparktests: 'true'
+      # Supply Auron only through spark-submit --jars, so it is defined by Spark's
+      # MutableURLClassLoader rather than the application class loader. The runtime
+      # bloom-filter ScalarSubquery deserialization defect (AURON #2386) cannot reproduce
+      # when the jar is also on $SPARK_HOME/jars.
+      jar-on-system-classpath: 'false'
+      assert-no-classcastexception: 'true'
       extrasparkconf: >-
         --conf spark.sql.optimizer.runtime.bloomFilter.enabled=true
         --conf spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold=1B
