@@ -426,6 +426,15 @@ impl PhysicalPlanner {
 
                 let join_type = protobuf::JoinType::try_from(broadcast_join.join_type)
                     .expect("invalid JoinType");
+                let join_type = join_type
+                    .try_into()
+                    .map_err(|_| proto_error("invalid JoinType"))?;
+                let join_filter = self.parse_join_filter(broadcast_join.filter.as_ref())?;
+                if join_filter.is_some() && join_type != JoinType::Inner {
+                    return Err(proto_error(
+                        "broadcast join filter is only supported for inner join",
+                    ));
+                }
 
                 let broadcast_side = protobuf::JoinSide::try_from(broadcast_join.broadcast_side)
                     .expect("invalid BroadcastSide");
@@ -438,16 +447,14 @@ impl PhysicalPlanner {
                     left,
                     right,
                     on,
-                    join_type
-                        .try_into()
-                        .map_err(|_| proto_error("invalid JoinType"))?,
+                    join_type,
                     broadcast_side
                         .try_into()
                         .map_err(|_| proto_error("invalid BroadcastSide"))?,
                     true,
                     Some(cached_build_hash_map_id),
                     is_null_aware_anti_join,
-                    None,
+                    join_filter,
                 )?))
             }
             PhysicalPlanType::Union(union) => {

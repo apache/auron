@@ -90,6 +90,7 @@ abstract class Shims {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       joinType: JoinType,
+      condition: Option[Expression],
       broadcastSide: JoinBuildSide,
       isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase
 

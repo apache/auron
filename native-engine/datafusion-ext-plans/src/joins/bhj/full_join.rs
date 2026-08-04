@@ -167,7 +167,7 @@ impl<const P: JoinerParams> FullJoiner<P> {
 
         if let Some(join_filter) = &self.join_params.join_filter {
             if P.probe_side_outer || P.build_side_outer {
-                df_execution_err!("join filter is only supported for inner shuffled hash join")?;
+                df_execution_err!("join filter is only supported for inner hash join")?;
             }
             // Materialize candidate pairs from the hash lookup before
             // evaluating the residual condition. This keeps the filter inside

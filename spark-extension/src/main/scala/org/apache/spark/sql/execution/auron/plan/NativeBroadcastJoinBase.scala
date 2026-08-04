@@ -29,6 +29,7 @@ import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.FullOuter
+import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.LeftOuter
@@ -53,6 +54,7 @@ abstract class NativeBroadcastJoinBase(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
+    condition: Option[Expression],
     broadcastSide: JoinBuildSide,
     isNullAwareAntiJoin: Boolean)
     extends BinaryExecNode
@@ -113,6 +115,9 @@ abstract class NativeBroadcastJoinBase(
 
   private def nativeJoinType = NativeConverters.convertJoinType(joinType)
 
+  private def nativeJoinFilter =
+    condition.map(NativeConverters.convertJoinFilter(_, left.output, right.output))
+
   private def nativeBroadcastSide = broadcastSide match {
     case JoinBuildLeft => pb.JoinSide.LEFT_SIDE
     case JoinBuildRight => pb.JoinSide.RIGHT_SIDE
@@ -121,6 +126,7 @@ abstract class NativeBroadcastJoinBase(
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
 
   // check whether native converting is supported
+  assert(condition.isEmpty || joinType.isInstanceOf[InnerLike], "join condition is not supported")
   nativeSchema
   nativeJoinType
   nativeJoinOn
@@ -133,6 +139,7 @@ abstract class NativeBroadcastJoinBase(
     val nativeSchema = this.nativeSchema
     val nativeJoinType = this.nativeJoinType
     val nativeJoinOn = this.nativeJoinOn
+    val nativeJoinFilter = this.nativeJoinFilter
 
     val (probedRDD, builtRDD) = broadcastSide match {
       case JoinBuildLeft => (rightRDD, leftRDD)
@@ -179,6 +186,7 @@ abstract class NativeBroadcastJoinBase(
           .setCachedBuildHashMapId(cachedBuildHashMapId)
           .setIsNullAwareAntiJoin(isNullAwareAntiJoin)
           .addAllOn(nativeJoinOn.asJava)
+        nativeJoinFilter.foreach(broadcastJoinExec.setFilter)
 
         pb.PhysicalPlanNode.newBuilder().setBroadcastJoin(broadcastJoinExec).build()
       },
