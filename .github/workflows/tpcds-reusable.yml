@@ -64,6 +64,23 @@ on:
         required: false
         type: string
         default: ''
+      assert-no-classcastexception:
+        description: >-
+          Whether to fail the job if the TPC-DS run logs any ClassCastException. Spark retries
+          absorb task-level deserialization failures, so queries can report PASS while throwing
+          hundreds of exceptions; this asserts on the log instead.
+        required: false
+        type: string
+        default: 'false'
+      jar-on-system-classpath:
+        description: >-
+          Whether to also copy the Auron jar into $SPARK_HOME/jars. When true the jar is
+          loaded by the application class loader; when false it reaches the JVM only through
+          spark-submit --jars, i.e. Spark's MutableURLClassLoader. Some class-loading defects
+          only reproduce in the latter configuration.
+        required: false
+        type: string
+        default: 'true'
       queries:
         description: 'Optional list of queries to run'
         required: false
@@ -257,12 +274,18 @@ jobs:
           path: dev/tpcds_1g
 
       - name: Install Auron JAR
+        env:
+          JAR_ON_SYSTEM_CLASSPATH: ${{ inputs.jar-on-system-classpath }}
         run: |
           ls -la
           jar=$(ls -1 auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar | head -n1)
           [ -n "$jar" ] || { echo "No jar matched: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar"; exit 1; }
           echo "AURON_SPARK_JAR=$jar" >> "$GITHUB_ENV"
-          cp "$jar" spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
+          if [ "$JAR_ON_SYSTEM_CLASSPATH" = "false" ]; then
+            echo "Auron reaches the JVM only through spark-submit --jars (MutableURLClassLoader)"
+          else
+            cp "$jar" spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
+          fi
 
       - name: Setup Java and Maven cache
         uses: actions/setup-java@v5
@@ -380,13 +403,30 @@ jobs:
           SPARK_HOME: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
         run: |
           ls -la
+          set -o pipefail
           dev/auron-it/run-it.sh  \
             ${{ inputs.extrasparkconf }} \
             --type tpcds \
             --data-location dev/tpcds_1g \
             --query-filter ${{ matrix.query }} \
             --result-check \
-            --plan-check
+            --plan-check 2>&1 | tee tpcds-run-${{ matrix.query }}.log
+
+      # Task-level deserialization failures are absorbed by Spark's task retries, so the
+      # queries can still report PASS while throwing hundreds of exceptions. Assert on the
+      # log directly, otherwise a regression of AURON #2386 goes unnoticed.
+      - name: Assert no deserialization ClassCastException
+        if: ${{ inputs.assert-no-classcastexception == 'true' }}
+        env:
+          QUERY_LOG: tpcds-run-${{ matrix.query }}.log
+        run: |
+          count=$(grep -c 'ClassCastException' "$QUERY_LOG" || true)
+          if [ "$count" -gt 0 ]; then
+            echo "::error::$count ClassCastException(s) during expression deserialization"
+            grep -m5 'ClassCastException' "$QUERY_LOG" || true
+            exit 1
+          fi
+          echo "No ClassCastException found."
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}
