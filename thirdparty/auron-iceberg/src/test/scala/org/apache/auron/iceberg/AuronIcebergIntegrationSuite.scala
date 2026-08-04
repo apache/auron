@@ -598,6 +598,48 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native scan supports full-data-file delete changelog scan") {
+    withTable("local.db.t_changelog_full_file_delete") {
+      withTempView("t_changelog_full_file_delete_changes") {
+        sql("""
+              |create table local.db.t_changelog_full_file_delete (id int, v string, p int)
+              |using iceberg
+              |partitioned by (p)
+              |tblproperties ('format-version' = '2')
+              |""".stripMargin)
+        sql("""
+              |insert into local.db.t_changelog_full_file_delete
+              |values (1, 'a', 1), (2, 'b', 2)
+              |""".stripMargin)
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_full_file_delete")
+        sql("delete from local.db.t_changelog_full_file_delete where p = 1")
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_full_file_delete")
+        createChangelogView(
+          "local.db.t_changelog_full_file_delete",
+          "t_changelog_full_file_delete_changes",
+          startSnapshotId,
+          endSnapshotId)
+
+        val query =
+          """
+            |select id, v, p, _change_type
+            |from t_changelog_full_file_delete_changes
+            |order by id
+            |""".stripMargin
+        val expected = Seq(Row(1, "a", 1, "DELETE"))
+        withSQLConf("spark.auron.enable" -> "false") {
+          checkAnswer(sql(query), expected)
+        }
+        withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+          val df = sql(query)
+          checkAnswer(df, expected)
+          val nativeScan = executedNativeIcebergTableScanExec(df)
+          assert(nativeScan.staticPlan.scanTasks.size == 1)
+        }
+      }
+    }
+  }
+
   test("iceberg native changelog scan remains correct in dynamic pruning join") {
     withTable("local.db.t_changelog_dpp", "local.db.t_changelog_dpp_dim") {
       withTempView("t_changelog_dpp_changes") {
@@ -701,39 +743,45 @@ class AuronIcebergIntegrationSuite
     }
   }
 
-  test("iceberg changelog scan falls back when delete changes exist") {
-    withTable("local.db.t_changelog_delete") {
-      withTempView("t_changelog_delete_changes") {
+  test("iceberg native scan supports mixed insert and full-data-file delete changelog scan") {
+    withTable("local.db.t_changelog_mixed_delete") {
+      withTempView("t_changelog_mixed_delete_changes") {
         sql("""
-              |create table local.db.t_changelog_delete (id int, v string)
+              |create table local.db.t_changelog_mixed_delete (id int, v string, p int)
               |using iceberg
+              |partitioned by (p)
               |tblproperties ('format-version' = '2')
               |""".stripMargin)
-        sql("insert into local.db.t_changelog_delete values (1, 'a'), (2, 'b')")
-        val startSnapshotId = currentSnapshotId("local.db.t_changelog_delete")
-        sql("delete from local.db.t_changelog_delete where id = 1")
-        val endSnapshotId = currentSnapshotId("local.db.t_changelog_delete")
+        sql("""
+              |insert into local.db.t_changelog_mixed_delete
+              |values (1, 'a', 1), (2, 'b', 2)
+              |""".stripMargin)
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_mixed_delete")
+        sql("delete from local.db.t_changelog_mixed_delete where p = 1")
+        sql("insert into local.db.t_changelog_mixed_delete values (3, 'c', 3)")
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_mixed_delete")
         createChangelogView(
-          "local.db.t_changelog_delete",
-          "t_changelog_delete_changes",
+          "local.db.t_changelog_mixed_delete",
+          "t_changelog_mixed_delete_changes",
           startSnapshotId,
           endSnapshotId)
 
         val query =
           """
-            |select id, v, _change_type, _change_ordinal, _commit_snapshot_id
-            |from t_changelog_delete_changes
+            |select id, v, p, _change_type, _change_ordinal, _commit_snapshot_id
+            |from t_changelog_mixed_delete_changes
             |order by id, _change_type
             |""".stripMargin
         var expected: Seq[Row] = Nil
         withSQLConf("spark.auron.enable" -> "false") {
           expected = sql(query).collect().toSeq
         }
+        assert(expected.exists(row => row.getString(3) == "DELETE"))
+        assert(expected.exists(row => row.getString(3) == "INSERT"))
         withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
           val df = sql(query)
           checkAnswer(df, expected)
-          val plan = df.queryExecution.executedPlan.toString()
-          assert(!plan.contains("NativeIcebergTableScan"))
+          executedNativeIcebergTableScanExec(df)
         }
       }
     }
