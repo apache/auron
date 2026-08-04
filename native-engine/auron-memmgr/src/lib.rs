@@ -224,6 +224,11 @@ pub trait MemConsumer: Send + Sync {
         mem_used as f64 / consumer_mem_max as f64
     }
 
+    /// Absolute bytes currently used by this consumer.
+    fn mem_used(&self) -> usize {
+        self.consumer_info().status.lock().mem_used
+    }
+
     fn set_spillable(&self, spillable: bool) {
         let consumer_info = self.consumer_info();
         let mut consumer_status = consumer_info.status.lock();

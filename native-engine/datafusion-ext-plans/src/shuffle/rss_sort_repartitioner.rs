@@ -17,11 +17,16 @@ use std::sync::Weak;
 
 use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
+use auron_jni_bridge::{
+    conf,
+    conf::{DoubleConf, LongConf},
+};
 use auron_memmgr::{MemConsumer, MemConsumerInfo, MemManager};
 use datafusion::{common::Result, physical_plan::metrics::Time};
 use datafusion_ext_commons::arrow::array_size::BatchSize;
 use futures::lock::Mutex;
 use jni::objects::GlobalRef;
+use once_cell::sync::OnceCell;
 
 use crate::shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData};
 
@@ -102,7 +107,15 @@ impl ShuffleRepartitioner for RssSortShuffleRepartitioner {
         // we are likely to spill more frequently because the cost of spilling a shuffle
         // repartition is lower than other consumers.
         // rss shuffle spill has even lower cost than normal shuffle
-        if self.mem_used_percent() > 0.4 {
+        static PCT_THRESHOLD: OnceCell<f64> = OnceCell::new();
+        static SIZE_THRESHOLD: OnceCell<i64> = OnceCell::new();
+        let pct_threshold =
+            *PCT_THRESHOLD.get_or_init(|| conf::RSS_SPILL_MEMORY_FRACTION.value().unwrap_or(0.4));
+        let size_threshold =
+            *SIZE_THRESHOLD.get_or_init(|| conf::RSS_SPILL_MEMORY_SIZE.value().unwrap_or(0));
+        if self.mem_used_percent() > pct_threshold
+            || (size_threshold > 0 && self.mem_used() > size_threshold as usize)
+        {
             self.force_spill().await?;
         }
         Ok(())

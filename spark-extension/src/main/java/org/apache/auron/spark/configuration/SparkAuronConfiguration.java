@@ -227,6 +227,28 @@ public class SparkAuronConfiguration extends AuronConfiguration {
                             + "Common options include lz4, snappy, and gzip. The choice affects both spill performance and disk space usage.")
             .withDefaultValue("lz4");
 
+    public static final ConfigOption<Double> RSS_SPILL_MEMORY_FRACTION = new ConfigOption<>(Double.class)
+            .withKey("auron.rss.spill.memoryFraction")
+            .withCategory("Runtime Configuration")
+            .withDescription(
+                    "RSS shuffle spill trigger: spill when this consumer's memory fraction exceeds the threshold. "
+                            + "A lower value makes auron spill sooner with a smaller buffer each time, so each spill pushes "
+                            + "a smaller burst to the celeborn worker and reduces the peak in-flight bytes that can trigger "
+                            + "a worker push pause. Default 0.4 preserves the previous hardcoded behavior.")
+            .withDefaultValue(0.4)
+            .checkValue(v -> v != null && v >= 0.0 && v <= 1.0, "must be a number in [0.0, 1.0]");
+
+    public static final ConfigOption<Long> RSS_SPILL_MEMORY_SIZE = new ConfigOption<>(Long.class)
+            .withKey("auron.rss.spill.memorySize")
+            .withCategory("Runtime Configuration")
+            .withDescription(
+                    "RSS shuffle spill trigger (absolute): force spill when this consumer's buffered bytes exceed "
+                            + "this size, regardless of the relative fraction. This caps the per-spill burst size pushed to "
+                            + "the celeborn worker deterministically (the fraction-based threshold varies with executor memory). "
+                            + "0 means disabled (only the fraction threshold is used). Default 0 preserves previous behavior.")
+            .withDefaultValue(0L)
+            .checkValue(v -> v != null && v >= 0L, "must be >= 0");
+
     public static final ConfigOption<Boolean> SMJ_FALLBACK_ENABLE = new ConfigOption<>(Boolean.class)
             .withKey("auron.smjfallback.enable")
             .withCategory("Operator Supports")
@@ -544,12 +566,20 @@ public class SparkAuronConfiguration extends AuronConfiguration {
                 : option instanceof SparkContextOption
                         ? GetFromSparkType.FROM_SPARK_CONTEXT
                         : GetFromSparkType.FROM_SPARK_ENV;
-        return Optional.ofNullable(getFromSpark(
+        T value = getFromSpark(
                 option.key(),
                 option.altKeys(),
                 option.getValueClass(),
                 () -> getOptionDefaultValue(option),
-                getFromSparkType));
+                getFromSparkType);
+        if (value != null) {
+            Optional<String> error = option.validate(value);
+            if (error.isPresent()) {
+                throw new IllegalArgumentException(
+                        "Invalid value for config '" + option.key() + "': " + error.get() + " (value=" + value + ")");
+            }
+        }
+        return Optional.ofNullable(value);
     }
 
     enum GetFromSparkType {

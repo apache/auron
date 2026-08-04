@@ -50,6 +50,8 @@ define_conf!(IntConf, TOKIO_WORKER_THREADS_PER_CPU);
 define_conf!(IntConf, TASK_CPUS);
 define_conf!(IntConf, SHUFFLE_COMPRESSION_TARGET_BUF_SIZE);
 define_conf!(StringConf, SPILL_COMPRESSION_CODEC);
+define_conf!(DoubleConf, RSS_SPILL_MEMORY_FRACTION);
+define_conf!(LongConf, RSS_SPILL_MEMORY_SIZE);
 define_conf!(BooleanConf, SMJ_FALLBACK_ENABLE);
 define_conf!(IntConf, SMJ_FALLBACK_ROWS_THRESHOLD);
 define_conf!(IntConf, SMJ_FALLBACK_MEM_SIZE_THRESHOLD);
