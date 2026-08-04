@@ -18,8 +18,10 @@ package org.apache.spark.sql.auron
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
+import java.io.ObjectStreamClass
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -1505,24 +1507,63 @@ object NativeConverters extends Logging {
     }
   }
 
+  /**
+   * ObjectInputStream that resolves classes against an explicit class loader.
+   *
+   * The default ObjectInputStream.resolveClass resolves each class through
+   * VM.latestUserDefinedLoader(), which selects a loader from the live call stack rather than the
+   * context class loader. During a nested read the most recent user-defined frame is often a
+   * Spark or Scala class, whose loader cannot see Auron classes when Auron is supplied through
+   * spark.jars and therefore loaded by MutableURLClassLoader. The expression graph then resolves
+   * only partially and an un-readResolve'd DefaultSerializationProxy is assigned into
+   * RDD.dependencies_, raising a ClassCastException. Pinning the loader keeps resolution
+   * independent of the call stack. Spark's own JavaDeserializationStream does the same.
+   */
+  private class AuronObjectInputStream(in: InputStream, loader: ClassLoader)
+      extends ObjectInputStream(in) {
+
+    // scalastyle:off classforname
+    private def load(name: String, cl: ClassLoader): Class[_] = Class.forName(name, false, cl)
+    // scalastyle:on classforname
+
+    // resolveProxyClass is deliberately not overridden: the only non-deprecated way to obtain a
+    // proxy Class is Proxy.getProxyClass, and serialized expressions contain no dynamic proxies.
+    override def resolveClass(desc: ObjectStreamClass): Class[_] = {
+      val name = desc.getName
+      try {
+        load(name, loader)
+      } catch {
+        case _: ClassNotFoundException =>
+          // the loader that defined Auron always resolves Auron's own classes even when the
+          // context loader cannot, and its parent chain still covers Spark and Scala classes
+          try {
+            load(name, getClass.getClassLoader)
+          } catch {
+            case _: ClassNotFoundException => super.resolveClass(desc)
+          }
+      }
+    }
+  }
+
   def deserializeExpression[E <: Expression, S <: Serializable](
       serialized: Array[Byte]): (E with Serializable, S) = {
     Utils.tryWithResource(new ByteArrayInputStream(serialized)) { bis =>
-      Utils.tryWithResource(new ObjectInputStream(bis)) { ois =>
-        def read(): (E with Serializable, S) = {
-          val expr = ois.readObject().asInstanceOf[E with Serializable]
-          val payload = ois.readObject().asInstanceOf[S with Serializable]
-          (expr, payload)
-        }
-        // Spark TaskMetrics#externalAccums is not thread-safe
-        val taskContext = TaskContext.get()
-        if (taskContext != null) {
-          taskContext.taskMetrics().synchronized {
+      Utils.tryWithResource(new AuronObjectInputStream(bis, Utils.getContextOrSparkClassLoader)) {
+        ois =>
+          def read(): (E with Serializable, S) = {
+            val expr = ois.readObject().asInstanceOf[E with Serializable]
+            val payload = ois.readObject().asInstanceOf[S with Serializable]
+            (expr, payload)
+          }
+          // Spark TaskMetrics#externalAccums is not thread-safe
+          val taskContext = TaskContext.get()
+          if (taskContext != null) {
+            taskContext.taskMetrics().synchronized {
+              read()
+            }
+          } else {
             read()
           }
-        } else {
-          read()
-        }
       }
     }
   }
