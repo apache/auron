@@ -436,7 +436,7 @@ mod test {
             AggMode::{Final, Partial},
             GroupingExpr,
             agg::create_agg,
-            sum::AggSum,
+            count::AggCount,
         },
         agg_exec::AggExec,
     };
@@ -705,7 +705,9 @@ mod test {
             Field::new("flag", DataType::Boolean, false),
         ]));
 
-        let grp_col: ArrayRef = Arc::new(StringArray::from(vec!["a", "a", "a", "b", "b", "b"]));
+        let grp_col: ArrayRef = Arc::new(StringArray::from(vec![
+            "a", "a", "a", "b", "b", "b", "c", "c",
+        ]));
         let val_col: ArrayRef = Arc::new(Int32Array::from(vec![
             Some(1),
             Some(2),
@@ -713,9 +715,11 @@ mod test {
             Some(4),
             Some(5),
             None,
+            Some(6),
+            Some(7),
         ]));
         let flag_col: ArrayRef = Arc::new(BooleanArray::from(vec![
-            true, false, true, false, true, true,
+            true, false, true, false, true, true, false, false,
         ]));
 
         let batch = RecordBatch::try_new(
@@ -729,8 +733,9 @@ mod test {
             None,
         )?);
 
-        // SUM(val) FILTER (WHERE flag = true)
-        // Expected: a=1+3=4, b=5+0=5 (NULL val contributes 0 to sum)
+        // COUNT(val) FILTER (WHERE flag = true)
+        // Expected: a=2, b=1 (NULL val is not counted), c=0 because all rows in
+        // group c are filtered out.
         let filter_expr = Arc::new(phys_expr::Column::new("flag", 2));
         let agg_exec = Arc::new(AggExec::try_new(
             HashAgg,
@@ -739,11 +744,11 @@ mod test {
                 expr: phys_expr::col("grp", &schema)?,
             }],
             vec![AggExpr {
-                field_name: "sum_filtered".to_string(),
+                field_name: "count_filtered".to_string(),
                 mode: Partial,
                 filter: Some(filter_expr),
-                agg: Arc::new(AggSum::try_new(
-                    phys_expr::col("val", &schema)?,
+                agg: Arc::new(AggCount::try_new(
+                    vec![phys_expr::col("val", &schema)?],
                     DataType::Int64,
                 )?),
             }],
@@ -755,15 +760,16 @@ mod test {
         let result = concat_batches(&output[0].schema(), &output)?;
 
         let grp_result = result.column(0).as_string::<i32>();
-        let sum_result = result.column(1).as_primitive::<Int64Type>();
+        let count_result = result.column(1).as_primitive::<Int64Type>();
 
-        assert_eq!(grp_result.len(), 2);
+        assert_eq!(grp_result.len(), 3);
         let mut found = std::collections::HashMap::new();
         for i in 0..grp_result.len() {
-            found.insert(grp_result.value(i), sum_result.value(i));
+            found.insert(grp_result.value(i), count_result.value(i));
         }
-        assert_eq!(found["a"], 4); // 1 + 3
-        assert_eq!(found["b"], 5); // 5 (NULL val contributes 0)
+        assert_eq!(found["a"], 2);
+        assert_eq!(found["b"], 1);
+        assert_eq!(found["c"], 0);
 
         Ok(())
     }
