@@ -2128,7 +2128,7 @@ mod fuzztest {
 
         MemManager::init(1000000000);
         let total = 51000;
-        let limit = Some(9999);
+        let limit = 9999;
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
         let keys: Vec<Option<i64>> = std::iter::repeat_with(|| {
             if rng.random_ratio(1, 20) {
@@ -2168,9 +2168,10 @@ mod fuzztest {
                     descending,
                     nulls_first,
                 };
-                let a = collect_primitive_sort_output(&batches, options, limit, true).await?;
-                let b = collect_primitive_sort_output(&batches, options, limit, false).await?;
-                assert_eq!(a.num_rows(), limit.unwrap());
+                let a = collect_primitive_sort_output(&batches, options, Some(limit), true).await?;
+                let b =
+                    collect_primitive_sort_output(&batches, options, Some(limit), false).await?;
+                assert_eq!(a.num_rows(), limit);
                 let keys_a = a
                     .column(0)
                     .as_any()
