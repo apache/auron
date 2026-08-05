@@ -33,6 +33,8 @@ services:
     environment:
       RUSTFLAGS: "-C target-cpu=skylake"
       AURON_BUILD_ARGS: "${AURON_BUILD_ARGS}"
+      AURON_BUILD_BRANCH: "${AURON_BUILD_BRANCH}"
+      AURON_BUILD_REVISION: "${AURON_BUILD_REVISION}"
       AURON_JAVA_VERSION: "${AURON_JAVA_VERSION:-8}"
     command: >
       bash -c '
