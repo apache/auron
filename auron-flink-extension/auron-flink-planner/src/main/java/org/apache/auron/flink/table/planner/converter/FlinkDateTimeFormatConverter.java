@@ -18,6 +18,7 @@ package org.apache.auron.flink.table.planner.converter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -63,11 +64,17 @@ public final class FlinkDateTimeFormatConverter {
      * Translates the given Java {@code SimpleDateFormat} pattern to the native {@code strftime}-style
      * format string.
      *
-     * @param javaPattern the Java date-time format pattern
+     * @param javaPattern the Java date-time format pattern, never {@code null}. Null is rejected
+     *     rather than reported as untranslatable: {@link Optional#empty()} means the user wrote a
+     *     pattern outside the native surface and the {@code Calc} should fall back, whereas a null
+     *     pattern means the caller never resolved one, which is a plumbing bug that a silent
+     *     fallback would hide.
      * @return the translated native format string, or {@link Optional#empty()} if any part of the
      *     pattern is outside the natively supported surface
+     * @throws NullPointerException if {@code javaPattern} is null
      */
     public static Optional<String> translate(String javaPattern) {
+        Objects.requireNonNull(javaPattern, "format pattern must not be null");
         List<Token> tokens = scan(javaPattern);
         if (tokens == null) {
             return Optional.empty();

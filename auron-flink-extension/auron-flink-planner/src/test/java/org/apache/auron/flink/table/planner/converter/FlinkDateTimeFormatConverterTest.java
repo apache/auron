@@ -18,6 +18,7 @@ package org.apache.auron.flink.table.planner.converter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -82,6 +83,16 @@ class FlinkDateTimeFormatConverterTest {
         assertEquals(Optional.of("%Y%m%d%H%M%S"), translate("yyyyMMddHHmmss"));
         // Literal separators remove the adjacency between fields → accepted at run length 1.
         assertEquals(Optional.of("%Y-%m-%d"), translate("yyyy-M-d"));
+    }
+
+    /**
+     * Contract: a null pattern is a caller bug, not an untranslatable pattern, so it fails fast
+     * rather than returning empty. Returning empty would route it into the same fallback path as a
+     * legitimately unsupported pattern and hide the bug.
+     */
+    @Test
+    void testNullPatternRejectedRatherThanReportedUntranslatable() {
+        assertThrows(NullPointerException.class, () -> translate(null));
     }
 
     private static Optional<String> translate(String javaPattern) {

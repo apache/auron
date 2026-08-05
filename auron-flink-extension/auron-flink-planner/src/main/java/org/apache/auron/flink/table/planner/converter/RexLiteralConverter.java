@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.EnumSet;
+import java.util.Objects;
 import java.util.Set;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -119,10 +120,14 @@ public class RexLiteralConverter implements FlinkRexNodeConverter {
      * serialized as a single-element {@code Utf8} Arrow record batch in IPC stream format, matching
      * the encoding {@link #convert} produces for CHAR/VARCHAR {@link RexLiteral}s.
      *
-     * @param value the constant string to encode
+     * @param value the constant string to encode, never {@code null}. A null value would mean the
+     *     caller failed to resolve a plan-time constant, which is a plumbing bug rather than an
+     *     unsupported expression, so it is rejected here instead of being encoded as a NULL literal.
      * @return a {@link PhysicalExprNode} carrying the value as a native literal
+     * @throws NullPointerException if {@code value} is null
      */
     public static PhysicalExprNode stringLiteral(String value) {
+        Objects.requireNonNull(value, "literal value must not be null");
         RowType rowType = RowType.of(new VarCharType(VarCharType.MAX_LENGTH));
         try (BufferAllocator allocator =
                         FlinkArrowUtils.getRootAllocator().newChildAllocator("literal", 0, Long.MAX_VALUE);
