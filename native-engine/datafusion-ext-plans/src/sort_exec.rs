@@ -1701,8 +1701,11 @@ mod fuzztest {
     use std::{sync::Arc, time::Instant};
 
     use arrow::{
-        array::{ArrayRef, Int64Array, StringArray, UInt32Array},
+        array::{Array, ArrayRef, Int64Array, PrimitiveArray, StringArray, UInt32Array},
         compute::{SortOptions, concat_batches},
+        datatypes::{
+            ArrowPrimitiveType, Date32Type, Date64Type, TimestampMicrosecondType, UInt64Type,
+        },
         record_batch::RecordBatch,
     };
     use auron_memmgr::MemManager;
@@ -1911,10 +1914,10 @@ mod fuzztest {
             .collect()
     }
 
-    /// Runs a single-column Int64 sort with the given options/limit through
-    /// Auron's `SortExec` (primitive fast path) or DataFusion's `SortExec`,
-    /// and returns the concatenated output batch.
-    async fn collect_i64_sort_output(
+    /// Runs a single-column primitive sort with the given options/limit
+    /// through Auron's `SortExec` (primitive fast path) or DataFusion's
+    /// `SortExec`, and returns the concatenated output batch.
+    async fn collect_primitive_sort_output(
         batches: &[RecordBatch],
         options: SortOptions,
         limit: Option<usize>,
@@ -1970,8 +1973,8 @@ mod fuzztest {
                     descending,
                     nulls_first,
                 };
-                let a = collect_i64_sort_output(&batches, options, limit, true).await?;
-                let b = collect_i64_sort_output(&batches, options, limit, false).await?;
+                let a = collect_primitive_sort_output(&batches, options, limit, true).await?;
+                let b = collect_primitive_sort_output(&batches, options, limit, false).await?;
                 assert!(
                     a == b,
                     "primitive fast path output mismatch: descending={descending}, \
@@ -2003,6 +2006,206 @@ mod fuzztest {
         // Top-N: limit is much smaller than the total row count, so the fast
         // path takes the `sort_to_indices(Some(limit))` partial-sort branch.
         fuzztest_primitive_fast_path_with_conf(1000000000, Some(9999), false).await
+    }
+
+    /// Builds single-column primitive batches from `keys`, chunked into
+    /// `rows_per_batch`-sized batches. Used to exercise the primitive fast
+    /// path across the advertised key types (not just Int64).
+    fn build_primitive_fast_path_batches<T>(
+        keys: Vec<Option<T::Native>>,
+        rows_per_batch: usize,
+    ) -> Vec<RecordBatch>
+    where
+        T: ArrowPrimitiveType,
+        PrimitiveArray<T>: From<Vec<Option<T::Native>>>,
+    {
+        let schema = Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new("c0", T::DATA_TYPE, true),
+        ]));
+        keys.chunks(rows_per_batch)
+            .map(|chunk| {
+                RecordBatch::try_new(
+                    schema.clone(),
+                    vec![Arc::new(PrimitiveArray::<T>::from(chunk.to_vec())) as ArrayRef],
+                )
+                .expect("failed to create test batch")
+            })
+            .collect()
+    }
+
+    /// Parameterized correctness check for one primitive key type: sorts
+    /// `extremes` plus randomly generated keys from `domain` (small domain
+    /// with ~5% nulls, so duplicates and nulls are heavily exercised) with
+    /// both Auron and DataFusion under all asc/desc x nulls-first/nulls-last
+    /// combinations and requires identical output. `extremes` should include
+    /// the type's min/max values so ordering-semantics bugs (e.g.
+    /// signed/unsigned mixups) cannot hide inside the random domain.
+    async fn check_primitive_type_fast_path<T>(
+        extremes: &[T::Native],
+        domain: std::ops::Range<T::Native>,
+    ) -> Result<()>
+    where
+        T: ArrowPrimitiveType,
+        T::Native: rand::distr::uniform::SampleUniform,
+        PrimitiveArray<T>: From<Vec<Option<T::Native>>>,
+    {
+        use rand::{Rng, SeedableRng, seq::SliceRandom};
+        MemManager::init(1000000000);
+        let total = 51000;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut keys: Vec<Option<T::Native>> = extremes.iter().map(|v| Some(*v)).collect();
+        keys.extend(
+            std::iter::repeat_with(|| {
+                if rng.random_ratio(1, 20) {
+                    None
+                } else {
+                    Some(rng.random_range(domain.clone()))
+                }
+            })
+            .take(total - extremes.len()),
+        );
+        keys.shuffle(&mut rng);
+        let batches = build_primitive_fast_path_batches::<T>(keys, 1000);
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let options = SortOptions {
+                    descending,
+                    nulls_first,
+                };
+                let a = collect_primitive_sort_output(&batches, options, None, true).await?;
+                let b = collect_primitive_sort_output(&batches, options, None, false).await?;
+                assert!(
+                    a == b,
+                    "primitive fast path output mismatch: descending={descending}, \
+                     nulls_first={nulls_first}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_uint64() -> Result<()> {
+        // extremes above i64::MAX catch signed/unsigned ordering mixups
+        check_primitive_type_fast_path::<UInt64Type>(
+            &[0, 1, i64::MAX as u64, i64::MAX as u64 + 1, u64::MAX],
+            0..1000,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_date32() -> Result<()> {
+        check_primitive_type_fast_path::<Date32Type>(&[i32::MIN, -1, 0, 1, i32::MAX], -1000..1000)
+            .await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_date64() -> Result<()> {
+        check_primitive_type_fast_path::<Date64Type>(&[i64::MIN, -1, 0, 1, i64::MAX], -1000..1000)
+            .await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_timestamp_us() -> Result<()> {
+        check_primitive_type_fast_path::<TimestampMicrosecondType>(
+            &[i64::MIN, -1, 0, 1, i64::MAX],
+            -1_000_000..1_000_000,
+        )
+        .await
+    }
+
+    /// Combined coverage: nullable key + payload column + Top-N limit.
+    /// Duplicate keys make the relative order of tied payload rows
+    /// implementation-defined, so the payload is a deterministic function of
+    /// the key: the key column must match DataFusion exactly (null ordering
+    /// included) and every payload must be aligned with its key.
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_topn_nullable_key_with_payload() -> Result<()> {
+        use rand::{Rng, SeedableRng};
+        const NULL_PAYLOAD: u32 = u32::MAX;
+        let payload_of = |key: i64| (key as u32).wrapping_mul(31).wrapping_add(7);
+
+        MemManager::init(1000000000);
+        let total = 51000;
+        let limit = Some(9999);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let keys: Vec<Option<i64>> = std::iter::repeat_with(|| {
+            if rng.random_ratio(1, 20) {
+                None
+            } else {
+                Some(rng.random_range(0..1000))
+            }
+        })
+        .take(total)
+        .collect();
+
+        let schema = Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new("c0", arrow::datatypes::DataType::Int64, true),
+            arrow::datatypes::Field::new("v", arrow::datatypes::DataType::UInt32, false),
+        ]));
+        let batches: Vec<RecordBatch> = keys
+            .chunks(1000)
+            .map(|chunk| {
+                let payload: UInt32Array = chunk
+                    .iter()
+                    .map(|key| key.map_or(NULL_PAYLOAD, payload_of))
+                    .collect();
+                RecordBatch::try_new(
+                    schema.clone(),
+                    vec![
+                        Arc::new(Int64Array::from(chunk.to_vec())) as ArrayRef,
+                        Arc::new(payload),
+                    ],
+                )
+                .expect("failed to create test batch")
+            })
+            .collect();
+
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let options = SortOptions {
+                    descending,
+                    nulls_first,
+                };
+                let a = collect_primitive_sort_output(&batches, options, limit, true).await?;
+                let b = collect_primitive_sort_output(&batches, options, limit, false).await?;
+                assert_eq!(a.num_rows(), limit.unwrap());
+                let keys_a = a
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("key column must be Int64");
+                let keys_b = b
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("key column must be Int64");
+                assert_eq!(
+                    keys_a, keys_b,
+                    "key ordering mismatch: descending={descending}, nulls_first={nulls_first}"
+                );
+                let payload_a = a
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<UInt32Array>()
+                    .expect("payload column must be UInt32");
+                for row_idx in 0..a.num_rows() {
+                    let expected = if keys_a.is_null(row_idx) {
+                        NULL_PAYLOAD
+                    } else {
+                        payload_of(keys_a.value(row_idx))
+                    };
+                    assert_eq!(
+                        payload_a.value(row_idx),
+                        expected,
+                        "payload misaligned at row {row_idx}: descending={descending}, \
+                         nulls_first={nulls_first}"
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn fuzztest_with_mem_conf(mem: usize) -> Result<()> {
