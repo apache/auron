@@ -55,8 +55,7 @@ use datafusion_ext_exprs::{
     named_struct::NamedStructExpr, row_num::RowNumExpr,
     spark_monotonically_increasing_id::SparkMonotonicallyIncreasingIdExpr,
     spark_negative::SparkNegativeExpr, spark_partition_id::SparkPartitionIdExpr,
-    spark_randn::SparkRandnExpr,
-    spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
+    spark_randn::SparkRandnExpr, spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
     spark_udf_wrapper::SparkUDFWrapperExpr, string_contains::StringContainsExpr,
     string_ends_with::StringEndsWithExpr, string_starts_with::StringStartsWithExpr,
 };

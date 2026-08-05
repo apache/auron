@@ -17,6 +17,7 @@
 package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.auron.Shims
 
 class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
@@ -100,6 +101,30 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         assertNativePlan(df)
       } else {
         checkSparkAnswerAndOperator("SELECT negative(col1), -(col1) FROM t1")
+      }
+    }
+  }
+
+  if (Shims.get.shimVersion != "spark-3.0") {
+    test("UnaryMinus preserves analyzed ANSI behavior") {
+      withSQLConf("spark.sql.ansi.enabled" -> "false") {
+        withTable("t1") {
+          sql("create table t1(col1 int) using parquet")
+          sql("insert into t1 values(-2147483648)")
+
+          spark.conf.set("spark.sql.ansi.enabled", "true")
+          val df =
+            try {
+              val query = sql("SELECT negative(col1), -(col1) FROM t1")
+              query.queryExecution.analyzed
+              query
+            } finally {
+              spark.conf.set("spark.sql.ansi.enabled", "false")
+            }
+
+          assertArithmeticOverflow(df, "[ARITHMETIC_OVERFLOW]")
+          assertNativePlan(df)
+        }
       }
     }
   }

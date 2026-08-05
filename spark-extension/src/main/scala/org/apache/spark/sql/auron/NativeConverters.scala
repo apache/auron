@@ -569,7 +569,7 @@ object NativeConverters extends Logging {
             pb.PhysicalNegativeNode
               .newBuilder()
               .setExpr(convertExprWithFallback(unaryMinus.child, isPruningExpr, fallback))
-              .setAnsiEnabled(SQLConf.get.ansiEnabled)
+              .setAnsiEnabled(Shims.get.getUnaryMinusFailOnError(unaryMinus))
               .build())
         }
 
