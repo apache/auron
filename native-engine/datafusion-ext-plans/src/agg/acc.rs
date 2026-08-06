@@ -88,6 +88,25 @@ impl AccTable {
         self.cols.iter_mut().for_each(|c| c.resize(num_records));
     }
 
+    pub fn ensure_size(&mut self, idx: IdxSelection<'_>) {
+        let num_records = match idx {
+            IdxSelection::Single(idx) => idx + 1,
+            IdxSelection::Indices(indices) => {
+                indices.iter().copied().max().map_or(0, |idx| idx + 1)
+            }
+            IdxSelection::IndicesU32(indices) => indices
+                .iter()
+                .copied()
+                .max()
+                .map_or(0, |idx| idx as usize + 1),
+            IdxSelection::Range(_, end) => end,
+        };
+        self.cols
+            .iter_mut()
+            .filter(|col| col.num_records() < num_records)
+            .for_each(|col| col.resize(num_records));
+    }
+
     pub fn shrink_to_fit(&mut self) {
         self.cols.iter_mut().for_each(|c| c.shrink_to_fit());
     }
