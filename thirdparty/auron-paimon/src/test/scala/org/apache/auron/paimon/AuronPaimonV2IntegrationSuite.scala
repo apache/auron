@@ -143,6 +143,24 @@ class AuronPaimonV2IntegrationSuite
     }
   }
 
+  test("paimon v2 COW primary-key table preserves latest value across commits") {
+    withTable("paimon.db.t_cow_multi_commit") {
+      sql("""
+            |create table paimon.db.t_cow_multi_commit (id int, v string)
+            |using paimon
+            |tblproperties (
+            |  'primary-key' = 'id',
+            |  'bucket' = '2',
+            |  'full-compaction.delta-commits' = '1'
+            |)
+            |""".stripMargin)
+      sql("insert into paimon.db.t_cow_multi_commit values (1, 'a'), (2, 'b')")
+      sql("insert into paimon.db.t_cow_multi_commit values (1, 'updated')")
+      val df = sql("select * from paimon.db.t_cow_multi_commit")
+      checkAnswer(df, Seq(Row(1, "updated"), Row(2, "b")))
+    }
+  }
+
   test("paimon v2 native scan handles empty table") {
     withTable("paimon.db.t_empty") {
       sql("create table paimon.db.t_empty (id int, v string) using paimon")
