@@ -406,7 +406,8 @@ class AuronPaimonV2IntegrationSuite
 
   test("paimon v2 native scan falls back for unsupported data types") {
     withTable("paimon.db.t_unsupported_type") {
-      sql("create table paimon.db.t_unsupported_type (id int, amount decimal(38, 10)) using paimon")
+      sql(
+        "create table paimon.db.t_unsupported_type (id int, amount decimal(38, 10)) using paimon")
       sql(
         "insert into paimon.db.t_unsupported_type values " +
           "(1, cast(123.45 as decimal(38, 10)))")
