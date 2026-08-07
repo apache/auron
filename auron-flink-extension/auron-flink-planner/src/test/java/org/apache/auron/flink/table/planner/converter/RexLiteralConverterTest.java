@@ -18,6 +18,7 @@ package org.apache.auron.flink.table.planner.converter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -167,5 +168,15 @@ class RexLiteralConverterTest {
         RexNode tsLit = REX_BUILDER.makeNullLiteral(TYPE_FACTORY.createSqlType(SqlTypeName.TIMESTAMP));
 
         assertFalse(converter.isSupported(tsLit, context));
+    }
+
+    /**
+     * Contract: {@code stringLiteral} encodes plan-time constants the caller has already resolved,
+     * so a null value means the caller failed to resolve one. It is rejected at the boundary rather
+     * than encoded as a NULL literal, which would ship a silently wrong argument to the native side.
+     */
+    @Test
+    void testStringLiteralRejectsNull() {
+        assertThrows(NullPointerException.class, () -> RexLiteralConverter.stringLiteral(null));
     }
 }

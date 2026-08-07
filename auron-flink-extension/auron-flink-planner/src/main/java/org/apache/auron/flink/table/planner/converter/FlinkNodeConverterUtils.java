@@ -16,10 +16,14 @@
  */
 package org.apache.auron.flink.table.planner.converter;
 
+import java.util.List;
 import org.apache.auron.flink.utils.SchemaConverters;
+import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.PhysicalCastNode;
 import org.apache.auron.protobuf.PhysicalExprNode;
+import org.apache.auron.protobuf.PhysicalScalarFunctionNode;
 import org.apache.auron.protobuf.PhysicalTryCastNode;
+import org.apache.auron.protobuf.ScalarFunction;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -137,6 +141,27 @@ public final class FlinkNodeConverterUtils {
         org.apache.auron.protobuf.ArrowType arrowType = SchemaConverters.convertToAuronArrowType(logicalType);
         return PhysicalExprNode.newBuilder()
                 .setCast(PhysicalCastNode.newBuilder().setExpr(expr).setArrowType(arrowType))
+                .build();
+    }
+
+    /**
+     * Assembles a {@link PhysicalScalarFunctionNode} that routes to Auron's ext-function registry
+     * ({@link ScalarFunction#AuronExtFunctions}) by name. The arguments must already be converted to
+     * native expression nodes.
+     *
+     * @param name the registry name of the ext function (e.g. {@code "Flink_UnixTimestamp"})
+     * @param args the already-converted argument expressions, in call order
+     * @param returnType the native Arrow return type of the function
+     * @return a {@link PhysicalExprNode} wrapping the scalar-function call
+     */
+    public static PhysicalExprNode buildExtScalarFunctionNode(
+            String name, List<PhysicalExprNode> args, ArrowType returnType) {
+        return PhysicalExprNode.newBuilder()
+                .setScalarFunction(PhysicalScalarFunctionNode.newBuilder()
+                        .setName(name)
+                        .setFun(ScalarFunction.AuronExtFunctions)
+                        .addAllArgs(args)
+                        .setReturnType(returnType))
                 .build();
     }
 
