@@ -77,7 +77,8 @@ import org.apache.flink.table.planner.utils.TableConfigUtils;
  * {@code [value, chronoFormat, zoneId]}. The single-argument form uses Flink's
  * default format; the two-argument form is supported only when the format operand
  * is a literal whose pattern {@link FlinkDateTimeFormatConverter} can translate,
- * and the zero-argument form falls back.
+ * and the zero-argument form falls back. It additionally requires a session time
+ * zone the native function can resolve (see {@link #isNativelySupportedZone}).
  */
 public class RexCallConverter implements FlinkRexNodeConverter {
 
@@ -149,7 +150,7 @@ public class RexCallConverter implements FlinkRexNodeConverter {
             return isCastTypeSupported(call.getOperands().get(0).getType(), call.getType());
         }
         if (call.getOperator() == FlinkSqlOperatorTable.UNIX_TIMESTAMP) {
-            return isUnixTimestampSupported(call);
+            return isUnixTimestampSupported(call, context);
         }
         SqlKind kind = call.getKind();
         if (!SUPPORTED_KINDS.contains(kind)) {
@@ -414,9 +415,10 @@ public class RexCallConverter implements FlinkRexNodeConverter {
 
     /**
      * Returns {@code true} if this {@code UNIX_TIMESTAMP} call can run natively. The single-argument
-     * form always can (it uses Flink's default format). The two-argument form can only when the
-     * format operand is a compile-time literal whose pattern the native parser handles identically
-     * (see {@link FlinkDateTimeFormatConverter}).
+     * form uses Flink's default format; the two-argument form additionally requires the format
+     * operand to be a compile-time literal whose pattern the native parser handles identically
+     * (see {@link FlinkDateTimeFormatConverter}). Both also require a session time zone the native
+     * function can resolve (see {@link #isNativelySupportedZone}).
      *
      * <p>The zero-argument form is rejected here so it always falls back to Flink. It is a
      * different function rather than a defaulted arity: it parses no input at all, and instead
@@ -424,9 +426,13 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      * folded to a literal at plan time. It also has no value operand, which the native
      * ext-function path needs to size its output against the batch.
      */
-    private static boolean isUnixTimestampSupported(RexCall call) {
+    private static boolean isUnixTimestampSupported(RexCall call, ConverterContext context) {
         List<RexNode> operands = call.getOperands();
         if (operands.isEmpty()) {
+            return false;
+        }
+        ZoneId zone = TableConfigUtils.getLocalTimeZone(context.getTableConfig());
+        if (!isNativelySupportedZone(zone.getId())) {
             return false;
         }
         if (operands.size() == 1) {
@@ -445,6 +451,30 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     }
 
     /**
+     * Returns {@code true} if the native function can resolve {@code zoneId}. It resolves a zone by
+     * exact-match lookup in the IANA time zone database, so two id families that Flink's
+     * {@code table.local-time-zone} accepts have to fall back:
+     *
+     * <ul>
+     *   <li>fixed-offset constructions such as {@code GMT-08:00}, which name an offset rather than
+     *       a region and are absent from {@link ZoneId#getAvailableZoneIds()}
+     *   <li>the legacy {@code SystemV/*} aliases, which the JDK still resolves but the database
+     *       the native lookup consults does not carry
+     * </ul>
+     *
+     * <p>The check has to happen at plan time: an unresolvable id fails inside the native call,
+     * and the Calc operator has no run-time fallback to catch it.
+     *
+     * <p>The membership test consults the JDK's copy of the database as a proxy for the one the
+     * native side resolves against. The two are updated independently and nothing in the build
+     * pins them together, so any further id family they stop agreeing on has to be excluded here
+     * the way {@code SystemV/*} is.
+     */
+    private static boolean isNativelySupportedZone(String zoneId) {
+        return !zoneId.startsWith("SystemV/") && ZoneId.getAvailableZoneIds().contains(zoneId);
+    }
+
+    /**
      * Builds a native {@code Flink_UnixTimestamp} ext-function call. The native argument list is
      * always {@code [value, chronoFormat, zoneId]}, and both of Flink's string-parsing arities are
      * normalized onto that shape here: the value operand is converted recursively, the format is
@@ -454,8 +484,9 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      * missing format or timezone itself, and treats any other arity as a plumbing bug.
      *
      * @throws IllegalArgumentException if the call carries an arity this converter does not
-     *     normalize, or a format literal outside the natively supported surface (both unreachable
-     *     via the factory, which gates on {@link #isSupported} first)
+     *     normalize, a format literal outside the natively supported surface, or a session time
+     *     zone the native function cannot resolve (all unreachable via the factory, which gates on
+     *     {@link #isSupported} first)
      */
     private PhysicalExprNode buildUnixTimestamp(RexCall call, ConverterContext context) {
         List<RexNode> operands = call.getOperands();
@@ -473,6 +504,10 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported UNIX_TIMESTAMP format: " + javaFormat));
 
         ZoneId zone = TableConfigUtils.getLocalTimeZone(context.getTableConfig());
+        if (!isNativelySupportedZone(zone.getId())) {
+            throw new IllegalArgumentException(
+                    "UNIX_TIMESTAMP session time zone is not natively resolvable: " + zone.getId());
+        }
 
         ArrowType bigIntType = ArrowType.newBuilder()
                 .setINT64(EmptyMessage.getDefaultInstance())

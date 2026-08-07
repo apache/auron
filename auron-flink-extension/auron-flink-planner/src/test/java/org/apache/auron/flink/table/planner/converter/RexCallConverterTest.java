@@ -82,7 +82,12 @@ class RexCallConverterTest {
                     new VarCharType()
                 },
                 new String[] {"f0", "f1", "f2", "f3", "f4", "f5", "f6"});
-        context = new ConverterContext(new Configuration(), null, getClass().getClassLoader(), inputType);
+        // The session time zone is pinned rather than left unset, because a converter that reads it
+        // rejects ids the native side cannot resolve. An unset zone resolves to the machine's
+        // default, which would make those cases depend on where the suite runs.
+        Configuration conf = new Configuration();
+        conf.setString("table.local-time-zone", "UTC");
+        context = new ConverterContext(conf, null, getClass().getClassLoader(), inputType);
     }
 
     @Test
@@ -551,16 +556,34 @@ class RexCallConverterTest {
      * enables. */
     @Test
     void testUnixTimestampTimezonePropagatesToNode() throws IOException {
-        Configuration conf = new Configuration();
-        conf.setString("table.local-time-zone", "Asia/Shanghai");
-        ConverterContext tzContext =
-                new ConverterContext(conf, null, getClass().getClassLoader(), context.getInputType());
+        ConverterContext tzContext = contextWithZone("Asia/Shanghai");
         RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
 
         PhysicalExprNode result = converter.convert(call, tzContext);
 
         assertEquals(
                 "Asia/Shanghai", decodeStringLiteral(result.getScalarFunction().getArgs(2)));
+    }
+
+    /** A fixed-offset session zone names an offset rather than a region: Flink accepts it, the
+     * native lookup cannot resolve it, so the gate rejects it and the builder refuses it outright
+     * rather than emitting a node that fails at run time. */
+    @Test
+    void testUnixTimestampFixedOffsetZoneFallsBack() {
+        ConverterContext tzContext = contextWithZone("GMT-08:00");
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
+
+        assertFalse(converter.isSupported(call, tzContext));
+        assertThrows(IllegalArgumentException.class, () -> converter.convert(call, tzContext));
+    }
+
+    /** A legacy {@code SystemV/*} session zone still resolves in the JDK, so it reaches the gate
+     * looking like an ordinary region id, but the native lookup does not carry it. */
+    @Test
+    void testUnixTimestampSystemVZoneFallsBack() {
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
+
+        assertFalse(converter.isSupported(call, contextWithZone("SystemV/PST8")));
     }
 
     /** The zero-argument form never reaches the native function: the gate rejects it so the Calc
@@ -589,6 +612,13 @@ class RexCallConverterTest {
     }
 
     // ---- Helpers ----
+
+    /** Returns a copy of the shared context whose session time zone is {@code zoneId}. */
+    private ConverterContext contextWithZone(String zoneId) {
+        Configuration conf = new Configuration();
+        conf.setString("table.local-time-zone", zoneId);
+        return new ConverterContext(conf, null, getClass().getClassLoader(), context.getInputType());
+    }
 
     private static String decodeStringLiteral(PhysicalExprNode node) throws IOException {
         byte[] bytes = node.getLiteral().getIpcBytes().toByteArray();
