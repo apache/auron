@@ -37,6 +37,7 @@ class AuronSparkSessionExtension extends (SparkSessionExtensions => Unit) with L
     logInfo(s"${classOf[AuronSparkSessionExtension].getName} enabled")
 
     Shims.get.onApplyingExtension()
+    Shims.get.injectQueryStagePrepRule(extensions)
 
     extensions.injectColumnar(sparkSession => {
       AuronColumnarOverrides(sparkSession)

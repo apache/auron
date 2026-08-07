@@ -29,6 +29,7 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.ShuffleHandle
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.auron.join.JoinBuildSides.JoinBuildSide
 import org.apache.spark.sql.catalyst.InternalRow
@@ -67,6 +68,8 @@ abstract class Shims {
   def initExtension(): Unit = {}
 
   def onApplyingExtension(): Unit = {}
+
+  def injectQueryStagePrepRule(extensions: SparkSessionExtensions): Unit
 
   def createConvertToNativeExec(child: SparkPlan): ConvertToNativeBase
 
