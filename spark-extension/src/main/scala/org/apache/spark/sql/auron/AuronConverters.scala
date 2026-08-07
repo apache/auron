@@ -545,6 +545,9 @@ object AuronConverters extends Logging {
       addRenameColumnsExec(convertToNative(exec.child)))
   }
 
+  def prepareExtensionPlans(exec: SparkPlan): Unit =
+    extConvertProviders.foreach(_.prepare(exec))
+
   def convertSortExec(exec: SortExec): SparkPlan = {
     val (sortOrder, global, child) = (exec.sortOrder, exec.global, exec.child)
     logDebugPlanConversion(
