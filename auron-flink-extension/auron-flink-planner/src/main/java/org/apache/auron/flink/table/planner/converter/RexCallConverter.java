@@ -18,6 +18,7 @@ package org.apache.auron.flink.table.planner.converter;
 
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -73,12 +74,15 @@ import org.apache.flink.table.planner.utils.TableConfigUtils;
  * result is cast to the call's result type so all branches share one type.
  *
  * <p>{@code UNIX_TIMESTAMP} (matched by operator identity, like {@code TRY_CAST})
- * maps to a native {@code Flink_UnixTimestamp} ext-function call with arguments
- * {@code [value, chronoFormat, zoneId]}. The single-argument form uses Flink's
- * default format; the two-argument form is supported only when the format operand
+ * maps to one of two native ext-function calls, chosen by arity. The
+ * string-parsing forms become {@code Flink_UnixTimestamp} with arguments
+ * {@code [value, chronoFormat, zoneId]}: the single-argument form uses Flink's
+ * default format, the two-argument form is supported only when the format operand
  * is a literal whose pattern {@link FlinkDateTimeFormatConverter} can translate,
- * and the zero-argument form falls back. It additionally requires a session time
- * zone the native function can resolve (see {@link #isNativelySupportedZone}).
+ * and both require a session time zone the native function can resolve (see
+ * {@link #isNativelySupportedZone}). The zero-argument form reads the wall clock
+ * rather than parsing a string, and becomes {@code Flink_UnixTimestampNow}, which
+ * takes no argument and needs no time zone.
  */
 public class RexCallConverter implements FlinkRexNodeConverter {
 
@@ -417,19 +421,20 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      * Returns {@code true} if this {@code UNIX_TIMESTAMP} call can run natively. The single-argument
      * form uses Flink's default format; the two-argument form additionally requires the format
      * operand to be a compile-time literal whose pattern the native parser handles identically
-     * (see {@link FlinkDateTimeFormatConverter}). Both also require a session time zone the native
-     * function can resolve (see {@link #isNativelySupportedZone}).
+     * (see {@link FlinkDateTimeFormatConverter}). Both interpret their string against the session
+     * time zone, so both require a zone the native function can resolve (see
+     * {@link #isNativelySupportedZone}).
      *
-     * <p>The zero-argument form is rejected here so it always falls back to Flink. It is a
-     * different function rather than a defaulted arity: it parses no input at all, and instead
-     * reads the wall clock once per record, so the operator is not deterministic and is never
-     * folded to a literal at plan time. It also has no value operand, which the native
-     * ext-function path needs to size its output against the batch.
+     * <p>The zero-argument form is a different function rather than a defaulted arity: it parses
+     * no input at all and instead reads the wall clock, so it is not deterministic and is never
+     * folded to a literal at plan time. Its result is epoch seconds, a zone-independent instant,
+     * which is why it is admitted above the zone check: a session zone the native side cannot
+     * resolve has no bearing on a value that never consults one.
      */
     private static boolean isUnixTimestampSupported(RexCall call, ConverterContext context) {
         List<RexNode> operands = call.getOperands();
         if (operands.isEmpty()) {
-            return false;
+            return true;
         }
         ZoneId zone = TableConfigUtils.getLocalTimeZone(context.getTableConfig());
         if (!isNativelySupportedZone(zone.getId())) {
@@ -475,10 +480,16 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     }
 
     /**
-     * Builds a native {@code Flink_UnixTimestamp} ext-function call. The native argument list is
-     * always {@code [value, chronoFormat, zoneId]}, and both of Flink's string-parsing arities are
-     * normalized onto that shape here: the value operand is converted recursively, the format is
-     * translated to the native specifier string (defaulting to Flink's
+     * Builds the native ext-function call backing {@code UNIX_TIMESTAMP}. Two different native
+     * functions serve it, selected by arity.
+     *
+     * <p>The zero-argument form becomes {@code Flink_UnixTimestampNow}, which takes no argument:
+     * it reads the clock and returns epoch seconds as a scalar the projection broadcasts across
+     * the batch, so it needs neither a value to size against nor a zone.
+     *
+     * <p>The string-parsing forms become {@code Flink_UnixTimestamp}, whose native argument list is
+     * always {@code [value, chronoFormat, zoneId]}: the value operand is converted recursively, the
+     * format is translated to the native specifier string (defaulting to Flink's
      * {@code yyyy-MM-dd HH:mm:ss} when the call carries no format operand), and the session
      * timezone is resolved at plan time. The native function therefore never has to default a
      * missing format or timezone itself, and treats any other arity as a plumbing bug.
@@ -490,10 +501,17 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      */
     private PhysicalExprNode buildUnixTimestamp(RexCall call, ConverterContext context) {
         List<RexNode> operands = call.getOperands();
-        if (operands.isEmpty() || operands.size() > 2) {
+        if (operands.size() > 2) {
             throw new IllegalArgumentException(
-                    "UNIX_TIMESTAMP is native only in its 1-argument and 2-argument forms, got " + operands.size()
-                            + " arguments");
+                    "UNIX_TIMESTAMP is native only in its 0-argument, 1-argument and 2-argument forms, got "
+                            + operands.size() + " arguments");
+        }
+        ArrowType bigIntType = ArrowType.newBuilder()
+                .setINT64(EmptyMessage.getDefaultInstance())
+                .build();
+        if (operands.isEmpty()) {
+            return FlinkNodeConverterUtils.buildExtScalarFunctionNode(
+                    "Flink_UnixTimestampNow", Collections.emptyList(), bigIntType);
         }
         PhysicalExprNode value = convertOperand(operands.get(0), context);
 
@@ -509,9 +527,6 @@ public class RexCallConverter implements FlinkRexNodeConverter {
                     "UNIX_TIMESTAMP session time zone is not natively resolvable: " + zone.getId());
         }
 
-        ArrowType bigIntType = ArrowType.newBuilder()
-                .setINT64(EmptyMessage.getDefaultInstance())
-                .build();
         return FlinkNodeConverterUtils.buildExtScalarFunctionNode(
                 "Flink_UnixTimestamp",
                 Arrays.asList(

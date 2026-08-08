@@ -586,14 +586,29 @@ class RexCallConverterTest {
         assertFalse(converter.isSupported(call, contextWithZone("SystemV/PST8")));
     }
 
-    /** The zero-argument form never reaches the native function: the gate rejects it so the Calc
-     * falls back, and the builder refuses it outright rather than reading an absent value operand. */
+    /** The zero-argument form parses no operand, so it converts to a distinct native function that
+     * takes no arguments at all rather than to the string-parsing one. */
     @Test
-    void testUnixTimestampZeroArgFallsBack() {
+    void testUnixTimestampZeroArgNodeShape() {
         RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP);
 
-        assertFalse(converter.isSupported(call, context));
-        assertThrows(IllegalArgumentException.class, () -> converter.convert(call, context));
+        PhysicalExprNode result = converter.convert(call, context);
+
+        assertTrue(result.hasScalarFunction());
+        PhysicalScalarFunctionNode fn = result.getScalarFunction();
+        assertEquals("Flink_UnixTimestampNow", fn.getName());
+        assertEquals(ScalarFunction.AuronExtFunctions, fn.getFun());
+        assertEquals(0, fn.getArgsCount(), "The zero-argument form carries no native argument");
+        assertEquals(ArrowType.ArrowTypeEnumCase.INT64, fn.getReturnType().getArrowTypeEnumCase());
+    }
+
+    /** The zero-argument result is epoch seconds, which no session time zone bears on, so the gate
+     * admits it even under a zone the native lookup cannot resolve. */
+    @Test
+    void testUnixTimestampZeroArgSupportedWithFixedOffsetZone() {
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP);
+
+        assertTrue(converter.isSupported(call, contextWithZone("GMT-08:00")));
     }
 
     @Test
