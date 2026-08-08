@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import org.apache.auron.flink.table.AuronFlinkTableTestBase;
+import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.CollectionUtil;
 import org.junit.jupiter.api.Test;
@@ -257,6 +258,40 @@ public class AuronFlinkCalcITCase extends AuronFlinkTableTestBase {
                 .collect());
         rows.sort(Comparator.comparingLong(o -> (long) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(1602316801L), Row.of(1602316802L), Row.of(1602316803L)));
+    }
+
+    /**
+     * The zero-argument UNIX_TIMESTAMP reads the wall clock rather than parsing a column. It yields
+     * one row per input row, each carrying epoch seconds bracketed by the test's own clock reads.
+     *
+     * <p>Fallback to Flink's codegen Calc is silent and total, and produces an identical row set, so
+     * the values alone cannot show the Calc ran natively. The fallback counter narrows it: a Calc
+     * that fails to convert always records either an unsupported node or a composition failure
+     * before it falls back, so a count of zero means this Calc converted. It does not mean the Calc
+     * ran. A native library holding no registry arm for the function still converts at plan time
+     * and only fails once executing, where nothing records a fallback, leaving the counter at zero
+     * and the result set empty.
+     *
+     * <p>The row count is what establishes that the native plan executed. {@code allSatisfy} passes
+     * vacuously over an empty list, so dropping {@code hasSize(3)} would let that runtime failure
+     * read as success and leave native execution unverified.
+     */
+    @Test
+    public void testUnixTimestampZeroArgRunsNatively() {
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        long before = System.currentTimeMillis() / 1000;
+        List<Row> rows = CollectionUtil.iteratorToList(
+                tableEnvironment.executeSql("select UNIX_TIMESTAMP() from T1").collect());
+        long after = System.currentTimeMillis() / 1000;
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        assertThat(rows)
+                .as("one clock-bracketed row per input row; an empty result set means the native"
+                        + " library implements no arm for this function")
+                .hasSize(3)
+                .allSatisfy(row -> assertThat((long) row.getField(0)).isBetween(before, after));
     }
 
     /** A NOT LIKE filter keeps rows whose string does not match the pattern. */
