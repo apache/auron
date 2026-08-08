@@ -31,6 +31,7 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.ShuffleHandle
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.auron.AuronConverters.ForceNativeExecutionWrapperBase
 import org.apache.spark.sql.auron.NativeConverters.NativeExprWrapperBase
@@ -160,6 +161,23 @@ class ShimsImpl extends Shims with Logging {
     }
 
   }
+
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  override def injectQueryStagePrepRule(extensions: SparkSessionExtensions): Unit = {
+    extensions.injectQueryStagePrepRule(_ =>
+      new org.apache.spark.sql.catalyst.rules.Rule[SparkPlan] {
+        override def apply(plan: SparkPlan): SparkPlan = {
+          if (SparkAuronConfiguration.AURON_ENABLED.get()) {
+            AuronConverters.prepareExtensionPlans(plan)
+          }
+          plan
+        }
+      })
+  }
+
+  @sparkver("3.0 / 3.1")
+  override def injectQueryStagePrepRule(extensions: SparkSessionExtensions): Unit =
+    extensions match { case _ => }
 
   // set Auron spark ui if spark.auron.ui.enabled is true
   override def onApplyingExtension(): Unit = {

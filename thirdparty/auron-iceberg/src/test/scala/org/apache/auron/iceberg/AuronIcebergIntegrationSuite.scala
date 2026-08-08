@@ -598,6 +598,114 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native changelog scan prunes tasks by simple metadata predicates") {
+    withTable("local.db.t_changelog_snapshot_pruning") {
+      withTempView("t_changelog_snapshot_pruning_changes") {
+        sql("""
+              |create table local.db.t_changelog_snapshot_pruning (id int, v string)
+              |using iceberg
+              |tblproperties ('format-version' = '2')
+              |""".stripMargin)
+        sql("insert into local.db.t_changelog_snapshot_pruning values (0, 'seed')")
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_snapshot_pruning")
+        sql("insert into local.db.t_changelog_snapshot_pruning values (1, 'a')")
+        val firstSnapshotId = currentSnapshotId("local.db.t_changelog_snapshot_pruning")
+        sql("insert into local.db.t_changelog_snapshot_pruning values (2, 'b')")
+        val secondSnapshotId = currentSnapshotId("local.db.t_changelog_snapshot_pruning")
+        sql("insert into local.db.t_changelog_snapshot_pruning values (3, 'c')")
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_snapshot_pruning")
+        createChangelogView(
+          "local.db.t_changelog_snapshot_pruning",
+          "t_changelog_snapshot_pruning_changes",
+          startSnapshotId,
+          endSnapshotId)
+
+        def checkQuery(query: String, expected: Seq[Row], expectedTaskCount: Int): Unit = {
+          withSQLConf("spark.auron.enable" -> "false") {
+            checkAnswer(sql(query), expected)
+          }
+          withSQLConf(
+            "spark.auron.enable" -> "true",
+            "spark.auron.enable.iceberg.scan" -> "true") {
+            val df = sql(query)
+            checkAnswer(df, expected)
+            if (expectedTaskCount > 0) {
+              val nativeScan = executedNativeIcebergTableScanExec(df)
+              assert(nativeScan.metrics("numFiles").value == expectedTaskCount)
+            } else {
+              val plan = df.queryExecution.executedPlan match {
+                case adaptive: AdaptiveSparkPlanExec => adaptive.executedPlan
+                case other => other
+              }
+              assert(collectMaterializedPlans(plan).exists(_.nodeName == "NativeEmpty"))
+            }
+          }
+        }
+
+        checkQuery(
+          s"""
+             |select id, _commit_snapshot_id
+             |from t_changelog_snapshot_pruning_changes
+             |where _commit_snapshot_id = $secondSnapshotId
+             |""".stripMargin,
+          Seq(Row(2, secondSnapshotId)),
+          expectedTaskCount = 1)
+        checkQuery(
+          """
+            |select id
+            |from t_changelog_snapshot_pruning_changes
+            |where _commit_snapshot_id = -1
+            |""".stripMargin,
+          Seq.empty,
+          expectedTaskCount = 0)
+        checkQuery(
+          """
+            |select id, _change_ordinal
+            |from t_changelog_snapshot_pruning_changes
+            |where _change_ordinal in (0, 2)
+            |order by id
+            |""".stripMargin,
+          Seq(Row(1, 0), Row(3, 2)),
+          expectedTaskCount = 2)
+        checkQuery(
+          s"""
+             |select id, _change_type
+             |from t_changelog_snapshot_pruning_changes
+             |where _change_type = 'INSERT' and _commit_snapshot_id = $firstSnapshotId
+             |""".stripMargin,
+          Seq(Row(1, "INSERT")),
+          expectedTaskCount = 1)
+        checkQuery(
+          s"""
+             |select id
+             |from t_changelog_snapshot_pruning_changes
+             |where _commit_snapshot_id = $firstSnapshotId
+             |   or _commit_snapshot_id = $secondSnapshotId
+             |order by id
+             |""".stripMargin,
+          Seq(Row(1), Row(2)),
+          expectedTaskCount = 3)
+        checkQuery(
+          s"""
+             |select id
+             |from t_changelog_snapshot_pruning_changes
+             |where not (_commit_snapshot_id = $firstSnapshotId)
+             |order by id
+             |""".stripMargin,
+          Seq(Row(2), Row(3)),
+          expectedTaskCount = 3)
+        checkQuery(
+          s"""
+             |select id
+             |from t_changelog_snapshot_pruning_changes
+             |where _commit_snapshot_id = $secondSnapshotId and id = 2
+             |""".stripMargin,
+          Seq(Row(2)),
+          expectedTaskCount = 3)
+      }
+    }
+  }
+
   test("iceberg native scan supports full-data-file delete changelog scan") {
     withTable("local.db.t_changelog_full_file_delete") {
       withTempView("t_changelog_full_file_delete_changes") {
