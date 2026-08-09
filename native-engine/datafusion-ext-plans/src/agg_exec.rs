@@ -436,6 +436,7 @@ mod test {
             AggMode::{Final, Partial},
             GroupingExpr,
             agg::create_agg,
+            count::AggCount,
             sum::AggSum,
         },
         agg_exec::AggExec,
@@ -738,15 +739,28 @@ mod test {
                 field_name: "grp".to_string(),
                 expr: phys_expr::col("grp", &schema)?,
             }],
-            vec![AggExpr {
-                field_name: "sum_filtered".to_string(),
-                mode: Partial,
-                filter: Some(filter_expr),
-                agg: Arc::new(AggSum::try_new(
-                    phys_expr::col("val", &schema)?,
-                    DataType::Int64,
-                )?),
-            }],
+            vec![
+                AggExpr {
+                    field_name: "sum_filtered".to_string(),
+                    mode: Partial,
+                    filter: Some(filter_expr),
+                    agg: Arc::new(AggSum::try_new(
+                        phys_expr::col("val", &schema)?,
+                        DataType::Int64,
+                    )?),
+                },
+                AggExpr {
+                    field_name: "count_filtered".to_string(),
+                    mode: Partial,
+                    filter: Some(Arc::new(phys_expr::Literal::new(ScalarValue::Boolean(
+                        Some(false),
+                    )))),
+                    agg: Arc::new(AggCount::try_new(
+                        vec![phys_expr::col("val", &schema)?],
+                        DataType::Int64,
+                    )?),
+                },
+            ],
             false,
             input,
         )?);
@@ -756,11 +770,13 @@ mod test {
 
         let grp_result = result.column(0).as_string::<i32>();
         let sum_result = result.column(1).as_primitive::<Int64Type>();
+        let count_result = result.column(2).as_primitive::<Int64Type>();
 
         assert_eq!(grp_result.len(), 2);
         let mut found = std::collections::HashMap::new();
         for i in 0..grp_result.len() {
             found.insert(grp_result.value(i), sum_result.value(i));
+            assert_eq!(count_result.value(i), 0);
         }
         assert_eq!(found["a"], 4); // 1 + 3
         assert_eq!(found["b"], 5); // 5 (NULL val contributes 0)

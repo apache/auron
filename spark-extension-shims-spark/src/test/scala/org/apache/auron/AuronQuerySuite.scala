@@ -974,6 +974,14 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         |GROUP BY category
         |ORDER BY category""".stripMargin)
 
+      // A group with no matching rows keeps the aggregate's empty-input state.
+      checkSparkAnswerAndOperator("""SELECT category,
+        |  SUM(amount) FILTER (WHERE amount > 450) AS high_amount,
+        |  SUM(amount) FILTER (WHERE amount < 150) AS low_amount
+        |FROM t_filter_agg_2289
+        |GROUP BY category
+        |ORDER BY category""".stripMargin)
+
       // Multiple aggregates with different FILTER predicates
       checkSparkAnswerAndOperator("""SELECT
         |  SUM(amount) FILTER (WHERE is_vip = true)  AS sum_vip,

@@ -274,6 +274,10 @@ impl AggContext {
         // arrow-ffi with sliced batch is buggy in older arrow-java, so we use unsliced
         // batch with explicit offsets
 
+        // Every group needs an accumulator slot even when FILTER excludes all of its
+        // rows.
+        acc_table.ensure_size(acc_idx);
+
         // partial update
         if self.need_partial_update {
             let agg_exprs_batch = self.agg_expr_evaluator.filter_project(&batch)?;
