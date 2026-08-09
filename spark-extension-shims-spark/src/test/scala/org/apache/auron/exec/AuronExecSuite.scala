@@ -46,7 +46,7 @@ class AuronExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   test("CollectLimit batches partition scans") {
     withTempPath { path =>
-      spark.range(8).repartition(8).write.parquet(path.getCanonicalPath)
+      spark.range(0, 80, 1, 8).write.parquet(path.getCanonicalPath)
 
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
