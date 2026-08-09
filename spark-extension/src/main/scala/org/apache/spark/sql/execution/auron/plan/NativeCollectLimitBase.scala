@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.auron.plan
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.sql.auron.{NativeHelper, NativeRDD, NativeSupports, Shims}
@@ -43,15 +42,7 @@ abstract class NativeCollectLimitBase(limit: Int, offset: Int, override val chil
 
   override def executeCollect(): Array[InternalRow] = {
     val partial = Shims.get.createNativeLocalLimitExec(limit, child)
-    val buf = new ArrayBuffer[InternalRow]
-
-    // collect rows partition-by-partition up to 'limit', avoiding full-partition collect.
-    val it = partial.execute().toLocalIterator
-    while (buf.size < limit && it.hasNext) {
-      val row = it.next().copy()
-      buf += row
-    }
-    val rows = buf.toArray
+    val rows = partial.executeTake(limit)
     if (offset > 0) rows.drop(offset) else rows
   }
 
