@@ -675,7 +675,7 @@ impl ExternalSorter {
         let sorted_batch = if !self.prune_sort_keys_from_batch.is_all_pruned() {
             take_batch(batch, sorted_indices)?
         } else {
-            create_zero_column_batch(batch.num_rows())
+            create_zero_column_batch(sorted_indices.len())
         };
 
         // add to in-mem blocks
@@ -1497,6 +1497,16 @@ mod test {
         )?))
     }
 
+    fn build_single_column_table(name: &str, values: Vec<i32>) -> Result<Arc<dyn ExecutionPlan>> {
+        let schema = Arc::new(Schema::new(vec![Field::new(name, DataType::Int32, false)]));
+        let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(Int32Array::from(values))])?;
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema,
+            None,
+        )?))
+    }
+
     // Verify that `common_prefix_len` correctly computes prefixes of small fixed
     // sizes. This ensures compiler optimizations do not incorrectly transform
     // the function for small lengths.
@@ -1543,6 +1553,35 @@ mod test {
             "+---+---+---+",
         ];
         assert_batches_eq!(expected, &batches);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_top_k_with_only_sort_column() -> Result<()> {
+        MemManager::init(100);
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+        let input = build_single_column_table("id", (0..10).rev().collect())?;
+        let sort_exprs = vec![PhysicalSortExpr {
+            expr: Arc::new(Column::new("id", 0)),
+            options: SortOptions::default(),
+        }];
+
+        let sort = SortExec::new(input, sort_exprs, Some(6), 0);
+        let output = sort.execute(0, task_ctx)?;
+        let batches = common::collect(output).await?;
+        let expected = r#"+----+
+| id |
++----+
+| 0  |
+| 1  |
+| 2  |
+| 3  |
+| 4  |
+| 5  |
++----+"#;
+        assert_batches_eq!(expected.lines().collect::<Vec<_>>(), &batches);
 
         Ok(())
     }

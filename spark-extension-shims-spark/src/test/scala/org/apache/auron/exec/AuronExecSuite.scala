@@ -116,6 +116,16 @@ class AuronExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("TakeOrderedAndProject with only the sort column") {
+    withTempView("t1") {
+      spark.range(10).repartition(1).createOrReplaceTempView("t1")
+      val df = checkSparkAnswerAndOperator("SELECT id FROM t1 ORDER BY id LIMIT 6")
+      assert(collect(df.queryExecution.executedPlan) { case e: NativeTakeOrderedExec =>
+        e
+      }.size == 1)
+    }
+  }
+
   test("TakeOrderedAndProject with offset") {
     if (AuronTestUtils.isSparkV34OrGreater) {
       withTempView("t1") {
