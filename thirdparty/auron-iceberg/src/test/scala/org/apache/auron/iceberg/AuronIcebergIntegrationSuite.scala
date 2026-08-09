@@ -627,17 +627,28 @@ class AuronIcebergIntegrationSuite
           withSQLConf(
             "spark.auron.enable" -> "true",
             "spark.auron.enable.iceberg.scan" -> "true") {
-            val df = sql(query)
-            checkAnswer(df, expected)
             if (expectedTaskCount > 0) {
+              val df = sql(query)
+              checkAnswer(df, expected)
               val nativeScan = executedNativeIcebergTableScanExec(df)
               assert(nativeScan.metrics("numFiles").value == expectedTaskCount)
             } else {
-              val plan = df.queryExecution.executedPlan match {
-                case adaptive: AdaptiveSparkPlanExec => adaptive.executedPlan
-                case other => other
+              val zeroFilesReported = new CountDownLatch(1)
+              val listener = new SparkListener {
+                override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+                  case SparkListenerDriverAccumUpdates(_, updates)
+                      if updates.size == 2 && updates.forall(_._2 == 0L) =>
+                    zeroFilesReported.countDown()
+                  case _ =>
+                }
               }
-              assert(collectMaterializedPlans(plan).exists(_.nodeName == "NativeEmpty"))
+              spark.sparkContext.addSparkListener(listener)
+              try {
+                checkAnswer(sql(query), expected)
+                assert(zeroFilesReported.await(30, TimeUnit.SECONDS))
+              } finally {
+                spark.sparkContext.removeSparkListener(listener)
+              }
             }
           }
         }
