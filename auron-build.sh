@@ -46,8 +46,10 @@ SUPPORTED_HUDI_VERSIONS=("0.15")
 #   Print script usage information, supported options, and example commands.
 # -----------------------------------------------------------------------------
 print_help() {
-    echo "Usage: $0 [OPTIONS] <maven build options>"
+    echo "Usage: $0 [OPTIONS] [--] <maven build options>"
     echo "Build Auron project with specified Maven profiles"
+    echo
+    echo "Any arguments after -- are passed to Maven unchanged."
     echo
     echo "Options:"
     echo "  --pre                    Activate pre-release profile"
@@ -57,6 +59,8 @@ print_help() {
     echo "  --sparktests <true|false> Run spark tests (default: false)"
     echo "  --docker <true|false>    Build in Docker environment (default: false)"
     echo "  --threads <N|NC>         Maven build threads (e.g. 1, 4, 1C). Default: local unset, docker 8"
+    echo "  --mvn <PATH>             Maven executable to build with (default: build/mvn, which downloads Maven)"
+    echo "  --goal <GOAL>            Maven goal to run, e.g. package or install (default: install)"
     IFS=','; echo "  --image <NAME>           Docker image to use (e.g. ${SUPPORTED_OS_IMAGES[*]}, default: ${SUPPORTED_OS_IMAGES[*]:0:1})"; unset IFS
     IFS=','; echo "  --sparkver <VERSION>     Specify Spark version (e.g. ${SUPPORTED_SPARK_VERSIONS[*]})"; unset IFS
     IFS=','; echo "  --flinkver <VERSION>     Specify Flink version (e.g. ${SUPPORTED_FLINK_VERSIONS[*]})"; unset IFS
@@ -163,6 +167,7 @@ PRE_PROFILE=false
 RELEASE_PROFILE=false
 CLEAN=true
 SKIP_TESTS=true
+MVN_GOAL="install"
 SPARK_TESTS=false
 THREADS=""
 SPARK_VER=""
@@ -375,8 +380,33 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --mvn)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                if ! MVN_CMD="$(command -v "$2")"; then
+                    echo "ERROR: --mvn '$2' is not an executable or a command on PATH" >&2
+                    exit 1
+                fi
+                shift 2
+            else
+                echo "ERROR: Missing argument for --mvn, specify a path to a Maven executable" >&2
+                exit 1
+            fi
+            ;;
+        --goal)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                MVN_GOAL="$2"
+                shift 2
+            else
+                echo "ERROR: Missing argument for --goal, specify a Maven goal such as package or install" >&2
+                exit 1
+            fi
+            ;;
         -h|--help)
             print_help
+            ;;
+        --)
+            shift
+            break
             ;;
         --*)
             echo "ERROR: Unknown option '$1'" >&2
@@ -467,9 +497,9 @@ fi
 
 BUILD_ARGS=()
 if [[ "$SKIP_TESTS" == true ]]; then
-    BUILD_ARGS+=("install" "-DskipTests")
+    BUILD_ARGS+=("$MVN_GOAL" "-DskipTests")
 else
-    BUILD_ARGS+=("install")
+    BUILD_ARGS+=("$MVN_GOAL")
 fi
 
 if [[ "$SPARK_TESTS" == true ]]; then
