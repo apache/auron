@@ -93,4 +93,8 @@ abstract class AuronQueryTest
       true
     case _ => false
   }
+
+  protected def waitUntilListenerBusEmpty(): Unit = {
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+  }
 }
