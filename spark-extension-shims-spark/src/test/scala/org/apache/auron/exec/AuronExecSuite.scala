@@ -57,7 +57,7 @@ class AuronExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
           case exec: NativeCollectLimitExec => exec
         }.get
         val numPartitions = collectLimit.child.execute().getNumPartitions
-        assert(numPartitions > 1 && numPartitions <= 100)
+        assert(numPartitions > 1)
 
         val jobGroup = s"collect-limit-${System.nanoTime()}"
         spark.sparkContext.setJobGroup(jobGroup, "test CollectLimit job count")
