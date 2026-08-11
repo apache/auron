@@ -22,11 +22,17 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.ipc.ArrowStreamReader;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
 import org.apache.auron.flink.runtime.operator.FlinkAuronCalcOperator;
 import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
@@ -34,6 +40,7 @@ import org.apache.auron.jni.AuronAdaptor;
 import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.FFIReaderExecNode;
 import org.apache.auron.protobuf.FilterExecNode;
+import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.auron.protobuf.ProjectionExecNode;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -50,6 +57,7 @@ import org.apache.flink.streaming.api.transformations.OneInputTransformation;
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.delegation.PlannerBase;
+import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
@@ -61,6 +69,7 @@ import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RawType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.table.types.logical.VarCharType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -274,6 +283,55 @@ class StreamExecCalcTest {
     }
 
     // =====================================================================
+    // UNIX_TIMESTAMP integration
+    // =====================================================================
+
+    /** Contract: a zero-argument {@code UNIX_TIMESTAMP()} is unsupported, so a Calc projecting it
+     * falls back rather than converting to a native operator. */
+    @Test
+    void testUnixTimestampZeroArgFallsBack() throws Exception {
+        Transformation<RowData> stub = new FakeSourceTransformation();
+        RexNode unixTs =
+                REX_BUILDER.makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, Collections.emptyList());
+        CapturingTranslator node = new CapturingTranslator(
+                tableConfig, Arrays.asList(unixTs), null, inputProperty, RowType.of(new BigIntType()), "calc", stub);
+        wireFakeUpstream(node, TWO_INT_ROW);
+
+        Transformation<RowData> result = invokeTranslate(node);
+
+        assertSame(stub, result);
+        assertEquals(1, node.fallbackCount);
+    }
+
+    /** Contract: the effective {@link ExecNodeConfig} — not the empty persisted config — seeds the
+     * converter, so a session {@code table.local-time-zone} reaches the emitted native node's zone
+     * argument. Threading the persisted config here would silently default the zone. */
+    @Test
+    void testSessionTimeZoneReachesNativePlan() throws Exception {
+        RowType inputRow = RowType.of(new LogicalType[] {new VarCharType()}, new String[] {"ts"});
+        RexNode unixTs =
+                REX_BUILDER.makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, Arrays.asList(strRef(0)));
+        StreamExecCalc node = newCalc(
+                Arrays.asList(unixTs), null, RowType.of(new LogicalType[] {new BigIntType()}, new String[] {"u"}));
+        wireFakeUpstream(node, inputRow);
+
+        Configuration conf = new Configuration();
+        conf.setString("table.local-time-zone", "Asia/Shanghai");
+        ExecNodeConfig zonedConfig = ExecNodeConfig.ofNodeConfig(conf, false);
+
+        Transformation<RowData> result = invokeTranslate(node, zonedConfig);
+
+        PhysicalPlanNode plan = ((FlinkAuronCalcOperator) operatorOf(result))
+                .getPhysicalPlanNodes()
+                .get(0);
+        PhysicalExprNode projected = plan.getProjection().getExpr(0);
+        assertTrue(projected.hasScalarFunction(), "UNIX_TIMESTAMP must convert to a scalar function node");
+        assertEquals(
+                "Asia/Shanghai",
+                decodeStringLiteral(projected.getScalarFunction().getArgs(2)));
+    }
+
+    // =====================================================================
     // Strict mode (FAIL_BACK_FLINK_ENGINE_ENABLED=false)
     // =====================================================================
 
@@ -396,6 +454,14 @@ class StreamExecCalcTest {
         return REX_BUILDER.makeInputRef(intType(), idx);
     }
 
+    private static RelDataType varcharType() {
+        return TYPE_FACTORY.createSqlType(SqlTypeName.VARCHAR);
+    }
+
+    private static RexNode strRef(int idx) {
+        return REX_BUILDER.makeInputRef(varcharType(), idx);
+    }
+
     private static RexNode makeBinary(
             RelDataType returnType, org.apache.calcite.sql.SqlOperator op, RexNode left, RexNode right) {
         return REX_BUILDER.makeCall(returnType, op, Arrays.asList(left, right));
@@ -418,18 +484,32 @@ class StreamExecCalcTest {
     }
 
     private Transformation<RowData> invokeTranslate(StreamExecCalc node) throws Exception {
+        return invokeTranslate(node, nodeConfig);
+    }
+
+    private Transformation<RowData> invokeTranslate(StreamExecCalc node, ExecNodeConfig config) throws Exception {
         Method m = ExecNodeBase.class.getDeclaredMethod(
                 "translateToPlanInternal", PlannerBase.class, ExecNodeConfig.class);
         m.setAccessible(true);
         try {
             @SuppressWarnings("unchecked")
-            Transformation<RowData> t = (Transformation<RowData>) m.invoke(node, null, nodeConfig);
+            Transformation<RowData> t = (Transformation<RowData>) m.invoke(node, null, config);
             return t;
         } catch (java.lang.reflect.InvocationTargetException e) {
             if (e.getCause() instanceof RuntimeException) {
                 throw (RuntimeException) e.getCause();
             }
             throw e;
+        }
+    }
+
+    private static String decodeStringLiteral(PhysicalExprNode node) throws IOException {
+        byte[] bytes = node.getLiteral().getIpcBytes().toByteArray();
+        try (BufferAllocator alloc = new RootAllocator(Long.MAX_VALUE);
+                ArrowStreamReader reader = new ArrowStreamReader(new ByteArrayInputStream(bytes), alloc)) {
+            reader.loadNextBatch();
+            VarCharVector vec = (VarCharVector) reader.getVectorSchemaRoot().getVector(0);
+            return vec.getObject(0).toString();
         }
     }
 

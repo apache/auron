@@ -18,6 +18,7 @@ package org.apache.auron.flink.table.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -219,6 +220,43 @@ public class AuronFlinkCalcITCase extends AuronFlinkTableTestBase {
                 .collect());
         rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(1), Row.of(2)));
+    }
+
+    /** UNIX_TIMESTAMP over the per-row {@code ts} string converts to the native ext function and
+     * yields the epoch seconds. The session timezone is set to Asia/Shanghai to make the result
+     * deterministic and to exercise timezone propagation into the native plan. */
+    @Test
+    public void testUnixTimestamp() {
+        tableEnvironment.getConfig().setLocalTimeZone(ZoneId.of("Asia/Shanghai"));
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select UNIX_TIMESTAMP(`ts`) from T1")
+                .collect());
+        rows.sort(Comparator.comparingLong(o -> (long) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1602259201L), Row.of(1602259202L), Row.of(1602259203L)));
+    }
+
+    /** UNIX_TIMESTAMP yields the epoch seconds at zero offset when the session timezone is named
+     * without a region prefix. */
+    @Test
+    public void testUnixTimestampUtcTimeZone() {
+        tableEnvironment.getConfig().setLocalTimeZone(ZoneId.of("UTC"));
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select UNIX_TIMESTAMP(`ts`) from T1")
+                .collect());
+        rows.sort(Comparator.comparingLong(o -> (long) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1602288001L), Row.of(1602288002L), Row.of(1602288003L)));
+    }
+
+    /** UNIX_TIMESTAMP yields the epoch seconds for the offset when the session timezone is a
+     * fixed-offset construction, a form Flink accepts that has no native equivalent. */
+    @Test
+    public void testUnixTimestampFixedOffsetTimeZoneFallsBack() {
+        tableEnvironment.getConfig().setLocalTimeZone(ZoneId.of("GMT-08:00"));
+        List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
+                .executeSql("select UNIX_TIMESTAMP(`ts`) from T1")
+                .collect());
+        rows.sort(Comparator.comparingLong(o -> (long) o.getField(0)));
+        assertThat(rows).isEqualTo(Arrays.asList(Row.of(1602316801L), Row.of(1602316802L), Row.of(1602316803L)));
     }
 
     /** A NOT LIKE filter keeps rows whose string does not match the pattern. */

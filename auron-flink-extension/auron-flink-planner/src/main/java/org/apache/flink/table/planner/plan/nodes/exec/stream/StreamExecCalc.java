@@ -189,7 +189,7 @@ public class StreamExecCalc extends CommonExecCalc
             return upstream;
         }
 
-        final Optional<PhysicalPlanNode> plan = tryBuildAuronPlan(inputRowType, outputRowType);
+        final Optional<PhysicalPlanNode> plan = tryBuildAuronPlan(config, inputRowType, outputRowType);
 
         if (!plan.isPresent()) {
             final boolean fallbackEnabled = AuronAdaptor.getInstance()
@@ -263,13 +263,20 @@ public class StreamExecCalc extends CommonExecCalc
      * composition throws — both signals are the same for the caller: fall back to Flink's codegen
      * Calc.
      *
+     * <p>The converter context is seeded with {@code config}, not {@code getPersistedConfig()}: the
+     * persisted config only carries the options this node declares in {@code @ExecNodeMetadata}, so
+     * it is empty here and would silently drop session settings such as {@code table.local-time-zone}
+     * that native converters need. The {@link ExecNodeConfig} in scope merges node-level overrides
+     * over the planner {@code TableConfig}, so it reflects the effective session configuration.
+     *
+     * @param config the effective exec-node configuration seeding the converter context
      * @param inputRowType the upstream row type used by the converter context
      * @param outputRowType the row type of this Calc's output
      * @return a composed plan, or empty if conversion failed
      */
-    private Optional<PhysicalPlanNode> tryBuildAuronPlan(RowType inputRowType, RowType outputRowType) {
-        return NativePlanFusionBuilder.buildNativeCalcPlan(
-                getPersistedConfig(), projection, condition, inputRowType, outputRowType);
+    private Optional<PhysicalPlanNode> tryBuildAuronPlan(
+            ExecNodeConfig config, RowType inputRowType, RowType outputRowType) {
+        return NativePlanFusionBuilder.buildNativeCalcPlan(config, projection, condition, inputRowType, outputRowType);
     }
 
     /**
