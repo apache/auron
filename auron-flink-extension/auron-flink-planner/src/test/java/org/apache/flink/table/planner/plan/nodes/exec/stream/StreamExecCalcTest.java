@@ -286,21 +286,26 @@ class StreamExecCalcTest {
     // UNIX_TIMESTAMP integration
     // =====================================================================
 
-    /** Contract: a zero-argument {@code UNIX_TIMESTAMP()} is unsupported, so a Calc projecting it
-     * falls back rather than converting to a native operator. */
+    /** Contract: a Calc whose only projection is a zero-argument {@code UNIX_TIMESTAMP()} converts
+     * to a native operator instead of falling back, even though it reads no input column. */
     @Test
-    void testUnixTimestampZeroArgFallsBack() throws Exception {
-        Transformation<RowData> stub = new FakeSourceTransformation();
+    void testUnixTimestampZeroArgConvertsNatively() throws Exception {
         RexNode unixTs =
                 REX_BUILDER.makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, Collections.emptyList());
         CapturingTranslator node = new CapturingTranslator(
-                tableConfig, Arrays.asList(unixTs), null, inputProperty, RowType.of(new BigIntType()), "calc", stub);
+                tableConfig,
+                Arrays.asList(unixTs),
+                null,
+                inputProperty,
+                RowType.of(new BigIntType()),
+                "calc",
+                new FakeSourceTransformation());
         wireFakeUpstream(node, TWO_INT_ROW);
 
         Transformation<RowData> result = invokeTranslate(node);
 
-        assertSame(stub, result);
-        assertEquals(1, node.fallbackCount);
+        assertEquals(0, node.fallbackCount);
+        assertTrue(operatorOf(result) instanceof FlinkAuronCalcOperator);
     }
 
     /** Contract: the effective {@link ExecNodeConfig} — not the empty persisted config — seeds the

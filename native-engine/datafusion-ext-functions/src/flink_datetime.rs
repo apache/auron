@@ -19,7 +19,7 @@ use arrow::{
     array::{Int64Array, StringArray},
     datatypes::DataType,
 };
-use chrono::{DateTime, LocalResult, NaiveDateTime, Offset, TimeZone};
+use chrono::{DateTime, LocalResult, NaiveDateTime, Offset, TimeZone, Utc};
 use chrono_tz::{OffsetComponents, Tz};
 use datafusion::{
     common::{DataFusionError, Result, ScalarValue},
@@ -45,8 +45,8 @@ use datafusion_ext_commons::arrow::cast::cast;
 /// every call reaching this function carries all three arguments already bound.
 ///
 /// Flink's no-argument `UNIX_TIMESTAMP()` parses nothing and yields the current
-/// wall-clock time per record. It is not routed here: it has no input column to
-/// size the output against, and it shares none of the parsing contract below.
+/// wall-clock time. It is served by [`flink_unix_timestamp_now`], which shares
+/// none of the parsing contract below.
 ///
 /// An unparseable value yields `i64::MIN` (Flink's `Long.MIN_VALUE`), never
 /// NULL and never an error; a NULL value yields NULL. Arity, format and
@@ -89,6 +89,32 @@ pub fn flink_unix_timestamp(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     );
 
     Ok(ColumnarValue::Array(Arc::new(result)))
+}
+
+/// Native implementation of Flink SQL `UNIX_TIMESTAMP()`: the current Unix
+/// timestamp in seconds.
+///
+/// Takes no arguments. The result is a `ColumnarValue::Scalar`, which the
+/// projection broadcasts to the width of the batch being evaluated, so no
+/// operand is needed to size the output. The clock is therefore read once per
+/// call site per batch, and every row of that batch carries the same second.
+///
+/// A non-empty argument list is a hard error rather than an ignored operand,
+/// on the same grounds as the arity check in [`flink_unix_timestamp`]: nothing
+/// enforces arity before this point, so a plumbing bug is only visible here.
+///
+/// The clock is read as `timestamp_millis() / 1000` so the truncation matches
+/// Flink's `System.currentTimeMillis() / 1000` exactly.
+pub fn flink_unix_timestamp_now(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if !args.is_empty() {
+        return Err(DataFusionError::Execution(format!(
+            "Flink_UnixTimestampNow takes no arguments, got {}",
+            args.len()
+        )));
+    }
+
+    let secs = Utc::now().timestamp_millis() / 1000;
+    Ok(ColumnarValue::Scalar(ScalarValue::Int64(Some(secs))))
 }
 
 fn utf8_scalar(arg: &ColumnarValue) -> Option<String> {
@@ -635,6 +661,11 @@ mod tests {
             ColumnarValue::Scalar(ScalarValue::Utf8(Some("extra".to_string()))),
         ];
         assert!(flink_unix_timestamp(&four).is_err());
+
+        let one = vec![ColumnarValue::Scalar(ScalarValue::Utf8(Some(
+            "unexpected".to_string(),
+        )))];
+        assert!(flink_unix_timestamp_now(&one).is_err());
     }
 
     #[test]
@@ -654,6 +685,49 @@ mod tests {
         assert_eq!(run("2020-10-10 00:00:01", "", "UTC"), MIN);
         assert_eq!(run("2020-10-10 00:00:01", "", "Asia/Shanghai"), MIN);
         assert_eq!(run("", "", "UTC"), MIN);
+    }
+
+    // The no-argument form returns a Scalar, not an Array. That is what lets it
+    // take no operand: the projection broadcasts the scalar to the batch width,
+    // giving every row of the batch the same second.
+    #[test]
+    fn now_returns_scalar_broadcast_over_the_batch() {
+        let out = flink_unix_timestamp_now(&[]).expect("flink_unix_timestamp_now must not error");
+        assert!(matches!(
+            &out,
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(_)))
+        ));
+
+        let batch_len = 4;
+        let out = out.into_array(batch_len).expect("must materialize");
+        let out = out
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .expect("result must be Int64Array");
+        assert_eq!(out.len(), batch_len);
+        for i in 0..batch_len {
+            assert!(!out.is_null(i));
+            assert_eq!(out.value(i), out.value(0));
+        }
+    }
+
+    // The result is in seconds, not milliseconds: it lands inside the window
+    // bracketed by the test's own clock reads.
+    #[test]
+    fn now_returns_epoch_seconds() {
+        let before = Utc::now().timestamp();
+        let out = flink_unix_timestamp_now(&[]).expect("flink_unix_timestamp_now must not error");
+        let after = Utc::now().timestamp();
+
+        let secs = match out {
+            ColumnarValue::Scalar(ScalarValue::Int64(secs)) => secs,
+            _ => None,
+        }
+        .expect("result must be a non-null Int64 scalar");
+        assert!(
+            (before..=after).contains(&secs),
+            "expected {secs} within [{before}, {after}]"
+        );
     }
 
     #[test]
