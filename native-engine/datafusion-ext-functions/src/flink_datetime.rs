@@ -99,10 +99,20 @@ pub fn flink_unix_timestamp(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 /// operand is needed to size the output. The clock is therefore read once per
 /// call site per batch, and every row of that batch carries the same second.
 ///
-/// The clock is read as `timestamp_millis() / 1000` to mirror Flink's
-/// `System.currentTimeMillis() / 1000` operator for operator, so the two
-/// implementations can be compared side by side.
-pub fn flink_unix_timestamp_now(_args: &[ColumnarValue]) -> Result<ColumnarValue> {
+/// A non-empty argument list is a hard error rather than an ignored operand,
+/// on the same grounds as the arity check in [`flink_unix_timestamp`]: nothing
+/// enforces arity before this point, so a plumbing bug is only visible here.
+///
+/// The clock is read as `timestamp_millis() / 1000` so the truncation matches
+/// Flink's `System.currentTimeMillis() / 1000` exactly.
+pub fn flink_unix_timestamp_now(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if !args.is_empty() {
+        return Err(DataFusionError::Execution(format!(
+            "Flink_UnixTimestampNow takes no arguments, got {}",
+            args.len()
+        )));
+    }
+
     let secs = Utc::now().timestamp_millis() / 1000;
     Ok(ColumnarValue::Scalar(ScalarValue::Int64(Some(secs))))
 }
@@ -651,6 +661,11 @@ mod tests {
             ColumnarValue::Scalar(ScalarValue::Utf8(Some("extra".to_string()))),
         ];
         assert!(flink_unix_timestamp(&four).is_err());
+
+        let one = vec![ColumnarValue::Scalar(ScalarValue::Utf8(Some(
+            "unexpected".to_string(),
+        )))];
+        assert!(flink_unix_timestamp_now(&one).is_err());
     }
 
     #[test]
