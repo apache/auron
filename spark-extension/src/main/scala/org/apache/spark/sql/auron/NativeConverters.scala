@@ -22,6 +22,7 @@ import java.io.InputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.ObjectStreamClass
+import java.lang.reflect.Proxy
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -1526,23 +1527,38 @@ object NativeConverters extends Logging {
     private def load(name: String, cl: ClassLoader): Class[_] = Class.forName(name, false, cl)
     // scalastyle:on classforname
 
-    // resolveProxyClass is deliberately not overridden: the only non-deprecated way to obtain a
-    // proxy Class is Proxy.getProxyClass, and serialized expressions contain no dynamic proxies.
-    override def resolveClass(desc: ObjectStreamClass): Class[_] = {
-      val name = desc.getName
+    /**
+     * Applies `resolve` to the pinned loader, then to the loader that defined Auron, then falls
+     * back to the default call-stack behaviour. The loader that defined Auron always resolves
+     * Auron's own classes even when the context loader cannot, and its parent chain still covers
+     * Spark and Scala classes.
+     */
+    private def withLoaderFallback[T](resolve: ClassLoader => T, default: => T): T =
       try {
-        load(name, loader)
+        resolve(loader)
       } catch {
         case _: ClassNotFoundException =>
-          // the loader that defined Auron always resolves Auron's own classes even when the
-          // context loader cannot, and its parent chain still covers Spark and Scala classes
           try {
-            load(name, getClass.getClassLoader)
+            resolve(getClass.getClassLoader)
           } catch {
-            case _: ClassNotFoundException => super.resolveClass(desc)
+            case _: ClassNotFoundException => default
           }
       }
-    }
+
+    override def resolveClass(desc: ObjectStreamClass): Class[_] =
+      withLoaderFallback(load(desc.getName, _), super.resolveClass(desc))
+
+    /**
+     * Dynamic proxies need the same treatment as ordinary classes: the default implementation
+     * resolves the proxy interfaces through VM.latestUserDefinedLoader() as well, so a proxy
+     * reachable from a UDF, UDAF or UDTF expression graph fails to deserialize whenever its
+     * interfaces are visible only to the loader that defined Auron. Spark's own
+     * JavaDeserializationStream overrides this for the same reason.
+     */
+    override def resolveProxyClass(interfaces: Array[String]): Class[_] =
+      withLoaderFallback(
+        cl => Proxy.getProxyClass(cl, interfaces.map(load(_, cl)): _*),
+        super.resolveProxyClass(interfaces))
   }
 
   def deserializeExpression[E <: Expression, S <: Serializable](
