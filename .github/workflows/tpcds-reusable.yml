@@ -64,20 +64,29 @@ on:
         required: false
         type: string
         default: ''
-      assert-no-classcastexception:
+      assert-log-matches:
         description: >-
-          Whether to fail the job if the TPC-DS run logs any ClassCastException. Spark retries
-          absorb task-level deserialization failures, so queries can report PASS while throwing
-          hundreds of exceptions; this asserts on the log instead.
+          Optional grep -E pattern that the TPC-DS run log must contain. Use it to assert that
+          the plan shape a job exists to cover was actually produced, so the job cannot pass
+          because the optimizer stopped generating it. Implies --print-plan.
         required: false
         type: string
-        default: 'false'
+        default: ''
+      assert-log-not-matches:
+        description: >-
+          Optional grep -E pattern that must not appear in the TPC-DS run log. Spark retries
+          absorb task-level failures, so queries can report PASS while throwing hundreds of
+          exceptions; this asserts on the log instead. Keep the pattern specific to the defect
+          under test, otherwise unrelated failures are attributed to it.
+        required: false
+        type: string
+        default: ''
       jar-on-system-classpath:
         description: >-
-          Whether to also copy the Auron jar into $SPARK_HOME/jars. When true the jar is
-          loaded by the application class loader; when false it reaches the JVM only through
-          spark-submit --jars, i.e. Spark's MutableURLClassLoader. Some class-loading defects
-          only reproduce in the latter configuration.
+          Whether to copy the Auron jar into $SPARK_HOME/jars, where the application class
+          loader defines it. When false, Auron is defined by Spark's MutableURLClassLoader
+          instead, which is what spark-submit --jars and the application jar both feed. Some
+          class-loading defects only reproduce in the latter configuration.
         required: false
         type: string
         default: 'true'
@@ -282,7 +291,7 @@ jobs:
           [ -n "$jar" ] || { echo "No jar matched: auron-${{ inputs.sparkver }}_${{ inputs.scalaver }}*.jar"; exit 1; }
           echo "AURON_SPARK_JAR=$jar" >> "$GITHUB_ENV"
           if [ "$JAR_ON_SYSTEM_CLASSPATH" = "false" ]; then
-            echo "Auron reaches the JVM only through spark-submit --jars (MutableURLClassLoader)"
+            echo "Auron stays off the system classpath (MutableURLClassLoader defines it)"
           else
             cp "$jar" spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
           fi
@@ -401,6 +410,7 @@ jobs:
           SPARK_VERSION: ${{ inputs.sparkver }}
           SCALA_VERSION: ${{ inputs.scalaver }}
           SPARK_HOME: spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}
+          PRINT_PLAN: ${{ inputs.assert-log-matches != '' && '--print-plan' || '' }}
         run: |
           ls -la
           set -o pipefail
@@ -410,23 +420,55 @@ jobs:
             --data-location dev/tpcds_1g \
             --query-filter ${{ matrix.query }} \
             --result-check \
+            $PRINT_PLAN \
             --plan-check 2>&1 | tee tpcds-run-${{ matrix.query }}.log
 
-      # Task-level deserialization failures are absorbed by Spark's task retries, so the
-      # queries can still report PASS while throwing hundreds of exceptions. Assert on the
-      # log directly, otherwise a regression of AURON #2386 goes unnoticed.
-      - name: Assert no deserialization ClassCastException
-        if: ${{ inputs.assert-no-classcastexception == 'true' }}
+      # The auron-it jar depends on the Auron uber jar and so bundles Auron classes itself, which
+      # means skipping the copy into $SPARK_HOME/jars is not on its own proof of how Auron was
+      # loaded. Assert the property the job actually depends on: that some loader other than the
+      # application class loader defined Auron. auron-it prints this at startup.
+      - name: Assert Auron is not on the system classpath
+        if: ${{ inputs.jar-on-system-classpath == 'false' }}
         env:
           QUERY_LOG: tpcds-run-${{ matrix.query }}.log
         run: |
-          count=$(grep -c 'ClassCastException' "$QUERY_LOG" || true)
-          if [ "$count" -gt 0 ]; then
-            echo "::error::$count ClassCastException(s) during expression deserialization"
-            grep -m5 'ClassCastException' "$QUERY_LOG" || true
+          grep -E '^Auron (Class Loader|Code Source|On System Classpath):' "$QUERY_LOG" || true
+          if ! grep -qx 'Auron On System Classpath: false' "$QUERY_LOG"; then
+            echo "::error::Auron was defined by the application class loader, or auron-it did not report it"
             exit 1
           fi
-          echo "No ClassCastException found."
+
+      # Guards against the job silently testing nothing: --plan-check only compares golden plans
+      # on Spark 3.5 (see PlanStabilityChecker), so on other versions a job whose purpose is a
+      # particular plan shape would still pass if the optimizer stopped producing it.
+      - name: Assert the run log matches ${{ inputs.assert-log-matches }}
+        if: ${{ inputs.assert-log-matches != '' }}
+        env:
+          QUERY_LOG: tpcds-run-${{ matrix.query }}.log
+          PATTERN: ${{ inputs.assert-log-matches }}
+        run: |
+          count=$(grep -c -E "$PATTERN" "$QUERY_LOG" || true)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::expected the run log to match '$PATTERN', found no occurrence"
+            exit 1
+          fi
+          echo "Matched '$PATTERN' $count time(s)."
+
+      # Task-level failures are absorbed by Spark's task retries, so the queries can still
+      # report PASS while throwing hundreds of exceptions. Assert on the log directly.
+      - name: Assert the run log does not match ${{ inputs.assert-log-not-matches }}
+        if: ${{ inputs.assert-log-not-matches != '' }}
+        env:
+          QUERY_LOG: tpcds-run-${{ matrix.query }}.log
+          PATTERN: ${{ inputs.assert-log-not-matches }}
+        run: |
+          count=$(grep -c -E "$PATTERN" "$QUERY_LOG" || true)
+          if [ "$count" -gt 0 ]; then
+            echo "::error::run log matched '$PATTERN' $count time(s)"
+            grep -m5 -E "$PATTERN" "$QUERY_LOG" || true
+            exit 1
+          fi
+          echo "No occurrence of '$PATTERN'."
 
       - name: Upload RSS log
         if: ${{ failure() && (inputs.celebornver != '' || inputs.unifflever != '') }}

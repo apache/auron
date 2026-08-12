@@ -64,6 +64,9 @@ object Main {
       opt[Unit]("regen-golden")
         .action((_, c) => c.copy(regenGoldenFiles = true))
         .text("regenerate golden files"),
+      opt[Unit]("print-plan")
+        .action((_, c) => c.copy(printPlan = true))
+        .text("print the Auron physical plan of every query (default: false)"),
       help('h', "help"))
   }
 
@@ -121,8 +124,27 @@ object Main {
     if (args.auronOnly) println("Mode: Auron-only (skip baseline)")
     if (args.enablePlanCheck) println("Plan Check: Enabled")
     if (args.regenGoldenFiles) println("Regenerate golden files: Enabled")
+    printClassLoaderSummary()
     println("-" * 60)
     println("")
+  }
+
+  /**
+   * Reports which loader actually defined Auron. Auron classes reach the JVM either through the
+   * application class loader (a jar in $SPARK_HOME/jars) or through Spark's MutableURLClassLoader
+   * (spark-submit --jars, and the application jar itself). The two behave differently during
+   * deserialization, so tests covering class-loading defects such as AURON #2386 need to state
+   * which arrangement they ran under rather than infer it from how the job was set up.
+   */
+  private def printClassLoaderSummary(): Unit = {
+    val auronClass = Shims.get.getClass
+    val loader = auronClass.getClassLoader
+    val codeSource = Option(auronClass.getProtectionDomain.getCodeSource)
+      .map(_.getLocation.toString)
+      .getOrElse("unknown")
+    println(s"Auron Class Loader: ${loader.getClass.getName}")
+    println(s"Auron Code Source: $codeSource")
+    println(s"Auron On System Classpath: ${loader eq ClassLoader.getSystemClassLoader}")
   }
 }
 // scalastyle:on
