@@ -654,8 +654,10 @@ class RexCallConverterTest {
     /**
      * The gate narrows rather than disappearing: the {@code SystemV/*} family is absent from the
      * time zone database the native side consults, so every one of its ids must still fall back.
-     * The family is swept from the JDK's own id set so that the count is asserted against what the
-     * runtime actually carries.
+     *
+     * <p>The family is swept from the JDK's own id set rather than a fixed list, so it covers
+     * whatever the runtime carries. How many ids that is comes from the bundled tzdb and can change
+     * without the gate's behavior changing, so the sweep asserts only that it was not vacuous.
      */
     @Test
     void testUnixTimestampZoneGateRejectsEverySystemVZone() {
@@ -668,7 +670,7 @@ class RexCallConverterTest {
                 covered++;
             }
         }
-        assertEquals(13, covered, "a skipped sweep would pass vacuously");
+        assertTrue(covered > 0, "a skipped sweep would pass vacuously");
     }
 
     /**
