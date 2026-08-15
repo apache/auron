@@ -37,7 +37,6 @@ class AuronSparkSessionExtension extends (SparkSessionExtensions => Unit) with L
     logInfo(s"${classOf[AuronSparkSessionExtension].getName} enabled")
 
     Shims.get.onApplyingExtension()
-    Shims.get.injectQueryStagePrepRule(extensions)
 
     extensions.injectColumnar(sparkSession => {
       AuronColumnarOverrides(sparkSession)
@@ -81,6 +80,8 @@ case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
               "org.apache.spark.sql.execution.auron.shuffle.AuronUniffleShuffleManager, " +
               "org.apache.spark.sql.execution.auron.shuffle.AuronCelebornShuffleManager.")
         }
+
+        AuronConverters.prepareExtensionPlans(sparkPlan)
 
         // generate convert strategy
         AuronConvertStrategy.apply(sparkPlan)

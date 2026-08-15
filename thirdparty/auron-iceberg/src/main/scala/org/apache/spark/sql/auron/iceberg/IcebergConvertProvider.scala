@@ -19,8 +19,7 @@ package org.apache.spark.sql.auron.iceberg
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.{AuronConverters, AuronConvertProvider}
-import org.apache.spark.sql.execution.FilterExec
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 
@@ -33,19 +32,22 @@ class IcebergConvertProvider extends AuronConvertProvider with Logging {
     exec.foreach {
       case filter: FilterExec
           if IcebergScanSupport.isSupportedChangelogTaskFilter(filter.condition) =>
-        val referencedNames = filter.condition.references.map(_.name).toSet
-        val changelogScans = filter.child.collect {
-          case scan: BatchScanExec
-              if scan.scan.getClass.getName ==
-                "org.apache.iceberg.spark.source.SparkChangelogScan" &&
-                referencedNames.subsetOf(scan.output.map(_.name).toSet) =>
-            scan
-        }
-        if (changelogScans.size == 1) {
-          IcebergScanSupport.addChangelogTaskFilter(changelogScans.head, filter.condition)
-        }
+        changelogScanUnder(filter.child)
+          .filter(scan => filter.condition.references.subsetOf(scan.outputSet))
+          .foreach(IcebergScanSupport.addChangelogTaskFilter(_, filter.condition))
       case _ =>
     }
+  }
+
+  private def changelogScanUnder(exec: SparkPlan): Option[BatchScanExec] = exec match {
+    case scan: BatchScanExec
+        if scan.scan.getClass.getName ==
+          "org.apache.iceberg.spark.source.SparkChangelogScan" =>
+      Some(scan)
+    case project: ProjectExec if project.projectList.forall(_.deterministic) =>
+      changelogScanUnder(project.child)
+    case _ =>
+      None
   }
 
   override def isEnabled(exec: SparkPlan): Boolean = {

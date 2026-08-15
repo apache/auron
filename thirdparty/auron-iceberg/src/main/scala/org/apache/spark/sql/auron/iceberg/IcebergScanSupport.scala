@@ -148,7 +148,11 @@ object IcebergScanSupport extends Logging {
     if (exec.runtimeFilters == runtimeFilters) {
       exec
     } else {
-      Shims.get.copyBatchScanExecWithRuntimeFilters(exec, runtimeFilters)
+      val copied = Shims.get.copyBatchScanExecWithRuntimeFilters(exec, runtimeFilters)
+      exec
+        .getTagValue(changelogTaskFilterTag)
+        .foreach(copied.setTagValue(changelogTaskFilterTag, _))
+      copied
     }
   }
 
@@ -614,12 +618,17 @@ object IcebergScanSupport extends Logging {
     changelogTaskPredicate(condition, partitionSchema)
       .map(predicate =>
         tasks.filter { task =>
-          val values = metadataPartitionValues(
-            task.file.location(),
-            task.file.specId(),
-            Some(task.changelogTask),
-            partitionSchema)
-          predicate(values)
+          task.changelogTask match {
+            case _: AddedRowsScanTask =>
+              val values = metadataPartitionValues(
+                task.file.location(),
+                task.file.specId(),
+                Some(task.changelogTask),
+                partitionSchema)
+              predicate(values)
+            case _ =>
+              true
+          }
         })
       .getOrElse(tasks)
   }
