@@ -29,7 +29,8 @@ mod tests {
     use datafusion::{
         assert_batches_sorted_eq,
         common::{JoinSide, Result},
-        physical_expr::expressions::Column,
+        logical_expr::Operator,
+        physical_expr::expressions::{BinaryExpr, Column},
         physical_plan::{ExecutionPlan, common, joins::utils::*, test::TestMemoryExec},
         prelude::{SessionConfig, SessionContext},
     };
@@ -37,7 +38,10 @@ mod tests {
     use crate::{
         broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
         broadcast_join_exec::BroadcastJoinExec,
-        joins::join_utils::{JoinType, JoinType::*},
+        joins::{
+            ColumnIndex, JoinFilter,
+            join_utils::{JoinType, JoinType::*},
+        },
         sort_merge_join_exec::SortMergeJoinExec,
     };
 
@@ -382,6 +386,60 @@ mod tests {
         Ok((columns, batches))
     }
 
+    async fn bhj_collect_with_filter(
+        test_type: TestType,
+        left: Arc<dyn ExecutionPlan>,
+        right: Arc<dyn ExecutionPlan>,
+        on: JoinOn,
+        join_filter: JoinFilter,
+    ) -> Result<(Vec<String>, Vec<RecordBatch>)> {
+        MemManager::init(1000000);
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+        let schema = build_join_schema_for_test(&left.schema(), &right.schema(), Inner)?;
+
+        let (left, right, broadcast_side): (
+            Arc<dyn ExecutionPlan>,
+            Arc<dyn ExecutionPlan>,
+            JoinSide,
+        ) = match test_type {
+            BHJLeftProbed => (
+                left,
+                Arc::new(BroadcastJoinBuildHashMapExec::new(
+                    right,
+                    on.iter().map(|(_, right_key)| right_key.clone()).collect(),
+                )),
+                JoinSide::Right,
+            ),
+            BHJRightProbed => (
+                Arc::new(BroadcastJoinBuildHashMapExec::new(
+                    left,
+                    on.iter().map(|(left_key, _)| left_key.clone()).collect(),
+                )),
+                right,
+                JoinSide::Left,
+            ),
+            _ => unreachable!("expected broadcast hash join test type"),
+        };
+
+        let join = BroadcastJoinExec::try_new(
+            schema,
+            left,
+            right,
+            on,
+            Inner,
+            broadcast_side,
+            true,
+            None,
+            false,
+            Some(join_filter),
+        )?;
+        let columns = columns(&join.schema());
+        let stream = join.execute(0, task_ctx)?;
+        let batches = common::collect(stream).await?;
+        Ok((columns, batches))
+    }
+
     const ALL_TEST_TYPE: [TestType; 5] = [
         SMJ,
         BHJLeftProbed,
@@ -541,6 +599,62 @@ mod tests {
                 "+----+----+----+----+----+----+",
             ];
             // The output order is important as SMJ preserves sortedness
+            assert_batches_sorted_eq!(expected, &batches);
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn broadcast_join_inner_with_filter() -> Result<()> {
+        for test_type in [BHJLeftProbed, BHJRightProbed] {
+            let left = build_table(
+                ("a1", &vec![10, 20, 30]),
+                ("b1", &vec![1, 1, 2]),
+                ("c1", &vec![1, 5, 3]),
+            )?;
+            let right = build_table(
+                ("a2", &vec![100, 200, 300]),
+                ("b1", &vec![1, 1, 2]),
+                ("c2", &vec![2, 4, 2]),
+            )?;
+            let on: JoinOn = vec![(
+                Arc::new(Column::new_with_schema("b1", &left.schema())?),
+                Arc::new(Column::new_with_schema("b1", &right.schema())?),
+            )];
+
+            let filter_schema = Arc::new(Schema::new(vec![
+                Field::new("left_c1", DataType::Int32, false),
+                Field::new("right_c2", DataType::Int32, false),
+            ]));
+            let join_filter = JoinFilter {
+                expression: Arc::new(BinaryExpr::new(
+                    Arc::new(Column::new("left_c1", 0)),
+                    Operator::Lt,
+                    Arc::new(Column::new("right_c2", 1)),
+                )),
+                column_indices: vec![
+                    ColumnIndex {
+                        side: JoinSide::Left,
+                        index: 2,
+                    },
+                    ColumnIndex {
+                        side: JoinSide::Right,
+                        index: 2,
+                    },
+                ],
+                schema: filter_schema,
+            };
+
+            let (_, batches) =
+                bhj_collect_with_filter(test_type, left, right, on, join_filter).await?;
+            let expected = vec![
+                "+----+----+----+-----+----+----+",
+                "| a1 | b1 | c1 | a2  | b1 | c2 |",
+                "+----+----+----+-----+----+----+",
+                "| 10 | 1  | 1  | 100 | 1  | 2  |",
+                "| 10 | 1  | 1  | 200 | 1  | 4  |",
+                "+----+----+----+-----+----+----+",
+            ];
             assert_batches_sorted_eq!(expected, &batches);
         }
         Ok(())

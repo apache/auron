@@ -500,6 +500,7 @@ message BroadcastJoinExecNode {
   JoinSide broadcast_side = 6;
   string cached_build_hash_map_id = 7;
   bool is_null_aware_anti_join = 8;
+  JoinFilter filter = 9;
 }
 
 message RenameColumnsExecNode {

@@ -33,6 +33,7 @@ case class NativeBroadcastJoinExec(
     override val leftKeys: Seq[Expression],
     override val rightKeys: Seq[Expression],
     override val joinType: JoinType,
+    override val condition: Option[Expression],
     broadcastSide: JoinBuildSide,
     isNullAwareAntiJoin: Boolean)
     extends NativeBroadcastJoinBase(
@@ -42,11 +43,10 @@ case class NativeBroadcastJoinExec(
       leftKeys,
       rightKeys,
       joinType,
+      condition,
       broadcastSide,
       isNullAwareAntiJoin)
     with HashJoin {
-
-  override val condition: Option[Expression] = None
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
   override def buildSide: org.apache.spark.sql.catalyst.optimizer.BuildSide =
