@@ -158,6 +158,7 @@ class AuronPaimonV2IntegrationSuite
       sql("insert into paimon.db.t_cow_multi_commit values (1, 'updated')")
       val df = sql("select * from paimon.db.t_cow_multi_commit")
       checkAnswer(df, Seq(Row(1, "updated"), Row(2, "b")))
+      assertNativePaimonScanApplied(df)
     }
   }
 
