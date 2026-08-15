@@ -32,7 +32,7 @@ private[ui] class AuronAllExecutionsPage(parent: AuronSQLTab) extends WebUIPage(
     UIUtils.headerSparkPage(request, "Auron", buildInfoSummary(sqlStore.buildInfo()), parent)
   }
 
-  @sparkver("4.0 / 4.1")
+  @sparkver("4.0 / 4.1 / 4.2")
   override def render(request: jakarta.servlet.http.HttpServletRequest): Seq[Node] = {
     UIUtils.headerSparkPage(request, "Auron", buildInfoSummary(sqlStore.buildInfo()), parent)
   }

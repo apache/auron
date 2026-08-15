@@ -132,7 +132,7 @@ case class NativeShuffleExchangeExec(
         internalWrite(rdd, dep, mapId, context, partition)
       }
 
-      @sparkver("4.0 / 4.1")
+      @sparkver("4.0 / 4.1 / 4.2")
       override def write(
           inputs: Iterator[_],
           dep: ShuffleDependency[_, _, _],
@@ -195,7 +195,7 @@ case class NativeShuffleExchangeExec(
   // for databricks testing
   val causedBroadcastJoinBuildOOM = false
 
-  @sparkver("3.5 / 4.0 / 4.1")
+  @sparkver("3.5 / 4.0 / 4.1 / 4.2")
   override def advisoryPartitionSize: Option[Long] = None
 
   // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
@@ -204,13 +204,13 @@ case class NativeShuffleExchangeExec(
   override def canChangeNumPartitions: Boolean =
     outputPartitioning != SinglePartition
 
-  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
   override def shuffleOrigin: org.apache.spark.sql.execution.exchange.ShuffleOrigin = {
     import org.apache.spark.sql.execution.exchange.ShuffleOrigin;
     _shuffleOrigin.get.asInstanceOf[ShuffleOrigin]
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
@@ -218,7 +218,7 @@ case class NativeShuffleExchangeExec(
   override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
     copy(child = newChildren.head)
 
-  @sparkver("4.0 / 4.1")
+  @sparkver("4.0 / 4.1 / 4.2")
   override def shuffleId: Int = {
     shuffleDependency.shuffleId
   }
