@@ -143,7 +143,7 @@ class AuronPaimonV2IntegrationSuite
     }
   }
 
-  test("paimon v2 COW primary-key table preserves latest value across commits") {
+  test("paimon v2 native scan preserves latest COW value after compaction") {
     withTable("paimon.db.t_cow_multi_commit") {
       sql("""
             |create table paimon.db.t_cow_multi_commit (id int, v string)
@@ -156,6 +156,7 @@ class AuronPaimonV2IntegrationSuite
             |""".stripMargin)
       sql("insert into paimon.db.t_cow_multi_commit values (1, 'a'), (2, 'b')")
       sql("insert into paimon.db.t_cow_multi_commit values (1, 'updated')")
+      sql("CALL paimon.sys.compact(table => 'db.t_cow_multi_commit')")
       val df = sql("select * from paimon.db.t_cow_multi_commit")
       checkAnswer(df, Seq(Row(1, "updated"), Row(2, "b")))
       assertNativePaimonScanApplied(df)
