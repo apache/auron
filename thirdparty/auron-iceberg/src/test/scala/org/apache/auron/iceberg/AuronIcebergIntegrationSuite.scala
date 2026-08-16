@@ -30,11 +30,12 @@ import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.auron.iceberg.IcebergScanSupport
+import org.apache.spark.sql.auron.AuronColumnarOverrides
+import org.apache.spark.sql.auron.iceberg.{IcebergConvertProvider, IcebergScanSupport}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, EqualTo, In, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.{FilterExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.collectFirst
-import org.apache.spark.sql.execution.FormattedMode
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -598,6 +599,175 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  test("iceberg native changelog scan prunes direct scan tasks by metadata predicates") {
+    withTable("local.db.t_changelog_direct_pruning") {
+      sql("""
+            |create table local.db.t_changelog_direct_pruning (id int, v string)
+            |using iceberg
+            |tblproperties ('format-version' = '2')
+            |""".stripMargin)
+      sql("insert into local.db.t_changelog_direct_pruning values (0, 'seed')")
+      val startSnapshotId = currentSnapshotId("local.db.t_changelog_direct_pruning")
+      sql("insert into local.db.t_changelog_direct_pruning values (1, 'a')")
+      val firstSnapshotId = currentSnapshotId("local.db.t_changelog_direct_pruning")
+      sql("insert into local.db.t_changelog_direct_pruning values (2, 'b')")
+      val secondSnapshotId = currentSnapshotId("local.db.t_changelog_direct_pruning")
+      sql("insert into local.db.t_changelog_direct_pruning values (3, 'c')")
+      val endSnapshotId = currentSnapshotId("local.db.t_changelog_direct_pruning")
+
+      def checkPlan(
+          condition: Map[
+            String,
+            Attribute] => org.apache.spark.sql.catalyst.expressions.Expression,
+          expectedTaskCount: Int): Unit = {
+        val scan =
+          rawChangelogScan("local.db.t_changelog_direct_pruning", startSnapshotId, endSnapshotId)
+        val attributes = scan.output.map(attribute => attribute.name -> attribute).toMap
+        new IcebergConvertProvider().prepare(FilterExec(condition(attributes), scan))
+        assert(IcebergScanSupport.plan(scan).get.scanTasks.size == expectedTaskCount)
+      }
+
+      checkPlan(
+        attributes => EqualTo(attributes("_commit_snapshot_id"), Literal(secondSnapshotId)),
+        expectedTaskCount = 1)
+      checkPlan(
+        attributes => EqualTo(attributes("_commit_snapshot_id"), Literal(-1L)),
+        expectedTaskCount = 0)
+      checkPlan(
+        attributes => In(attributes("_change_ordinal"), Seq(Literal(0), Literal(2))),
+        expectedTaskCount = 2)
+      checkPlan(
+        attributes =>
+          And(
+            EqualTo(attributes("_change_type"), Literal("INSERT")),
+            EqualTo(attributes("_commit_snapshot_id"), Literal(firstSnapshotId))),
+        expectedTaskCount = 1)
+      checkPlan(
+        attributes =>
+          Or(
+            EqualTo(attributes("_commit_snapshot_id"), Literal(firstSnapshotId)),
+            EqualTo(attributes("_commit_snapshot_id"), Literal(secondSnapshotId))),
+        expectedTaskCount = 3)
+      checkPlan(
+        attributes => Not(EqualTo(attributes("_commit_snapshot_id"), Literal(firstSnapshotId))),
+        expectedTaskCount = 3)
+      checkPlan(
+        attributes =>
+          And(
+            EqualTo(attributes("_commit_snapshot_id"), Literal(secondSnapshotId)),
+            EqualTo(attributes("id"), Literal(2))),
+        expectedTaskCount = 3)
+      checkPlan(
+        attributes =>
+          EqualTo(attributes("_commit_snapshot_id").newInstance(), Literal(secondSnapshotId)),
+        expectedTaskCount = 3)
+
+      withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+        val scan =
+          rawChangelogScan("local.db.t_changelog_direct_pruning", startSnapshotId, endSnapshotId)
+        val commitSnapshotId = scan.output.find(_.name == "_commit_snapshot_id").get
+        val transformed = AuronColumnarOverrides(spark).preColumnarTransitions.apply(
+          FilterExec(EqualTo(commitSnapshotId, Literal(secondSnapshotId)), scan))
+        val nativeScan = transformed.collectFirst { case nativeScan: NativeIcebergTableScanExec =>
+          nativeScan
+        }.get
+        assert(nativeScan.staticPlan.scanTasks.size == 1)
+      }
+    }
+  }
+
+  test("iceberg changelog metadata pruning does not cross unsafe operators") {
+    withTable("local.db.t_changelog_snapshot_pruning") {
+      withTempView("t_changelog_snapshot_pruning_changes") {
+        sql("""
+              |create table local.db.t_changelog_snapshot_pruning (id int, v string)
+              |using iceberg
+              |tblproperties ('format-version' = '2')
+              |""".stripMargin)
+        sql("insert into local.db.t_changelog_snapshot_pruning values (0, 'seed')")
+        val startSnapshotId = currentSnapshotId("local.db.t_changelog_snapshot_pruning")
+        sql("insert into local.db.t_changelog_snapshot_pruning values (1, 'a')")
+        sql("insert into local.db.t_changelog_snapshot_pruning values (2, 'b')")
+        sql("insert into local.db.t_changelog_snapshot_pruning values (3, 'c')")
+        val endSnapshotId = currentSnapshotId("local.db.t_changelog_snapshot_pruning")
+        createChangelogView(
+          "local.db.t_changelog_snapshot_pruning",
+          "t_changelog_snapshot_pruning_changes",
+          startSnapshotId,
+          endSnapshotId)
+
+        def checkQuery(query: String, expected: Seq[Row], expectedTaskCount: Int): Unit = {
+          withSQLConf("spark.auron.enable" -> "false") {
+            checkAnswer(sql(query), expected)
+          }
+          withSQLConf(
+            "spark.auron.enable" -> "true",
+            "spark.auron.enable.iceberg.scan" -> "true") {
+            if (expectedTaskCount > 0) {
+              val df = sql(query)
+              checkAnswer(df, expected)
+              val nativeScan = executedNativeIcebergTableScanExec(df)
+              assert(nativeScan.metrics("numFiles").value == expectedTaskCount)
+            } else {
+              val zeroFilesReported = new CountDownLatch(1)
+              val listener = new SparkListener {
+                override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+                  case SparkListenerDriverAccumUpdates(_, updates)
+                      if updates.size == 2 && updates.forall(_._2 == 0L) =>
+                    zeroFilesReported.countDown()
+                  case _ =>
+                }
+              }
+              spark.sparkContext.addSparkListener(listener)
+              try {
+                checkAnswer(sql(query), expected)
+                assert(zeroFilesReported.await(30, TimeUnit.SECONDS))
+              } finally {
+                spark.sparkContext.removeSparkListener(listener)
+              }
+            }
+          }
+        }
+
+        checkQuery(
+          """
+            |select _change_ordinal
+            |from (
+            |  select max(_change_ordinal) as _change_ordinal
+            |  from t_changelog_snapshot_pruning_changes
+            |)
+            |where _change_ordinal = 0
+            |""".stripMargin,
+          Seq.empty,
+          expectedTaskCount = 3)
+        checkQuery(
+          """
+            |select _change_ordinal
+            |from (
+            |  select _change_ordinal
+            |  from t_changelog_snapshot_pruning_changes
+            |  order by _change_ordinal
+            |  limit 1
+            |)
+            |where _change_ordinal = 0
+            |""".stripMargin,
+          Seq(Row(0)),
+          expectedTaskCount = 3)
+        val nondeterministicDf = sql("""
+            |select _change_ordinal, random_value
+            |from (
+            |  select _change_ordinal, rand() as random_value
+            |  from t_changelog_snapshot_pruning_changes
+            |)
+            |where _change_ordinal = 0
+            |""".stripMargin)
+        assert(nondeterministicDf.collect().map(_.getInt(0)).toSeq == Seq(0))
+        assert(
+          executedNativeIcebergTableScanExec(nondeterministicDf).staticPlan.scanTasks.size == 3)
+      }
+    }
+  }
+
   test("iceberg native scan supports full-data-file delete changelog scan") {
     withTable("local.db.t_changelog_full_file_delete") {
       withTempView("t_changelog_full_file_delete_changes") {
@@ -635,6 +805,20 @@ class AuronIcebergIntegrationSuite
           checkAnswer(df, expected)
           val nativeScan = executedNativeIcebergTableScanExec(df)
           assert(nativeScan.staticPlan.scanTasks.size == 1)
+        }
+
+        val metadataFilterQuery = """
+            |select id
+            |from t_changelog_full_file_delete_changes
+            |where _change_type = 'INSERT'
+            |""".stripMargin
+        withSQLConf("spark.auron.enable" -> "false") {
+          checkAnswer(sql(metadataFilterQuery), Seq.empty)
+        }
+        withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+          val df = sql(metadataFilterQuery)
+          checkAnswer(df, Seq.empty)
+          assert(executedNativeIcebergTableScanExec(df).metrics("numFiles").value == 1L)
         }
       }
     }
@@ -681,6 +865,33 @@ class AuronIcebergIntegrationSuite
           executedNativeIcebergTableScanExec(df)
         }
       }
+    }
+  }
+
+  test("iceberg changelog task filter survives a runtime-filter scan copy") {
+    withTable("local.db.t_changelog_runtime_filter_copy") {
+      sql("""
+            |create table local.db.t_changelog_runtime_filter_copy (id int, v string, p int)
+            |using iceberg
+            |partitioned by (p)
+            |tblproperties ('format-version' = '2')
+            |""".stripMargin)
+      sql("insert into local.db.t_changelog_runtime_filter_copy values (0, 'seed', 0)")
+      val startSnapshotId = currentSnapshotId("local.db.t_changelog_runtime_filter_copy")
+      sql("insert into local.db.t_changelog_runtime_filter_copy values (1, 'a', 1)")
+      sql("insert into local.db.t_changelog_runtime_filter_copy values (2, 'b', 2)")
+      sql("insert into local.db.t_changelog_runtime_filter_copy values (3, 'c', 3)")
+      val endSnapshotId = currentSnapshotId("local.db.t_changelog_runtime_filter_copy")
+      val scan = rawChangelogScan(
+        "local.db.t_changelog_runtime_filter_copy",
+        startSnapshotId,
+        endSnapshotId)
+      val changeOrdinal = scan.output.find(_.name == "_change_ordinal").get
+      new IcebergConvertProvider().prepare(FilterExec(EqualTo(changeOrdinal, Literal(1)), scan))
+
+      val copied = IcebergScanSupport.withRuntimeFilters(scan, Seq(Literal(true)))
+      assert(copied.runtimeFilters.nonEmpty)
+      assert(IcebergScanSupport.plan(copied).get.scanTasks.size == 1)
     }
   }
 
@@ -956,6 +1167,24 @@ class AuronIcebergIntegrationSuite
          |  )
          |)
          |""".stripMargin)
+  }
+
+  private def rawChangelogScan(
+      tableName: String,
+      startSnapshotId: Long,
+      endSnapshotId: Long): BatchScanExec = {
+    spark.read
+      .option("start-snapshot-id", startSnapshotId)
+      .option("end-snapshot-id", endSnapshotId)
+      .table(s"$tableName.changes")
+      .queryExecution
+      .sparkPlan
+      .collectFirst {
+        case scan: BatchScanExec if isChangelogScan(scan.scan) => scan
+      }
+      .getOrElse {
+        throw new AssertionError(s"Cannot find changelog BatchScanExec for table: $tableName")
+      }
   }
 
   private def currentSnapshotId(tableName: String): Long =

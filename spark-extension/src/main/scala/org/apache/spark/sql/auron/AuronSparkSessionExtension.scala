@@ -81,6 +81,8 @@ case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
               "org.apache.spark.sql.execution.auron.shuffle.AuronCelebornShuffleManager.")
         }
 
+        AuronConverters.prepareExtensionPlans(sparkPlan)
+
         // generate convert strategy
         AuronConvertStrategy.apply(sparkPlan)
         logInfo("Auron convert strategy for current stage:")
