@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.WindowExpression
 import org.apache.spark.sql.catalyst.expressions.WindowSpecDefinition
 import org.apache.spark.sql.execution.auron.plan.{NativeCollectLimitExec, NativeGlobalLimitExec, NativeLocalLimitExec, NativeTakeOrderedExec}
 import org.apache.spark.sql.execution.auron.plan.NativeWindowExec
+import org.apache.spark.sql.internal.SQLConf
 
 import org.apache.auron.BaseAuronSQLSuite
 import org.apache.auron.util.AuronTestUtils
@@ -39,6 +40,35 @@ class AuronExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
         assert(collectFirst(df.queryExecution.executedPlan) { case e: NativeCollectLimitExec =>
           e
         }.isDefined)
+      }
+    }
+  }
+
+  test("CollectLimit batches partition scans") {
+    withTempPath { path =>
+      spark.range(0, 80, 1, 8).write.parquet(path.getCanonicalPath)
+
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        "spark.sql.files.maxPartitionBytes" -> "4096",
+        "spark.sql.limit.initialNumPartitions" -> "1") {
+        val df = spark.read.parquet(path.getCanonicalPath).where("id < 0").limit(1)
+        val collectLimit = collectFirst(df.queryExecution.executedPlan) {
+          case exec: NativeCollectLimitExec => exec
+        }.get
+        val numPartitions = collectLimit.child.execute().getNumPartitions
+        assert(numPartitions > 1)
+
+        val jobGroup = s"collect-limit-${System.nanoTime()}"
+        spark.sparkContext.setJobGroup(jobGroup, "test CollectLimit job count")
+        try {
+          assert(collectLimit.executeCollect().isEmpty)
+          waitUntilListenerBusEmpty()
+          val jobCount = spark.sparkContext.statusTracker.getJobIdsForGroup(jobGroup).length
+          assert(jobCount > 0 && jobCount < numPartitions)
+        } finally {
+          spark.sparkContext.clearJobGroup()
+        }
       }
     }
   }
