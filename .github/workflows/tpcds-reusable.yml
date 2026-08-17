@@ -118,6 +118,9 @@ jobs:
             cargo
 
       - name: Build auron (Spark ${{ inputs.sparkver }}, Scala ${{ inputs.scalaver }}, JDK ${{ inputs.javaver }})
+        env:
+          AURON_BUILD_BRANCH: ${{ github.head_ref || github.ref_name }}
+          AURON_BUILD_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           rm -f .build-checksum_*.cache
           
