@@ -21,7 +21,7 @@ use std::{
     sync::Arc,
 };
 
-use arrow::{array::*, compute::*, datatypes::*, record_batch::RecordBatch};
+use arrow::{array::*, buffer::NullBuffer, compute::*, datatypes::*, record_batch::RecordBatch};
 use datafusion::{
     common::{
         Result, ScalarValue,
@@ -124,7 +124,13 @@ impl PhysicalExpr for GetIndexedFieldExpr {
             }
             (DataType::Struct(_), ScalarValue::Int32(Some(k))) => {
                 let as_struct_array = as_struct_array(&array)?;
-                let taken = as_struct_array.column(*k as usize).clone();
+                let child = as_struct_array.column(*k as usize);
+                let taken = if as_struct_array.null_count() == 0 {
+                    child.clone()
+                } else {
+                    let nulls = NullBuffer::union(as_struct_array.nulls(), child.nulls());
+                    make_array(child.to_data().into_builder().nulls(nulls).build()?)
+                };
                 if array_is_scalar {
                     return Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
                         &taken, 0,
@@ -189,7 +195,7 @@ fn get_indexed_field(data_type: &DataType, key: &ScalarValue) -> Result<Arc<Fiel
 mod test {
     use std::sync::Arc;
 
-    use arrow::{array::*, datatypes::*, record_batch::RecordBatch};
+    use arrow::{array::*, buffer::NullBuffer, datatypes::*, record_batch::RecordBatch};
     use datafusion::{
         assert_batches_eq,
         physical_plan::{PhysicalExpr, expressions::Column},
@@ -245,6 +251,48 @@ mod test {
             "+---------+",
         ];
         assert_batches_eq!(expected, &[output_batch]);
+        Ok(())
+    }
+
+    #[test]
+    fn struct_field_propagates_parent_nulls() -> Result<(), Box<dyn std::error::Error>> {
+        let child: ArrayRef = Arc::new(Int32Array::from(vec![Some(10), Some(20), None, None]));
+        let fields = Fields::from(vec![Field::new("child", DataType::Int32, true)]);
+        let struct_array: ArrayRef = Arc::new(StructArray::new(
+            fields.clone(),
+            vec![child.clone()],
+            Some(NullBuffer::from(vec![true, false, true, false])),
+        ));
+        let input_batch =
+            RecordBatch::try_from_iter_with_nullable(vec![("struct", struct_array, true)])?;
+        let get_indexed = Arc::new(GetIndexedFieldExpr::new(
+            Arc::new(Column::new("struct", 0)),
+            ScalarValue::from(0_i32),
+        ));
+
+        let output = get_indexed.evaluate(&input_batch)?.into_array(0)?;
+        assert_eq!(
+            output.as_primitive::<Int32Type>(),
+            &Int32Array::from(vec![Some(10), None, None, None])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn struct_field_without_parent_nulls_reuses_child() -> Result<(), Box<dyn std::error::Error>> {
+        let child: ArrayRef = Arc::new(Int32Array::from(vec![Some(10), None]));
+        let fields = Fields::from(vec![Field::new("child", DataType::Int32, true)]);
+        let struct_array: ArrayRef = Arc::new(StructArray::new(fields, vec![child.clone()], None));
+        let input_batch =
+            RecordBatch::try_from_iter_with_nullable(vec![("struct", struct_array, true)])?;
+        let get_indexed = Arc::new(GetIndexedFieldExpr::new(
+            Arc::new(Column::new("struct", 0)),
+            ScalarValue::from(0_i32),
+        ));
+        let output = get_indexed.evaluate(&input_batch)?.into_array(0)?;
+        assert!(Arc::ptr_eq(&output, &child));
+
         Ok(())
     }
 }
