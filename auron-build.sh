@@ -59,7 +59,8 @@ print_help() {
     echo "  --sparktests <true|false> Run spark tests (default: false)"
     echo "  --docker <true|false>    Build in Docker environment (default: false)"
     echo "  --threads <N|NC>         Maven build threads (e.g. 1, 4, 1C). Default: local unset, docker 8"
-    echo "  --mvn <PATH>             Maven executable to build with (default: build/mvn, which downloads Maven)"
+    echo "  --mvn <PATH>             Maven executable to build with, local builds only"
+    echo "                           (default: build/mvn, which downloads Maven)"
     echo "  --goal <GOAL>            Maven goal to run, e.g. package or install (default: install)"
     IFS=','; echo "  --image <NAME>           Docker image to use (e.g. ${SUPPORTED_OS_IMAGES[*]}, default: ${SUPPORTED_OS_IMAGES[*]:0:1})"; unset IFS
     IFS=','; echo "  --sparkver <VERSION>     Specify Spark version (e.g. ${SUPPORTED_SPARK_VERSIONS[*]})"; unset IFS
@@ -155,6 +156,7 @@ run_docker_compose_up() {
 }
 
 MVN_CMD="$(dirname "$0")/build/mvn"
+MVN_CMD_OVERRIDDEN=false
 
 # -----------------------------------------------------------------------------
 # Section: Initialize Variables
@@ -382,6 +384,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --mvn)
             if [[ -n "$2" && "$2" != -* ]]; then
+                MVN_CMD_OVERRIDDEN=true
                 if ! MVN_CMD="$(command -v "$2")"; then
                     echo "ERROR: --mvn '$2' is not an executable or a command on PATH" >&2
                     exit 1
@@ -557,7 +560,7 @@ BUILD_INFO_FILE="common/src/main/resources/auron-build-info.properties"
 mkdir -p "$(dirname "$BUILD_INFO_FILE")"
 
 JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk '{print $3}' | tr -d '"')
-PROJECT_VERSION=$(./build/mvn help:evaluate -N -Dexpression=project.version -Pspark-${SPARK_VER} -q -DforceStdout 2>/dev/null)
+PROJECT_VERSION=$("$MVN_CMD" help:evaluate -N -Dexpression=project.version -Pspark-${SPARK_VER} -q -DforceStdout 2>/dev/null)
 RUST_VERSION=$(rustc --version | awk '{print $2}')
 
 get_build_info() {
@@ -621,6 +624,9 @@ fi
 # -----------------------------------------------------------------------------
 if [[ "$USE_DOCKER" == true ]]; then
     echo "[INFO] Compiling inside Docker container using image: $IMAGE_NAME"
+    if [[ "$MVN_CMD_OVERRIDDEN" == true ]]; then
+        echo "[WARN] --mvn only applies to local builds; the container always uses ./build/mvn"
+    fi
     if [[ "$CLEAN" == true ]]; then
         # Clean the host-side directory that is mounted into the Docker container.
         # This avoids "device or resource busy" errors when running `mvn clean` inside the container.
@@ -629,7 +635,13 @@ if [[ "$USE_DOCKER" == true ]]; then
     fi
 
     echo "[INFO] Compiling inside Docker container..."
-    export AURON_BUILD_ARGS="${BUILD_ARGS[*]}"
+    # Forward -D arguments and everything after `--` into the container.
+    DOCKER_MVN_ARGS=("${BUILD_ARGS[@]}" "${MVN_D_ARGS[@]}" "$@")
+    AURON_BUILD_ARGS=""
+    for arg in "${DOCKER_MVN_ARGS[@]}"; do
+        AURON_BUILD_ARGS+="$(printf '%q' "$arg") "
+    done
+    export AURON_BUILD_ARGS="${AURON_BUILD_ARGS% }"
     export BUILD_CONTEXT="./${IMAGE_NAME}"
     # Spark 4.x requires JDK 17+, auto-set if not specified
     if [[ -z "$AURON_JAVA_VERSION" && "$SPARK_VER" == 4.* ]]; then
