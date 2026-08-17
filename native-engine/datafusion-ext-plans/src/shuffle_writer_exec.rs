@@ -17,13 +17,16 @@
 
 use std::{any::Any, fmt::Debug, sync::Arc};
 
-use arrow::datatypes::SchemaRef;
+use arrow::datatypes::{DataType, Field, SchemaRef};
 use async_trait::async_trait;
 use auron_memmgr::MemManager;
 use datafusion::{
     error::Result,
     execution::context::TaskContext,
-    physical_expr::{EquivalenceProperties, PhysicalExprRef, expressions::Column},
+    logical_expr::Volatility,
+    physical_expr::{
+        EquivalenceProperties, PhysicalExprRef, ScalarFunctionExpr, expressions::Column,
+    },
     physical_plan,
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties, SendableRecordBatchStream,
@@ -31,6 +34,7 @@ use datafusion::{
         execution_plan::{Boundedness, EmissionType},
         metrics::{ExecutionPlanMetricsSet, MetricsSet},
     },
+    prelude::create_udf,
 };
 use datafusion_ext_commons::df_execution_err;
 use once_cell::sync::OnceCell;
@@ -43,6 +47,67 @@ use crate::{
     },
     sort_exec::create_default_ascending_sort_exec,
 };
+
+fn contains_map(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::Map(..) => true,
+        DataType::List(field) => contains_map(field.data_type()),
+        DataType::Struct(fields) => fields.iter().any(|field| contains_map(field.data_type())),
+        _ => false,
+    }
+}
+
+pub(crate) fn create_round_robin_sort_exec(
+    input: Arc<dyn ExecutionPlan>,
+    partition: usize,
+) -> Result<Arc<dyn ExecutionPlan>> {
+    let sort_exprs = if input
+        .schema()
+        .fields()
+        .iter()
+        .any(|field| contains_map(field.data_type()))
+    {
+        let function_name = "Spark_Murmur3Hash";
+        let function =
+            datafusion_ext_functions::create_auron_ext_function(function_name, partition)?;
+        let args = input
+            .schema()
+            .fields()
+            .iter()
+            .enumerate()
+            .map(|(index, field)| Arc::new(Column::new(field.name(), index)) as PhysicalExprRef)
+            .collect::<Vec<_>>();
+        let udf = Arc::new(create_udf(
+            function_name,
+            args.iter()
+                .map(|expr| expr.data_type(&input.schema()))
+                .collect::<Result<Vec<_>>>()?,
+            DataType::Int32,
+            Volatility::Immutable,
+            function,
+        ));
+        vec![Arc::new(ScalarFunctionExpr::new(
+            function_name,
+            udf,
+            args,
+            Arc::new(Field::new("round_robin_sort_hash", DataType::Int32, false)),
+        )) as PhysicalExprRef]
+    } else {
+        input
+            .schema()
+            .fields()
+            .iter()
+            .enumerate()
+            .map(|(index, field)| Arc::new(Column::new(field.name(), index)) as PhysicalExprRef)
+            .collect::<Vec<_>>()
+    };
+    Ok(create_default_ascending_sort_exec(
+        input,
+        &sort_exprs,
+        None,
+        false, // do not record output metric
+    ))
+}
 
 /// The shuffle writer operator maps each input partition to M output partitions
 /// based on a partitioning scheme. No guarantees are made about the order of
@@ -137,21 +202,7 @@ impl ExecutionPlan for ShuffleWriterExec {
                 partitioner
             }
             Partitioning::RoundRobinPartitioning(..) => {
-                input = create_default_ascending_sort_exec(
-                    input,
-                    self.input
-                        .schema()
-                        .fields()
-                        .iter()
-                        .enumerate()
-                        .map(|(index, field)| {
-                            Arc::new(Column::new(&field.name(), index)) as PhysicalExprRef
-                        })
-                        .collect::<Vec<_>>()
-                        .as_ref(),
-                    None,
-                    false, // do not record output metric
-                );
+                input = create_round_robin_sort_exec(input, partition)?;
                 let partitioner = Arc::new(SortShuffleRepartitioner::new(
                     exec_ctx.clone(),
                     self.output_data_file.clone(),

@@ -20,6 +20,7 @@ import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
 import org.apache.spark.sql.execution.auron.plan.NativeFilterBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
+import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
@@ -119,7 +120,11 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   test("repartition over MapType") {
     withTable("t_map") {
       sql("create table t_map using parquet as select map('a', '1', 'b', '2') as data_map")
-      checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ data_map FROM t_map")
+      val df =
+        checkSparkAnswerAndOperator("SELECT /*+ repartition(10) */ data_map FROM t_map")
+      assert(collectFirst(df.queryExecution.executedPlan) { case e: NativeShuffleExchangeExec =>
+        e
+      }.isDefined)
     }
   }
 
