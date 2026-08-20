@@ -109,6 +109,9 @@ jobs:
         run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
+        env:
+          AURON_BUILD_BRANCH: ${{ github.head_ref || github.ref_name }}
+          AURON_BUILD_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           rm -f .build-checksum_*.cache
           build/mvn package -Prelease -P${{ matrix.sparkver }} -Pscala-${{ matrix.scalaver }} -DskipTests
