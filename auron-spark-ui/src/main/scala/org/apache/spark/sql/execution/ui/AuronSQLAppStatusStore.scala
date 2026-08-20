@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.execution.ui
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.kvstore.{KVIndex, KVStore}
+import org.apache.spark.status.KVUtils.KVIndexParam
+import org.apache.spark.util.Utils
+import org.apache.spark.util.kvstore.{KVIndex, KVStore, KVStoreView}
 
 class AuronSQLAppStatusStore(store: KVStore) extends Logging {
 
@@ -36,7 +39,40 @@ class AuronSQLAppStatusStore(store: KVStore) extends Logging {
         None
     }
   }
+
+  private def viewToSeq[T](view: KVStoreView[T]): Seq[T] = {
+    Utils.tryWithResource(view.closeableIterator())(iter => iter.asScala.toList)
+  }
+
+  def executionsList(): Seq[AuronSQLExecutionUIData] = {
+    viewToSeq(store.view(classOf[AuronSQLExecutionUIData]))
+  }
+
+  def executionsList(offset: Int, length: Int): Seq[AuronSQLExecutionUIData] = {
+    viewToSeq(store.view(classOf[AuronSQLExecutionUIData]).skip(offset).max(length))
+  }
+
+  def execution(executionId: Long): Option[AuronSQLExecutionUIData] = {
+    try {
+      Some(store.read(classOf[AuronSQLExecutionUIData], executionId))
+    } catch {
+      case _: NoSuchElementException => None
+    }
+  }
+
+  def executionsCount(): Long = {
+    store.count(classOf[AuronSQLExecutionUIData])
+  }
 }
+
+@KVIndex("executionId")
+class AuronSQLExecutionUIData(
+    @KVIndexParam val executionId: Long,
+    val description: String,
+    val numAuronNodes: Int,
+    val numFallbackNodes: Int,
+    val fallbackDescription: String,
+    val fallbackNodeToReason: Seq[(String, String)]) {}
 
 class AuronBuildInfoUIData(val info: Seq[(String, String)]) {
   @JsonIgnore
