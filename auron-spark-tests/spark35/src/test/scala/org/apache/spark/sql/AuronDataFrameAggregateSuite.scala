@@ -21,7 +21,7 @@ import scala.util.Random
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.auron.plan.NativeAggBase
-import org.apache.spark.sql.functions.{collect_list, monotonically_increasing_id, rand, randn, spark_partition_id, sum}
+import org.apache.spark.sql.functions.{collect_list, last, monotonically_increasing_id, rand, randn, spark_partition_id, sum}
 import org.apache.spark.sql.internal.SQLConf
 
 class AuronDataFrameAggregateSuite extends DataFrameAggregateSuite with SparkQueryTestsBase {
@@ -74,5 +74,32 @@ class AuronDataFrameAggregateSuite extends DataFrameAggregateSuite with SparkQue
       spark_partition_id(),
       rand(Random.nextLong()),
       randn(Random.nextLong())).foreach(assertNoExceptions)
+  }
+
+  testAuron("native last / last(ignoreNulls) aggregate") {
+    // The grouped aggregate is reliably offloaded to NativeAggBase, and the data
+    // is deterministic by construction (no intra-group ordering dependence):
+    //   k=1 -> all values 10   => last=10,   last(ignoreNulls)=10
+    //   k=2 -> all values null => last=null, last(ignoreNulls)=null
+    //   k=3 -> single row 30   => last=30,   last(ignoreNulls)=30
+    val df = Seq[(Int, Option[Int])](
+      (1, Some(10)),
+      (1, Some(10)),
+      (2, None),
+      (2, None),
+      (3, Some(30)))
+      .toDF("k", "v")
+
+    val aggDF = df
+      .groupBy("k")
+      .agg(last($"v").as("last_v"), last($"v", ignoreNulls = true).as("last_v_ign"))
+
+    checkAnswer(aggDF, Seq(Row(1, 10, 10), Row(2, null, null), Row(3, 30, 30)))
+
+    // the aggregate must be offloaded to the native engine
+    assert(getExecutedPlan(aggDF).exists {
+      case _: NativeAggBase => true
+      case _ => false
+    })
   }
 }

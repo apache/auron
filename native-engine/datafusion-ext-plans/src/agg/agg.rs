@@ -33,6 +33,8 @@ use crate::agg::{
     count::AggCount,
     first::AggFirst,
     first_ignores_null::AggFirstIgnoresNull,
+    last::AggLast,
+    last_ignores_null::AggLastIgnoresNull,
     maxmin::{AggMax, AggMin},
     spark_udaf_wrapper::SparkUDAFWrapper,
     sum::AggSum,
@@ -211,6 +213,14 @@ pub fn create_agg(
         AggFunction::FirstIgnoresNull => {
             let dt = children[0].data_type(input_schema)?;
             Arc::new(AggFirstIgnoresNull::try_new(children[0].clone(), dt)?)
+        }
+        AggFunction::Last => {
+            let dt = children[0].data_type(input_schema)?;
+            Arc::new(AggLast::try_new(children[0].clone(), dt)?)
+        }
+        AggFunction::LastIgnoresNull => {
+            let dt = children[0].data_type(input_schema)?;
+            Arc::new(AggLastIgnoresNull::try_new(children[0].clone(), dt)?)
         }
         AggFunction::BloomFilter => {
             let dt = children[0].data_type(input_schema)?;
