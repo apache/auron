@@ -447,7 +447,7 @@ object AuronConverters extends Logging {
     outputPartitioning match {
       case partitioning: RangePartitioning =>
         val unsupportedOrderType = partitioning.ordering
-          .find(e => !isTypeSupported(e.dataType))
+          .find(e => !isTypeSupported(e.dataType) && e.dataType != BinaryType)
         assert(
           unsupportedOrderType.isEmpty,
           s"Unsupported order type in range partitioning: ${unsupportedOrderType.get}")
