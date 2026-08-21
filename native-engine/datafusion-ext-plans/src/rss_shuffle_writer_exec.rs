@@ -24,7 +24,7 @@ use datafusion::{
     arrow::datatypes::SchemaRef,
     error::{DataFusionError, Result},
     execution::context::TaskContext,
-    physical_expr::{EquivalenceProperties, PhysicalExprRef, expressions::Column},
+    physical_expr::EquivalenceProperties,
     physical_plan,
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties, SendableRecordBatchStream,
@@ -42,7 +42,7 @@ use crate::{
         rss_single_repartitioner::RssSingleShuffleRepartitioner,
         rss_sort_repartitioner::RssSortShuffleRepartitioner,
     },
-    sort_exec::create_default_ascending_sort_exec,
+    shuffle_writer_exec::create_round_robin_sort_exec,
 };
 
 /// The rss shuffle writer operator maps each input partition to M output
@@ -143,21 +143,7 @@ impl ExecutionPlan for RssShuffleWriterExec {
                 partitioner
             }
             Partitioning::RoundRobinPartitioning(..) => {
-                input = create_default_ascending_sort_exec(
-                    input,
-                    self.input
-                        .schema()
-                        .fields()
-                        .iter()
-                        .enumerate()
-                        .map(|(index, field)| {
-                            Arc::new(Column::new(&field.name(), index)) as PhysicalExprRef
-                        })
-                        .collect::<Vec<_>>()
-                        .as_ref(),
-                    None,
-                    false, // do not record output metric
-                );
+                input = create_round_robin_sort_exec(input, partition)?;
 
                 let partitioner = Arc::new(RssSortShuffleRepartitioner::new(
                     partition,
