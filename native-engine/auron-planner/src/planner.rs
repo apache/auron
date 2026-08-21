@@ -42,8 +42,8 @@ use datafusion::{
     physical_plan::{
         ColumnStatistics, ExecutionPlan, Statistics, expressions as phys_expr,
         expressions::{
-            BinaryExpr, CaseExpr, CastExpr, Column, IsNotNullExpr, IsNullExpr, Literal,
-            NegativeExpr, NotExpr, PhysicalSortExpr,
+            BinaryExpr, CaseExpr, CastExpr, Column, IsNotNullExpr, IsNullExpr, Literal, NotExpr,
+            PhysicalSortExpr,
         },
         metrics::ExecutionPlanMetricsSet,
     },
@@ -54,8 +54,8 @@ use datafusion_ext_exprs::{
     get_indexed_field::GetIndexedFieldExpr, get_map_value::GetMapValueExpr,
     named_struct::NamedStructExpr, row_num::RowNumExpr,
     spark_monotonically_increasing_id::SparkMonotonicallyIncreasingIdExpr,
-    spark_partition_id::SparkPartitionIdExpr, spark_randn::SparkRandnExpr,
-    spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
+    spark_negative::SparkNegativeExpr, spark_partition_id::SparkPartitionIdExpr,
+    spark_randn::SparkRandnExpr, spark_scalar_subquery_wrapper::SparkScalarSubqueryWrapperExpr,
     spark_udf_wrapper::SparkUDFWrapperExpr, string_contains::StringContainsExpr,
     string_ends_with::StringEndsWithExpr, string_starts_with::StringStartsWithExpr,
 };
@@ -969,8 +969,9 @@ impl PhysicalPlanner {
             ExprType::NotExpr(e) => Arc::new(NotExpr::new(
                 self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
             )),
-            ExprType::Negative(e) => Arc::new(NegativeExpr::new(
+            ExprType::Negative(e) => Arc::new(SparkNegativeExpr::new(
                 self.try_parse_physical_expr_box_required(&e.expr, input_schema)?,
+                e.ansi_enabled,
             )),
             ExprType::InList(e) => {
                 let expr = self.try_parse_physical_expr_box_required(&e.expr, input_schema)?;
