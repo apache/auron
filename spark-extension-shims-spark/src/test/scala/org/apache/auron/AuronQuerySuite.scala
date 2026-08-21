@@ -546,6 +546,18 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("get field from nullable struct propagates parent null") {
+    withTable("t_nullable_struct") {
+      sql("""
+            |create table t_nullable_struct using parquet as
+            |select id, case when id = 1 then named_struct('child', 10) end as s
+            |from range(1, 3, 1, 1)
+            |""".stripMargin)
+
+      checkSparkAnswerAndOperator("select s.child from t_nullable_struct order by id")
+    }
+  }
+
   test("cast map to string") {
     if (AuronTestUtils.isSparkV31OrGreater) {
       withTable("t_map") {
