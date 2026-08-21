@@ -28,7 +28,8 @@ use std::{
 
 use arrow::{
     array::ArrayRef,
-    datatypes::{Schema, SchemaRef},
+    compute::{SortOptions, sort_to_indices},
+    datatypes::{DataType, Schema, SchemaRef},
     record_batch::{RecordBatch, RecordBatchOptions},
     row::{RowConverter, Rows, SortField},
 };
@@ -642,38 +643,84 @@ impl ExternalSorter {
         self.mem_total_size
             .fetch_add(batch.get_batch_mem_size(), SeqCst);
 
-        // sort keys
+        // For a single-column primitive key (e.g. TPC-H `lineitem.l_orderkey`),
+        // skip the RowConverter byte-comparison sort and use Arrow
+        // `sort_to_indices` on the raw array instead (~6x faster on the batch
+        // in-place sort). The batch is sorted and limited here; the rest of the
+        // pipeline (encode for K-way merge, output) is unchanged.
+        let is_fast_path = self
+            .prune_sort_keys_from_batch
+            .primitive_fast_path
+            .is_some();
+        let batch = if is_fast_path {
+            self.prune_sort_keys_from_batch
+                .sort_batch_in_place(batch, self.limit)?
+        } else {
+            batch
+        };
+
         // NOTE: we use stable merge sort for longer keys due to less comparison
         let (keys, batch) = self.prune_sort_keys_from_batch.prune(batch)?;
-        let sorted_indices = if keys.size() / keys.num_rows() <= 8 {
-            (0..keys.num_rows() as u32).sorted_unstable_by_key(|&row_idx| unsafe {
-                // safety: bypass boundary and lifetime checking
-                std::mem::transmute::<_, &'static [u8]>(
-                    keys.row_unchecked(row_idx as usize).as_ref(),
-                )
-            })
+        // On the fast path the batch is already sorted (and limited) above, so
+        // the key rows from `prune` are in final order — we can append them
+        // sequentially and skip allocating an identity `Vec<u32>`. The non-fast
+        // path needs an actual sorted-index vector for both key appending and
+        // the `take_batch` below.
+        let sorted_indices = if is_fast_path {
+            None
+        } else if keys.size() / keys.num_rows() <= 8 {
+            Some(
+                (0..keys.num_rows() as u32)
+                    .sorted_unstable_by_key(|&row_idx| unsafe {
+                        // safety: bypass boundary and lifetime checking
+                        std::mem::transmute::<_, &'static [u8]>(
+                            keys.row_unchecked(row_idx as usize).as_ref(),
+                        )
+                    })
+                    .take(self.limit)
+                    .collect::<Vec<_>>(),
+            )
         } else {
-            (0..keys.num_rows() as u32).sorted_by_key(|&row_idx| unsafe {
-                // safety: bypass boundary and lifetime checking
-                std::mem::transmute::<_, &'static [u8]>(
-                    keys.row_unchecked(row_idx as usize).as_ref(),
-                )
-            })
-        }
-        .take(self.limit)
-        .collect::<Vec<_>>();
+            Some(
+                (0..keys.num_rows() as u32)
+                    .sorted_by_key(|&row_idx| unsafe {
+                        // safety: bypass boundary and lifetime checking
+                        std::mem::transmute::<_, &'static [u8]>(
+                            keys.row_unchecked(row_idx as usize).as_ref(),
+                        )
+                    })
+                    .take(self.limit)
+                    .collect::<Vec<_>>(),
+            )
+        };
 
         // build keys
         let mut key_collector = InMemRowsKeyCollector::default();
         key_collector.reserve(keys.num_rows(), keys.size());
-        for &row_idx in &sorted_indices {
-            key_collector.add_key(keys.row(row_idx as usize).as_ref());
+        match sorted_indices.as_deref() {
+            Some(indices) => {
+                for &row_idx in indices {
+                    key_collector.add_key(keys.row(row_idx as usize).as_ref());
+                }
+            }
+            // fast path: rows are already in final order, append sequentially.
+            None => {
+                for row_idx in 0..keys.num_rows() as u32 {
+                    key_collector.add_key(keys.row(row_idx as usize).as_ref());
+                }
+            }
         }
         key_collector.freeze();
 
         // build batch
         let sorted_batch = if !self.prune_sort_keys_from_batch.is_all_pruned() {
-            take_batch(batch, sorted_indices)?
+            if is_fast_path {
+                // batch is already sorted and pruned by `sort_batch_in_place`;
+                // avoid an extra `take_batch` copy.
+                batch
+            } else {
+                take_batch(batch, sorted_indices.expect("non-fast-path indices"))?
+            }
         } else {
             create_zero_column_batch(sorted_indices.len())
         };
@@ -1091,6 +1138,41 @@ fn create_zero_column_batch(num_rows: usize) -> RecordBatch {
     .expect("failed to create empty RecordBatch")
 }
 
+struct PrimitiveSortKey {
+    sort_expr: PhysicalSortExpr,
+}
+
+impl PrimitiveSortKey {
+    fn try_new(input_schema: &SchemaRef, exprs: &[PhysicalSortExpr]) -> Option<Self> {
+        if exprs.len() != 1 {
+            return None;
+        }
+        let expr = &exprs[0];
+        // must be a direct column reference
+        expr.expr.as_any().downcast_ref::<Column>()?;
+        let data_type = expr.expr.data_type(input_schema).ok()?;
+        if !matches!(
+            data_type,
+            DataType::Int8
+                | DataType::Int16
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::UInt8
+                | DataType::UInt16
+                | DataType::UInt32
+                | DataType::UInt64
+                | DataType::Date32
+                | DataType::Date64
+                | DataType::Timestamp(_, _)
+        ) {
+            return None;
+        }
+        Some(Self {
+            sort_expr: expr.clone(),
+        })
+    }
+}
+
 struct PruneSortKeysFromBatch {
     input_projection: Vec<usize>,
     sort_row_converter: Arc<Mutex<RowConverter>>,
@@ -1099,6 +1181,7 @@ struct PruneSortKeysFromBatch {
     restored_col_mappers: Vec<ColMapper>,
     restored_schema: SchemaRef,
     pruned_schema: SchemaRef,
+    primitive_fast_path: Option<PrimitiveSortKey>,
 }
 
 #[derive(Clone, Copy)]
@@ -1169,11 +1252,45 @@ impl PruneSortKeysFromBatch {
             restored_col_mappers,
             pruned_schema,
             restored_schema,
+            primitive_fast_path: PrimitiveSortKey::try_new(&input_schema, exprs),
         })
     }
 
     fn is_all_pruned(&self) -> bool {
         self.pruned_schema.fields().is_empty()
+    }
+
+    /// Fast-path batch in-place sort for a single-column primitive key.
+    ///
+    /// Sorts the batch by the primitive sort key using Arrow `sort_to_indices`
+    /// (which compares the raw values, e.g. `i64`, instead of `RowConverter`
+    /// byte encoding), then reorders the batch by the resulting indices and
+    /// applies `limit` rows. The caller can then treat the returned batch as
+    /// already sorted and pruned. No-op precondition: `primitive_fast_path`
+    /// must be `Some`; the caller checks `is_fast_path` before calling.
+    fn sort_batch_in_place(&self, batch: RecordBatch, limit: usize) -> Result<RecordBatch> {
+        // safety/correctness: only reached when is_fast_path == true
+        let key = self
+            .primitive_fast_path
+            .as_ref()
+            .expect("sort_batch_in_place requires a primitive fast path");
+        let array = key
+            .sort_expr
+            .expr
+            .evaluate(&batch)
+            .and_then(|cv| cv.into_array(batch.num_rows()))?;
+        let options = SortOptions {
+            descending: key.sort_expr.options.descending,
+            nulls_first: key.sort_expr.options.nulls_first,
+        };
+        // Pass `limit` straight to `sort_to_indices` so Arrow uses partial
+        // sorting (it only emits the top-`limit` indices); when `limit`
+        // covers the whole batch Arrow internally falls back to a full sort,
+        // so this is never worse than `None`. The returned `UInt32Array` is
+        // handed directly to `take_batch` (which accepts a `PrimitiveArray`)
+        // instead of being copied through an intermediate `Vec<u32>`.
+        let indices = sort_to_indices(&array, Some(options), Some(limit))?;
+        take_batch(batch, indices)
     }
 
     fn pruned_schema(&self) -> SchemaRef {
@@ -1627,8 +1744,11 @@ mod fuzztest {
     use std::{sync::Arc, time::Instant};
 
     use arrow::{
-        array::{ArrayRef, StringArray, UInt32Array},
+        array::{Array, ArrayRef, Int64Array, PrimitiveArray, StringArray, UInt32Array},
         compute::{SortOptions, concat_batches},
+        datatypes::{
+            ArrowPrimitiveType, Date32Type, Date64Type, TimestampMicrosecondType, UInt64Type,
+        },
         record_batch::RecordBatch,
     };
     use auron_memmgr::MemManager;
@@ -1640,6 +1760,128 @@ mod fuzztest {
     };
 
     use crate::sort_exec::SortExec;
+
+    /// Benchmark helper: build a single Int64 column where each value is
+    /// repeated `repeat` times, shuffled, to simulate TPC-H
+    /// lineitem.l_orderkey distribution.
+    fn build_repeated_i64_batch(num_rows: usize, repeat: usize, seed: u64) -> RecordBatch {
+        use rand::{Rng, SeedableRng};
+        let unique_keys = (num_rows + repeat - 1) / repeat;
+        let mut values: Vec<i64> = (0..unique_keys)
+            .flat_map(|v| std::iter::repeat(v as i64).take(repeat))
+            .take(num_rows)
+            .collect();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        rand::seq::SliceRandom::shuffle(values.as_mut_slice(), &mut rng);
+        let schema = Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new("l_orderkey", arrow::datatypes::DataType::Int64, false),
+        ]));
+        RecordBatch::try_new(schema, vec![Arc::new(Int64Array::from(values)) as ArrayRef])
+            .expect("failed to create benchmark batch")
+    }
+
+    async fn bench_sort_repeat(repeat: usize, mem: usize, use_auron: bool) -> Result<(usize, f64)> {
+        bench_sort_repeat_with_limit(repeat, mem, use_auron, None).await
+    }
+
+    /// Variant of `bench_sort_repeat` that can pass a Top-N `limit` to the
+    /// Auron `SortExec`, so the `sort_to_indices(limit)` partial-sort path
+    /// can be exercised (vs. a full sort when `limit` is `None`).
+    async fn bench_sort_repeat_with_limit(
+        repeat: usize,
+        mem: usize,
+        use_auron: bool,
+        limit: Option<usize>,
+    ) -> Result<(usize, f64)> {
+        MemManager::init(mem);
+        let session_ctx =
+            SessionContext::new_with_config(SessionConfig::new().with_batch_size(10000));
+        let task_ctx = session_ctx.task_ctx();
+        let num_rows = 1_000_000;
+        let batch = build_repeated_i64_batch(num_rows, repeat, 42);
+        let schema = batch.schema();
+        let sort_exprs = vec![PhysicalSortExpr {
+            expr: Arc::new(Column::new("l_orderkey", 0)),
+            options: SortOptions::default(),
+        }];
+
+        let input = Arc::new(TestMemoryExec::try_new(
+            &[vec![batch]],
+            schema.clone(),
+            None,
+        )?);
+        let sort: Arc<dyn ExecutionPlan> = if use_auron {
+            Arc::new(SortExec::new(input, sort_exprs.clone(), limit, 0))
+        } else {
+            Arc::new(
+                datafusion::physical_plan::sorts::sort::SortExec::new(
+                    LexOrdering::new(sort_exprs.iter().cloned()).expect("invalid sort exprs"),
+                    input,
+                )
+                .with_fetch(limit),
+            )
+        };
+        let start = Instant::now();
+        let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
+        let elapsed = start.elapsed().as_secs_f64();
+        let total_rows: usize = output.iter().map(|b| b.num_rows()).sum();
+        Ok((total_rows, elapsed))
+    }
+
+    #[tokio::test]
+    #[ignore = "manual benchmark"]
+    async fn bench_native_sort_varying_repeat_in_mem() -> Result<()> {
+        for repeat in [1usize, 4, 20, 100] {
+            let (_, elapsed_auron) = bench_sort_repeat(repeat, 1_000_000_000, true).await?;
+            let (_, elapsed_df) = bench_sort_repeat(repeat, 1_000_000_000, false).await?;
+            eprintln!(
+                "[sort in-mem] repeat={:>3}, auron={:.3}s, datafusion={:.3}s, speedup(df/auron)={:.2}x",
+                repeat,
+                elapsed_auron,
+                elapsed_df,
+                elapsed_auron / elapsed_df
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "manual benchmark"]
+    async fn bench_native_sort_topn_limit_in_mem() -> Result<()> {
+        // Top-N scenario: limit=10000 << num_rows=1M, so the primitive fast
+        // path's `sort_to_indices(Some(limit))` partial sort should be cheaper
+        // than a full sort. Compares Auron vs DataFusion, both with limit.
+        let limit = 10_000usize;
+        for repeat in [1usize, 100] {
+            let (_, elapsed_auron) =
+                bench_sort_repeat_with_limit(repeat, 1_000_000_000, true, Some(limit)).await?;
+            let (_, elapsed_df) =
+                bench_sort_repeat_with_limit(repeat, 1_000_000_000, false, Some(limit)).await?;
+            eprintln!(
+                "[sort top-N limit={limit}] repeat={repeat:>3}, auron={elapsed_auron:.3}s, datafusion={elapsed_df:.3}s, speedup(df/auron)={:.2}x",
+                elapsed_auron / elapsed_df
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "manual benchmark"]
+    async fn bench_native_sort_varying_repeat_external() -> Result<()> {
+        // NOTE: this measures Auron's external (spilling) sort in isolation.
+        // DataFusion's native SortExec has no spilling path, so under the same
+        // 2 MB `MemManager` limit Auron spills while DataFusion keeps sorting
+        // fully in memory — the two are not comparable. We therefore report
+        // Auron's spill cost on its own; use the in-mem group for a fair
+        // Auron-vs-DataFusion comparison (both stay in memory at 1 GB).
+        for repeat in [1usize, 4, 20, 100] {
+            let (_, elapsed_auron) = bench_sort_repeat(repeat, 2_000_000, true).await?;
+            eprintln!(
+                "[sort external/spill, auron-only] repeat={repeat:>3}, auron={elapsed_auron:.3}s"
+            );
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn fuzztest_in_mem_sorting() -> Result<()> {
@@ -1654,6 +1896,359 @@ mod fuzztest {
         let time_start = Instant::now();
         fuzztest_with_mem_conf(10000).await?;
         eprintln!("fuzztest_external_sorting_time: {:?}", time_start.elapsed());
+        Ok(())
+    }
+
+    /// Builds `num_batches` Int64-keyed batches for exercising the primitive
+    /// fast path (single direct `Column` key, so `PrimitiveSortKey::try_new`
+    /// applies).
+    ///
+    /// Without a payload column, keys are drawn from a small domain with ~5%
+    /// nulls, so duplicates and nulls are heavily exercised while tied rows
+    /// stay indistinguishable (full-output comparison is meaningful). With a
+    /// payload column, keys are unique global ids (no nulls) so the total
+    /// order is well-defined even though rows carry distinct payload values.
+    fn build_i64_fast_path_batches(
+        num_batches: usize,
+        rows_per_batch: usize,
+        with_payload: bool,
+        seed: u64,
+    ) -> Vec<RecordBatch> {
+        use rand::{Rng, SeedableRng, seq::SliceRandom};
+        let total = num_batches * rows_per_batch;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        let keys: Vec<Option<i64>> = if with_payload {
+            let mut ids: Vec<Option<i64>> = (0..total as i64).map(Some).collect();
+            ids.shuffle(&mut rng);
+            ids
+        } else {
+            std::iter::repeat_with(|| {
+                if rng.random_ratio(1, 20) {
+                    None
+                } else {
+                    Some(rng.random_range(0..1000))
+                }
+            })
+            .take(total)
+            .collect()
+        };
+        let schema = Arc::new(arrow::datatypes::Schema::new(
+            std::iter::once(arrow::datatypes::Field::new(
+                "c0",
+                arrow::datatypes::DataType::Int64,
+                true,
+            ))
+            .chain(with_payload.then(|| {
+                arrow::datatypes::Field::new("v", arrow::datatypes::DataType::UInt32, true)
+            }))
+            .collect::<Vec<_>>(),
+        ));
+        keys.chunks(rows_per_batch)
+            .map(|chunk| {
+                let mut columns: Vec<ArrayRef> = vec![Arc::new(Int64Array::from(chunk.to_vec()))];
+                if with_payload {
+                    let payload: UInt32Array = std::iter::repeat_with(|| rng.random::<u32>())
+                        .take(chunk.len())
+                        .collect();
+                    columns.push(Arc::new(payload));
+                }
+                RecordBatch::try_new(schema.clone(), columns).expect("failed to create test batch")
+            })
+            .collect()
+    }
+
+    /// Runs a single-column primitive sort with the given options/limit
+    /// through Auron's `SortExec` (primitive fast path) or DataFusion's
+    /// `SortExec`, and returns the concatenated output batch.
+    async fn collect_primitive_sort_output(
+        batches: &[RecordBatch],
+        options: SortOptions,
+        limit: Option<usize>,
+        use_auron: bool,
+    ) -> Result<RecordBatch> {
+        let session_ctx =
+            SessionContext::new_with_config(SessionConfig::new().with_batch_size(10000));
+        let task_ctx = session_ctx.task_ctx();
+        let schema = batches[0].schema();
+        let sort_exprs = vec![PhysicalSortExpr {
+            expr: Arc::new(Column::new("c0", 0)),
+            options,
+        }];
+        let input = Arc::new(TestMemoryExec::try_new(
+            &[batches.to_vec()],
+            schema.clone(),
+            None,
+        )?);
+        let sort: Arc<dyn ExecutionPlan> = if use_auron {
+            Arc::new(SortExec::new(input, sort_exprs.clone(), limit, 0))
+        } else {
+            Arc::new(
+                datafusion::physical_plan::sorts::sort::SortExec::new(
+                    LexOrdering::new(sort_exprs.iter().cloned()).expect("invalid sort exprs"),
+                    input,
+                )
+                .with_fetch(limit),
+            )
+        };
+        let output = datafusion::physical_plan::collect(sort, task_ctx).await?;
+        Ok(concat_batches(&schema, &output)?)
+    }
+
+    /// Correctness coverage for the primitive fast path (single-column
+    /// primitive key sorted via Arrow `sort_to_indices`). The fuzz tests
+    /// above use string keys and therefore only exercise the RowConverter
+    /// path, while the benchmarks above are `#[ignore]`d and only measure
+    /// elapsed time. These tests feed multiple batches (so the K-way merge
+    /// is exercised), cover ascending/descending and nulls-first/nulls-last
+    /// orderings as well as a Top-N limit, and compare the complete output
+    /// with DataFusion's `SortExec`.
+    async fn fuzztest_primitive_fast_path_with_conf(
+        mem: usize,
+        limit: Option<usize>,
+        with_payload: bool,
+    ) -> Result<()> {
+        MemManager::init(mem);
+        let batches = build_i64_fast_path_batches(51, 10000, with_payload, 42);
+        let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let options = SortOptions {
+                    descending,
+                    nulls_first,
+                };
+                let a = collect_primitive_sort_output(&batches, options, limit, true).await?;
+                let b = collect_primitive_sort_output(&batches, options, limit, false).await?;
+                assert!(
+                    a == b,
+                    "primitive fast path output mismatch: descending={descending}, \
+                     nulls_first={nulls_first}, limit={limit:?}, with_payload={with_payload}"
+                );
+                assert_eq!(a.num_rows(), limit.unwrap_or(usize::MAX).min(total_rows));
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_in_mem_sorting() -> Result<()> {
+        fuzztest_primitive_fast_path_with_conf(1000000000, None, false).await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_in_mem_sorting_with_payload() -> Result<()> {
+        fuzztest_primitive_fast_path_with_conf(1000000000, None, true).await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_external_sorting() -> Result<()> {
+        fuzztest_primitive_fast_path_with_conf(10000, None, false).await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_topn() -> Result<()> {
+        // Top-N: limit is much smaller than the total row count, so the fast
+        // path takes the `sort_to_indices(Some(limit))` partial-sort branch.
+        fuzztest_primitive_fast_path_with_conf(1000000000, Some(9999), false).await
+    }
+
+    /// Builds single-column primitive batches from `keys`, chunked into
+    /// `rows_per_batch`-sized batches. Used to exercise the primitive fast
+    /// path across the advertised key types (not just Int64).
+    fn build_primitive_fast_path_batches<T>(
+        keys: Vec<Option<T::Native>>,
+        rows_per_batch: usize,
+    ) -> Vec<RecordBatch>
+    where
+        T: ArrowPrimitiveType,
+        PrimitiveArray<T>: From<Vec<Option<T::Native>>>,
+    {
+        let schema = Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new("c0", T::DATA_TYPE, true),
+        ]));
+        keys.chunks(rows_per_batch)
+            .map(|chunk| {
+                RecordBatch::try_new(
+                    schema.clone(),
+                    vec![Arc::new(PrimitiveArray::<T>::from(chunk.to_vec())) as ArrayRef],
+                )
+                .expect("failed to create test batch")
+            })
+            .collect()
+    }
+
+    /// Parameterized correctness check for one primitive key type: sorts
+    /// `extremes` plus randomly generated keys from `domain` (small domain
+    /// with ~5% nulls, so duplicates and nulls are heavily exercised) with
+    /// both Auron and DataFusion under all asc/desc x nulls-first/nulls-last
+    /// combinations and requires identical output. `extremes` should include
+    /// the type's min/max values so ordering-semantics bugs (e.g.
+    /// signed/unsigned mixups) cannot hide inside the random domain.
+    async fn check_primitive_type_fast_path<T>(
+        extremes: &[T::Native],
+        domain: std::ops::Range<T::Native>,
+    ) -> Result<()>
+    where
+        T: ArrowPrimitiveType,
+        T::Native: rand::distr::uniform::SampleUniform,
+        PrimitiveArray<T>: From<Vec<Option<T::Native>>>,
+    {
+        use rand::{Rng, SeedableRng, seq::SliceRandom};
+        MemManager::init(1000000000);
+        let total = 51000;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut keys: Vec<Option<T::Native>> = extremes.iter().map(|v| Some(*v)).collect();
+        keys.extend(
+            std::iter::repeat_with(|| {
+                if rng.random_ratio(1, 20) {
+                    None
+                } else {
+                    Some(rng.random_range(domain.clone()))
+                }
+            })
+            .take(total - extremes.len()),
+        );
+        keys.shuffle(&mut rng);
+        let batches = build_primitive_fast_path_batches::<T>(keys, 1000);
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let options = SortOptions {
+                    descending,
+                    nulls_first,
+                };
+                let a = collect_primitive_sort_output(&batches, options, None, true).await?;
+                let b = collect_primitive_sort_output(&batches, options, None, false).await?;
+                assert!(
+                    a == b,
+                    "primitive fast path output mismatch: descending={descending}, \
+                     nulls_first={nulls_first}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_uint64() -> Result<()> {
+        // extremes above i64::MAX catch signed/unsigned ordering mixups
+        check_primitive_type_fast_path::<UInt64Type>(
+            &[0, 1, i64::MAX as u64, i64::MAX as u64 + 1, u64::MAX],
+            0..1000,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_date32() -> Result<()> {
+        check_primitive_type_fast_path::<Date32Type>(&[i32::MIN, -1, 0, 1, i32::MAX], -1000..1000)
+            .await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_date64() -> Result<()> {
+        check_primitive_type_fast_path::<Date64Type>(&[i64::MIN, -1, 0, 1, i64::MAX], -1000..1000)
+            .await
+    }
+
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_timestamp_us() -> Result<()> {
+        check_primitive_type_fast_path::<TimestampMicrosecondType>(
+            &[i64::MIN, -1, 0, 1, i64::MAX],
+            -1_000_000..1_000_000,
+        )
+        .await
+    }
+
+    /// Combined coverage: nullable key + payload column + Top-N limit.
+    /// Duplicate keys make the relative order of tied payload rows
+    /// implementation-defined, so the payload is a deterministic function of
+    /// the key: the key column must match DataFusion exactly (null ordering
+    /// included) and every payload must be aligned with its key.
+    #[tokio::test]
+    async fn fuzztest_primitive_fast_path_topn_nullable_key_with_payload() -> Result<()> {
+        use rand::{Rng, SeedableRng};
+        const NULL_PAYLOAD: u32 = u32::MAX;
+        let payload_of = |key: i64| (key as u32).wrapping_mul(31).wrapping_add(7);
+
+        MemManager::init(1000000000);
+        let total = 51000;
+        let limit = 9999;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let keys: Vec<Option<i64>> = std::iter::repeat_with(|| {
+            if rng.random_ratio(1, 20) {
+                None
+            } else {
+                Some(rng.random_range(0..1000))
+            }
+        })
+        .take(total)
+        .collect();
+
+        let schema = Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new("c0", arrow::datatypes::DataType::Int64, true),
+            arrow::datatypes::Field::new("v", arrow::datatypes::DataType::UInt32, false),
+        ]));
+        let batches: Vec<RecordBatch> = keys
+            .chunks(1000)
+            .map(|chunk| {
+                let payload: UInt32Array = chunk
+                    .iter()
+                    .map(|key| key.map_or(NULL_PAYLOAD, payload_of))
+                    .collect();
+                RecordBatch::try_new(
+                    schema.clone(),
+                    vec![
+                        Arc::new(Int64Array::from(chunk.to_vec())) as ArrayRef,
+                        Arc::new(payload),
+                    ],
+                )
+                .expect("failed to create test batch")
+            })
+            .collect();
+
+        for descending in [false, true] {
+            for nulls_first in [false, true] {
+                let options = SortOptions {
+                    descending,
+                    nulls_first,
+                };
+                let a = collect_primitive_sort_output(&batches, options, Some(limit), true).await?;
+                let b =
+                    collect_primitive_sort_output(&batches, options, Some(limit), false).await?;
+                assert_eq!(a.num_rows(), limit);
+                let keys_a = a
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("key column must be Int64");
+                let keys_b = b
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("key column must be Int64");
+                assert_eq!(
+                    keys_a, keys_b,
+                    "key ordering mismatch: descending={descending}, nulls_first={nulls_first}"
+                );
+                let payload_a = a
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<UInt32Array>()
+                    .expect("payload column must be UInt32");
+                for row_idx in 0..a.num_rows() {
+                    let expected = if keys_a.is_null(row_idx) {
+                        NULL_PAYLOAD
+                    } else {
+                        payload_of(keys_a.value(row_idx))
+                    };
+                    assert_eq!(
+                        payload_a.value(row_idx),
+                        expected,
+                        "payload misaligned at row {row_idx}: descending={descending}, \
+                         nulls_first={nulls_first}"
+                    );
+                }
+            }
+        }
         Ok(())
     }
 
