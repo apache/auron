@@ -150,7 +150,8 @@ run_docker_compose_up() {
     exit 1
 }
 
-MVN_CMD="$(dirname "$0")/build/mvn"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MVN_CMD="$SCRIPT_DIR/build/mvn"
 
 # -----------------------------------------------------------------------------
 # Section: Initialize Variables
@@ -523,11 +524,20 @@ MVN_ARGS=("${CLEAN_ARGS[@]}" "${BUILD_ARGS[@]}")
 # Description:
 #   Generate auron-build-info.properties for build metadata tracking.
 # -----------------------------------------------------------------------------
-BUILD_INFO_FILE="common/src/main/resources/auron-build-info.properties"
+BUILD_INFO_FILE="$SCRIPT_DIR/common/src/main/resources/auron-build-info.properties"
 mkdir -p "$(dirname "$BUILD_INFO_FILE")"
 
 JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk '{print $3}' | tr -d '"')
-PROJECT_VERSION=$(./build/mvn help:evaluate -N -Dexpression=project.version -Pspark-${SPARK_VER} -q -DforceStdout 2>/dev/null)
+MVN_STDERR=$(mktemp)
+if ! PROJECT_VERSION=$("$MVN_CMD" help:evaluate -N -f "$SCRIPT_DIR/pom.xml" -Dexpression=project.version -Pspark-${SPARK_VER} -q -DforceStdout 2>"$MVN_STDERR") \
+   || [[ ! "$PROJECT_VERSION" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "[ERROR] Failed to resolve project.version using $MVN_CMD" >&2
+  [[ -n "$PROJECT_VERSION" ]] && echo "[ERROR] stdout was: $PROJECT_VERSION" >&2
+  sed 's/^/[ERROR] /' "$MVN_STDERR" >&2
+  rm -f "$MVN_STDERR"
+  exit 1
+fi
+rm -f "$MVN_STDERR"
 RUST_VERSION=$(rustc --version | awk '{print $2}')
 
 get_build_info() {
