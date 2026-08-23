@@ -18,8 +18,16 @@ package org.apache.auron.flink.jni;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
+import java.nio.ByteBuffer;
+import org.apache.auron.flink.functions.FlinkAuronUDFWrapperContext;
+import org.apache.auron.flink.functions.FlinkUDFPayload;
+import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.jni.AuronAdaptor;
 import org.apache.auron.jni.FlinkAuronAdaptor;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.functions.ScalarFunction;
+import org.apache.flink.table.types.DataType;
+import org.apache.flink.util.InstantiationUtil;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -32,5 +40,34 @@ public class FlinkAuronAdaptorTest {
         AuronAdaptor flinkAuronAdaptor = AuronAdaptor.getInstance();
         assertInstanceOf(
                 FlinkAuronAdaptor.class, flinkAuronAdaptor, "SPI should discover and instantiate FlinkAuronAdaptor");
+    }
+
+    /**
+     * Contract: the Flink adaptor builds a {@link FlinkAuronUDFWrapperContext} from a serialized
+     * UDF payload rather than rejecting the call.
+     */
+    @Test
+    public void testGetAuronUDFWrapperContextReturnsWrapper() throws Exception {
+        FlinkUDFPayload payload = new FlinkUDFPayload(
+                new PlusOneFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), new String[] {
+                    Integer.class.getName()
+                });
+        byte[] bytes = InstantiationUtil.serializeObject(payload);
+        ByteBuffer buffer = ByteBuffer.allocateDirect(bytes.length);
+        buffer.put(bytes);
+        buffer.flip();
+
+        AuronUDFWrapperContext context = AuronAdaptor.getInstance().getAuronUDFWrapperContext(buffer);
+
+        assertInstanceOf(FlinkAuronUDFWrapperContext.class, context);
+    }
+
+    /** Minimal serializable UDF fixture; static so it captures no enclosing test instance. */
+    public static class PlusOneFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        public Integer eval(Integer value) {
+            return value == null ? null : value + 1;
+        }
     }
 }

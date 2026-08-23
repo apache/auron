@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import org.apache.auron.configuration.AuronConfiguration;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
+import org.apache.auron.flink.functions.FlinkAuronUDFWrapperContext;
 import org.apache.auron.functions.AuronUDFWrapperContext;
 
 /**
@@ -71,7 +72,13 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
 
     @Override
     public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer byteBuffer) {
-        throw new UnsupportedOperationException();
+        try {
+            // A fresh instance per call: the wrapper keeps reusable per-evaluation buffers, and
+            // parallel subtasks in one TaskManager JVM must not share them.
+            return new FlinkAuronUDFWrapperContext(byteBuffer);
+        } catch (Exception e) {
+            throw new IllegalStateException("error creating Flink UDF wrapper context", e);
+        }
     }
 
     @Override
