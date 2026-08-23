@@ -40,7 +40,7 @@ use datafusion_ext_commons::{arrow::cast::cast, df_execution_err};
 use jni::objects::GlobalRef;
 use once_cell::sync::OnceCell;
 
-pub struct SparkUDFWrapperExpr {
+pub struct UDFWrapperExpr {
     pub serialized: Vec<u8>,
     pub return_type: DataType,
     pub return_nullable: bool,
@@ -51,7 +51,7 @@ pub struct SparkUDFWrapperExpr {
     expr_string: String,
 }
 
-impl PartialEq for SparkUDFWrapperExpr {
+impl PartialEq for UDFWrapperExpr {
     fn eq(&self, other: &Self) -> bool {
         physical_exprs_bag_equal(&self.params, &other.params)
             && self.serialized == other.serialized
@@ -60,7 +60,7 @@ impl PartialEq for SparkUDFWrapperExpr {
     }
 }
 
-impl DynEq for SparkUDFWrapperExpr {
+impl DynEq for UDFWrapperExpr {
     fn dyn_eq(&self, other: &dyn Any) -> bool {
         other
             .downcast_ref::<Self>()
@@ -69,7 +69,7 @@ impl DynEq for SparkUDFWrapperExpr {
     }
 }
 
-impl SparkUDFWrapperExpr {
+impl UDFWrapperExpr {
     pub fn try_new(
         serialized: Vec<u8>,
         return_type: DataType,
@@ -101,25 +101,25 @@ impl SparkUDFWrapperExpr {
     }
 }
 
-impl Display for SparkUDFWrapperExpr {
+impl Display for UDFWrapperExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(self, f)
     }
 }
 
-impl Debug for SparkUDFWrapperExpr {
+impl Debug for UDFWrapperExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "UDFWrapper({})", self.expr_string)
     }
 }
 
-impl Hash for SparkUDFWrapperExpr {
+impl Hash for UDFWrapperExpr {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.serialized.hash(state);
     }
 }
 
-impl PhysicalExpr for SparkUDFWrapperExpr {
+impl PhysicalExpr for UDFWrapperExpr {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -134,7 +134,7 @@ impl PhysicalExpr for SparkUDFWrapperExpr {
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
         if !is_task_running() {
-            df_execution_err!("SparkUDFWrapper: is_task_running=false")?;
+            df_execution_err!("UDFWrapper: is_task_running=false")?;
         }
 
         let batch_schema = batch.schema();
