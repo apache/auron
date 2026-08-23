@@ -213,7 +213,7 @@ fn invoke_udf(
     let struct_array = StructArray::from(params_batch);
     let mut export_ffi_array = FFI_ArrowArray::new(&struct_array.to_data());
     let mut import_ffi_array = FFI_ArrowArray::empty();
-    jni_call!(SparkAuronUDFWrapperContext(jcontext.as_obj()).eval(
+    jni_call!(AuronUDFWrapperContext(jcontext.as_obj()).eval(
         &mut export_ffi_array as *mut FFI_ArrowArray as i64,
         &mut import_ffi_array as *mut FFI_ArrowArray as i64,
     ) -> ())?;

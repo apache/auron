@@ -19,6 +19,7 @@ package org.apache.auron
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
+import org.apache.spark.sql.execution.ExecSubqueryExpression
 import org.apache.spark.sql.execution.auron.plan.NativeFilterBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
@@ -89,6 +90,27 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         sql("create table t1 using parquet as select '2024-12-18' as event_time")
         checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
       }
+    }
+  }
+
+  test("scalar subquery is evaluated natively") {
+    withTable("t1", "t2") {
+      sql("create table t1 using parquet as select id as c1, id + 1 as c2 from range(10)")
+      sql("create table t2 using parquet as select id as c3 from range(5)")
+      val df =
+        checkSparkAnswerAndOperator("select c1 from t1 where c2 > (select max(c3) from t2)")
+
+      // Comparing against vanilla Spark would also pass if both sides returned nothing,
+      // and an empty input means the native filter never runs.
+      assert(df.collect().length == 6)
+
+      // A row check alone would still pass if the planner folded the subquery into a
+      // literal, in which case nothing would reach the native subquery expression.
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val subqueryOwner = plan.collectFirst {
+        case p if p.expressions.exists(ExecSubqueryExpression.hasSubquery) => p
+      }
+      assert(subqueryOwner.isDefined, s"expected a subquery expression in the plan:\n$plan")
     }
   }
 
