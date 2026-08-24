@@ -139,3 +139,13 @@ jobs:
         --conf spark.sql.optimizer.runtime.bloomFilter.enabled=true
         --conf spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold=1B
         --conf spark.sql.autoBroadcastJoinThreshold=-1
+
+  test-spark-42-jdk21-scala-2-13:
+    name: Test spark-4.2 JDK21 Scala-2.13
+    uses: ./.github/workflows/tpcds-reusable.yml
+    with:
+      sparkver: spark-4.2
+      javaver: '21'
+      scalaver: '2.13'
+      hadoop-profile: 'hadoop3'
+      sparktests: 'true'

@@ -20,6 +20,7 @@ import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
 import org.apache.spark.sql.execution.auron.plan.NativeFilterBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
+import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
@@ -112,7 +113,10 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     withTable("t1", "t2") {
       sql("create table t1(c1 binary, c2 int) using parquet")
       sql("insert into t1 values (cast('test1' as binary), 1), (cast('test2' as binary), 2)")
-      checkSparkAnswerAndOperator("select c2 from t1 order by c1")
+      val df = checkSparkAnswerAndOperator("select c2 from t1 order by c1")
+      assert(collectFirst(df.queryExecution.executedPlan) { case e: NativeShuffleExchangeExec =>
+        e
+      }.isDefined)
     }
   }
 
@@ -539,6 +543,18 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
         checkSparkAnswerAndOperator("select cast(s as string) from t_struct_nulls")
       }
+    }
+  }
+
+  test("get field from nullable struct propagates parent null") {
+    withTable("t_nullable_struct") {
+      sql("""
+            |create table t_nullable_struct using parquet as
+            |select id, case when id = 1 then named_struct('child', 10) end as s
+            |from range(1, 3, 1, 1)
+            |""".stripMargin)
+
+      checkSparkAnswerAndOperator("select s.child from t_nullable_struct order by id")
     }
   }
 

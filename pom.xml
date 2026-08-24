@@ -1160,6 +1160,64 @@
     </profile>
 
     <profile>
+      <id>spark-4.2</id>
+      <properties>
+        <shimName>spark-4.2</shimName>
+        <scalaTestVersion>3.2.9</scalaTestVersion>
+        <sparkVersion>4.2.0</sparkVersion>
+        <parquetVersion>1.17.0</parquetVersion>
+        <shortSparkVersion>4.2</shortSparkVersion>
+        <nettyVersion>4.2.13.Final</nettyVersion>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven-enforcer-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>spark42-enforce-java-scala-version</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <!-- Spark 4.2 requires JDK 17+ and Scala 2.13.x -->
+                    <requireJavaVersion>
+                      <version>[17,)</version>
+                      <message>Spark 4.2 requires JDK 17 or higher. Current: ${java.version}</message>
+                    </requireJavaVersion>
+                    <requireProperty>
+                      <property>scalaLongVersion</property>
+                      <regex>2\.13\.\d+</regex>
+                      <regexMessage>Spark 4.2 requires Scala 2.13.x. Current: ${scalaLongVersion}</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+              <execution>
+                <id>spark42-disallow-iceberg</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>icebergEnabled</property>
+                      <regex>false</regex>
+                      <regexMessage>Spark 4.2 is not supported for Iceberg. Use Spark 3.4-4.0 or disable icebergEnabled.</regexMessage>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
       <id>jdk-8</id>
       <activation>
         <jdk>1.8</jdk>

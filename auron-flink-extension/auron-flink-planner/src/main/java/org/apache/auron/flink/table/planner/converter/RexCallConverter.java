@@ -23,6 +23,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.apache.auron.protobuf.ArrowType;
 import org.apache.auron.protobuf.EmptyMessage;
 import org.apache.auron.protobuf.PhysicalBinaryExprNode;
@@ -92,6 +93,15 @@ public class RexCallConverter implements FlinkRexNodeConverter {
 
     /** Flink's default format for the single-argument {@code UNIX_TIMESTAMP(string)} form. */
     private static final String DEFAULT_UNIX_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss";
+
+    /**
+     * A session time zone that names a constant offset rather than a region. The {@code GMT} prefix
+     * is optional because both spellings are reachable: {@link ZoneId#getId()} returns the bare form
+     * for a zone built from an offset, and the prefixed form for one built from a {@code GMT±HH:MM}
+     * id. The pattern does not re-check the numeric range, because every id tested against it came
+     * from a constructed {@link ZoneId} and is therefore already bounded to {@code ±18:00}.
+     */
+    private static final Pattern FIXED_OFFSET_ZONE = Pattern.compile("(?:GMT)?[+-]\\d{2}:\\d{2}");
 
     /** All supported SqlKinds including unary and cast. */
     private static final Set<SqlKind> SUPPORTED_KINDS = EnumSet.of(
@@ -456,27 +466,28 @@ public class RexCallConverter implements FlinkRexNodeConverter {
     }
 
     /**
-     * Returns {@code true} if the native function can resolve {@code zoneId}. It resolves a zone by
-     * exact-match lookup in the IANA time zone database, so two id families that Flink's
-     * {@code table.local-time-zone} accepts have to fall back:
+     * Returns {@code true} if the native function can resolve {@code zoneId}. It resolves either a
+     * region id, by exact-match lookup in the IANA time zone database, or a fixed offset, by
+     * parsing it. The one family Flink's {@code table.local-time-zone} accepts that still has to
+     * fall back is the legacy {@code SystemV/*} aliases, which the JDK resolves but the database
+     * the native lookup consults does not carry.
      *
-     * <ul>
-     *   <li>fixed-offset constructions such as {@code GMT-08:00}, which name an offset rather than
-     *       a region and are absent from {@link ZoneId#getAvailableZoneIds()}
-     *   <li>the legacy {@code SystemV/*} aliases, which the JDK still resolves but the database
-     *       the native lookup consults does not carry
-     * </ul>
+     * <p>The set this admits has to equal the set the native side resolves, in both directions.
+     * Admitting less costs acceleration; admitting more is worse than an error, because a zone the
+     * native function rejects surfaces as an empty result set rather than a failure — the Calc
+     * operator has no run-time fallback, and nothing downstream distinguishes "no rows" from "the
+     * zone was unresolvable".
      *
-     * <p>The check has to happen at plan time: an unresolvable id fails inside the native call,
-     * and the Calc operator has no run-time fallback to catch it.
-     *
-     * <p>The membership test consults the JDK's copy of the database as a proxy for the one the
+     * <p>The region branch consults the JDK's copy of the database as a proxy for the one the
      * native side resolves against. The two are updated independently and nothing in the build
      * pins them together, so any further id family they stop agreeing on has to be excluded here
-     * the way {@code SystemV/*} is.
+     * the way {@code SystemV/*} is. The fixed-offset branch depends on neither database: an offset
+     * is parsed arithmetically on both sides.
      */
     private static boolean isNativelySupportedZone(String zoneId) {
-        return !zoneId.startsWith("SystemV/") && ZoneId.getAvailableZoneIds().contains(zoneId);
+        return !zoneId.startsWith("SystemV/")
+                && (ZoneId.getAvailableZoneIds().contains(zoneId)
+                        || FIXED_OFFSET_ZONE.matcher(zoneId).matches());
     }
 
     /**

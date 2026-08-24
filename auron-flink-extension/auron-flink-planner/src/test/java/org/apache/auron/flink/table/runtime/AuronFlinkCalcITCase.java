@@ -248,14 +248,28 @@ public class AuronFlinkCalcITCase extends AuronFlinkTableTestBase {
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(1602288001L), Row.of(1602288002L), Row.of(1602288003L)));
     }
 
-    /** UNIX_TIMESTAMP yields the epoch seconds for the offset when the session timezone is a
-     * fixed-offset construction, a form Flink accepts that has no native equivalent. */
+    /**
+     * A fixed-offset session timezone names a constant offset rather than a region. The native
+     * function parses the offset instead of looking it up, so the Calc converts and applies it.
+     *
+     * <p>Flink's codegen Calc produces the same rows from the same offset, so the values alone
+     * cannot show which engine ran. The fallback counter is what discriminates: a Calc that fails
+     * to convert records either an unsupported node or a composition failure before falling back,
+     * so a count of zero means this Calc converted. The row set carries the rest — a plan that
+     * converts but hits no native registry arm fails while executing, where nothing records a
+     * fallback, and surfaces as an empty result with the counter still at zero.
+     */
     @Test
-    public void testUnixTimestampFixedOffsetTimeZoneFallsBack() {
+    public void testUnixTimestampFixedOffsetTimeZoneRunsNatively() {
+        UnsupportedFlinkNodeRecorder.resetForTest();
         tableEnvironment.getConfig().setLocalTimeZone(ZoneId.of("GMT-08:00"));
         List<Row> rows = CollectionUtil.iteratorToList(tableEnvironment
                 .executeSql("select UNIX_TIMESTAMP(`ts`) from T1")
                 .collect());
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
         rows.sort(Comparator.comparingLong(o -> (long) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(1602316801L), Row.of(1602316802L), Row.of(1602316803L)));
     }

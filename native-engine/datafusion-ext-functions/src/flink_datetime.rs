@@ -19,7 +19,7 @@ use arrow::{
     array::{Int64Array, StringArray},
     datatypes::DataType,
 };
-use chrono::{DateTime, LocalResult, NaiveDateTime, Offset, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, LocalResult, NaiveDateTime, Offset, TimeZone, Utc};
 use chrono_tz::{OffsetComponents, Tz};
 use datafusion::{
     common::{DataFusionError, Result, ScalarValue},
@@ -66,9 +66,7 @@ pub fn flink_unix_timestamp(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let zone_id = utf8_scalar(&args[2]).ok_or_else(|| {
         DataFusionError::Execution("Flink_UnixTimestamp: zoneId must be a non-null string".into())
     })?;
-    let tz: Tz = zone_id.parse().map_err(|_| {
-        DataFusionError::Execution(format!("Flink_UnixTimestamp: invalid timezone {zone_id}"))
-    })?;
+    let zone = parse_zone_spec(&zone_id)?;
 
     let tokens = parse_format(&format)?;
 
@@ -85,7 +83,7 @@ pub fn flink_unix_timestamp(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let result = Int64Array::from_iter(
         value
             .iter()
-            .map(|opt_s| opt_s.map(|s| parse_datetime(s, &tokens, tz).unwrap_or(i64::MIN))),
+            .map(|opt_s| opt_s.map(|s| parse_datetime(s, &tokens, &zone).unwrap_or(i64::MIN))),
     );
 
     Ok(ColumnarValue::Array(Arc::new(result)))
@@ -123,6 +121,54 @@ fn utf8_scalar(arg: &ColumnarValue) -> Option<String> {
         | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(s))) => Some(s.clone()),
         _ => None,
     }
+}
+
+/// Resolve the session time zone id to a zone specification.
+///
+/// The id arrives already normalized by `ZoneId.getId()`, so the accepted forms
+/// are an IANA region id, `GMT±HH:MM`, or a bare `±HH:MM`. Anything else is an
+/// error rather than a default: the plan-time gate admits only what this
+/// function resolves, so a disagreement between the two is a plumbing bug, and
+/// returning an error keeps it from surfacing as silently wrong data.
+fn parse_zone_spec(zone_id: &str) -> Result<ZoneSpec> {
+    if let Ok(tz) = zone_id.parse::<Tz>() {
+        return Ok(ZoneSpec::Iana(tz));
+    }
+    if let Some(secs) = parse_fixed_offset_secs(zone_id.strip_prefix("GMT").unwrap_or(zone_id)) {
+        if let Some(offset) = FixedOffset::east_opt(secs) {
+            return Ok(ZoneSpec::Fixed(offset));
+        }
+    }
+    Err(DataFusionError::Execution(format!(
+        "Flink_UnixTimestamp: invalid timezone {zone_id}"
+    )))
+}
+
+/// Parse exactly `±HH:MM`, rejecting any trailing input so that a
+/// second-precision id cannot silently lose its seconds field.
+fn parse_fixed_offset_secs(s: &str) -> Option<i32> {
+    let b = s.as_bytes();
+    if b.len() != 6 || b[3] != b':' {
+        return None;
+    }
+    let sign = match b[0] {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    if !b[1..3].iter().chain(&b[4..6]).all(u8::is_ascii_digit) {
+        return None;
+    }
+    let hours = i32::from(b[1] - b'0') * 10 + i32::from(b[2] - b'0');
+    let minutes = i32::from(b[4] - b'0') * 10 + i32::from(b[5] - b'0');
+    if minutes > 59 {
+        return None;
+    }
+    let secs = sign * (hours * 3600 + minutes * 60);
+    if secs.abs() > 18 * 3600 {
+        return None;
+    }
+    Some(secs)
 }
 
 /// A field is one of the six numeric SimpleDateFormat components; every
@@ -237,7 +283,7 @@ impl Fields {
 /// format. Every other token consumes at least one byte — a literal matches
 /// one, a field needs at least one digit — so an empty token list is the only
 /// way to finish having consumed nothing.
-fn parse_datetime(input: &str, tokens: &[Token], tz: Tz) -> Option<i64> {
+fn parse_datetime(input: &str, tokens: &[Token], zone: &ZoneSpec) -> Option<i64> {
     if tokens.is_empty() {
         return None;
     }
@@ -287,7 +333,7 @@ fn parse_datetime(input: &str, tokens: &[Token], tz: Tz) -> Option<i64> {
     }
 
     let local_sec = normalize(&fields);
-    let offset = resolve_offset_secs(local_sec, tz);
+    let offset = zone.offset_secs(local_sec);
     Some(local_sec - offset)
 }
 
@@ -394,6 +440,25 @@ fn resolve_offset_secs(local_sec: i64, tz: Tz) -> i64 {
     }
 }
 
+/// Session time zone as resolved at plan time: an IANA region from the time
+/// zone database, or a constant UTC offset.
+#[derive(Clone, Copy)]
+enum ZoneSpec {
+    Iana(Tz),
+    Fixed(FixedOffset),
+}
+
+impl ZoneSpec {
+    /// UTC offset in seconds for a local wall-clock instant. A fixed offset is
+    /// constant by construction, so it ignores the instant entirely.
+    fn offset_secs(&self, local_sec: i64) -> i64 {
+        match self {
+            ZoneSpec::Iana(tz) => resolve_offset_secs(local_sec, *tz),
+            ZoneSpec::Fixed(offset) => offset.local_minus_utc() as i64,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use arrow::array::Array;
@@ -418,6 +483,18 @@ mod tests {
             .expect("result must be Int64Array");
         assert_eq!(out.len(), 1);
         out.value(0)
+    }
+
+    /// Whether the zone id is rejected outright. A rejected zone is an error
+    /// from the function itself, distinct from the `i64::MIN` sentinel that
+    /// a row-level parse failure produces.
+    fn zone_rejected(tz: &str) -> bool {
+        let args = vec![
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("2020-10-10 00:00:01".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(DEFAULT.to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(tz.to_string()))),
+        ];
+        flink_unix_timestamp(&args).is_err()
     }
 
     const MIN: i64 = i64::MIN;
@@ -557,6 +634,84 @@ mod tests {
         );
     }
 
+    // Every `GMT±HH:MM` zone applies the constant offset `sign × (hh·3600 +
+    // mm·60)`, across the whole family. The expected offset is recomputed from
+    // the loop indices that built the id, never re-parsed from the id string,
+    // so the assertion cannot degenerate into re-running the code under test.
+    //
+    // `GMT±00:00` is excluded because it normalizes to plain `GMT` and so never
+    // reaches this function in that spelling; anything past `±18:00` is not a zone
+    // id at all. The counter guards against a skip condition that silently empties
+    // the loop.
+    #[test]
+    fn oracle_fixed_offset_family_exhaustive() {
+        const VALUE: &str = "2020-10-10 00:00:01";
+        let local_sec = run(VALUE, DEFAULT, "UTC");
+
+        let mut covered = 0;
+        for sign in [1i64, -1i64] {
+            for hh in 0..=18i64 {
+                for mm in 0..=59i64 {
+                    let magnitude = hh * 3600 + mm * 60;
+                    if magnitude == 0 || magnitude > 18 * 3600 {
+                        continue;
+                    }
+                    let sign_char = if sign > 0 { '+' } else { '-' };
+                    let id = format!("GMT{sign_char}{hh:02}:{mm:02}");
+                    let expected_offset = sign * magnitude;
+                    assert_eq!(
+                        run(VALUE, DEFAULT, &id),
+                        local_sec - expected_offset,
+                        "zone {id}"
+                    );
+                    covered += 1;
+                }
+            }
+        }
+        assert_eq!(covered, 2160);
+    }
+
+    // Spot values for the fixed-offset family, taken from the Java oracle rather
+    // than from the closed form, so the closed form itself is falsifiable: the
+    // exhaustive sweep above recomputes the same arithmetic and therefore cannot
+    // detect a sign or unit error shared by both sides.
+    //
+    // Covers plain `GMT` (which resolves as a region, not an offset), the smallest
+    // and largest offsets in both directions, a non-quarter-hour offset, a
+    // day-crossing at the epoch, a pre-1900 date, and the 1582 hybrid-calendar
+    // boundary.
+    //
+    // The last three rows are the bare `±HH:MM` spelling, and are the complete
+    // reachable set of it: the session zone is only unvalidated when it comes from
+    // `ZoneId.systemDefault()`, where `TZ=EST`/`MST`/`HST` map through
+    // `ZoneId.SHORT_IDS` to exactly these three. They assert the resolved offset
+    // rather than merely the absence of an error, so a resolver that accepted the
+    // bare form but mapped it to UTC would still fail here.
+    #[test]
+    fn oracle_fixed_offset() {
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT"), 1602288001);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT+00:01"), 1602287941);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT-00:01"), 1602288061);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT+18:00"), 1602223201);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT-18:00"), 1602352801);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT+05:07"), 1602269581);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT+05:45"), 1602267301);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT+08:00"), 1602259201);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "GMT-08:00"), 1602316801);
+        assert_eq!(run("1970-01-01 00:00:00", DEFAULT, "GMT+08:00"), -28800);
+        assert_eq!(
+            run("1900-01-01 00:00:00", DEFAULT, "GMT-08:00"),
+            -2208960000
+        );
+        assert_eq!(
+            run("1582-10-15 00:00:00", DEFAULT, "GMT-08:00"),
+            -12219264000
+        );
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "-05:00"), 1602306001);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "-07:00"), 1602313201);
+        assert_eq!(run("2020-10-10 00:00:01", DEFAULT, "-10:00"), 1602324001);
+    }
+
     // Literals from quoted patterns: a case-sensitive letter, a literal percent
     // (`%%`), and a literal single quote.
     #[test]
@@ -668,14 +823,54 @@ mod tests {
         assert!(flink_unix_timestamp_now(&one).is_err());
     }
 
+    // A zone id that is not resolvable is an error, not a silent default. Beyond
+    // outright nonsense, the rows here are spellings close enough to a real id that
+    // a permissive resolver would accept them: wrong case, surrounding whitespace,
+    // and the `SystemV/*` family, which is absent from the time zone database and
+    // must keep being rejected rather than being swept in with the fixed offsets.
     #[test]
     fn invalid_timezone_errors() {
-        let args = vec![
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some("2020-10-10 00:00:01".to_string()))),
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some(DEFAULT.to_string()))),
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some("Mars/Olympus".to_string()))),
-        ];
-        assert!(flink_unix_timestamp(&args).is_err());
+        assert!(zone_rejected("Mars/Olympus"));
+        assert!(zone_rejected("gmt+08:00"));
+        assert!(zone_rejected(" GMT+08:00"));
+        assert!(zone_rejected("GMT+08:00 "));
+        assert!(zone_rejected("SystemV/PST8"));
+    }
+
+    // The fixed-offset grammar is exactly `±HH:MM`, optionally prefixed by `GMT`,
+    // with nothing before or after it. Each row is a spelling a permissive offset
+    // parser would accept: a trailing seconds field (which a truncating parser
+    // silently drops, turning `+08:00:30` into `+08:00`), a separator that is not a
+    // colon, a repeated separator, a Unicode minus sign in place of the ASCII
+    // hyphen, a single-digit hour, and a single-digit minute.
+    #[test]
+    fn invalid_fixed_offset_zone_errors() {
+        assert!(zone_rejected("GMT+08:00:30"));
+        assert!(zone_rejected("GMT+08 00"));
+        assert!(zone_rejected("GMT+08::::00"));
+        assert!(zone_rejected("GMT\u{2212}08:00")); // U+2212 MINUS SIGN, not '-'
+        assert!(zone_rejected("GMT+8"));
+        assert!(zone_rejected("+08:0"));
+    }
+
+    // The two numeric bounds on a fixed offset: minutes are a sixtieth of an hour,
+    // not a free two-digit field, and the magnitude stops at ±18:00.
+    //
+    // Both are unreachable through the plan-time gate, which only ever emits ids
+    // built from a constructed `ZoneId` — `ZoneId.of` throws on all of these. They
+    // are asserted because the bounds are the parser's own guarantee rather than an
+    // inherited one, and a caller that does not hold the `ZoneId` invariant would
+    // otherwise resolve `GMT+08:60` to a well-formed offset an hour past where it
+    // should be. Each row fails for exactly one of the two checks, so neither can
+    // be deleted while the suite stays green.
+    #[test]
+    fn out_of_range_fixed_offset_zone_errors() {
+        assert!(zone_rejected("GMT+08:60"));
+        assert!(zone_rejected("GMT-08:60"));
+
+        assert!(zone_rejected("GMT+18:01"));
+        assert!(zone_rejected("GMT-18:01"));
+        assert!(zone_rejected("GMT+19:00"));
     }
 
     // An empty format consumes nothing, so it matches no input at all rather

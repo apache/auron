@@ -18,13 +18,17 @@ package org.apache.auron.flink.table.planner.converter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VarCharVector;
@@ -565,16 +569,17 @@ class RexCallConverterTest {
                 "Asia/Shanghai", decodeStringLiteral(result.getScalarFunction().getArgs(2)));
     }
 
-    /** A fixed-offset session zone names an offset rather than a region: Flink accepts it, the
-     * native lookup cannot resolve it, so the gate rejects it and the builder refuses it outright
-     * rather than emitting a node that fails at run time. */
+    /** A fixed-offset session zone names an offset rather than a region: the native function parses
+     * the offset instead of looking it up, so the gate admits it. The id reaches the node verbatim,
+     * because the two sides have to agree on the spelling and not merely on the offset it denotes. */
     @Test
-    void testUnixTimestampFixedOffsetZoneFallsBack() {
+    void testUnixTimestampFixedOffsetZoneIsSupported() throws IOException {
         ConverterContext tzContext = contextWithZone("GMT-08:00");
         RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
 
-        assertFalse(converter.isSupported(call, tzContext));
-        assertThrows(IllegalArgumentException.class, () -> converter.convert(call, tzContext));
+        assertTrue(converter.isSupported(call, tzContext));
+        PhysicalExprNode result = converter.convert(call, tzContext);
+        assertEquals("GMT-08:00", decodeStringLiteral(result.getScalarFunction().getArgs(2)));
     }
 
     /** A legacy {@code SystemV/*} session zone still resolves in the JDK, so it reaches the gate
@@ -603,12 +608,99 @@ class RexCallConverterTest {
     }
 
     /** The zero-argument result is epoch seconds, which no session time zone bears on, so the gate
-     * admits it even under a zone the native lookup cannot resolve. */
+     * admits it even under a zone the native lookup cannot resolve. The zone has to be one the gate
+     * actually rejects, or the test passes without exercising the ordering it pins. */
     @Test
-    void testUnixTimestampZeroArgSupportedWithFixedOffsetZone() {
+    void testUnixTimestampZeroArgSupportedWithUnresolvableZone() {
         RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP);
 
-        assertTrue(converter.isSupported(call, contextWithZone("GMT-08:00")));
+        assertTrue(converter.isSupported(call, contextWithZone("SystemV/PST8")));
+    }
+
+    /**
+     * The gate must admit every {@code GMT±HH:MM} id, because the native function resolves every one
+     * of them. Admitting a zone it cannot resolve is worse than rejecting one it can: the native
+     * call returns an error, the unwind handler turns that into a default-valued batch, and the
+     * query yields no rows while recording no fallback.
+     *
+     * <p>The family is swept in full rather than sampled, because where the boundary falls is the
+     * whole content of the predicate. The ids are built from the loop indices under
+     * {@link Locale#ROOT}, so a locale with non-ASCII digits cannot generate ids that fail the
+     * ASCII-only pattern for a reason unrelated to the gate.
+     */
+    @Test
+    void testUnixTimestampZoneGateAdmitsEveryFixedOffsetZone() {
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
+
+        int covered = 0;
+        for (int sign = -1; sign <= 1; sign += 2) {
+            for (int hh = 0; hh <= 18; hh++) {
+                for (int mm = 0; mm <= 59; mm++) {
+                    int magnitude = hh * 3600 + mm * 60;
+                    // ±00:00 normalizes to plain GMT and never reaches the gate spelled this way;
+                    // anything past ±18:00 is not a zone id at all.
+                    if (magnitude == 0 || magnitude > 18 * 3600) {
+                        continue;
+                    }
+                    String zoneId = String.format(Locale.ROOT, "GMT%s%02d:%02d", sign > 0 ? "+" : "-", hh, mm);
+                    assertTrue(converter.isSupported(call, contextWithZone(zoneId)), zoneId);
+                    covered++;
+                }
+            }
+        }
+        assertEquals(2160, covered, "a skipped sweep would pass vacuously");
+    }
+
+    /**
+     * The gate narrows rather than disappearing: the {@code SystemV/*} family is absent from the
+     * time zone database the native side consults, so every one of its ids must still fall back.
+     *
+     * <p>The family is swept from the JDK's own id set rather than a fixed list, so it covers
+     * whatever the runtime carries. How many ids that is comes from the bundled tzdb and can change
+     * without the gate's behavior changing, so the sweep asserts only that it was not vacuous.
+     */
+    @Test
+    void testUnixTimestampZoneGateRejectsEverySystemVZone() {
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
+
+        int covered = 0;
+        for (String zoneId : ZoneId.getAvailableZoneIds()) {
+            if (zoneId.startsWith("SystemV/")) {
+                assertFalse(converter.isSupported(call, contextWithZone(zoneId)), zoneId);
+                covered++;
+            }
+        }
+        assertTrue(covered > 0, "a skipped sweep would pass vacuously");
+    }
+
+    /**
+     * The bare {@code ±HH:MM} spelling cannot be configured — Flink's validator rejects it — but an
+     * unset session zone resolves to {@link ZoneId#systemDefault()} without passing through that
+     * validator, and a process running under {@code TZ=EST}, {@code MST} or {@code HST} lands on
+     * exactly these three ids. The native parser treats the {@code GMT} prefix as optional for this
+     * reason, so the gate has to as well.
+     *
+     * <p>Each iteration asserts the id it actually reached before asserting the verdict, so the
+     * sweep cannot silently degrade into testing the machine's own time zone three times.
+     */
+    @Test
+    void testUnixTimestampZoneGateAdmitsTheBareOffsetsReachableFromTheSystemDefault() {
+        RexNode call = makeCall(bigintType(), FlinkSqlOperatorTable.UNIX_TIMESTAMP, strRef(5));
+
+        Map<String, String> shortIdZones = new LinkedHashMap<>();
+        shortIdZones.put("EST", "-05:00");
+        shortIdZones.put("MST", "-07:00");
+        shortIdZones.put("HST", "-10:00");
+        TimeZone savedDefault = TimeZone.getDefault();
+        try {
+            for (Map.Entry<String, String> entry : shortIdZones.entrySet()) {
+                TimeZone.setDefault(TimeZone.getTimeZone(entry.getKey()));
+                assertEquals(entry.getValue(), ZoneId.systemDefault().getId());
+                assertTrue(converter.isSupported(call, contextWithUnsetZone()), entry.getValue());
+            }
+        } finally {
+            TimeZone.setDefault(savedDefault);
+        }
     }
 
     @Test
@@ -633,6 +725,15 @@ class RexCallConverterTest {
         Configuration conf = new Configuration();
         conf.setString("table.local-time-zone", zoneId);
         return new ConverterContext(conf, null, getClass().getClassLoader(), context.getInputType());
+    }
+
+    /**
+     * Returns a copy of the shared context with no session time zone configured, which resolves to
+     * {@link ZoneId#systemDefault()} without passing through Flink's zone-id validator. This is the
+     * only path by which an id the validator rejects can reach the converter.
+     */
+    private ConverterContext contextWithUnsetZone() {
+        return new ConverterContext(new Configuration(), null, getClass().getClassLoader(), context.getInputType());
     }
 
     private static String decodeStringLiteral(PhysicalExprNode node) throws IOException {
