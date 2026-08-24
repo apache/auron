@@ -19,17 +19,19 @@ package org.apache.spark.sql
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.test.SQLTestUtils
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.auron.sparkverExcludeParents
+
 /**
- * Base test class under org.apache.spark.sql to use package-private [[SQLTestUtils]]; extends
- * [[QueryTest]] for comparisons and checks.
+ * Base test class under org.apache.spark.sql to extends [[QueryTest]] for comparisons and checks.
+ * Before spark-4.1 also extends package-private [[org.apache.spark.sql.test.SQLTestUtils]].
  */
+@sparkverExcludeParents("4.2", "org.apache.spark.sql.test.SQLTestUtils")
 abstract class AuronQueryTest
     extends QueryTest
-    with SQLTestUtils
     with BeforeAndAfterEach
+    with org.apache.spark.sql.test.SQLTestUtils
     with AdaptiveSparkPlanHelper {
 
   /**
