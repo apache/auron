@@ -1,25 +1,3 @@
-From 61b889e409c3c7da0ca19ec6108fdff7b46b99dd Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?=E4=B8=A5=E7=A5=A8=E6=9F=B1?= <yanpiaozhu1673@shengtian.com>
-Date: Fri, 7 Aug 2026 10:17:11 +0800
-Subject: [PATCH] =?UTF-8?q?=E6=94=AF=E6=8C=81parquet=E5=8A=A0=E5=AF=86?=
- =?UTF-8?q?=E6=96=87=E4=BB=B6AES=5FGCM=5FCTR=5FV1=E7=AE=97=E6=B3=95?=
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
-
----
- parquet/Cargo.toml                           |   3 +-
- parquet/src/column/page_encryption.rs        |  14 ++-
- parquet/src/encryption/ciphers.rs            | 118 +++++++++++++++++++
- parquet/src/encryption/decrypt.rs            |  35 ++++--
- parquet/src/encryption/encrypt.rs            |  59 ++++++++--
- parquet/src/file/metadata/reader.rs          |  40 +++++--
- parquet/src/file/metadata/writer.rs          |  21 +++-
- parquet/src/file/serialized_reader.rs        |   4 +-
- parquet/tests/encryption/encryption.rs       |  13 +-
- parquet/tests/encryption/encryption_async.rs |  20 +---
- 10 files changed, 259 insertions(+), 68 deletions(-)
-
 diff --git a/parquet/Cargo.toml b/parquet/Cargo.toml
 index d277a2cbd..1c1968d06 100644
 --- a/parquet/Cargo.toml
@@ -89,7 +67,7 @@ index 0fb7c8942..7fe2362c1 100644
      }
  }
 diff --git a/parquet/src/encryption/ciphers.rs b/parquet/src/encryption/ciphers.rs
-index 576469467..5b5909b76 100644
+index 576469467..11d94d7d1 100644
 --- a/parquet/src/encryption/ciphers.rs
 +++ b/parquet/src/encryption/ciphers.rs
 @@ -21,6 +21,7 @@ use crate::errors::Result;
@@ -117,7 +95,7 @@ index 576469467..5b5909b76 100644
  }
  
  impl NonceSequence for CounterNonce {
-@@ -178,10 +189,117 @@ impl BlockEncryptor for RingGcmBlockEncryptor {
+@@ -178,10 +189,176 @@ impl BlockEncryptor for RingGcmBlockEncryptor {
      }
  }
  
@@ -146,14 +124,46 @@ index 576469467..5b5909b76 100644
 +    }
 +}
 +
++/// CTR module format: `[length (4 LE) | nonce (12) | ciphertext]`.
++/// `length` is the size of `nonce || ciphertext`, excluding the length prefix.
++fn split_ctr_module(length_and_ciphertext: &[u8]) -> Result<([u8; NONCE_LEN], &[u8])> {
++    if length_and_ciphertext.len() < SIZE_LEN {
++        return Err(General(format!(
++            "Invalid CTR ciphertext: expected at least {SIZE_LEN} bytes for length prefix, got {}",
++            length_and_ciphertext.len()
++        )));
++    }
++
++    let declared_len = u32::from_le_bytes(length_and_ciphertext[..SIZE_LEN].try_into().unwrap())
++        as usize;
++    let expected_len = SIZE_LEN
++        .checked_add(declared_len)
++        .ok_or_else(|| General("Invalid CTR ciphertext: length prefix overflow".to_string()))?;
++
++    if length_and_ciphertext.len() != expected_len {
++        return Err(General(format!(
++            "Invalid CTR ciphertext: length prefix is {declared_len} but buffer has {} bytes after prefix",
++            length_and_ciphertext.len() - SIZE_LEN
++        )));
++    }
++    if declared_len < NONCE_LEN {
++        return Err(General(format!(
++            "Invalid CTR ciphertext: length prefix {declared_len} is smaller than nonce length {NONCE_LEN}"
++        )));
++    }
++
++    let mut nonce = [0u8; NONCE_LEN];
++    nonce.copy_from_slice(&length_and_ciphertext[SIZE_LEN..SIZE_LEN + NONCE_LEN]);
++    let ciphertext = &length_and_ciphertext[SIZE_LEN + NONCE_LEN..];
++    Ok((nonce, ciphertext))
++}
++
 +impl BlockDecryptor for CtrBlockDecryptor {
 +    fn decrypt(&self, length_and_ciphertext: &[u8], _aad: &[u8]) -> Result<Vec<u8>> {
-+        let nonce: [u8; NONCE_LEN] = length_and_ciphertext[SIZE_LEN..SIZE_LEN + NONCE_LEN]
-+            .try_into()
-+            .map_err(|_| General("Invalid nonce length".to_string()))?;
++        let (nonce, ciphertext) = split_ctr_module(length_and_ciphertext)?;
 +        let iv = build_ctr_iv(&nonce);
 +
-+        let mut result = length_and_ciphertext[SIZE_LEN + NONCE_LEN..].to_vec();
++        let mut result = ciphertext.to_vec();
 +        let context = aws_lc_rs::cipher::DecryptionContext::Iv128(
 +            aws_lc_rs::iv::FixedLength::<CTR_IV_LEN>::from(iv),
 +        );
@@ -230,6 +240,33 @@ index 576469467..5b5909b76 100644
 +        let decrypted = decryptor.decrypt(&ciphertext, b"").unwrap();
 +
 +        assert_eq!(plaintext, decrypted.as_slice());
++    }
++
++    #[test]
++    fn test_ctr_decrypt_rejects_truncated_buffer() {
++        let decryptor = CtrBlockDecryptor::new(&[0u8; 16]).unwrap();
++        // Too short to contain length prefix + nonce
++        let err = decryptor.decrypt(&[1, 2, 3], b"").unwrap_err();
++        assert!(err.to_string().contains("Invalid CTR ciphertext"));
++    }
++
++    #[test]
++    fn test_ctr_decrypt_rejects_length_prefix_mismatch() {
++        let decryptor = CtrBlockDecryptor::new(&[0u8; 16]).unwrap();
++        // Declares 20 bytes after prefix, but only nonce (12) is present
++        let mut buf = vec![20, 0, 0, 0];
++        buf.extend_from_slice(&[0u8; NONCE_LEN]);
++        let err = decryptor.decrypt(&buf, b"").unwrap_err();
++        assert!(err.to_string().contains("length prefix is 20"));
++    }
++
++    #[test]
++    fn test_ctr_decrypt_rejects_declared_length_smaller_than_nonce() {
++        let decryptor = CtrBlockDecryptor::new(&[0u8; 16]).unwrap();
++        let mut buf = vec![4, 0, 0, 0];
++        buf.extend_from_slice(&[1, 2, 3, 4]);
++        let err = decryptor.decrypt(&buf, b"").unwrap_err();
++        assert!(err.to_string().contains("smaller than nonce length"));
 +    }
 +
      #[test]
@@ -643,6 +680,3 @@ index e0fbbcdfa..39137b57b 100644
  }
  
  #[tokio::test]
--- 
-2.34.1
-
