@@ -69,7 +69,7 @@ case class NativeOrcInsertIntoHiveTableExec(
       metrics)
   }
 
-  @sparkver("4.0 / 4.1")
+  @sparkver("4.0 / 4.1 / 4.2")
   override protected def getInsertIntoHiveTableCommand(
       table: CatalogTable,
       partition: Map[String, Option[String]],
@@ -88,7 +88,7 @@ case class NativeOrcInsertIntoHiveTableExec(
       metrics)
   }
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 
@@ -294,7 +294,7 @@ case class NativeOrcInsertIntoHiveTableExec(
     }
   }
 
-  @sparkver("4.0 / 4.1")
+  @sparkver("4.0 / 4.1 / 4.2")
   class AuronInsertIntoHiveTable41(
       table: CatalogTable,
       partition: Map[String, Option[String]],

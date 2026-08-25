@@ -38,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        sparkver: [spark-3.0, spark-3.1, spark-3.2, spark-3.3, spark-3.4, spark-3.5, spark-4.0, spark-4.1]
+        sparkver: [spark-3.0, spark-3.1, spark-3.2, spark-3.3, spark-3.4, spark-3.5, spark-4.0, spark-4.1, spark-4.2]
         scalaver: [ 2.12, 2.13 ]
         javaver: [ 8, 21 ]
         auronver: [9.0.0-SNAPSHOT]
@@ -70,15 +70,22 @@ jobs:
             scalaver: '2.12'
           - sparkver: spark-4.1
             scalaver: '2.12'
+          - sparkver: spark-4.2
+            scalaver: '2.12'
           - sparkver: spark-4.0
             javaver: '8'
           - sparkver: spark-4.1
+            javaver: '8'
+          - sparkver: spark-4.2
             javaver: '8'
           # Spark 4.x JDK 21 builds are handled by explicit rockylinux8 include entries below.
           - sparkver: spark-4.0
             scalaver: '2.13'
             javaver: '21'
           - sparkver: spark-4.1
+            scalaver: '2.13'
+            javaver: '21'
+          - sparkver: spark-4.2
             scalaver: '2.13'
             javaver: '21'
         include:
@@ -90,6 +97,12 @@ jobs:
             runner: ubuntu-24.04
             image: rockylinux8
           - sparkver: spark-4.1
+            scalaver: '2.13'
+            javaver: '21'
+            auronver: 9.0.0-SNAPSHOT
+            runner: ubuntu-24.04
+            image: rockylinux8
+          - sparkver: spark-4.2
             scalaver: '2.13'
             javaver: '21'
             auronver: 9.0.0-SNAPSHOT
