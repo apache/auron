@@ -722,7 +722,7 @@ impl ExternalSorter {
                 take_batch(batch, sorted_indices.expect("non-fast-path indices"))?
             }
         } else {
-            create_zero_column_batch(sorted_indices.len())
+            create_zero_column_batch(sorted_indices.as_ref().map_or(keys.num_rows(), Vec::len))
         };
 
         // add to in-mem blocks
