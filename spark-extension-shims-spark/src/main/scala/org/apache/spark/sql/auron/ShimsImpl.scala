@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.expressions.SparkPartitionID
 import org.apache.spark.sql.catalyst.expressions.StringSplit
 import org.apache.spark.sql.catalyst.expressions.TaggingExpression
+import org.apache.spark.sql.catalyst.expressions.UnaryMinus
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.First
@@ -703,6 +704,15 @@ class ShimsImpl extends Shims with Logging {
   override def getLikeEscapeChar(expr: Expression): Char = {
     expr.asInstanceOf[Like].escapeChar
   }
+
+  @sparkver("3.0")
+  override def getUnaryMinusFailOnError(expr: UnaryMinus): Boolean = {
+    import org.apache.spark.sql.internal.SQLConf
+    SQLConf.get.ansiEnabled
+  }
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  override def getUnaryMinusFailOnError(expr: UnaryMinus): Boolean = expr.failOnError
 
   override def convertMoreAggregateExpr(e: AggregateExpression): Option[pb.PhysicalExprNode] = {
     e.aggregateFunction match {

@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.Generator
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.UnaryMinus
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
@@ -247,6 +248,8 @@ abstract class Shims {
   def convertMoreAggregateExpr(e: AggregateExpression): Option[pb.PhysicalExprNode]
 
   def getLikeEscapeChar(expr: Expression): Char
+
+  def getUnaryMinusFailOnError(expr: UnaryMinus): Boolean
 
   def getAggregateExpressionFilter(expr: Expression): Option[Expression]
 
