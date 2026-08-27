@@ -704,6 +704,15 @@ class ShimsImpl extends Shims with Logging {
     expr.asInstanceOf[Like].escapeChar
   }
 
+  @sparkver("3.0")
+  override def getMakeDateFailOnError(expr: Expression): Boolean = false
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override def getMakeDateFailOnError(expr: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.MakeDate
+    expr.asInstanceOf[MakeDate].failOnError
+  }
+
   override def convertMoreAggregateExpr(e: AggregateExpression): Option[pb.PhysicalExprNode] = {
     e.aggregateFunction match {
       case First(child, ignoresNull) =>
