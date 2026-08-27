@@ -98,7 +98,7 @@ jobs:
           submodules: recursive
 
       - name: Setup Java and Maven cache
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
@@ -265,7 +265,7 @@ jobs:
           cp "$jar" spark-bin-${{ inputs.sparkver }}_${{ inputs.scalaver }}/jars/
 
       - name: Setup Java and Maven cache
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'adopt-hotspot'
           java-version: ${{ inputs.javaver }}
