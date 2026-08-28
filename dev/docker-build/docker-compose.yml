@@ -39,5 +39,5 @@ services:
         source ~/.bashrc &&
         cd /auron &&
         echo "[DOCKER] Running: ./build/mvn $AURON_BUILD_ARGS" &&
-        ./build/mvn $AURON_BUILD_ARGS
+        eval "./build/mvn $AURON_BUILD_ARGS"
       '
