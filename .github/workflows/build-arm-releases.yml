@@ -113,10 +113,17 @@ jobs:
         run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
+        env:
+          AURON_BUILD_BRANCH: ${{ github.head_ref || github.ref_name }}
+          AURON_BUILD_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           rm -f .build-checksum_*.cache
-          build/mvn package -Prelease -P${{ matrix.sparkver }} -Pscala-${{ matrix.scalaver }} -DskipTests
-
+          SPARK_VERSION="${{ matrix.sparkver }}"
+          SPARK_VERSION="${SPARK_VERSION#spark-}"
+          ./auron-build.sh \
+            --release \
+            --sparkver "$SPARK_VERSION" \
+            --scalaver ${{ matrix.scalaver }}
       - name: Upload auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
         uses: actions/upload-artifact@v7
         with:
