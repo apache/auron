@@ -16,7 +16,6 @@
  */
 package org.apache.auron
 
-import java.sql.Date
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
@@ -1135,19 +1134,42 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("test function make_date") {
-    withTable("t1") {
-      sql(
-        "create table t1 using parquet as select '2025'" +
-          " as year, '03' as month, '01' as day")
-      val functions =
-        """
-          |select
-          |  make_date(year, month, day)
-          |from t1
-         """.stripMargin
+    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+      withTable("t1") {
+        sql("create table t1(year int, month int, day int) using parquet")
+        sql("""
+            |insert into t1 values
+            |  (2025, 3, 1),
+            |  (2024, null, 2),
+            |  (2024, 2, 30),
+            |  (null, 7, 15),
+            |  (2024, 7, null)
+            |""".stripMargin)
+        checkSparkAnswerAndOperator(
+          "select make_date(year, month, day), " +
+            "make_date(cast(null as int), month, day) from t1")
+      }
+    }
+  }
 
-      val df = sql(functions)
-      checkAnswer(df, Seq(Row(Date.valueOf("2025-03-01"))))
+  test("make_date invalid input follows version-specific ANSI behavior") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1(year int, month int, day int) using parquet")
+        sql("insert into t1 values (2024, 13, 1)")
+        val query = "select make_date(year, month, day) from t1"
+
+        if (AuronTestUtils.isSparkV31OrGreater) {
+          val df = sql(query)
+          val err = intercept[Exception] {
+            df.collect()
+          }
+          assertPlanIsNative(df)
+          assert(allCauseMessages(err).toLowerCase.contains("invalid value for make_date"))
+        } else {
+          checkSparkAnswerAndOperator(query)
+        }
+      }
     }
   }
 

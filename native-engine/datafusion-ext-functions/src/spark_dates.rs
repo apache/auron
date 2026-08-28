@@ -17,7 +17,8 @@ use std::sync::Arc;
 
 use arrow::{
     array::{
-        ArrayRef, BooleanArray, Date32Array, Float64Array, Int32Array, TimestampMillisecondArray,
+        ArrayRef, BooleanArray, Date32Array, Date32Builder, Float64Array, Int32Array,
+        TimestampMillisecondArray,
     },
     compute::{DatePart, date_part},
     datatypes::{DataType, TimeUnit},
@@ -276,6 +277,81 @@ pub fn spark_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     )?))
 }
 
+pub fn spark_make_date(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 4 {
+        return Err(DataFusionError::Execution(
+            "spark_make_date() requires four arguments".to_string(),
+        ));
+    }
+
+    let fail_on_error = match &args[3] {
+        ColumnarValue::Scalar(ScalarValue::Boolean(Some(value))) => *value,
+        _ => {
+            return Err(DataFusionError::Execution(
+                "spark_make_date() failOnError must be a boolean scalar".to_string(),
+            ));
+        }
+    };
+    let scalar_result = args[..3]
+        .iter()
+        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
+    let arrays = ColumnarValue::values_to_arrays(&args[..3])?;
+    let years = arrays[0]
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .ok_or_else(|| {
+            DataFusionError::Execution("spark_make_date() year must be Int32".to_string())
+        })?;
+    let months = arrays[1]
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .ok_or_else(|| {
+            DataFusionError::Execution("spark_make_date() month must be Int32".to_string())
+        })?;
+    let days = arrays[2]
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .ok_or_else(|| {
+            DataFusionError::Execution("spark_make_date() day must be Int32".to_string())
+        })?;
+    let mut result = Date32Builder::with_capacity(years.len());
+
+    for ((year, month), day) in years.iter().zip(months.iter()).zip(days.iter()) {
+        match (year, month, day) {
+            (Some(year), Some(month), Some(day)) => {
+                let date = u32::try_from(month)
+                    .ok()
+                    .zip(u32::try_from(day).ok())
+                    .and_then(|(month, day)| NaiveDate::from_ymd_opt(year, month, day));
+
+                match date {
+                    Some(date) => {
+                        result.append_value(date.to_epoch_days());
+                    }
+                    None if !fail_on_error => result.append_null(),
+                    None => {
+                        return Err(DataFusionError::Execution(format!(
+                            "Invalid value for make_date: {year}-{month}-{day}"
+                        )));
+                    }
+                }
+            }
+            _ => {
+                result.append_null();
+            }
+        }
+    }
+
+    let result: ArrayRef = Arc::new(result.finish());
+    if scalar_result {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(result))
+    }
+}
+
 /// Spark `dayofweek()`: Sunday = 1, Monday = 2, ..., Saturday = 7.
 pub fn spark_dayofweek(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let input = resolve_local_date32(args)?;
@@ -517,6 +593,83 @@ mod tests {
         ]));
         assert_eq!(&spark_day(&args)?.into_array(1)?, &expected_ret);
         Ok(())
+    }
+
+    #[test]
+    fn test_spark_make_date_null_and_invalid_inputs() -> Result<()> {
+        let result = spark_make_date(&[
+            ColumnarValue::Array(Arc::new(Int32Array::from(vec![
+                Some(2025),
+                Some(2024),
+                Some(2024),
+                None,
+                Some(2024),
+            ]))),
+            ColumnarValue::Array(Arc::new(Int32Array::from(vec![
+                Some(3),
+                None,
+                Some(2),
+                Some(7),
+                Some(7),
+            ]))),
+            ColumnarValue::Array(Arc::new(Int32Array::from(vec![
+                Some(1),
+                Some(2),
+                Some(30),
+                Some(15),
+                None,
+            ]))),
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(false))),
+        ])?
+        .into_array(5)?;
+        let expected: ArrayRef =
+            Arc::new(Date32Array::from(vec![Some(20148), None, None, None, None]));
+
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_make_date_scalar_and_ansi_error() -> Result<()> {
+        let null_result = spark_make_date(&[
+            ColumnarValue::Scalar(ScalarValue::Int32(None)),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(7))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(15))),
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))),
+        ])?;
+        assert!(matches!(
+            null_result,
+            ColumnarValue::Scalar(ScalarValue::Date32(None))
+        ));
+
+        let error = spark_make_date(&[
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(2024))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(13))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))),
+        ]);
+        assert!(matches!(
+            error,
+            Err(DataFusionError::Execution(message))
+                if message.contains("Invalid value for make_date")
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_make_date_rejects_non_int32_inputs() {
+        let error = spark_make_date(&[
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(2024))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(false))),
+        ]);
+
+        assert!(matches!(
+            error,
+            Err(DataFusionError::Execution(message))
+                if message.contains("year must be Int32")
+        ));
     }
 
     #[test]
