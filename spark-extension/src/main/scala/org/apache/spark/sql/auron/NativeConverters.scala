@@ -128,7 +128,7 @@ object NativeConverters extends Logging {
   }
 
   def roundRobinTypeSupported(dataType: DataType): Boolean = dataType match {
-    case MapType(_, _, _) => false
+    case MapType(_, _, _) => true
     case ArrayType(elementType, _) => roundRobinTypeSupported(elementType)
     case StructType(fields) => fields.forall(f => roundRobinTypeSupported(f.dataType))
     case _ => true
