@@ -244,6 +244,9 @@ abstract class NativeShuffleExchangeBase(
       case _ => null
     }
 
+    val nativeHashExprs = this.nativeHashExprs
+    val nativeSortExecNode = this.nativeSortExecNode
+
     val nativeShuffleRDD = new NativeRDD(
       nativeInputRDD.sparkContext,
       nativeMetrics,

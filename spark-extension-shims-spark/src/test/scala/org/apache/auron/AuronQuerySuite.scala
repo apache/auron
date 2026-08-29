@@ -17,9 +17,11 @@
 package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
 import org.apache.spark.sql.execution.auron.plan.NativeFilterBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
+import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
@@ -114,9 +116,15 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       sql("create table t1(c1 binary, c2 int) using parquet")
       sql("insert into t1 values (cast('test1' as binary), 1), (cast('test2' as binary), 2)")
       val df = checkSparkAnswerAndOperator("select c2 from t1 order by c1")
-      assert(collectFirst(df.queryExecution.executedPlan) { case e: NativeShuffleExchangeExec =>
-        e
-      }.isDefined)
+      val exchange = collectFirst(df.queryExecution.executedPlan) {
+        case e: NativeShuffleExchangeExec =>
+          e
+      }.get
+      val nativeShuffleRDD =
+        exchange.shuffleDependency.rdd.dependencies.head.rdd.asInstanceOf[NativeRDD]
+      assert(!nativeShuffleRDD.nativePlanWrapper.p.getClass.getDeclaredFields.exists { field =>
+        classOf[NativeShuffleExchangeBase].isAssignableFrom(field.getType)
+      })
     }
   }
 
