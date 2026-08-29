@@ -277,6 +277,18 @@ pub fn spark_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     )?))
 }
 
+pub fn spark_last_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let input = resolve_local_date32(args)?;
+    let last_day = Date32Array::from_iter(input.iter().map(|opt_days| {
+        opt_days
+            .and_then(NaiveDate::from_epoch_days)
+            .and_then(|date| date.with_day(days_in_month(date.year(), date.month())))
+            .map(|date| date.to_epoch_days())
+    }));
+
+    Ok(ColumnarValue::Array(Arc::new(last_day)))
+}
+
 pub fn spark_make_date(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 4 {
         return Err(DataFusionError::Execution(
@@ -592,6 +604,32 @@ mod tests {
             None,
         ]));
         assert_eq!(&spark_day(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_last_day() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let input = Arc::new(Date32Array::from(vec![
+            Some(date(2009, 1, 12)),
+            Some(date(2024, 2, 10)),
+            Some(date(2023, 2, 10)),
+            Some(date(1969, 12, 1)),
+            None,
+        ]));
+        let args = vec![ColumnarValue::Array(input)];
+        let expected_ret: ArrayRef = Arc::new(Date32Array::from(vec![
+            Some(date(2009, 1, 31)),
+            Some(date(2024, 2, 29)),
+            Some(date(2023, 2, 28)),
+            Some(date(1969, 12, 31)),
+            None,
+        ]));
+        assert_eq!(&spark_last_day(&args)?.into_array(1)?, &expected_ret);
         Ok(())
     }
 
