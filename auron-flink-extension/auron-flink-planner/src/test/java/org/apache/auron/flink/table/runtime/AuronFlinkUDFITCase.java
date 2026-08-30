@@ -17,6 +17,7 @@
 package org.apache.auron.flink.table.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -29,6 +30,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.auron.flink.table.AuronFlinkTableTestBase;
 import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
+import org.apache.flink.table.annotation.DataTypeHint;
+import org.apache.flink.table.annotation.FunctionHint;
 import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
@@ -43,7 +46,19 @@ import org.junit.jupiter.api.Test;
  * <p>Every case asserts the fallback-recorder emit count <em>and</em> the row count. A zero emit
  * count only proves the Calc converted: a native library with no arm for the plan converts cleanly
  * and yields an empty result set with the counter still at zero, and assertions over an empty list
- * pass vacuously. The row count is what establishes that the native plan actually executed.
+ * pass vacuously. The row count is what establishes that the native plan actually executed. The one
+ * case whose query is expected to fail asserts the failure instead, which rules out the same thing:
+ * a plan with no arm returns rows, empty ones, rather than failing.
+ *
+ * <p>The cases that compare an expression against the same expression evaluated by Flink obtain the
+ * second answer by appending a companion expression the converter declines, since there is no switch
+ * that turns the Calc rewriter off. That technique rests on
+ * {@code NativePlanFusionBuilder.buildNativeCalcPlan} declining as a whole: one unconvertible
+ * expression takes the entire Calc back to Flink's generated code. Were declining ever to become
+ * per-expression, the companion would be the only part to fall back, the expression under test would
+ * still run natively in both collections, and those cases would compare Auron against Auron — and
+ * still pass. Nothing in them can detect that, so a change to that method's decline granularity has
+ * to be checked against these cases by hand.
  */
 public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
 
@@ -395,6 +410,194 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
                 .isEqualTo(Arrays.asList(Row.of(1, 1), Row.of(2, 2), Row.of(3, 3)));
     }
 
+    /**
+     * A function declaring two {@code eval} overloads both invokable for the call's argument runs
+     * natively, and produces the overload Flink itself would have chosen.
+     *
+     * <p>{@code eval(int)} and {@code eval(Integer)} are both reachable for an {@code INT} argument
+     * once autoboxing is allowed, so nothing in Auron can pick between them; the choice belongs to
+     * the type inference that runs when Auron is not involved. Registering through
+     * {@code createTemporarySystemFunction} is what puts that inference in play, and the value
+     * itself names the overload that ran, so a divergence shows up as a wrong string rather than as
+     * an equal-but-unverified answer.
+     */
+    @Test
+    public void testCompetingEvalOverloadsResolveAsFlinkDoes() {
+        tableEnvironment.createTemporarySystemFunction("auron_overloaded", OverloadedFunction.class);
+        tableEnvironment.createTemporarySystemFunction("auron_second_of", SecondOfFunction.class);
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> nativeRows = collectSorted("select auron_overloaded(`int`) from T1");
+        int nativeFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> flinkRows =
+                collectFirstColumnSorted("select auron_overloaded(`int`), auron_second_of(`int`) from T1");
+        int comparisonFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        assertThat(nativeFallbacks)
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        assertThat(comparisonFallbacks)
+                .as("the comparison run recorded no fallback, the only signal available that it left the"
+                        + " native path")
+                .isNotZero();
+        assertThat(nativeRows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .hasSize(3);
+        assertThat(nativeRows)
+                .as("the native wrapper resolved a different overload than Flink's own Calc")
+                .isEqualTo(flinkRows);
+    }
+
+    /**
+     * A call mixing a column and a literal runs natively and produces the same values Flink's own
+     * Calc does.
+     *
+     * <p>The generated invoker receives its arguments as a row, so every operand is rewritten to a
+     * reference into that row and a literal operand stops being one by the time Flink generates the
+     * call. Whether that matters is a property of the call, not of the rewrite, and this pins the
+     * answer for the ordinary case.
+     */
+    @Test
+    public void testLiteralArgumentRunsNatively() {
+        tableEnvironment.createTemporarySystemFunction("auron_join", JoinFunction.class);
+        tableEnvironment.createTemporarySystemFunction("auron_second_of", SecondOfFunction.class);
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> nativeRows = collectSorted("select auron_join(`name`, 'lit') from T1");
+        int nativeFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> flinkRows =
+                collectFirstColumnSorted("select auron_join(`name`, 'lit'), auron_second_of(`int`) from T1");
+        int comparisonFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        assertThat(nativeFallbacks)
+                .as("a literal argument must not decline the call")
+                .isZero();
+        assertThat(comparisonFallbacks)
+                .as("the comparison run recorded no fallback, the only signal available that it left the"
+                        + " native path")
+                .isNotZero();
+        assertThat(nativeRows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .hasSize(3);
+        assertThat(nativeRows)
+                .as("the literal argument reached the function as a different value than Flink passes")
+                .isEqualTo(flinkRows);
+    }
+
+    /**
+     * A NULL arriving at an {@code eval} declared over a primitive parameter fails the job, and
+     * fails it inside the generated invoker for that function rather than by declining the call.
+     *
+     * <p>Flink's generated call unboxes the argument rather than short-circuiting on null, so such a
+     * function is not null-safe over a nullable column, and the wrapper inherits that because it
+     * runs the same generated call. The failure is the assertion: a wrapper that substituted the
+     * primitive default would return rows here where Flink returns none, and a native plan with no
+     * arm for this expression would return an empty result set rather than fail at all. The
+     * companion run establishes that the query fails without the wrapper too, so the failure is
+     * Flink's semantics rather than something the wrapper introduced.
+     *
+     * <p>The two failures cannot be compared by identity, and the assertions differ accordingly.
+     * Crossing back from the native side, the JNI bridge carries the Java exception as the text of
+     * {@code Throwable.toString()}, so the cause chain does not survive and only the wrapper's own
+     * message — which names the function — is left to assert on. On Flink's own path the unboxing
+     * raises before {@code eval} is entered, so the function is not a stack frame there and only the
+     * root cause is left to assert on. Neither side can present the other's evidence.
+     *
+     * <p>This is not the only NULL coverage: a null argument reaching a null-tolerant function, and
+     * a null result travelling back, are covered over the Arrow boundary by
+     * {@code FlinkUDFCodeGeneratorTest#testNullArgumentAndNullResultCrossTheBoundary}.
+     */
+    @Test
+    public void testPrimitiveParameterFedNullFailsInsideTheGeneratedInvoker() {
+        String dataId = TestValuesTableFactory.registerData(Arrays.asList(row(1), row((Integer) null), row(3)));
+        tableEnvironment.executeSql("CREATE TABLE TNullable ( `int` INT ) WITH ("
+                + " 'connector' = 'values',"
+                + " 'data-id' = '" + dataId + "',"
+                + " 'failing-source' = 'false' )");
+        tableEnvironment.createTemporarySystemFunction("auron_primitive_arg", PrimitiveArgFunction.class);
+        tableEnvironment.createTemporarySystemFunction("auron_second_of", SecondOfFunction.class);
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        Throwable nativeFailure =
+                catchThrowable(() -> collectSorted("select auron_primitive_arg(`int`) from TNullable"));
+        int nativeFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        Throwable flinkFailure = catchThrowable(
+                () -> collectSorted("select auron_primitive_arg(`int`), auron_second_of(`int`) from TNullable"));
+        int comparisonFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        assertThat(nativeFallbacks)
+                .as("the call declined at plan time, so the job failed short of the native path")
+                .isZero();
+        assertThat(comparisonFallbacks)
+                .as("the comparison run recorded no fallback, the only signal available that it left the"
+                        + " native path")
+                .isNotZero();
+        assertThat(nativeFailure)
+                .as("the wrapper absorbed a null Flink's own call does not survive")
+                .isNotNull();
+        assertThat(nativeFailure)
+                .as("the job failed somewhere other than inside the wrapped function")
+                .hasStackTraceContaining(PrimitiveArgFunction.class.getName());
+        assertThat(flinkFailure)
+                .as("the comparison run returned rows, so Flink's own generated call did not fail on the null")
+                .isNotNull();
+        assertThat(rootCauseOf(flinkFailure))
+                .as("Flink's own generated call must fail on unboxing the null")
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    // ---- comparison-run helpers ----
+
+    /**
+     * Runs a query and returns its rows in a stable order.
+     *
+     * <p>The expectation of a comparison run is the second collection rather than a literal value,
+     * so both sides go through this and neither depends on the order the sources interleaved in.
+     */
+    private List<Row> collectSorted(String sql) {
+        List<Row> rows =
+                CollectionUtil.iteratorToList(tableEnvironment.executeSql(sql).collect());
+        rows.sort(Comparator.comparing(Row::toString));
+        return rows;
+    }
+
+    /**
+     * Runs a query and returns only its first column, in a stable order.
+     *
+     * <p>A comparison run appends a companion expression the converter declines, which takes the
+     * whole Calc back to Flink's own generated code and leaves the expression under test evaluated
+     * the way it would be without Auron. Dropping that companion column here is what makes the two
+     * collections comparable.
+     *
+     * <p>Each row keeps its own kind rather than being rebuilt as an insertion, so that the
+     * collection this returns differs from {@link #collectSorted} in its width alone. A comparison
+     * that silently normalised the kind on one side could not see a change of kind as a difference.
+     */
+    private List<Row> collectFirstColumnSorted(String sql) {
+        List<Row> rows =
+                CollectionUtil.iteratorToList(tableEnvironment.executeSql(sql).collect());
+        List<Row> firstColumn = new ArrayList<>(rows.size());
+        for (Row row : rows) {
+            firstColumn.add(Row.ofKind(row.getKind(), row.getField(0)));
+        }
+        firstColumn.sort(Comparator.comparing(Row::toString));
+        return firstColumn;
+    }
+
+    private static Throwable rootCauseOf(Throwable t) {
+        Throwable cause = t;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
     // ---- UDF fixtures ----
 
     /** Joins two string arguments, so argument order is visible in the result. */
@@ -467,7 +670,14 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
         }
     }
 
-    /** Returns a {@code TIMESTAMP}, which is outside the admitted type set. */
+    /**
+     * Returns a {@code TIMESTAMP}, which is outside the admitted type set, so a Calc whose
+     * projection contains a call to it converts no further and runs on Flink's own generated code.
+     * That is what makes it usable as the companion expression of a comparison run.
+     *
+     * <p>Null-safe, so that a comparison run over a column containing nulls fails only where the
+     * expression under test fails.
+     */
     public static class SecondOfFunction extends ScalarFunction {
         private static final long serialVersionUID = 1L;
 
@@ -478,7 +688,7 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
          * @return the timestamp
          */
         public LocalDateTime eval(Integer a) {
-            return LocalDateTime.of(2020, 1, 1, 0, 0, a);
+            return LocalDateTime.of(2020, 1, 1, 0, 0, a == null ? 0 : a);
         }
     }
 
@@ -609,6 +819,55 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
          */
         public Integer eval(Integer a) {
             return ++calls;
+        }
+    }
+
+    /**
+     * Declares two {@code eval} overloads both invokable for an {@code INT} argument, so which one
+     * runs is decided by type inference rather than by anything Auron does. The returned value
+     * names the overload that ran.
+     */
+    public static class OverloadedFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * The overload over a primitive parameter.
+         *
+         * @param a the argument
+         * @return the argument, tagged with the overload that produced it
+         */
+        public String eval(int a) {
+            return "primitive:" + a;
+        }
+
+        /**
+         * The overload over a boxed parameter.
+         *
+         * @param a the argument
+         * @return the argument, tagged with the overload that produced it
+         */
+        public String eval(Integer a) {
+            return "boxed:" + a;
+        }
+    }
+
+    /**
+     * Declares {@code eval} over a primitive parameter while accepting a nullable argument. The
+     * hint is what makes the call valid: extraction would otherwise derive a {@code NOT NULL}
+     * argument type and a nullable column would be rejected before the query ran.
+     */
+    @FunctionHint(input = @DataTypeHint("INT"), output = @DataTypeHint("STRING"))
+    public static class PrimitiveArgFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * Renders its argument.
+         *
+         * @param a the argument
+         * @return the argument's decimal form
+         */
+        public String eval(int a) {
+            return "v=" + a;
         }
     }
 }

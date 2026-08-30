@@ -297,7 +297,7 @@ public final class FlinkUDFFallbackBuilder {
      *       would run, so a function declaring both {@code eval(int, int)} and {@code eval(int...)}
      *       declines even though the fixed-arity one would win. That much is deliberate. It does
      *       narrow the admitted set in one shape: a varargs overload whose return type kept it out
-     *       of the invokable set was admitted before and declines now.
+     *       of the candidate set was admitted before and declines now.
      * </ul>
      *
      * <p>The last check is Flink's own: it rejects a function whose class or {@code eval} the
