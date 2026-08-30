@@ -18,6 +18,8 @@ package org.apache.auron.flink.runtime.operator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -32,12 +34,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.auron.flink.arrow.FlinkArrowFFIExporter;
+import org.apache.auron.flink.functions.FlinkAuronTaskContext;
+import org.apache.auron.flink.functions.FlinkUDFPayload;
+import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.jni.JniBridge;
 import org.apache.auron.protobuf.FFIReaderExecNode;
 import org.apache.auron.protobuf.FilterExecNode;
@@ -61,11 +67,15 @@ import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.streaming.runtime.watermarkstatus.WatermarkStatus;
+import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.functions.ScalarFunction;
+import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.OutputTag;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -135,6 +145,16 @@ public class FlinkAuronCalcOperatorTest {
                 JniBridge.getResource(key); // removes
             }
         }
+    }
+
+    @BeforeEach
+    public void resetUdfCloseCounter() {
+        CloseCountingFunction.closeCount = 0;
+    }
+
+    @AfterEach
+    public void clearPublishedTaskContext() {
+        FlinkAuronTaskContext.clearCurrent();
     }
 
     // ---------------------------------------------------------------------
@@ -554,6 +574,111 @@ public class FlinkAuronCalcOperatorTest {
                 "Exception message must identify the unexpected node type for diagnostics, got: " + ex.getMessage());
     }
 
+    // ---------------------------------------------------------------------
+    // 14) UDF task context: publication window, drain survival, subtask isolation
+    // ---------------------------------------------------------------------
+
+    /**
+     * Contract: the operator's task context is published on the Flink task thread only while the
+     * native runtime is being created, the single frame the native side reads it from, and is gone
+     * again by the time the drain returns. A Flink task thread is long-lived and reused, so a
+     * context left behind would pin a user-code classloader on it.
+     */
+    @Test
+    public void testTaskContextIsPublishedOnlyWhileTheNativeRuntimeIsCreated() throws Exception {
+        AtomicReference<FlinkAuronTaskContext> seenInFactory = new AtomicReference<>();
+        FakeExporterTrackingOperator op = newUdfOperator((a, p, m, mem) -> {
+            seenInFactory.set(FlinkAuronTaskContext.current());
+            return new OneShotNativeRuntime();
+        });
+        op.open();
+        try {
+            op.processElement(new StreamRecord<>(GenericRowData.of(1)));
+
+            assertNotNull(seenInFactory.get(), "the task context must be published while the runtime is created");
+            assertSame(readTaskContext(op), seenInFactory.get(), "the published context must be the operator's own");
+            assertNull(
+                    FlinkAuronTaskContext.current(),
+                    "no context may linger on the task thread once the drain has returned");
+        } finally {
+            op.close();
+        }
+    }
+
+    /**
+     * Contract: one wrapper serves every drain cycle of a subtask. The payload bytes are rebuilt
+     * per cycle, mirroring the fresh buffer the native side hands over, so only a context that
+     * outlives the drain can return the same instance twice.
+     */
+    @Test
+    public void testWrapperSurvivesAcrossDrainCycles() throws Exception {
+        List<AuronUDFWrapperContext> perCycle = new ArrayList<>();
+        FakeExporterTrackingOperator op = newUdfOperator((a, p, m, mem) -> {
+            perCycle.add(wrapperFromPublishedContext());
+            return new OneShotNativeRuntime();
+        });
+        op.open();
+        try {
+            op.processElement(new StreamRecord<>(GenericRowData.of(1)));
+            op.processElement(new StreamRecord<>(GenericRowData.of(2)));
+
+            assertEquals(2, perCycle.size(), "each batch-full drain must create a native runtime");
+            assertSame(perCycle.get(0), perCycle.get(1), "the wrapper must be reused across drain cycles");
+        } finally {
+            op.close();
+        }
+    }
+
+    /**
+     * Contract: two operator instances, standing in for two subtasks whose payload bytes are
+     * identical, build separate wrappers. A wrapper owns reusable per-call state, so a shared
+     * instance would let concurrent subtasks corrupt each other's results.
+     */
+    @Test
+    public void testSeparateOperatorsNeverShareAWrapper() throws Exception {
+        List<AuronUDFWrapperContext> fromFirst = new ArrayList<>();
+        List<AuronUDFWrapperContext> fromSecond = new ArrayList<>();
+        FakeExporterTrackingOperator first = newUdfOperator((a, p, m, mem) -> {
+            fromFirst.add(wrapperFromPublishedContext());
+            return new OneShotNativeRuntime();
+        });
+        FakeExporterTrackingOperator second = newUdfOperator((a, p, m, mem) -> {
+            fromSecond.add(wrapperFromPublishedContext());
+            return new OneShotNativeRuntime();
+        });
+        first.open();
+        second.open();
+        try {
+            first.processElement(new StreamRecord<>(GenericRowData.of(1)));
+            second.processElement(new StreamRecord<>(GenericRowData.of(1)));
+
+            assertNotSame(
+                    fromFirst.get(0), fromSecond.get(0), "subtasks of one operator must not share a wrapper instance");
+        } finally {
+            first.close();
+            second.close();
+        }
+    }
+
+    /**
+     * Contract: {@code close()} closes the task context, so the user function behind every retained
+     * wrapper is closed and the registry is emptied. This is the once-per-subtask counterpart of
+     * the {@code open} that ran when the wrapper was built.
+     */
+    @Test
+    public void testCloseReleasesRetainedWrappers() throws Exception {
+        FakeExporterTrackingOperator op = newUdfOperator((a, p, m, mem) -> new OneShotNativeRuntime());
+        op.open();
+        FlinkAuronTaskContext taskContext = readTaskContext(op);
+        assertNotNull(taskContext, "open() must build the operator's task context");
+        taskContext.getOrCreateWrapper(udfPayloadBytes());
+
+        op.close();
+
+        assertEquals(0, taskContext.wrapperCount(), "close() must empty the wrapper registry");
+        assertEquals(1, CloseCountingFunction.closeCount, "close() must close the retained UDF");
+    }
+
     // =====================================================================
     // Construction helpers
     // =====================================================================
@@ -587,6 +712,47 @@ public class FlinkAuronCalcOperatorTest {
                 plan, rowType, rowType, "auron-op-id", (a, p, m, mem) -> runtime, fullAfterRows);
         op.fakeRuntime = runtime;
         return op;
+    }
+
+    /**
+     * Builds an operator whose exporter reports batch-full after a single row, so one
+     * {@code processElement} equals one drain cycle, and whose native runtime comes from the
+     * supplied factory.
+     */
+    private FakeExporterTrackingOperator newUdfOperator(FlinkAuronCalcOperator.NativeRuntimeFactory factory) {
+        PhysicalPlanNode plan = buildProjectFilterFfiReaderPlan(1);
+        RowType rowType = RowType.of(new LogicalType[] {new IntType()}, new String[] {"id"});
+        return new FakeExporterTrackingOperator(plan, rowType, rowType, "auron-op-id", factory, /* fullAfterRows */ 1);
+    }
+
+    /**
+     * Resolves the wrapper for the fixture payload through whatever context is published on the
+     * calling thread, re-serializing the payload each time so the bytes are equal but the array is
+     * not the one used before.
+     */
+    private static AuronUDFWrapperContext wrapperFromPublishedContext() {
+        FlinkAuronTaskContext context = FlinkAuronTaskContext.current();
+        assertNotNull(context, "a task context must be published while the native runtime is created");
+        try {
+            return context.getOrCreateWrapper(udfPayloadBytes());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Serializes the fixture UDF payload the way the planner does. */
+    private static byte[] udfPayloadBytes() throws Exception {
+        FlinkUDFPayload payload = new FlinkUDFPayload(
+                new CloseCountingFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), new String[] {
+                    Integer.class.getName()
+                });
+        return InstantiationUtil.serializeObject(payload);
+    }
+
+    private static FlinkAuronTaskContext readTaskContext(FlinkAuronCalcOperator op) throws Exception {
+        Field f = FlinkAuronCalcOperator.class.getDeclaredField("taskContext");
+        f.setAccessible(true);
+        return (FlinkAuronTaskContext) f.get(op);
     }
 
     // =====================================================================
@@ -1014,6 +1180,25 @@ public class FlinkAuronCalcOperatorTest {
         }
     }
 
+    /**
+     * Counts its {@code close} statically: the function instance inside a payload is
+     * Java-deserialized when the wrapper is built, so instance fields never travel back here.
+     */
+    public static class CloseCountingFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        static int closeCount;
+
+        @Override
+        public void close() {
+            closeCount++;
+        }
+
+        public Integer eval(Integer value) {
+            return value == null ? null : value + 1;
+        }
+    }
+
     // =====================================================================
     // StreamingRuntimeContext stub via Unsafe.allocateInstance
     //
@@ -1049,6 +1234,12 @@ public class FlinkAuronCalcOperatorTest {
         @Override
         public int getIndexOfThisSubtask() {
             return SUBTASK_INDEX;
+        }
+
+        // Allocated via Unsafe, so the inherited implementation would read a null field.
+        @Override
+        public ClassLoader getUserCodeClassLoader() {
+            return FlinkAuronCalcOperatorTest.class.getClassLoader();
         }
     }
 

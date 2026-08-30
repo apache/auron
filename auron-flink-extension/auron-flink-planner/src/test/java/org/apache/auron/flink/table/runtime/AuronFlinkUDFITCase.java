@@ -19,12 +19,20 @@ package org.apache.auron.flink.table.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.auron.flink.table.AuronFlinkTableTestBase;
 import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
+import org.apache.flink.table.planner.factories.TestValuesTableFactory;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.CollectionUtil;
 import org.junit.jupiter.api.Test;
@@ -205,6 +213,188 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
                 .isEqualTo(Arrays.asList(Row.of("a:Comment#1"), Row.of("a:Comment#1"), Row.of("a:Hi")));
     }
 
+    /**
+     * A function overriding {@code open(FunctionContext)} reaches the native Calc and produces its
+     * values. {@code eval} reads state that only {@code open} establishes, so a wrapper that never
+     * opened the function would fail the job rather than return wrong rows.
+     */
+    @Test
+    public void testUdfOverridingOpenRunsNatively() throws Exception {
+        LifecycleFunction.reset();
+        environment.setParallelism(1);
+        tableEnvironment.createTemporarySystemFunction("auron_lifecycle_plus", LifecycleFunction.class);
+        UnsupportedFlinkNodeRecorder.resetForTest();
+
+        TableResult result = tableEnvironment.executeSql("select auron_lifecycle_plus(`int`) from T1");
+        List<Row> rows = CollectionUtil.iteratorToList(result.collect());
+        result.await();
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .isEqualTo(Arrays.asList(Row.of(2), Row.of(3), Row.of(3)));
+        assertThat(LifecycleFunction.openCount.get())
+                .as("open must run for the subtask")
+                .isOne();
+        assertThat(LifecycleFunction.closeCount.get())
+                .as("close must run when the operator closes")
+                .isOne();
+    }
+
+    /**
+     * {@code open} runs once per subtask rather than once per drain cycle.
+     *
+     * <p>The operator drains when its exporter reports batch-full at 8192 buffered rows, and again
+     * from {@code close()} for the remainder, so 10000 rows force at least two drain cycles. Each
+     * cycle builds a fresh native runtime whose expression tree asks the JVM for the wrapper again,
+     * so without per-subtask retention the wrapper would be rebuilt and {@code open} would run once
+     * per cycle. The count is what separates the two.
+     */
+    @Test
+    public void testOpenRunsOncePerSubtaskAcrossDrainCycles() throws Exception {
+        LifecycleFunction.reset();
+        environment.setParallelism(1);
+        List<Row> data = new ArrayList<>();
+        for (int i = 0; i < 10000; i++) {
+            data.add(row(i));
+        }
+        tableEnvironment.executeSql("CREATE TABLE TWide ( `int` INT ) WITH ("
+                + " 'connector' = 'values',"
+                + " 'data-id' = '" + TestValuesTableFactory.registerData(data) + "',"
+                + " 'failing-source' = 'false' )");
+        tableEnvironment.createTemporarySystemFunction("auron_lifecycle_plus", LifecycleFunction.class);
+        UnsupportedFlinkNodeRecorder.resetForTest();
+
+        TableResult result = tableEnvironment.executeSql("select auron_lifecycle_plus(`int`) from TWide");
+        List<Row> rows = CollectionUtil.iteratorToList(result.collect());
+        result.await();
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        assertThat(rows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .hasSize(10000);
+        assertThat(LifecycleFunction.openCount.get())
+                .as("open ran per drain cycle instead of once for the subtask")
+                .isOne();
+        assertThat(LifecycleFunction.closeCount.get())
+                .as("close must run when the operator closes")
+                .isOne();
+    }
+
+    /**
+     * Overriding {@code close} alone is admitted as well, and the hook still runs at operator close.
+     * The two hooks are independent, so admitting one does not establish the other.
+     */
+    @Test
+    public void testUdfOverridingCloseOnlyRunsNatively() throws Exception {
+        ClosesFunction.closeCount.set(0);
+        environment.setParallelism(1);
+        tableEnvironment.createTemporarySystemFunction("auron_closes", ClosesFunction.class);
+        UnsupportedFlinkNodeRecorder.resetForTest();
+
+        TableResult result = tableEnvironment.executeSql("select auron_closes(`int`) from T1");
+        List<Row> rows = CollectionUtil.iteratorToList(result.collect());
+        result.await();
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .isEqualTo(Arrays.asList(Row.of(10), Row.of(20), Row.of(20)));
+        assertThat(ClosesFunction.closeCount.get())
+                .as("close must run when the operator closes")
+                .isOne();
+    }
+
+    /**
+     * Subtask isolation, end to end. The registry is scoped to a subtask precisely so two subtasks
+     * of one operator never share a wrapper, and every other test pins parallelism to 1, where the
+     * property cannot be observed.
+     *
+     * <p>Each subtask opens its own function, so the number of {@code open} calls and the number of
+     * distinct instances that received one must agree. A shared wrapper would open once and be
+     * evaluated by both subtasks, which shows up here as fewer opens than subtasks.
+     */
+    @Test
+    public void testEachSubtaskGetsItsOwnFunctionInstance() throws Exception {
+        ParallelLifecycleFunction.reset();
+        // A values source is not parallel, and the Calc chains to it, so it would run on a single
+        // subtask however high the environment parallelism is. A sequence source is parallel, which
+        // is what puts several subtasks of the Calc in flight at once.
+        environment.setParallelism(4);
+        tableEnvironment.createTemporaryView(
+                "TParallel", tableEnvironment.fromDataStream(environment.fromSequence(1, 8)));
+        tableEnvironment.createTemporarySystemFunction("auron_parallel_plus", ParallelLifecycleFunction.class);
+        UnsupportedFlinkNodeRecorder.resetForTest();
+
+        TableResult result = tableEnvironment.executeSql("select auron_parallel_plus(f0) from TParallel");
+        List<Row> rows = CollectionUtil.iteratorToList(result.collect());
+        result.await();
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        rows.sort(Comparator.comparingLong(o -> (long) o.getField(0)));
+        assertThat(rows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .isEqualTo(Arrays.asList(
+                        Row.of(2L),
+                        Row.of(3L),
+                        Row.of(4L),
+                        Row.of(5L),
+                        Row.of(6L),
+                        Row.of(7L),
+                        Row.of(8L),
+                        Row.of(9L)));
+        assertThat(ParallelLifecycleFunction.openCount.get())
+                .as("the operator must run at a parallelism where sharing could be observed")
+                .isGreaterThan(1);
+        assertThat(ParallelLifecycleFunction.instances.size())
+                .as("subtasks shared a function instance")
+                .isEqualTo(ParallelLifecycleFunction.openCount.get());
+        assertThat(ParallelLifecycleFunction.closeCount.get())
+                .as("every subtask must close the function it opened")
+                .isEqualTo(ParallelLifecycleFunction.openCount.get());
+    }
+
+    /**
+     * Two call sites of one function must not share a wrapper, and therefore must not share a
+     * function instance.
+     *
+     * <p>The two calls carry byte-identical payloads — same function, same argument and return
+     * types — because the arguments themselves travel outside the payload, so only the node
+     * ordinal separates them. The function counts its own invocations from state {@code open}
+     * initialises, which is what makes sharing produce a wrong answer rather than merely a shared
+     * object: each call site evaluates the whole batch in turn, so one shared counter yields
+     * {@code (1,4) (2,5) (3,6)} where two independent ones yield {@code (1,1) (2,2) (3,3)}.
+     */
+    @Test
+    public void testTwoCallSitesOfOneFunctionDoNotShareInstanceState() throws Exception {
+        environment.setParallelism(1);
+        tableEnvironment.createTemporarySystemFunction("auron_call_count", CallCountingFunction.class);
+        UnsupportedFlinkNodeRecorder.resetForTest();
+
+        TableResult result =
+                tableEnvironment.executeSql("select auron_call_count(`int`), auron_call_count(`int` * 2) from T1");
+        List<Row> rows = CollectionUtil.iteratorToList(result.collect());
+        result.await();
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows)
+                .as("the two call sites shared one function instance")
+                .isEqualTo(Arrays.asList(Row.of(1, 1), Row.of(2, 2), Row.of(3, 3)));
+    }
+
     // ---- UDF fixtures ----
 
     /** Joins two string arguments, so argument order is visible in the result. */
@@ -289,6 +479,136 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
          */
         public LocalDateTime eval(Integer a) {
             return LocalDateTime.of(2020, 1, 1, 0, 0, a);
+        }
+    }
+
+    /**
+     * Overrides both lifecycle hooks and counts them statically, since the instance the job runs is
+     * deserialized from the plan and never travels back here. {@code eval} depends on state only
+     * {@code open} sets, so a missing {@code open} fails loudly instead of skewing a value.
+     */
+    public static class LifecycleFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        static final AtomicInteger openCount = new AtomicInteger();
+        static final AtomicInteger closeCount = new AtomicInteger();
+
+        private transient int offset;
+
+        static void reset() {
+            openCount.set(0);
+            closeCount.set(0);
+        }
+
+        @Override
+        public void open(FunctionContext context) {
+            offset = 1;
+            openCount.incrementAndGet();
+        }
+
+        @Override
+        public void close() {
+            closeCount.incrementAndGet();
+        }
+
+        /**
+         * Adds the offset established by {@code open}.
+         *
+         * @param a the argument
+         * @return {@code a + 1}
+         */
+        public Integer eval(Integer a) {
+            if (offset == 0) {
+                throw new IllegalStateException("auron_lifecycle_plus was evaluated before open()");
+            }
+            return a == null ? null : a + offset;
+        }
+    }
+
+    /** Overrides {@code close} only, so the two hooks are exercised independently. */
+    public static class ClosesFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        static final AtomicInteger closeCount = new AtomicInteger();
+
+        @Override
+        public void close() {
+            closeCount.incrementAndGet();
+        }
+
+        /**
+         * Scales its argument by ten.
+         *
+         * @param a the argument
+         * @return {@code a * 10}
+         */
+        public Integer eval(Integer a) {
+            return a == null ? null : a * 10;
+        }
+    }
+
+    /**
+     * Records the identity of every instance that is opened, so that two subtasks sharing one
+     * wrapper is distinguishable from two subtasks each holding their own.
+     */
+    public static class ParallelLifecycleFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        static final AtomicInteger openCount = new AtomicInteger();
+        static final AtomicInteger closeCount = new AtomicInteger();
+        static final Set<Object> instances =
+                Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
+
+        static void reset() {
+            openCount.set(0);
+            closeCount.set(0);
+            instances.clear();
+        }
+
+        @Override
+        public void open(FunctionContext context) {
+            instances.add(this);
+            openCount.incrementAndGet();
+        }
+
+        @Override
+        public void close() {
+            closeCount.incrementAndGet();
+        }
+
+        /**
+         * Adds one to its argument.
+         *
+         * @param a the argument
+         * @return {@code a + 1}
+         */
+        public Long eval(Long a) {
+            return a == null ? null : a + 1;
+        }
+    }
+
+    /**
+     * Counts its own invocations from state {@code open} establishes, so that two call sites
+     * sharing one instance is visible in the values rather than only in object identity.
+     */
+    public static class CallCountingFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        private transient int calls;
+
+        @Override
+        public void open(FunctionContext context) {
+            calls = 0;
+        }
+
+        /**
+         * Returns how many times this instance has been called, ignoring its argument.
+         *
+         * @param a the argument, which only fixes the call's type signature
+         * @return the one-based invocation count
+         */
+        public Integer eval(Integer a) {
+            return ++calls;
         }
     }
 }

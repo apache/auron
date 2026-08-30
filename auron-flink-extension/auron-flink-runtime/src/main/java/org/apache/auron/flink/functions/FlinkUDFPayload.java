@@ -40,7 +40,23 @@ public final class FlinkUDFPayload implements Serializable {
     private final String[] evalParameterTypeNames;
 
     /**
-     * Creates a payload.
+     * Distinguishes this wrapper node from every other one in the same plan.
+     *
+     * <p>Nothing reads it back; its whole job is to be part of the serialized form. The runtime
+     * keys its per-subtask wrapper registry on the payload bytes, because the native callback
+     * carries nothing else, so two nodes whose payloads were byte-equal would resolve to one
+     * wrapper and therefore to one user function instance. That is observable whenever the
+     * function keeps instance state, and it diverges from Flink, which hands each call site its
+     * own copy of the function. Two calls of one function on arguments of the same types produce
+     * exactly such a pair, since the arguments travel outside the payload.
+     */
+    private final int nodeOrdinal;
+
+    /**
+     * Creates a payload for a plan holding a single wrapper node.
+     *
+     * <p>Prefer {@link #of}, which takes the node's ordinal: a payload built here always carries
+     * ordinal zero, so two of them collide.
      *
      * @param function the resolved user function instance the wrapper invokes
      * @param argTypes one type per {@code eval} argument, in argument order
@@ -52,6 +68,15 @@ public final class FlinkUDFPayload implements Serializable {
      */
     public FlinkUDFPayload(
             ScalarFunction function, DataType[] argTypes, DataType returnType, String[] evalParameterTypeNames) {
+        this(function, argTypes, returnType, evalParameterTypeNames, 0);
+    }
+
+    private FlinkUDFPayload(
+            ScalarFunction function,
+            DataType[] argTypes,
+            DataType returnType,
+            String[] evalParameterTypeNames,
+            int nodeOrdinal) {
         if (argTypes.length != evalParameterTypeNames.length) {
             throw new IllegalArgumentException("argTypes has " + argTypes.length
                     + " entries but the selected eval overload declares " + evalParameterTypeNames.length
@@ -61,6 +86,7 @@ public final class FlinkUDFPayload implements Serializable {
         this.argTypes = argTypes;
         this.returnType = returnType;
         this.evalParameterTypeNames = evalParameterTypeNames;
+        this.nodeOrdinal = nodeOrdinal;
     }
 
     /**
@@ -77,16 +103,18 @@ public final class FlinkUDFPayload implements Serializable {
      * @param argTypes one type per {@code eval} argument, in argument order
      * @param returnType the type of the value {@code eval} produces
      * @param evalMethod the {@code eval} overload the planner selected
+     * @param nodeOrdinal a value unique to this wrapper node within its plan, which is what keeps
+     *     two call sites of one function from resolving to a single shared wrapper at runtime
      * @return the payload to serialize into the wrapper node
      */
     public static FlinkUDFPayload of(
-            ScalarFunction function, DataType[] argTypes, DataType returnType, Method evalMethod) {
+            ScalarFunction function, DataType[] argTypes, DataType returnType, Method evalMethod, int nodeOrdinal) {
         Class<?>[] parameterTypes = evalMethod.getParameterTypes();
         String[] names = new String[parameterTypes.length];
         for (int i = 0; i < parameterTypes.length; i++) {
             names[i] = parameterTypes[i].getName();
         }
-        return new FlinkUDFPayload(function, argTypes, returnType, names);
+        return new FlinkUDFPayload(function, argTypes, returnType, names, nodeOrdinal);
     }
 
     /**

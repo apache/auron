@@ -26,6 +26,7 @@ import org.apache.auron.flink.arrow.FlinkArrowFFIExporter;
 import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
+import org.apache.auron.flink.functions.FlinkAuronTaskContext;
 import org.apache.auron.flink.metric.FlinkMetricNode;
 import org.apache.auron.jni.AuronAdaptor;
 import org.apache.auron.jni.AuronCallNativeWrapper;
@@ -77,9 +78,15 @@ import org.apache.flink.table.types.logical.RowType;
  *       before the checkpoint barrier crosses them. Calc is stateless; no operator-state writes
  *       are needed.
  *   <li>{@link #close()} signals end-of-input, performs a final drain, then closes the native
- *       runtime, exporter, and child allocator in nested try/finally so partial failure still
- *       releases resources. Idempotent: fields are nulled after close.
+ *       runtime, the subtask context, exporter, and child allocator in nested try/finally so
+ *       partial failure still releases resources. Idempotent: fields are nulled after close.
  * </ul>
+ *
+ * <p>A {@link FlinkAuronTaskContext} built in {@code open()} carries the subtask's user-code
+ * classloader and its UDF wrapper registry to the native engine. It is published on the task
+ * thread only while a native runtime is being created, which is the frame the native side reads it
+ * from, and it is closed with the operator so a user function's {@code close} runs once per
+ * subtask.
  *
  * <p>Valid construction (well-formed plan tree, matching row types, non-null operator ID) is
  * the caller's responsibility — no defensive null checks are performed.
@@ -111,6 +118,9 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
     private transient NativeRuntime nativeRuntime;
     private transient PhysicalPlanNode runtimePlan;
     private transient StreamRecord<RowData> outputRecord;
+    // Subtask-scoped state the native runtime carries to its worker threads; holds the user-code
+    // classloader and the UDF wrapper registry that survives drain cycles.
+    private transient FlinkAuronTaskContext taskContext;
     // Cached so reinitExporterAndRuntime() can reuse the value resolved once in open().
     private transient long nativeMemory;
     // Set in close() before the final drain so drainNative() skips its post-loop reinit.
@@ -170,6 +180,15 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         // to the first non-empty drain so the runtime always starts against a populated buffer.
 
         this.outputRecord = new StreamRecord<>(null);
+        this.taskContext = new FlinkAuronTaskContext(rc);
+        // Build every UDF wrapper here rather than on first use. Two things follow from the task
+        // thread doing it: the user function's open() runs on the same thread Flink would have run
+        // it on, instead of on a tokio worker that dies with the drain cycle that created it; and a
+        // subtask that never receives a row still opens and closes its functions, as it would on
+        // Flink's own path.
+        for (byte[] payload : AuronPlanTreeRewriter.collectUdfWrapperPayloads(runtimePlan)) {
+            taskContext.getOrCreateWrapper(payload);
+        }
     }
 
     @Override
@@ -213,18 +232,30 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
                 }
             } finally {
                 try {
-                    if (exporter != null) {
-                        exporter.close();
-                        exporter = null;
+                    // After the native runtime, whose finalize cancels the pending streams and
+                    // aborts the producer task. It shuts the tokio pool down in the background
+                    // without joining, so this ordering does not by itself prove no worker thread
+                    // is alive; what makes the drain loop above sufficient is that it runs the
+                    // output stream to exhaustion, leaving no evaluation outstanding.
+                    if (taskContext != null) {
+                        taskContext.close();
+                        taskContext = null;
                     }
                 } finally {
                     try {
-                        if (childAllocator != null) {
-                            childAllocator.close();
-                            childAllocator = null;
+                        if (exporter != null) {
+                            exporter.close();
+                            exporter = null;
                         }
                     } finally {
-                        super.close();
+                        try {
+                            if (childAllocator != null) {
+                                childAllocator.close();
+                                childAllocator = null;
+                            }
+                        } finally {
+                            super.close();
+                        }
                     }
                 }
             }
@@ -256,8 +287,18 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
             return;
         }
         if (nativeRuntime == null) {
-            this.nativeRuntime = nativeRuntimeFactory.create(
-                    FlinkArrowUtils.getRootAllocator(), runtimePlan, metricNode, nativeMemory);
+            // Native runtime construction reads the thread context from this very frame and
+            // installs it on every worker thread of the pool it builds. Publishing only for the
+            // duration of that call keeps this Flink task thread — which outlives the operator and
+            // is reused — from retaining a user-code classloader afterwards, and keeps a chained
+            // Auron operator from picking up a context that is not its own.
+            FlinkAuronTaskContext.setCurrent(taskContext);
+            try {
+                this.nativeRuntime = nativeRuntimeFactory.create(
+                        FlinkArrowUtils.getRootAllocator(), runtimePlan, metricNode, nativeMemory);
+            } finally {
+                FlinkAuronTaskContext.clearCurrent();
+            }
         }
         while (nativeRuntime.loadNextBatch(this::emitArrowBatch)) {
             // loop

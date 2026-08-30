@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
-import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,6 +40,7 @@ import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -188,7 +188,8 @@ public class FlinkAuronUDFWrapperContextTest {
                 new PositionalFunction(),
                 new DataType[] {DataTypes.STRING(), DataTypes.STRING(), DataTypes.INT()},
                 DataTypes.STRING(),
-                evalMethod(PositionalFunction.class));
+                evalMethod(PositionalFunction.class),
+                0);
 
         List<RowData> rows = Arrays.asList(row(StringData.fromString("alpha"), StringData.fromString("beta"), 7));
 
@@ -236,9 +237,11 @@ public class FlinkAuronUDFWrapperContextTest {
                 new PositionalFunction(),
                 new DataType[] {DataTypes.STRING(), DataTypes.STRING(), DataTypes.INT()},
                 DataTypes.STRING(),
-                evalMethod(PositionalFunction.class));
+                evalMethod(PositionalFunction.class),
+                0);
 
-        FlinkAuronUDFWrapperContext context = new FlinkAuronUDFWrapperContext(serialize(payload));
+        FlinkAuronUDFWrapperContext context = new FlinkAuronUDFWrapperContext(
+                serialize(payload), FlinkAuronUDFWrapperContextTest.class.getClassLoader(), new FunctionContext(null));
         try {
             List<Object> first = evalOn(
                     context,
@@ -275,12 +278,14 @@ public class FlinkAuronUDFWrapperContextTest {
                 new PrimitiveTripleFunction(),
                 new DataType[] {DataTypes.INT()},
                 DataTypes.INT(),
-                evalMethod(PrimitiveTripleFunction.class));
+                evalMethod(PrimitiveTripleFunction.class),
+                0);
         FlinkUDFPayload boom = FlinkUDFPayload.of(
                 new ThrowingFunction(),
                 new DataType[] {DataTypes.INT()},
                 DataTypes.INT(),
-                evalMethod(ThrowingFunction.class));
+                evalMethod(ThrowingFunction.class),
+                0);
 
         long baseline = FlinkArrowUtils.getRootAllocator().getAllocatedMemory();
 
@@ -387,7 +392,8 @@ public class FlinkAuronUDFWrapperContextTest {
      */
     private static List<Object> evalUdf(FlinkUDFPayload payload, List<RowData> inputRows, ResultExtractor extractor)
             throws Exception {
-        FlinkAuronUDFWrapperContext context = new FlinkAuronUDFWrapperContext(serialize(payload));
+        FlinkAuronUDFWrapperContext context = new FlinkAuronUDFWrapperContext(
+                serialize(payload), FlinkAuronUDFWrapperContextTest.class.getClassLoader(), new FunctionContext(null));
         try {
             return evalOn(context, payload, inputRows, extractor);
         } finally {
@@ -447,13 +453,9 @@ public class FlinkAuronUDFWrapperContextTest {
         return results;
     }
 
-    /** Serializes the payload the way the planner does, into the direct buffer native code hands over. */
-    private static ByteBuffer serialize(FlinkUDFPayload payload) throws Exception {
-        byte[] bytes = InstantiationUtil.serializeObject(payload);
-        ByteBuffer buffer = ByteBuffer.allocateDirect(bytes.length);
-        buffer.put(bytes);
-        buffer.flip();
-        return buffer;
+    /** Serializes the payload the way the planner does. */
+    private static byte[] serialize(FlinkUDFPayload payload) throws Exception {
+        return InstantiationUtil.serializeObject(payload);
     }
 
     /**

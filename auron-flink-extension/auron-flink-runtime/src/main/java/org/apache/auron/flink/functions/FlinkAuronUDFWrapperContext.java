@@ -20,7 +20,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -39,6 +38,7 @@ import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.conversion.DataStructureConverter;
 import org.apache.flink.table.data.conversion.DataStructureConverters;
+import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.functions.UserDefinedFunctionHelper;
 import org.apache.flink.table.types.DataType;
@@ -57,6 +57,10 @@ import org.slf4j.LoggerFactory;
  * is an empty struct the single result column is exported into. Values arrive in Flink's internal
  * representation, are converted to the external representation the user function declares, and the
  * returned value is converted back before it is written out.
+ *
+ * <p>An instance is retained for the lifetime of one subtask by {@link FlinkAuronTaskContext}, so
+ * the user function is deserialized and opened once per subtask and closed when that context is
+ * closed.
  */
 public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext {
 
@@ -98,22 +102,24 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
     private final GenericRowData outputRow = new GenericRowData(1);
 
     /**
-     * Rebuilds the wrapper from the bytes the planner attached to the native expression node.
+     * Builds the wrapper from the bytes the planner attached to the native expression node.
      *
-     * @param serialized the serialized {@link FlinkUDFPayload}, positioned at its first byte
-     * @throws Exception if the payload cannot be deserialized, or the {@code eval} overload it
-     *     names cannot be resolved on the user function
+     * <p>{@link FlinkAuronTaskContext} retains the result for the lifetime of the subtask, so this
+     * runs once per subtask rather than once per drain cycle, and the {@code open} call at the end
+     * is the user function's single initialization for that subtask.
+     *
+     * @param serialized the serialized {@link FlinkUDFPayload}
+     * @param userCodeClassLoader the classloader that can see the user function class; taken from
+     *     the runtime context rather than from the calling thread, matching where Flink itself
+     *     loads user code from
+     * @param functionContext the context handed to the user function's {@code open}
+     * @throws Exception if the payload cannot be deserialized, the {@code eval} overload it names
+     *     cannot be resolved on the user function, or the function's {@code open} fails
      */
     @SuppressWarnings("unchecked")
-    public FlinkAuronUDFWrapperContext(ByteBuffer serialized) throws Exception {
-        // The tokio worker thread reaching this constructor carries the Flink task thread's context
-        // classloader, propagated when the native runtime was created, so the user jar is visible.
-        ClassLoader userClassLoader = Thread.currentThread().getContextClassLoader();
-
-        // The buffer the native side hands over is direct, so it has no backing array.
-        byte[] bytes = new byte[serialized.remaining()];
-        serialized.get(bytes);
-        FlinkUDFPayload payload = InstantiationUtil.deserializeObject(bytes, userClassLoader);
+    public FlinkAuronUDFWrapperContext(
+            byte[] serialized, ClassLoader userCodeClassLoader, FunctionContext functionContext) throws Exception {
+        FlinkUDFPayload payload = InstantiationUtil.deserializeObject(serialized, userCodeClassLoader);
 
         this.function = payload.getFunction();
         DataType[] argTypes = payload.getArgTypes();
@@ -136,7 +142,7 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
             fieldGetters[i] = RowData.createFieldGetter(argLogicalTypes[i], i);
             if (!DataTypeUtils.isInternal(argTypes[i])) {
                 converters[i] = DataStructureConverters.getConverter(argTypes[i]);
-                converters[i].open(userClassLoader);
+                converters[i].open(userCodeClassLoader);
             }
         }
         this.argConverters = converters;
@@ -145,11 +151,14 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
             this.returnConverter = null;
         } else {
             this.returnConverter = DataStructureConverters.getConverter(returnType);
-            this.returnConverter.open(userClassLoader);
+            this.returnConverter.open(userCodeClassLoader);
         }
 
         this.args = new Object[argTypes.length];
-        this.evalHandle = bindEval(payload, userClassLoader);
+        this.evalHandle = bindEval(payload, userCodeClassLoader);
+        // Last, so a function that acquires resources in open() does so only once everything it
+        // will be evaluated through has been built successfully.
+        function.open(functionContext);
         LOG.debug("Initialized UDF wrapper for {}", function.getClass().getName());
     }
 
@@ -166,6 +175,11 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
      * expression out across threads, so two evaluations of one wrapper never overlap. Adding a
      * repartitioning or partition-coalescing node to a plan that can carry this expression would
      * break that invariant, and this state would then have to become per-call.
+     *
+     * <p>Retention across drain cycles does not widen that exposure. The registry holding the
+     * instance belongs to a single subtask, and each drain builds a runtime that executes one
+     * partition for that same subtask, so successive users of this state are the same task thread's
+     * successive runtimes rather than concurrent ones.
      *
      * @param importFFIArrayPtr address of the Arrow C-Data array holding the argument columns
      * @param exportFFIArrayPtr address of the Arrow C-Data array the result column is exported into
@@ -200,6 +214,21 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
         } catch (Throwable t) {
             throw new IllegalStateException(
                     "Flink UDF " + function.getClass().getName() + " failed during evaluation", t);
+        }
+    }
+
+    /**
+     * Closes the user function.
+     *
+     * <p>Reached from {@link FlinkAuronTaskContext#close()} when the owning operator closes. The
+     * native side binds no {@code close} on this interface, so nothing else calls it.
+     */
+    @Override
+    public void close() {
+        try {
+            function.close();
+        } catch (Exception e) {
+            throw new IllegalStateException("Flink UDF " + function.getClass().getName() + " failed while closing", e);
         }
     }
 

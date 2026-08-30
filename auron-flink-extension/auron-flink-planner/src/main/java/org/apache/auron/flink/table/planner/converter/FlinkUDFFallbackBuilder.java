@@ -34,7 +34,6 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.flink.table.api.ValidationException;
-import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.FunctionDefinition;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.functions.UserDefinedFunction;
@@ -63,6 +62,10 @@ import org.slf4j.LoggerFactory;
  * <p>This is a coverage feature rather than a performance one: a JVM upcall per batch with a
  * reflective per-row {@code eval} is slower than a native expression. What it buys is that the rest
  * of the Calc no longer falls back along with the function.
+ *
+ * <p>A function overriding {@code open} or {@code close} is admitted. The runtime retains one
+ * wrapper per subtask, so each hook runs once for that subtask, which is the lifecycle Flink gives
+ * a function on its own path.
  */
 public final class FlinkUDFFallbackBuilder {
 
@@ -182,9 +185,6 @@ public final class FlinkUDFFallbackBuilder {
         if (!evalMethod.isPresent()) {
             return Optional.empty();
         }
-        if (overridesLifecycleMethod(udf)) {
-            return decline(udf, "the function overrides open() or close(), which the wrapper never calls");
-        }
         if (!isPreparable(udf, context)) {
             return Optional.empty();
         }
@@ -200,7 +200,8 @@ public final class FlinkUDFFallbackBuilder {
 
         byte[] blob;
         try {
-            blob = InstantiationUtil.serializeObject(FlinkUDFPayload.of(udf, argTypes, returnType, evalMethod.get()));
+            blob = InstantiationUtil.serializeObject(
+                    FlinkUDFPayload.of(udf, argTypes, returnType, evalMethod.get(), context.nextUdfWrapperOrdinal()));
         } catch (Exception e) {
             LOG.debug(
                     "Cannot serialize Flink UDF {}; the call falls back.",
@@ -317,25 +318,6 @@ public final class FlinkUDFFallbackBuilder {
             return Optional.empty();
         }
         return Optional.of(selected);
-    }
-
-    /**
-     * Returns whether the function overrides either lifecycle hook.
-     *
-     * <p>Nothing opens or closes a function on the native path, and the wrapper is rebuilt on every
-     * drain cycle rather than once per query, so a function that needs {@code open} would be reopened
-     * repeatedly and never closed. Declining it yields a correct, slower plan instead.
-     */
-    private static boolean overridesLifecycleMethod(ScalarFunction udf) {
-        try {
-            Class<?> udfClass = udf.getClass();
-            return udfClass.getMethod("open", FunctionContext.class).getDeclaringClass() != UserDefinedFunction.class
-                    || udfClass.getMethod("close").getDeclaringClass() != UserDefinedFunction.class;
-        } catch (NoSuchMethodException e) {
-            // Both hooks are declared on UserDefinedFunction, so every ScalarFunction inherits them.
-            throw new IllegalStateException(
-                    "Flink lifecycle methods are missing from " + udf.getClass().getName(), e);
-        }
     }
 
     /**

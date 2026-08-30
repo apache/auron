@@ -19,6 +19,7 @@ package org.apache.auron.flink.table.planner.converter;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDateTime;
@@ -42,7 +43,6 @@ import org.apache.calcite.sql.type.SqlReturnTypeInference;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
-import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.FunctionIdentifier;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
@@ -122,6 +122,28 @@ class FlinkUDFFallbackBuilderTest {
         assertEquals(call.toString(), wrapper.getExprString());
     }
 
+    /**
+     * Two wrapper nodes in one plan carry different payload bytes even when everything the payload
+     * describes is identical.
+     *
+     * <p>The runtime keys its wrapper registry on those bytes, because the native callback carries
+     * nothing else, so byte-equal payloads would collapse two call sites onto one user function
+     * instance. Building the same call twice is the strongest form of the case: every input to the
+     * payload matches, and only the per-node ordinal separates them.
+     */
+    @Test
+    void testEachWrapperNodeGetsDistinctPayloadBytes() {
+        RexCall call = udfCall(intType(), new OneIntFunction(), intRef(0));
+
+        PhysicalExprNode first = buildFor(call).orElseThrow(AssertionError::new);
+        PhysicalExprNode second = buildFor(call).orElseThrow(AssertionError::new);
+
+        assertNotEquals(
+                first.getUdfWrapperExpr().getSerialized(),
+                second.getUdfWrapperExpr().getSerialized(),
+                "two call sites sharing payload bytes would share one wrapper, and one function instance");
+    }
+
     /** The wrapper's return type and nullability are read off the call, not off the function class. */
     @Test
     void testReturnTypeAndNullabilityMatchTheCall() {
@@ -189,22 +211,6 @@ class FlinkUDFFallbackBuilderTest {
     @Test
     void testDeclinesAmbiguousEvalOverloads() {
         RexCall call = udfCall(varcharType(), new AmbiguousFunction(), strRef(3));
-
-        assertFalse(buildFor(call).isPresent());
-    }
-
-    /** A UDF overriding {@code open} is declined, because nothing invokes it on the native path. */
-    @Test
-    void testDeclinesUdfOverridingOpen() {
-        RexCall call = udfCall(intType(), new OpensFunction(), intRef(0));
-
-        assertFalse(buildFor(call).isPresent());
-    }
-
-    /** A UDF overriding {@code close} is declined; overriding one lifecycle hook does not imply the other. */
-    @Test
-    void testDeclinesUdfOverridingClose() {
-        RexCall call = udfCall(intType(), new ClosesFunction(), intRef(0));
 
         assertFalse(buildFor(call).isPresent());
     }
@@ -466,42 +472,6 @@ class FlinkUDFFallbackBuilderTest {
          */
         public String eval(String s) {
             return s;
-        }
-    }
-
-    /** Overrides {@code open}, which nothing invokes on the native path. */
-    public static class OpensFunction extends ScalarFunction {
-        private static final long serialVersionUID = 1L;
-
-        @Override
-        public void open(FunctionContext functionContext) {}
-
-        /**
-         * Returns its argument.
-         *
-         * @param a the argument
-         * @return the argument unchanged
-         */
-        public int eval(int a) {
-            return a;
-        }
-    }
-
-    /** Overrides {@code close}, which nothing invokes on the native path. */
-    public static class ClosesFunction extends ScalarFunction {
-        private static final long serialVersionUID = 1L;
-
-        @Override
-        public void close() {}
-
-        /**
-         * Returns its argument.
-         *
-         * @param a the argument
-         * @return the argument unchanged
-         */
-        public int eval(int a) {
-            return a;
         }
     }
 

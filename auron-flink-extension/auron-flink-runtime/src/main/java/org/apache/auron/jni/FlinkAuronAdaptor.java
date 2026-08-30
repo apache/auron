@@ -24,7 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import org.apache.auron.configuration.AuronConfiguration;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
-import org.apache.auron.flink.functions.FlinkAuronUDFWrapperContext;
+import org.apache.auron.flink.functions.FlinkAuronTaskContext;
 import org.apache.auron.functions.AuronUDFWrapperContext;
 
 /**
@@ -55,14 +55,36 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
         return tempFile.getAbsolutePath();
     }
 
+    /**
+     * Returns the {@link FlinkAuronTaskContext} of the operator whose native runtime is being
+     * created on this thread, so that the native engine can install it on every worker thread of
+     * that runtime's pool.
+     *
+     * <p>Falls back to the thread's context classloader for a caller that publishes no such
+     * context, which is what an operator that creates a native runtime without needing subtask
+     * state does.
+     */
     @Override
     public Object getThreadContext() {
-        return Thread.currentThread().getContextClassLoader();
+        FlinkAuronTaskContext taskContext = FlinkAuronTaskContext.current();
+        return taskContext != null ? taskContext : Thread.currentThread().getContextClassLoader();
     }
 
+    /**
+     * Installs a context produced by {@link #getThreadContext()} on the calling thread.
+     *
+     * <p>Both shapes must leave the thread with a usable context classloader: a worker that lost it
+     * would fail to resolve JVM classes with no signal pointing back here.
+     */
     @Override
     public void setThreadContext(Object context) {
-        Thread.currentThread().setContextClassLoader((ClassLoader) context);
+        if (context instanceof FlinkAuronTaskContext) {
+            FlinkAuronTaskContext taskContext = (FlinkAuronTaskContext) context;
+            FlinkAuronTaskContext.setCurrent(taskContext);
+            Thread.currentThread().setContextClassLoader(taskContext.getUserCodeClassLoader());
+        } else {
+            Thread.currentThread().setContextClassLoader((ClassLoader) context);
+        }
     }
 
     @Override
@@ -70,15 +92,27 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
         return auronFlinkConfig;
     }
 
+    /**
+     * Returns the wrapper for this payload from the registry of the subtask the calling thread is
+     * working for, building it on the first request of that subtask.
+     *
+     * <p>The registry cannot be keyed on the payload alone: every subtask of an operator
+     * deserializes the same operator bytes, so parallel subtasks in one TaskManager JVM present
+     * identical payloads, and a wrapper keeps reusable per-evaluation buffers they must not share.
+     */
     @Override
     public AuronUDFWrapperContext getAuronUDFWrapperContext(ByteBuffer byteBuffer) {
-        try {
-            // A fresh instance per call: the wrapper keeps reusable per-evaluation buffers, and
-            // parallel subtasks in one TaskManager JVM must not share them.
-            return new FlinkAuronUDFWrapperContext(byteBuffer);
-        } catch (Exception e) {
-            throw new IllegalStateException("error creating Flink UDF wrapper context", e);
+        FlinkAuronTaskContext taskContext = FlinkAuronTaskContext.current();
+        if (taskContext == null) {
+            throw new IllegalStateException("no Flink task context is published on thread "
+                    + Thread.currentThread().getName()
+                    + "; a UDF wrapper is only reachable from a native runtime an Auron Flink "
+                    + "operator created");
         }
+        // The buffer the native side hands over is direct, so it has no backing array.
+        byte[] payload = new byte[byteBuffer.remaining()];
+        byteBuffer.get(payload);
+        return taskContext.getOrCreateWrapper(payload);
     }
 
     @Override
