@@ -109,9 +109,11 @@ public class FlinkAuronAdaptor extends AuronAdaptor {
                     + "; a UDF wrapper is only reachable from a native runtime an Auron Flink "
                     + "operator created");
         }
-        // The buffer the native side hands over is direct, so it has no backing array.
-        byte[] payload = new byte[byteBuffer.remaining()];
-        byteBuffer.get(payload);
+        // The buffer the native side hands over is direct, so it has no backing array. Read
+        // through a duplicate so the caller's buffer is not consumed and stays readable.
+        ByteBuffer payloadBuffer = byteBuffer.duplicate();
+        byte[] payload = new byte[payloadBuffer.remaining()];
+        payloadBuffer.get(payload);
         return taskContext.getOrCreateWrapper(payload);
     }
 

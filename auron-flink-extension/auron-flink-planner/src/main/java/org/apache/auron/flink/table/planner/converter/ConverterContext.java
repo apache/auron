@@ -76,12 +76,6 @@ public class ConverterContext {
     }
 
     /**
-     * Returns the input schema of the node being converted.
-     *
-     * <p>Converters use this to resolve {@code RexInputRef} column references to concrete types,
-     * check type support, and determine if casts are needed.
-     */
-    /**
      * Returns an ordinal no other wrapper node in this conversion will receive.
      *
      * <p>The value is written into the node's serialized payload at plan time and travels inside
@@ -93,6 +87,14 @@ public class ConverterContext {
         return udfWrapperCount++;
     }
 
+    /**
+     * Returns the input schema of the node being converted.
+     *
+     * <p>Converters use this to resolve {@code RexInputRef} column references to concrete types,
+     * check type support, and determine if casts are needed.
+     *
+     * @return the input schema of the node being converted
+     */
     public RowType getInputType() {
         return inputType;
     }
