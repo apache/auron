@@ -122,11 +122,14 @@ public class FlinkNodeConverterFactory {
         if (converter == null) {
             return Optional.empty();
         }
-        if (!converter.isSupported(node, context)) {
-            return Optional.empty();
-        }
         try {
+            if (!converter.isSupported(node, context)) {
+                return Optional.empty();
+            }
             return Optional.of(converter.convert(node, context));
+        } catch (FlinkNodeConverter.UnsupportedNodeException e) {
+            LOG.debug("RexNode {} declined natively: {}", node.getClass().getName(), e.getMessage());
+            return Optional.empty();
         } catch (Exception e) {
             LOG.warn("RexNode conversion failed for {}", node.getClass().getName(), e);
             return Optional.empty();
