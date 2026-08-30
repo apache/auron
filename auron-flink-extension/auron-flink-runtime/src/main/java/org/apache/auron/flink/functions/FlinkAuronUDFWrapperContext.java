@@ -190,7 +190,7 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
                     Object internal = fieldGetters[i].getFieldOrNull(paramsRow);
                     args[i] = argConverters[i] == null ? internal : argConverters[i].toExternalOrNull(internal);
                 }
-                Object external = evalHandle.invokeWithArguments(args);
+                Object external = (Object) evalHandle.invokeExact(args);
                 outputRow.setField(0, returnConverter == null ? external : returnConverter.toInternalOrNull(external));
                 writer.write(outputRow);
             }
@@ -206,11 +206,15 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
     /**
      * Binds the single {@code eval} overload the planner selected to the function instance.
      *
-     * <p>{@code unreflect} takes the descriptor from the resolved {@link Method} itself, so it
-     * cannot mismatch a function declaring primitive parameters, and the {@code asType} adaptation
-     * inserts the boxing and widening the erased call site needs. Binding through
-     * {@code findVirtual} would instead demand an exact descriptor built from the boxed conversion
-     * classes and would not find {@code eval(int)}.
+     * <p>{@code unreflect} takes the whole descriptor from the resolved {@link Method}, so only the
+     * parameter types have to be recovered from the payload and the return type never has to be
+     * named separately — which {@code findVirtual} would require, and which the payload does not
+     * carry. The {@code asType} adaptation then inserts the boxing and widening the erased call
+     * site needs.
+     *
+     * <p>The handle is spread over an {@code Object[]} so the per-row call can be an
+     * {@code invokeExact}, the one invocation form the JIT can inline. The looser forms re-derive
+     * the adaptation on every call.
      */
     private MethodHandle bindEval(FlinkUDFPayload payload, ClassLoader classLoader) throws Exception {
         String[] parameterTypeNames = payload.getEvalParameterTypeNames();
@@ -224,7 +228,8 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
         return MethodHandles.publicLookup()
                 .unreflect(method)
                 .bindTo(function)
-                .asType(MethodType.methodType(Object.class, erased));
+                .asType(MethodType.methodType(Object.class, erased))
+                .asSpreader(Object[].class, erased.length);
     }
 
     /** Resolves a declared parameter type; {@link Class#forName} alone cannot name a primitive. */
