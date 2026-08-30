@@ -170,6 +170,21 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("last_day function") {
+    withTable("t1") {
+      sql("create table t1(c1 date) using parquet")
+      sql("""insert into t1 values
+          |  (date'2009-01-12'),
+          |  (date'2024-02-10'),
+          |  (date'2023-02-10'),
+          |  (date'1969-12-01'),
+          |  (null)
+          |""".stripMargin)
+
+      checkSparkAnswerAndOperator("select last_day(c1) from t1")
+    }
+  }
+
   test("date-part functions with non-UTC timezone") {
     withTable("t1") {
       sql("create table t1(c1 timestamp) using parquet")
