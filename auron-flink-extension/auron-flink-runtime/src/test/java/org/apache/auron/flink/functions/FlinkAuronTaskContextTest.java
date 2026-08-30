@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Arrays;
@@ -35,7 +34,6 @@ import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.types.DataType;
-import org.apache.flink.util.InstantiationUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,9 +44,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The serialized UDF payload is byte-identical across subtasks as well as across drain cycles,
  * so it can only key a registry that is itself scoped to one subtask. The wrapper it maps to owns
- * reusable per-call state (an argument array, an output row, converters), which is why sharing one
- * instance between two subtasks would corrupt results. These tests pin both halves of that: reuse
- * within one context, isolation between two.
+ * reusable per-call state (an output row, and whatever its generated invoker holds), which is why
+ * sharing one instance between two subtasks would corrupt results. These tests pin both halves of
+ * that: reuse within one context, isolation between two.
  */
 public class FlinkAuronTaskContextTest {
 
@@ -275,31 +273,14 @@ public class FlinkAuronTaskContextTest {
      * two distinct arrays that are {@link Arrays#equals} — the shape drain cycles hand over.
      */
     private static byte[] payloadBytes(int addend) throws Exception {
-        return InstantiationUtil.serializeObject(FlinkUDFPayload.of(
-                new LifecycleFunction(addend),
-                new DataType[] {DataTypes.INT()},
-                DataTypes.INT(),
-                evalMethod(LifecycleFunction.class),
-                0));
+        return GeneratedUdfTestSupport.payloadBytes(
+                new LifecycleFunction(addend), new DataType[] {DataTypes.INT()}, DataTypes.INT(), 0);
     }
 
     /** Serializes a payload whose function fails in {@code close}. */
     private static byte[] failingPayloadBytes() throws Exception {
-        return InstantiationUtil.serializeObject(FlinkUDFPayload.of(
-                new ThrowsOnCloseFunction(),
-                new DataType[] {DataTypes.INT()},
-                DataTypes.INT(),
-                evalMethod(ThrowsOnCloseFunction.class),
-                0));
-    }
-
-    private static Method evalMethod(Class<? extends ScalarFunction> udfClass) {
-        for (Method method : udfClass.getDeclaredMethods()) {
-            if ("eval".equals(method.getName())) {
-                return method;
-            }
-        }
-        throw new IllegalStateException("no eval method declared on " + udfClass.getName());
+        return GeneratedUdfTestSupport.payloadBytes(
+                new ThrowsOnCloseFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), 0);
     }
 
     /** Fails in {@code close}, so the aggregation of a failing close can be exercised. */

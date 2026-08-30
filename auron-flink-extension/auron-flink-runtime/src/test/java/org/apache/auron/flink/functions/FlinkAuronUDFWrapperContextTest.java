@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -40,12 +39,10 @@ import org.apache.flink.table.data.DecimalData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
-import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.util.InstantiationUtil;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -56,6 +53,11 @@ import org.junit.jupiter.api.Test;
  * C-Data FFI boundary with no native engine involved: the test plays the role the native side
  * plays in production, exporting the parameter columns into an {@link ArrowArray} and importing
  * the single result column back out of a second one.
+ *
+ * <p>What is under test is the boundary, not the invocation: the payloads carry a stand-in invoker
+ * from {@link GeneratedUdfTestSupport} rather than a planner-generated one, because generation
+ * lives in the module that depends on this one. The generated invocation itself is covered where
+ * it is produced.
  */
 public class FlinkAuronUDFWrapperContextTest {
 
@@ -83,19 +85,18 @@ public class FlinkAuronUDFWrapperContextTest {
      */
     @Test
     public void testIdentityConversionTypesRoundTrip() throws Exception {
-        FlinkUDFPayload payload = new FlinkUDFPayload(
-                new WeightedSumFunction(),
-                new DataType[] {
-                    DataTypes.BOOLEAN(), DataTypes.INT(), DataTypes.BIGINT(), DataTypes.DOUBLE(), DataTypes.BYTES()
-                },
-                DataTypes.BIGINT(),
-                evalParameterTypeNames(WeightedSumFunction.class));
+        DataType[] argTypes = {
+            DataTypes.BOOLEAN(), DataTypes.INT(), DataTypes.BIGINT(), DataTypes.DOUBLE(), DataTypes.BYTES()
+        };
+        byte[] payload =
+                GeneratedUdfTestSupport.payloadBytes(new WeightedSumFunction(), argTypes, DataTypes.BIGINT(), 0);
 
         List<RowData> rows = Arrays.asList(
                 row(true, 7, 1_000_000_000_000L, 2.5d, new byte[] {1, 2, 3}),
                 row(false, -3, 5L, -0.5d, new byte[] {7, 7}));
 
-        List<Object> results = evalUdf(payload, rows, r -> r.isNullAt(0) ? null : r.getLong(0));
+        List<Object> results =
+                evalUdf(payload, argTypes, DataTypes.BIGINT(), rows, r -> r.isNullAt(0) ? null : r.getLong(0));
 
         // 1 + 2*7 + 3*1_000_000_000_000 + (long) (4 * 2.5) + 5*3
         // 0 + 2*-3 + 3*5 + (long) (4 * -0.5) + 5*2
@@ -110,11 +111,9 @@ public class FlinkAuronUDFWrapperContextTest {
      */
     @Test
     public void testConvertedTypesRoundTrip() throws Exception {
-        FlinkUDFPayload payload = new FlinkUDFPayload(
-                new ExternalTypesFunction(),
-                new DataType[] {DataTypes.STRING(), DataTypes.DECIMAL(10, 2), DataTypes.DATE()},
-                DataTypes.STRING(),
-                evalParameterTypeNames(ExternalTypesFunction.class));
+        DataType[] argTypes = {DataTypes.STRING(), DataTypes.DECIMAL(10, 2), DataTypes.DATE()};
+        byte[] payload =
+                GeneratedUdfTestSupport.payloadBytes(new ExternalTypesFunction(), argTypes, DataTypes.STRING(), 0);
 
         List<RowData> rows = Arrays.asList(
                 row(StringData.fromString("ab"), DecimalData.fromBigDecimal(new BigDecimal("12.34"), 10, 2), (int)
@@ -123,7 +122,11 @@ public class FlinkAuronUDFWrapperContextTest {
                         LocalDate.of(1969, 12, 31).toEpochDay()));
 
         List<Object> results = evalUdf(
-                payload, rows, r -> r.isNullAt(0) ? null : r.getString(0).toString());
+                payload,
+                argTypes,
+                DataTypes.STRING(),
+                rows,
+                r -> r.isNullAt(0) ? null : r.getString(0).toString());
 
         assertEquals(Arrays.<Object>asList("ab|12.34|2024-02-29", "x|-0.05|1969-12-31"), results);
     }
@@ -134,11 +137,8 @@ public class FlinkAuronUDFWrapperContextTest {
      */
     @Test
     public void testNullsInEveryArgumentPositionAndNullResult() throws Exception {
-        FlinkUDFPayload payload = new FlinkUDFPayload(
-                new NullProbeFunction(),
-                new DataType[] {DataTypes.STRING(), DataTypes.INT(), DataTypes.BIGINT()},
-                DataTypes.STRING(),
-                evalParameterTypeNames(NullProbeFunction.class));
+        DataType[] argTypes = {DataTypes.STRING(), DataTypes.INT(), DataTypes.BIGINT()};
+        byte[] payload = GeneratedUdfTestSupport.payloadBytes(new NullProbeFunction(), argTypes, DataTypes.STRING(), 0);
 
         List<RowData> rows = Arrays.asList(
                 row(null, 2, 3L),
@@ -147,56 +147,13 @@ public class FlinkAuronUDFWrapperContextTest {
                 row(null, null, null));
 
         List<Object> results = evalUdf(
-                payload, rows, r -> r.isNullAt(0) ? null : r.getString(0).toString());
+                payload,
+                argTypes,
+                DataTypes.STRING(),
+                rows,
+                r -> r.isNullAt(0) ? null : r.getString(0).toString());
 
         assertEquals(Arrays.<Object>asList("-/2/3", "a/-/3", "a/2/-", null), results);
-    }
-
-    /**
-     * Contract: an {@code eval} overload declared with primitive parameters is invoked
-     * successfully even though the argument {@link DataType}'s conversion class is the boxed type.
-     *
-     * <p>Binding through {@code MethodHandles.Lookup#findVirtual} with a descriptor built from
-     * {@link DataType#getConversionClass()} cannot find {@code eval(int)}, because the conversion
-     * class of {@code DataTypes.INT()} is {@link Integer}. The payload here deliberately reproduces
-     * that shape: boxed conversion classes on the {@link DataType}s, primitive names in
-     * {@code evalParameterTypeNames}, primitives on the declared method.
-     */
-    @Test
-    public void testPrimitiveParameterEvalIsBound() throws Exception {
-        FlinkUDFPayload payload = new FlinkUDFPayload(
-                new PrimitiveTripleFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), new String[] {"int"});
-
-        List<Object> results =
-                evalUdf(payload, Arrays.asList(row(5), row(-2)), r -> r.isNullAt(0) ? null : r.getInt(0));
-
-        assertEquals(Arrays.<Object>asList(15, -6), results);
-    }
-
-    /**
-     * Contract: parameter {@code i} of the input struct is passed as {@code eval} argument
-     * {@code i}.
-     *
-     * <p>The first two arguments are both {@code STRING} with distinct values, so transposing them
-     * changes the produced value instead of raising a {@link ClassCastException}. A silent
-     * positional swap between two same-typed arguments is invisible to every other test in this
-     * class, which is what this one exists to catch.
-     */
-    @Test
-    public void testParametersBindPositionally() throws Exception {
-        FlinkUDFPayload payload = FlinkUDFPayload.of(
-                new PositionalFunction(),
-                new DataType[] {DataTypes.STRING(), DataTypes.STRING(), DataTypes.INT()},
-                DataTypes.STRING(),
-                evalMethod(PositionalFunction.class),
-                0);
-
-        List<RowData> rows = Arrays.asList(row(StringData.fromString("alpha"), StringData.fromString("beta"), 7));
-
-        List<Object> results = evalUdf(
-                payload, rows, r -> r.isNullAt(0) ? null : r.getString(0).toString());
-
-        assertEquals(Arrays.<Object>asList("alpha|beta|7"), results);
     }
 
     /**
@@ -205,21 +162,51 @@ public class FlinkAuronUDFWrapperContextTest {
      * diagnosable.
      */
     @Test
-    public void testEvalFailureNamesTheUdfClass() {
-        FlinkUDFPayload payload = new FlinkUDFPayload(
-                new ThrowingFunction(),
-                new DataType[] {DataTypes.INT()},
-                DataTypes.INT(),
-                evalParameterTypeNames(ThrowingFunction.class));
+    public void testEvalFailureNamesTheUdfClass() throws Exception {
+        DataType[] argTypes = {DataTypes.INT()};
+        byte[] payload = GeneratedUdfTestSupport.payloadBytes(new ThrowingFunction(), argTypes, DataTypes.INT(), 0);
 
         IllegalStateException thrown = assertThrows(
                 IllegalStateException.class,
-                () -> evalUdf(payload, Arrays.asList(row(1)), r -> r.isNullAt(0) ? null : r.getInt(0)));
+                () -> evalUdf(
+                        payload,
+                        argTypes,
+                        DataTypes.INT(),
+                        Arrays.asList(row(1)),
+                        r -> r.isNullAt(0) ? null : r.getInt(0)));
 
         String chain = describeChain(thrown);
         assertTrue(
                 chain.contains(ThrowingFunction.class.getSimpleName()),
                 "eval failure must name the UDF class, but the exception chain was: " + chain);
+    }
+
+    /**
+     * Contract: an invoker whose source does not compile surfaces an exception naming the UDF
+     * class.
+     *
+     * <p>The compiler's own message advises reporting a Flink bug and names only the synthetic
+     * class it was compiling, which tells a user with a broken function nothing. Every other
+     * failure on this path already names the function; construction is the one that has to be made
+     * to.
+     *
+     * <p>What this pins is the rethrow, not how widely the load path catches. The fixture fails
+     * inside the compiler, which surfaces it as an unchecked exception, so a narrower catch would
+     * satisfy this test identically.
+     */
+    @Test
+    public void testInvokerLoadFailureNamesTheUdfClass() throws Exception {
+        byte[] payload = GeneratedUdfTestSupport.uncompilablePayloadBytes(
+                new PrimitiveTripleFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT());
+
+        IllegalStateException thrown = assertThrows(
+                IllegalStateException.class,
+                () -> new FlinkAuronUDFWrapperContext(
+                        payload, FlinkAuronUDFWrapperContextTest.class.getClassLoader(), null));
+
+        assertTrue(
+                thrown.getMessage().contains(PrimitiveTripleFunction.class.getName()),
+                "the load failure must name the UDF class, but the message was: " + thrown.getMessage());
     }
 
     /**
@@ -233,19 +220,17 @@ public class FlinkAuronUDFWrapperContextTest {
      */
     @Test
     public void testRepeatedEvalOnOneContextStaysCorrect() throws Exception {
-        FlinkUDFPayload payload = FlinkUDFPayload.of(
-                new PositionalFunction(),
-                new DataType[] {DataTypes.STRING(), DataTypes.STRING(), DataTypes.INT()},
-                DataTypes.STRING(),
-                evalMethod(PositionalFunction.class),
-                0);
+        DataType[] argTypes = {DataTypes.STRING(), DataTypes.STRING(), DataTypes.INT()};
+        byte[] payload =
+                GeneratedUdfTestSupport.payloadBytes(new PositionalFunction(), argTypes, DataTypes.STRING(), 0);
 
-        FlinkAuronUDFWrapperContext context = new FlinkAuronUDFWrapperContext(
-                serialize(payload), FlinkAuronUDFWrapperContextTest.class.getClassLoader(), new FunctionContext(null));
+        FlinkAuronUDFWrapperContext context =
+                new FlinkAuronUDFWrapperContext(payload, FlinkAuronUDFWrapperContextTest.class.getClassLoader(), null);
         try {
             List<Object> first = evalOn(
                     context,
-                    payload,
+                    argTypes,
+                    DataTypes.STRING(),
                     Arrays.asList(
                             row(StringData.fromString("a"), StringData.fromString("b"), 1),
                             row(StringData.fromString("c"), StringData.fromString("d"), 2)),
@@ -254,7 +239,8 @@ public class FlinkAuronUDFWrapperContextTest {
 
             List<Object> second = evalOn(
                     context,
-                    payload,
+                    argTypes,
+                    DataTypes.STRING(),
                     Arrays.asList(row(StringData.fromString("e"), StringData.fromString("f"), 3)),
                     r -> r.isNullAt(0) ? null : r.getString(0).toString());
             assertEquals(Arrays.<Object>asList("e|f|3"), second);
@@ -274,28 +260,29 @@ public class FlinkAuronUDFWrapperContextTest {
      */
     @Test
     public void testRootAllocatorIsReleasedOnBothSuccessAndFailure() throws Exception {
-        FlinkUDFPayload ok = FlinkUDFPayload.of(
-                new PrimitiveTripleFunction(),
-                new DataType[] {DataTypes.INT()},
-                DataTypes.INT(),
-                evalMethod(PrimitiveTripleFunction.class),
-                0);
-        FlinkUDFPayload boom = FlinkUDFPayload.of(
-                new ThrowingFunction(),
-                new DataType[] {DataTypes.INT()},
-                DataTypes.INT(),
-                evalMethod(ThrowingFunction.class),
-                0);
+        DataType[] argTypes = {DataTypes.INT()};
+        byte[] ok = GeneratedUdfTestSupport.payloadBytes(new PrimitiveTripleFunction(), argTypes, DataTypes.INT(), 0);
+        byte[] boom = GeneratedUdfTestSupport.payloadBytes(new ThrowingFunction(), argTypes, DataTypes.INT(), 0);
 
         long baseline = FlinkArrowUtils.getRootAllocator().getAllocatedMemory();
 
         for (int i = 0; i < 25; i++) {
             assertEquals(
                     Arrays.<Object>asList(3 * i),
-                    evalUdf(ok, Arrays.asList(row(i)), r -> r.isNullAt(0) ? null : r.getInt(0)));
+                    evalUdf(
+                            ok,
+                            argTypes,
+                            DataTypes.INT(),
+                            Arrays.asList(row(i)),
+                            r -> r.isNullAt(0) ? null : r.getInt(0)));
             assertThrows(
                     IllegalStateException.class,
-                    () -> evalUdf(boom, Arrays.asList(row(1)), r -> r.isNullAt(0) ? null : r.getInt(0)));
+                    () -> evalUdf(
+                            boom,
+                            argTypes,
+                            DataTypes.INT(),
+                            Arrays.asList(row(1)),
+                            r -> r.isNullAt(0) ? null : r.getInt(0)));
         }
 
         assertEquals(
@@ -349,11 +336,7 @@ public class FlinkAuronUDFWrapperContextTest {
         }
     }
 
-    /**
-     * Renders its arguments in declaration order. The first two parameters share a type on purpose:
-     * where parameter types are mutually incompatible a positional swap dies on a
-     * {@link ClassCastException}, which any test would catch, rather than producing a wrong value.
-     */
+    /** Renders its arguments in declaration order, so a stale value from an earlier call shows up. */
     public static class PositionalFunction extends ScalarFunction {
         private static final long serialVersionUID = 1L;
 
@@ -390,12 +373,17 @@ public class FlinkAuronUDFWrapperContextTest {
      * imported from an initially empty {@link ArrowArray} against
      * {@code toArrowSchema(RowType.of(returnLogicalType))}.
      */
-    private static List<Object> evalUdf(FlinkUDFPayload payload, List<RowData> inputRows, ResultExtractor extractor)
+    private static List<Object> evalUdf(
+            byte[] payload,
+            DataType[] argTypes,
+            DataType returnType,
+            List<RowData> inputRows,
+            ResultExtractor extractor)
             throws Exception {
-        FlinkAuronUDFWrapperContext context = new FlinkAuronUDFWrapperContext(
-                serialize(payload), FlinkAuronUDFWrapperContextTest.class.getClassLoader(), new FunctionContext(null));
+        FlinkAuronUDFWrapperContext context =
+                new FlinkAuronUDFWrapperContext(payload, FlinkAuronUDFWrapperContextTest.class.getClassLoader(), null);
         try {
-            return evalOn(context, payload, inputRows, extractor);
+            return evalOn(context, argTypes, returnType, inputRows, extractor);
         } finally {
             context.close();
         }
@@ -407,17 +395,17 @@ public class FlinkAuronUDFWrapperContextTest {
      */
     private static List<Object> evalOn(
             FlinkAuronUDFWrapperContext context,
-            FlinkUDFPayload payload,
+            DataType[] argTypes,
+            DataType returnType,
             List<RowData> inputRows,
             ResultExtractor extractor)
             throws Exception {
-        DataType[] argTypes = payload.getArgTypes();
         LogicalType[] argLogicalTypes = new LogicalType[argTypes.length];
         for (int i = 0; i < argTypes.length; i++) {
             argLogicalTypes[i] = argTypes[i].getLogicalType();
         }
         RowType paramsRowType = RowType.of(argLogicalTypes);
-        RowType resultRowType = RowType.of(payload.getReturnType().getLogicalType());
+        RowType resultRowType = RowType.of(returnType.getLogicalType());
 
         List<Object> results = new ArrayList<>();
         try (BufferAllocator allocator = FlinkArrowUtils.createChildAllocator("udfWrapperTest")) {
@@ -451,39 +439,6 @@ public class FlinkAuronUDFWrapperContextTest {
             }
         }
         return results;
-    }
-
-    /** Serializes the payload the way the planner does. */
-    private static byte[] serialize(FlinkUDFPayload payload) throws Exception {
-        return InstantiationUtil.serializeObject(payload);
-    }
-
-    /**
-     * Reads the declared parameter type names off the fixture's single {@code eval} overload, in
-     * the {@link Class#getName()} form the payload carries ({@code "int"}, {@code "[B"},
-     * {@code "java.lang.String"}).
-     */
-    private static Method evalMethod(Class<? extends ScalarFunction> udfClass) {
-        for (Method method : udfClass.getDeclaredMethods()) {
-            if ("eval".equals(method.getName())) {
-                return method;
-            }
-        }
-        throw new IllegalStateException("no eval method declared on " + udfClass.getName());
-    }
-
-    private static String[] evalParameterTypeNames(Class<? extends ScalarFunction> udfClass) {
-        for (Method method : udfClass.getDeclaredMethods()) {
-            if ("eval".equals(method.getName())) {
-                Class<?>[] parameterTypes = method.getParameterTypes();
-                String[] names = new String[parameterTypes.length];
-                for (int i = 0; i < parameterTypes.length; i++) {
-                    names[i] = parameterTypes[i].getName();
-                }
-                return names;
-            }
-        }
-        throw new IllegalStateException("no eval method declared on " + udfClass.getName());
     }
 
     private static RowData row(Object... fields) {

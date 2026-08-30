@@ -27,7 +27,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.auron.flink.functions.FlinkAuronTaskContext;
 import org.apache.auron.flink.functions.FlinkAuronUDFWrapperContext;
-import org.apache.auron.flink.functions.FlinkUDFPayload;
+import org.apache.auron.flink.functions.GeneratedUdfTestSupport;
 import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.jni.AuronAdaptor;
 import org.apache.auron.jni.FlinkAuronAdaptor;
@@ -35,7 +35,6 @@ import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.types.DataType;
-import org.apache.flink.util.InstantiationUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -175,11 +174,8 @@ public class FlinkAuronAdaptorTest {
     }
 
     private static byte[] payloadBytes() throws Exception {
-        FlinkUDFPayload payload = new FlinkUDFPayload(
-                new PlusOneFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), new String[] {
-                    Integer.class.getName()
-                });
-        return InstantiationUtil.serializeObject(payload);
+        return GeneratedUdfTestSupport.payloadBytes(
+                new PlusOneFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), 0);
     }
 
     private static ByteBuffer directBuffer(byte[] bytes) {

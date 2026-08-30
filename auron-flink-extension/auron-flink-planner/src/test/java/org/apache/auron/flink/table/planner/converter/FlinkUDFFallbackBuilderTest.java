@@ -16,7 +16,6 @@
  */
 package org.apache.auron.flink.table.planner.converter;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -129,7 +128,8 @@ class FlinkUDFFallbackBuilderTest {
      * <p>The runtime keys its wrapper registry on those bytes, because the native callback carries
      * nothing else, so byte-equal payloads would collapse two call sites onto one user function
      * instance. Building the same call twice is the strongest form of the case: every input to the
-     * payload matches, and only the per-node ordinal separates them.
+     * payload matches, and only the per-node ordinal and the name the invoker was generated under
+     * separate them.
      */
     @Test
     void testEachWrapperNodeGetsDistinctPayloadBytes() {
@@ -162,9 +162,15 @@ class FlinkUDFFallbackBuilderTest {
         assertFalse(notNullWrapper.getReturnNullable());
     }
 
-    /** The serialized blob round-trips to the same function, argument types, return type and eval parameters. */
+    /**
+     * The serialized blob round-trips to the argument and return types the call carried, in
+     * argument order, and names the function class.
+     *
+     * <p>Those types are what the runtime builds its Arrow schemas from, so a transposed or dropped
+     * entry surfaces there as a decode against the wrong column type rather than as a wrong value.
+     */
     @Test
-    void testBlobDeserializesToTheSameFunctionAndTypes() throws Exception {
+    void testBlobDeserializesToTheCallsTypes() throws Exception {
         RexCall call = udfCall(varcharType(), new ConcatFunction(), strRef(3), intRef(0));
 
         PhysicalUDFWrapperExprNode wrapper =
@@ -172,7 +178,6 @@ class FlinkUDFFallbackBuilderTest {
         FlinkUDFPayload payload = InstantiationUtil.deserializeObject(
                 wrapper.getSerialized().toByteArray(), getClass().getClassLoader());
 
-        assertTrue(payload.getFunction() instanceof ConcatFunction);
         DataType[] argTypes = payload.getArgTypes();
         assertEquals(2, argTypes.length);
         assertEquals(LogicalTypeRoot.VARCHAR, argTypes[0].getLogicalType().getTypeRoot());
@@ -180,7 +185,7 @@ class FlinkUDFFallbackBuilderTest {
         assertEquals(
                 LogicalTypeRoot.VARCHAR,
                 payload.getReturnType().getLogicalType().getTypeRoot());
-        assertArrayEquals(new String[] {"java.lang.String", "int"}, payload.getEvalParameterTypeNames());
+        assertEquals(ConcatFunction.class.getName(), payload.getUdfClassName());
     }
 
     /** A {@code TIME} argument is declined: the Auron Arrow type table cannot represent it at all. */
@@ -207,12 +212,16 @@ class FlinkUDFFallbackBuilderTest {
         assertFalse(buildFor(call).isPresent());
     }
 
-    /** Two invokable eval overloads decline rather than silently picking one javac would not. */
+    /**
+     * Competing {@code eval} overloads are admitted. Which one runs is settled while the invocation
+     * is generated, by the same resolution the query would get without Auron, so there is nothing
+     * left here to guess at.
+     */
     @Test
-    void testDeclinesAmbiguousEvalOverloads() {
+    void testAdmitsCompetingEvalOverloads() {
         RexCall call = udfCall(varcharType(), new AmbiguousFunction(), strRef(3));
 
-        assertFalse(buildFor(call).isPresent());
+        assertTrue(buildFor(call).isPresent());
     }
 
     /**
@@ -232,9 +241,8 @@ class FlinkUDFFallbackBuilderTest {
     }
 
     /**
-     * A UDF whose class is not public is declined. Flink's own instance preparation is what rejects
-     * it, so the runtime never reaches the public method-handle lookup that such a class would also
-     * fail.
+     * A UDF whose class is not public is declined. Flink's own validation is what rejects it, and
+     * the generated source could not name such a class either.
      */
     @Test
     void testDeclinesUdfWithInaccessibleClass() {

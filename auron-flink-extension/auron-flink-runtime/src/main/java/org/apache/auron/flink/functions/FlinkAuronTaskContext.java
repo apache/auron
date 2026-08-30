@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.functions.RuntimeContext;
-import org.apache.flink.table.functions.FunctionContext;
 
 /**
  * Subtask-scoped state the native engine reaches through the thread-context channel.
@@ -31,11 +30,13 @@ import org.apache.flink.table.functions.FunctionContext;
  * it on every worker thread of that runtime's pool, so a callback arriving on a worker can find
  * the state belonging to the subtask it is working for.
  *
- * <p>It carries two things:
+ * <p>It carries three things:
  *
  * <ul>
  *   <li>the user-code classloader, taken from the runtime context rather than from the thread's
  *       context classloader, which is what Flink itself uses wherever it loads user code;
+ *   <li>the subtask's runtime context, which every generated user-function invoker this context
+ *       opens turns into the {@code FunctionContext} the user function expects;
  *   <li>a registry of {@link FlinkAuronUDFWrapperContext}s, so a wrapper is built once per subtask
  *       instead of once per drain cycle.
  * </ul>
@@ -43,7 +44,7 @@ import org.apache.flink.table.functions.FunctionContext;
  * <p>The registry is deliberately owned by this per-subtask object rather than being a static map
  * keyed on the payload. Every subtask of an operator deserializes the same operator bytes, so the
  * payloads two subtasks present are byte-identical and could not tell them apart. A wrapper reuses
- * an argument array, an output row and its converters across evaluations, and each subtask is
+ * an output row and its generated invoker's own state across evaluations, and each subtask is
  * entitled to its own {@code ScalarFunction} instance, so two subtasks sharing one wrapper would
  * corrupt results. Confining the registry to one subtask limits sharing to identical wrapper nodes
  * within a single subtask's own plan, which is the case the wrapper's own reuse argument covers.
@@ -54,7 +55,7 @@ public final class FlinkAuronTaskContext implements AutoCloseable {
 
     private final ClassLoader userCodeClassLoader;
 
-    private final FunctionContext functionContext;
+    private final RuntimeContext runtimeContext;
 
     /**
      * Keyed on the payload contents: {@link ByteBuffer#equals} and {@link ByteBuffer#hashCode} are
@@ -67,12 +68,11 @@ public final class FlinkAuronTaskContext implements AutoCloseable {
      * Creates the context for one subtask.
      *
      * @param runtimeContext the operator's runtime context, which supplies the user-code
-     *     classloader and backs the {@link FunctionContext} handed to every user function this
-     *     context opens
+     *     classloader and is handed to every generated user-function invoker this context opens
      */
     public FlinkAuronTaskContext(RuntimeContext runtimeContext) {
         this.userCodeClassLoader = runtimeContext.getUserCodeClassLoader();
-        this.functionContext = new FunctionContext(runtimeContext);
+        this.runtimeContext = runtimeContext;
     }
 
     /**
@@ -119,10 +119,10 @@ public final class FlinkAuronTaskContext implements AutoCloseable {
      * Returns the wrapper for {@code payload}, building it on the first request and reusing it on
      * every later one.
      *
-     * <p>Reuse is what gives the user function a once-per-subtask lifecycle: the function is
-     * deserialized and opened when the wrapper is built, and closed when this context is closed,
-     * rather than being rebuilt on each of the roughly five drain cycles a busy subtask runs per
-     * second.
+     * <p>Reuse is what gives the user function a once-per-subtask lifecycle: the generated
+     * invoker is compiled and opened when the wrapper is built, and closed when this context is
+     * closed, rather than being rebuilt on each of the roughly five drain cycles a busy subtask
+     * runs per second.
      *
      * @param payload the serialized {@link FlinkUDFPayload} the planner attached to the expression
      * @return the wrapper for that payload
@@ -131,7 +131,7 @@ public final class FlinkAuronTaskContext implements AutoCloseable {
     public AuronUDFWrapperContext getOrCreateWrapper(byte[] payload) {
         return wrappers.computeIfAbsent(ByteBuffer.wrap(payload), key -> {
             try {
-                return new FlinkAuronUDFWrapperContext(payload, userCodeClassLoader, functionContext);
+                return new FlinkAuronUDFWrapperContext(payload, userCodeClassLoader, runtimeContext);
             } catch (Exception e) {
                 throw new IllegalStateException("error creating Flink UDF wrapper context", e);
             }

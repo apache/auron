@@ -42,7 +42,7 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.auron.flink.arrow.FlinkArrowFFIExporter;
 import org.apache.auron.flink.functions.FlinkAuronTaskContext;
-import org.apache.auron.flink.functions.FlinkUDFPayload;
+import org.apache.auron.flink.functions.GeneratedUdfTestSupport;
 import org.apache.auron.functions.AuronUDFWrapperContext;
 import org.apache.auron.jni.JniBridge;
 import org.apache.auron.protobuf.FFIReaderExecNode;
@@ -75,7 +75,6 @@ import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.OutputTag;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -742,11 +741,8 @@ public class FlinkAuronCalcOperatorTest {
 
     /** Serializes the fixture UDF payload the way the planner does. */
     private static byte[] udfPayloadBytes() throws Exception {
-        FlinkUDFPayload payload = new FlinkUDFPayload(
-                new CloseCountingFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), new String[] {
-                    Integer.class.getName()
-                });
-        return InstantiationUtil.serializeObject(payload);
+        return GeneratedUdfTestSupport.payloadBytes(
+                new CloseCountingFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), 0);
     }
 
     private static FlinkAuronTaskContext readTaskContext(FlinkAuronCalcOperator op) throws Exception {

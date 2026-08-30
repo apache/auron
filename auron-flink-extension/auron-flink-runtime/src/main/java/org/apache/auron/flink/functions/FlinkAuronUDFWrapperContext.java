@@ -16,13 +16,6 @@
  */
 package org.apache.auron.flink.functions;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 import org.apache.arrow.c.ArrowArray;
 import org.apache.arrow.c.Data;
 import org.apache.arrow.memory.BufferAllocator;
@@ -34,17 +27,14 @@ import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.arrow.FlinkArrowWriter;
 import org.apache.auron.functions.AuronUDFWrapperContext;
+import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.data.conversion.DataStructureConverter;
-import org.apache.flink.table.data.conversion.DataStructureConverters;
-import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
-import org.apache.flink.table.functions.UserDefinedFunctionHelper;
+import org.apache.flink.table.runtime.generated.CompileUtils;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.table.types.utils.DataTypeUtils;
 import org.apache.flink.util.InstantiationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,31 +44,22 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The native side hands over two Arrow C-Data array pointers per call: the first holds a struct
  * array whose field {@code i} carries the values of {@code eval} argument {@code i}, and the second
- * is an empty struct the single result column is exported into. Values arrive in Flink's internal
- * representation, are converted to the external representation the user function declares, and the
- * returned value is converted back before it is written out.
+ * is an empty struct the single result column is exported into. Values arrive and leave in Flink's
+ * internal representation; the conversions to and from the representation the user function
+ * declares live inside the generated class this context drives, alongside the {@code eval} call
+ * itself.
  *
  * <p>An instance is retained for the lifetime of one subtask by {@link FlinkAuronTaskContext}, so
- * the user function is deserialized and opened once per subtask and closed when that context is
- * closed.
+ * the generated class is compiled and instantiated once per subtask, the user function behind it is
+ * opened once, and it is closed when that context is closed.
  */
 public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkAuronUDFWrapperContext.class);
 
-    private static final Map<String, Class<?>> PRIMITIVE_CLASSES = primitiveClasses();
+    private final AuronGeneratedUDF generated;
 
-    private final ScalarFunction function;
-
-    private final MethodHandle evalHandle;
-
-    private final RowData.FieldGetter[] fieldGetters;
-
-    /** One entry per argument; null where the internal and external representations coincide. */
-    private final DataStructureConverter<Object, Object>[] argConverters;
-
-    /** Null where the internal and external representations of the return type coincide. */
-    private final DataStructureConverter<Object, Object> returnConverter;
+    private final String udfClassName;
 
     private final RowType paramsRowType;
 
@@ -97,8 +78,6 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
 
     private final DictionaryProvider dictionaries = new MapDictionaryProvider();
 
-    private final Object[] args;
-
     private final GenericRowData outputRow = new GenericRowData(1);
 
     /**
@@ -111,17 +90,20 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
      * @param serialized the serialized {@link FlinkUDFPayload}
      * @param userCodeClassLoader the classloader that can see the user function class; taken from
      *     the runtime context rather than from the calling thread, matching where Flink itself
-     *     loads user code from
-     * @param functionContext the context handed to the user function's {@code open}
-     * @throws Exception if the payload cannot be deserialized, the {@code eval} overload it names
-     *     cannot be resolved on the user function, or the function's {@code open} fails
+     *     loads user code from. It is also the only loader that can see both the user function and
+     *     the Auron interface the generated class implements, which is why it is what compiles it.
+     * @param runtimeContext the runtime context the generated class builds the user function's
+     *     {@code FunctionContext} from
+     * @throws Exception if the payload cannot be deserialized, the generated source cannot be
+     *     compiled or instantiated, or the function's {@code open} fails. Every failure past
+     *     deserialization names the user function class, because a message naming only the
+     *     generated class tells a user with a broken function nothing about which one it is.
      */
-    @SuppressWarnings("unchecked")
     public FlinkAuronUDFWrapperContext(
-            byte[] serialized, ClassLoader userCodeClassLoader, FunctionContext functionContext) throws Exception {
+            byte[] serialized, ClassLoader userCodeClassLoader, RuntimeContext runtimeContext) throws Exception {
         FlinkUDFPayload payload = InstantiationUtil.deserializeObject(serialized, userCodeClassLoader);
 
-        this.function = payload.getFunction();
+        this.udfClassName = payload.getUdfClassName();
         DataType[] argTypes = payload.getArgTypes();
         DataType returnType = payload.getReturnType();
 
@@ -134,41 +116,52 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
         this.paramsArrowSchema = FlinkArrowUtils.toArrowSchema(paramsRowType);
         this.outputArrowSchema = FlinkArrowUtils.toArrowSchema(outputRowType);
 
-        this.fieldGetters = new RowData.FieldGetter[argTypes.length];
-        // Generic arrays cannot be created directly; every element written below is a
-        // DataStructureConverter<Object, Object> returned by DataStructureConverters.
-        DataStructureConverter<Object, Object>[] converters = new DataStructureConverter[argTypes.length];
-        for (int i = 0; i < argTypes.length; i++) {
-            fieldGetters[i] = RowData.createFieldGetter(argLogicalTypes[i], i);
-            if (!DataTypeUtils.isInternal(argTypes[i])) {
-                converters[i] = DataStructureConverters.getConverter(argTypes[i]);
-                converters[i].open(userCodeClassLoader);
-            }
-        }
-        this.argConverters = converters;
-
-        if (DataTypeUtils.isInternal(returnType)) {
-            this.returnConverter = null;
-        } else {
-            this.returnConverter = DataStructureConverters.getConverter(returnType);
-            this.returnConverter.open(userCodeClassLoader);
-        }
-
-        this.args = new Object[argTypes.length];
-        this.evalHandle = bindEval(payload, userCodeClassLoader);
+        this.generated = instantiate(payload, userCodeClassLoader);
         // Last, so a function that acquires resources in open() does so only once everything it
         // will be evaluated through has been built successfully.
-        function.open(functionContext);
-        LOG.debug("Initialized UDF wrapper for {}", function.getClass().getName());
+        generated.open(runtimeContext);
+        LOG.debug("Initialized UDF wrapper for {}", udfClassName);
+    }
+
+    /**
+     * Compiles and instantiates the invoker the payload carries.
+     *
+     * <p>A compile failure arrives from {@code CompileUtils} as an advice to report a Flink bug,
+     * naming only the synthetic class it was compiling. Neither half is true or useful here: the
+     * source is Auron's, and what the reader needs is the user function it was generated for. The
+     * source itself goes to the log rather than into the message, because it is many lines long and
+     * this exception travels back across the native boundary.
+     *
+     * <p>The catch is on {@link Throwable} rather than {@link Exception} because the failures that
+     * most need the function named are errors: loading the generated class links the user function,
+     * so a missing dependency of it arrives as {@code NoClassDefFoundError} and a throwing static
+     * initializer as {@code ExceptionInInitializerError}. Nothing is swallowed — every catch here
+     * rethrows.
+     */
+    private AuronGeneratedUDF instantiate(FlinkUDFPayload payload, ClassLoader userCodeClassLoader) {
+        try {
+            Class<?> compiled = CompileUtils.compile(userCodeClassLoader, payload.getClassName(), payload.getCode());
+            return (AuronGeneratedUDF)
+                    compiled.getConstructor(Object[].class).newInstance((Object) payload.getReferences());
+        } catch (Throwable t) {
+            LOG.debug(
+                    "Generated invoker for Flink UDF {} failed to load. Source:\n{}",
+                    udfClassName,
+                    payload.getCode(),
+                    t);
+            throw new IllegalStateException(
+                    "Flink UDF " + udfClassName + " failed while loading its generated invoker", t);
+        }
     }
 
     /**
      * Evaluates the function once per row of the imported batch.
      *
-     * <p>The {@code args} array, the output row and the argument converters are reused across rows
-     * and across calls. None of them is thread-safe, and nothing in the native expression interface
-     * forbids a concurrent call: the expression is shared between threads and its evaluation entry
-     * takes a shared reference, so the safety here is not a guarantee the engine makes.
+     * <p>The output row is reused across rows and across calls, and so is whatever per-instance
+     * state the generated class holds. None of it is thread-safe, and nothing in the native
+     * expression interface forbids a concurrent call: the expression is shared between threads and
+     * its evaluation entry takes a shared reference, so the safety here is not a guarantee the
+     * engine makes.
      *
      * <p>What makes the reuse safe is how Auron schedules the plan. A Flink native runtime executes
      * exactly one partition, and no plan Auron builds contains a node that fans evaluation of one
@@ -200,20 +193,15 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
             for (int row = 0; row < rowCount; row++) {
                 // The reader hands back one reused row instance, which this loop never retains.
                 RowData paramsRow = reader.read(row);
-                for (int i = 0; i < args.length; i++) {
-                    Object internal = fieldGetters[i].getFieldOrNull(paramsRow);
-                    args[i] = argConverters[i] == null ? internal : argConverters[i].toExternalOrNull(internal);
-                }
-                Object external = (Object) evalHandle.invokeExact(args);
-                outputRow.setField(0, returnConverter == null ? external : returnConverter.toInternalOrNull(external));
+                Object internal = generated.eval(paramsRow);
+                outputRow.setField(0, internal);
                 writer.write(outputRow);
             }
             writer.finish();
 
             Data.exportVectorSchemaRoot(allocator, outputRoot, dictionaries, exportArray);
         } catch (Throwable t) {
-            throw new IllegalStateException(
-                    "Flink UDF " + function.getClass().getName() + " failed during evaluation", t);
+            throw new IllegalStateException("Flink UDF " + udfClassName + " failed during evaluation", t);
         }
     }
 
@@ -226,58 +214,9 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
     @Override
     public void close() {
         try {
-            function.close();
+            generated.close();
         } catch (Exception e) {
-            throw new IllegalStateException("Flink UDF " + function.getClass().getName() + " failed while closing", e);
+            throw new IllegalStateException("Flink UDF " + udfClassName + " failed while closing", e);
         }
-    }
-
-    /**
-     * Binds the single {@code eval} overload the planner selected to the function instance.
-     *
-     * <p>{@code unreflect} takes the whole descriptor from the resolved {@link Method}, so only the
-     * parameter types have to be recovered from the payload and the return type never has to be
-     * named separately — which {@code findVirtual} would require, and which the payload does not
-     * carry. The {@code asType} adaptation then inserts the boxing and widening the erased call
-     * site needs.
-     *
-     * <p>The handle is spread over an {@code Object[]} so the per-row call can be an
-     * {@code invokeExact}, the one invocation form the JIT can inline. The looser forms re-derive
-     * the adaptation on every call.
-     */
-    private MethodHandle bindEval(FlinkUDFPayload payload, ClassLoader classLoader) throws Exception {
-        String[] parameterTypeNames = payload.getEvalParameterTypeNames();
-        Class<?>[] declared = new Class<?>[parameterTypeNames.length];
-        for (int i = 0; i < declared.length; i++) {
-            declared[i] = resolveClass(parameterTypeNames[i], classLoader);
-        }
-        Method method = function.getClass().getMethod(UserDefinedFunctionHelper.SCALAR_EVAL, declared);
-        Class<?>[] erased = new Class<?>[declared.length];
-        Arrays.fill(erased, Object.class);
-        return MethodHandles.publicLookup()
-                .unreflect(method)
-                .bindTo(function)
-                .asType(MethodType.methodType(Object.class, erased))
-                .asSpreader(Object[].class, erased.length);
-    }
-
-    /** Resolves a declared parameter type; {@link Class#forName} alone cannot name a primitive. */
-    private static Class<?> resolveClass(String name, ClassLoader classLoader) throws ClassNotFoundException {
-        Class<?> primitive = PRIMITIVE_CLASSES.get(name);
-        return primitive != null ? primitive : Class.forName(name, true, classLoader);
-    }
-
-    private static Map<String, Class<?>> primitiveClasses() {
-        Map<String, Class<?>> classes = new HashMap<>();
-        classes.put("boolean", boolean.class);
-        classes.put("byte", byte.class);
-        classes.put("short", short.class);
-        classes.put("int", int.class);
-        classes.put("long", long.class);
-        classes.put("float", float.class);
-        classes.put("double", double.class);
-        classes.put("char", char.class);
-        classes.put("void", void.class);
-        return classes;
     }
 }

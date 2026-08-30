@@ -45,6 +45,7 @@ import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.extraction.ExtractionUtils;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
+import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.utils.TypeConversions;
 import org.apache.flink.util.InstantiationUtil;
 import org.slf4j.Logger;
@@ -55,12 +56,13 @@ import org.slf4j.LoggerFactory;
  * expression node, so that the surrounding Calc keeps running natively while the function itself is
  * evaluated by an upcall into the JVM.
  *
- * <p>The wrapper carries the resolved function instance and its argument and return types inside an
- * opaque serialized blob, plus one native parameter expression per {@code eval} argument. It is
- * emitted in place of the call, so the native parent's own evaluation semantics govern it.
+ * <p>The wrapper carries the generated invoker for the call, the function instance it holds, and
+ * the argument and return types inside an opaque serialized blob, plus one native parameter
+ * expression per {@code eval} argument. It is emitted in place of the call, so the native
+ * parent's own evaluation semantics govern it.
  *
- * <p>This is a coverage feature rather than a performance one: a JVM upcall per batch with a
- * reflective per-row {@code eval} is slower than a native expression. What it buys is that the rest
+ * <p>This is a coverage feature rather than a performance one: a JVM upcall per batch is slower
+ * than a native expression, whatever the invocation inside it costs. What it buys is that the rest
  * of the Calc no longer falls back along with the function.
  *
  * <p>A function overriding {@code open} or {@code close} is admitted. The runtime retains one
@@ -170,6 +172,7 @@ public final class FlinkUDFFallbackBuilder {
         }
 
         DataType[] argTypes = new DataType[operands.size()];
+        LogicalType[] argLogicalTypes = new LogicalType[operands.size()];
         for (int i = 0; i < operands.size(); i++) {
             LogicalType argLogicalType =
                     FlinkTypeFactory.toLogicalType(operands.get(i).getType());
@@ -177,12 +180,12 @@ public final class FlinkUDFFallbackBuilder {
                 return decline(
                         udf, "argument " + i + " of type " + argLogicalType.asSummaryString() + " is not supported");
             }
+            argLogicalTypes[i] = argLogicalType;
             argTypes[i] = TypeConversions.fromLogicalToDataType(argLogicalType);
         }
         DataType returnType = TypeConversions.fromLogicalToDataType(returnLogicalType);
 
-        Optional<Method> evalMethod = selectEvalMethod(udf, argTypes, returnType);
-        if (!evalMethod.isPresent()) {
+        if (!isEvalAdmissible(udf, argTypes, returnType)) {
             return Optional.empty();
         }
         if (!isPreparable(udf, context)) {
@@ -198,10 +201,22 @@ public final class FlinkUDFFallbackBuilder {
             params.add(converted.get());
         }
 
+        Optional<FlinkUDFCodeGenerator.GeneratedCode> generated = FlinkUDFCodeGenerator.generate(
+                call, RowType.of(argLogicalTypes), context.getTableConfig(), context.getClassLoader());
+        if (!generated.isPresent()) {
+            return Optional.empty();
+        }
+
         byte[] blob;
         try {
-            blob = InstantiationUtil.serializeObject(
-                    FlinkUDFPayload.of(udf, argTypes, returnType, evalMethod.get(), context.nextUdfWrapperOrdinal()));
+            blob = InstantiationUtil.serializeObject(new FlinkUDFPayload(
+                    generated.get().getClassName(),
+                    generated.get().getCode(),
+                    generated.get().getReferences(),
+                    argTypes,
+                    returnType,
+                    udf.getClass().getName(),
+                    context.nextUdfWrapperOrdinal()));
         } catch (Exception e) {
             LOG.debug(
                     "Cannot serialize Flink UDF {}; the call falls back.",
@@ -268,20 +283,28 @@ public final class FlinkUDFFallbackBuilder {
     }
 
     /**
-     * Resolves the single {@code eval} overload the wrapper will invoke, or empty if the selection is
-     * not unambiguous.
+     * Returns whether the {@code eval} the call resolves to can be admitted.
      *
-     * <p>Accepting exactly one candidate rather than the first invokable one is what keeps the answer
-     * equal to the one the same query produces without Auron. Flink compiles a literal Java call and
-     * lets javac apply the most-specific rule; the extraction helpers used here do not implement that
-     * rule, so a function declaring both {@code eval(Object)} and {@code eval(String)} called with a
-     * string has two invokable candidates whose order is not javac's. With one candidate there is
-     * nothing to disagree about, and with several the call falls back instead of guessing.
+     * <p>Which overload runs is Flink's decision, made while the invocation is generated, so no
+     * selection happens here. Two shapes are still declined:
      *
-     * <p>Varargs and zero-argument overloads are declined: the argument packing for the first and the
-     * zero-column batch the second would produce across the native boundary are both untested.
+     * <ul>
+     *   <li>a zero-argument {@code eval}, which produces a zero-column Arrow batch across the
+     *       native boundary, a path with no coverage;
+     *   <li>any function declaring a varargs {@code eval} the arguments could reach. The generator
+     *       handles varargs; what has never been exercised is the packed argument array crossing
+     *       that boundary. The test is on the whole overload set rather than on the overload that
+     *       would run, so a function declaring both {@code eval(int, int)} and {@code eval(int...)}
+     *       declines even though the fixed-arity one would win. That much is deliberate. It does
+     *       narrow the admitted set in one shape: a varargs overload whose return type kept it out
+     *       of the invokable set was admitted before and declines now.
+     * </ul>
+     *
+     * <p>The last check is Flink's own: it rejects a function whose class or {@code eval} the
+     * generated source could not name or call, which is the same requirement the generated call
+     * imposes.
      */
-    private static Optional<Method> selectEvalMethod(ScalarFunction udf, DataType[] argTypes, DataType returnType) {
+    private static boolean isEvalAdmissible(ScalarFunction udf, DataType[] argTypes, DataType returnType) {
         Class<?> udfClass = udf.getClass();
         Class<?>[] argClasses = new Class<?>[argTypes.length];
         for (int i = 0; i < argTypes.length; i++) {
@@ -289,35 +312,25 @@ public final class FlinkUDFFallbackBuilder {
         }
         Class<?> outClass = returnType.getConversionClass();
         if (argClasses.length == 0) {
-            return declineMethod(udf, "a zero-argument eval is not supported");
+            return declineEval(udf, "a zero-argument eval is not supported");
         }
-
-        List<Method> candidates = new ArrayList<>();
         for (Method method : ExtractionUtils.collectMethods(udfClass, UserDefinedFunctionHelper.SCALAR_EVAL)) {
-            if (ExtractionUtils.isInvokable(method, argClasses)
-                    && ExtractionUtils.isAssignable(outClass, method.getReturnType(), true)) {
-                candidates.add(method);
+            if (method.isVarArgs() && ExtractionUtils.isInvokable(method, argClasses)) {
+                return declineEval(udf, "a varargs eval is not supported");
             }
-        }
-        if (candidates.size() != 1) {
-            return declineMethod(udf, candidates.size() + " eval overloads are invokable; exactly one is required");
-        }
-        Method selected = candidates.get(0);
-        if (selected.isVarArgs()) {
-            return declineMethod(udf, "a varargs eval is not supported");
         }
         try {
             UserDefinedFunctionHelper.validateClassForRuntime(
-                    udf.getClass().asSubclass(UserDefinedFunction.class),
+                    udfClass.asSubclass(UserDefinedFunction.class),
                     UserDefinedFunctionHelper.SCALAR_EVAL,
                     argClasses,
                     outClass,
                     udfClass.getName());
         } catch (ValidationException e) {
             LOG.debug("Flink rejects UDF {} for these argument types; the call falls back.", udfClass.getName(), e);
-            return Optional.empty();
+            return false;
         }
-        return Optional.of(selected);
+        return true;
     }
 
     /**
@@ -343,8 +356,8 @@ public final class FlinkUDFFallbackBuilder {
         return Optional.empty();
     }
 
-    private static Optional<Method> declineMethod(ScalarFunction udf, String reason) {
+    private static boolean declineEval(ScalarFunction udf, String reason) {
         LOG.debug("Flink UDF {} falls back: {}", udf.getClass().getName(), reason);
-        return Optional.empty();
+        return false;
     }
 }
