@@ -170,6 +170,23 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("dayofyear function") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTable("t1") {
+        sql("create table t1(c1 date, c2 timestamp) using parquet")
+        sql("""
+            |insert into t1 values
+            |  (date'2016-04-09', timestamp'2016-04-09 12:34:56'),
+            |  (date'2023-12-31', timestamp'2023-12-31 23:59:59'),
+            |  (date'2024-12-31', timestamp'2024-12-31 23:59:59'),
+            |  (null, null)
+            |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select dayofyear(c1), dayofyear(c2) from t1")
+      }
+    }
+  }
+
   test("last_day function") {
     withTable("t1") {
       sql("create table t1(c1 date) using parquet")
@@ -193,7 +210,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       }
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/New_York") {
         checkSparkAnswerAndOperator(
-          "select year(c1), month(c1), dayofmonth(c1), dayofweek(c1), quarter(c1) from t1")
+          "select year(c1), month(c1), dayofmonth(c1), dayofyear(c1), dayofweek(c1), quarter(c1) from t1")
       }
     }
   }
@@ -204,7 +221,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         sql("create table t1(c1 date) using parquet")
         sql("insert into t1 values(date'2021-01-04')")
         checkSparkAnswerAndOperator(
-          "select year(c1), month(c1), dayofmonth(c1), dayofweek(c1), quarter(c1) from t1")
+          "select year(c1), month(c1), dayofmonth(c1), dayofyear(c1), dayofweek(c1), quarter(c1) from t1")
       }
     }
   }
