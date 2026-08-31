@@ -14,7 +14,7 @@
 # limitations under the License.
 
 github:
-  description: "The Auron accelerator for distributed computing framework (e.g., Spark) leverages native vectorized execution to accelerate query processing"
+  description: "Apache Auron(Incubating) is an accelerator for big data engines, leveraging native vectorized execution to accelerate query processing."
   homepage: https://auron.apache.org/
   labels:
     - rust-lang
