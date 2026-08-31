@@ -992,6 +992,8 @@ object NativeConverters extends Logging {
         buildTimePartExt("Spark_Month", child, isPruningExpr, fallback)
       case DayOfMonth(child) =>
         buildTimePartExt("Spark_Day", child, isPruningExpr, fallback)
+      case DayOfYear(child) =>
+        buildTimePartExt("Spark_DayOfYear", child, isPruningExpr, fallback)
       case DayOfWeek(child) =>
         buildTimePartExt("Spark_DayOfWeek", child, isPruningExpr, fallback)
       case WeekOfYear(child) =>

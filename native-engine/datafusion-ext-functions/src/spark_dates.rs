@@ -277,6 +277,14 @@ pub fn spark_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     )?))
 }
 
+pub fn spark_dayofyear(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let local = resolve_local_date32(args)?;
+    Ok(ColumnarValue::Array(date_part(
+        &(Arc::new(local) as ArrayRef),
+        DatePart::DayOfYear,
+    )?))
+}
+
 pub fn spark_last_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let input = resolve_local_date32(args)?;
     let last_day = Date32Array::from_iter(input.iter().map(|opt_days| {
@@ -604,6 +612,30 @@ mod tests {
             None,
         ]));
         assert_eq!(&spark_day(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_dayofyear() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let input = Arc::new(Date32Array::from(vec![
+            Some(date(2016, 4, 9)),
+            Some(date(2023, 12, 31)),
+            Some(date(2024, 12, 31)),
+            None,
+        ]));
+        let args = vec![ColumnarValue::Array(input)];
+        let expected_ret: ArrayRef = Arc::new(Int32Array::from(vec![
+            Some(100),
+            Some(365),
+            Some(366),
+            None,
+        ]));
+        assert_eq!(&spark_dayofyear(&args)?.into_array(1)?, &expected_ret);
         Ok(())
     }
 
@@ -1325,6 +1357,8 @@ mod tests {
         let out_month =
             spark_month(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
         let out_day = spark_day(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
+        let out_doy =
+            spark_dayofyear(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
         let out_quarter =
             spark_quarter(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
         let out_dow = spark_dayofweek(&[ColumnarValue::Array(ts), tz])?.into_array(1)?;
@@ -1332,12 +1366,14 @@ mod tests {
         let expected_year: ArrayRef = Arc::new(Int32Array::from(vec![Some(2022)]));
         let expected_month: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         let expected_day: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
+        let expected_doy: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         let expected_quarter: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         let expected_dow: ArrayRef = Arc::new(Int32Array::from(vec![Some(7)])); // Saturday
 
         assert_eq!(&out_year, &expected_year);
         assert_eq!(&out_month, &expected_month);
         assert_eq!(&out_day, &expected_day);
+        assert_eq!(&out_doy, &expected_doy);
         assert_eq!(&out_quarter, &expected_quarter);
         assert_eq!(&out_dow, &expected_dow);
         Ok(())
