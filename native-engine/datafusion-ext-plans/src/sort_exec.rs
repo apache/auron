@@ -1212,7 +1212,12 @@ impl PruneSortKeysFromBatch {
         let mut relation = vec![];
         for (expr_idx, expr) in exprs.iter().enumerate() {
             if let Some(col) = expr.expr.as_any().downcast_ref::<Column>() {
-                relation.push((expr_idx, col.index()));
+                if let Some(projected_idx) = input_projection
+                    .iter()
+                    .position(|&input_idx| input_idx == col.index())
+                {
+                    relation.push((expr_idx, projected_idx));
+                }
             }
         }
 
