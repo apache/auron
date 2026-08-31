@@ -65,6 +65,20 @@ public abstract class AuronConfiguration {
                             + "if not configured, the default value of 1 is used.")
             .withDefaultValue(1);
 
+    /**
+     * How often the native runtime publishes DataFusion metrics to {@code MetricNode} while a task
+     * is running. Java {@code MetricNode.add} is incremental, so the native side sends positive
+     * deltas. {@code 0} disables the timer and publishes only when the native runtime finalizes
+     * (the historical batch behavior).
+     */
+    public static final ConfigOption<Long> METRICS_UPDATE_INTERVAL_MS = new ConfigOption<>(Long.class)
+            .withKey("auron.metrics.update.interval.ms")
+            .withCategory("Runtime Configuration")
+            .withDescription("Interval in milliseconds for publishing native execution metrics to MetricNode "
+                    + "during a running task. Set to 0 to publish only when the native runtime finalizes. "
+                    + "Default is 1000ms so long-running Flink tasks report live counters.")
+            .withDefaultValue(1000L);
+
     public abstract <T> Optional<T> getOptional(ConfigOption<T> option);
 
     public <T> T get(ConfigOption<T> option) {
