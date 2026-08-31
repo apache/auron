@@ -1156,6 +1156,16 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  // Before Spark 3.2, TreeNode.withNewChildren is overridable and copies tags only by way of
+  // makeCopy. The native plan nodes override it with a plain copy of the case class, so no tag
+  // survives a child rebuild on those versions. The converter still sets the logical link
+  // everywhere, but adaptive execution drops it again as soon as it substitutes a query stage
+  // into the tree, so only the versions below can be asserted on the executed plan.
+  private def assumeTagsSurviveChildRebuild(): Unit =
+    assume(
+      sparkver.matchVersion("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2"),
+      "native plan nodes drop tags on withNewChildren before Spark 3.2")
+
   test("the same DataFrame can be executed more than once") {
     withLinkTestTables {
       val df =
@@ -1168,6 +1178,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("converted native plans carry Spark's logical link") {
+    assumeTagsSurviveChildRebuild()
     withLinkTestTables {
       val df =
         checkSparkAnswerAndOperator("select c1 from t1 where c2 > (select max(c3) from t2)")
@@ -1185,6 +1196,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("converted native plans keep one logical link per operator") {
+    assumeTagsSurviveChildRebuild()
     withLinkTestTables {
       val df =
         checkSparkAnswerAndOperator("select t1.c1, t2.c3 from t1 join t2 on t1.c2 = t2.c3")
