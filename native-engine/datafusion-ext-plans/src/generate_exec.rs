@@ -274,9 +274,13 @@ fn execute_generate(
                         let generated_ids = generated_ids.finish();
                         let child_outputs = take_cols(&child_outputs, child_output_row_ids)?;
                         let generated_outputs = match generated_outputs {
-                            Some(generated_outputs) => {
+                            Some(generated_outputs) if outer => {
                                 take_cols(&generated_outputs.cols, generated_ids)?
                             }
+                            // Without outer rows, generated_ids is always the identity
+                            // sequence 0..generated_outputs.len(). Reuse the generated
+                            // arrays instead of copying them through Arrow take.
+                            Some(generated_outputs) => generated_outputs.cols,
                             None => generator_output_schema
                                 .fields()
                                 .iter()
