@@ -1,0 +1,682 @@
+diff --git a/parquet/Cargo.toml b/parquet/Cargo.toml
+index d277a2cbd..1c1968d06 100644
+--- a/parquet/Cargo.toml
++++ b/parquet/Cargo.toml
+@@ -71,6 +71,7 @@ half = { version = "2.1", default-features = false, features = ["num-traits"] }
+ crc32fast = { version = "1.4.2", optional = true, default-features = false }
+ simdutf8 = { version = "0.1.5", optional = true, default-features = false }
+ ring = { version = "0.17", default-features = false, features = ["std"], optional = true }
++aws-lc-rs = { version = "1.17.3", default-features = false, features = ["non-fips"], optional = true }
+ 
+ [dev-dependencies]
+ base64 = { version = "0.22", default-features = false, features = ["std"] }
+@@ -118,7 +119,7 @@ crc = ["dep:crc32fast"]
+ # Enable SIMD UTF-8 validation
+ simdutf8 = ["dep:simdutf8"]
+ # Enable Parquet modular encryption support
+-encryption = ["dep:ring"]
++encryption = ["dep:ring", "dep:aws-lc-rs"]
+ 
+ 
+ [[example]]
+diff --git a/parquet/src/column/page_encryption.rs b/parquet/src/column/page_encryption.rs
+index 0fb7c8942..7fe2362c1 100644
+--- a/parquet/src/column/page_encryption.rs
++++ b/parquet/src/column/page_encryption.rs
+@@ -31,7 +31,8 @@ use std::sync::Arc;
+ /// Encrypts page headers and page data for columns
+ pub(crate) struct PageEncryptor {
+     file_encryptor: Arc<FileEncryptor>,
+-    block_encryptor: Box<dyn BlockEncryptor>,
++    data_encryptor: Box<dyn BlockEncryptor>,
++    metadata_encryptor: Box<dyn BlockEncryptor>,
+     row_group_index: usize,
+     column_index: usize,
+     page_index: usize,
+@@ -47,10 +48,13 @@ impl PageEncryptor {
+     ) -> Result<Option<Self>> {
+         match file_encryptor {
+             Some(file_encryptor) if file_encryptor.is_column_encrypted(column_path) => {
+-                let block_encryptor = file_encryptor.get_column_encryptor(column_path)?;
++                let data_encryptor = file_encryptor.get_column_data_encryptor(column_path)?;
++                let metadata_encryptor =
++                    file_encryptor.get_column_metadata_encryptor(column_path)?;
+                 Ok(Some(Self {
+                     file_encryptor: file_encryptor.clone(),
+-                    block_encryptor,
++                    data_encryptor,
++                    metadata_encryptor,
+                     row_group_index,
+                     column_index,
+                     page_index: 0,
+@@ -78,7 +82,7 @@ impl PageEncryptor {
+             self.column_index,
+             Some(self.page_index),
+         )?;
+-        let encrypted_buffer = self.block_encryptor.encrypt(page.data(), &aad)?;
++        let encrypted_buffer = self.data_encryptor.encrypt(page.data(), &aad)?;
+ 
+         Ok(encrypted_buffer)
+     }
+@@ -114,6 +118,6 @@ impl PageEncryptor {
+             Some(self.page_index),
+         )?;
+ 
+-        encrypt_object(page_header, &mut self.block_encryptor, sink, &aad)
++        encrypt_object(page_header, &mut self.metadata_encryptor, sink, &aad)
+     }
+ }
+diff --git a/parquet/src/encryption/ciphers.rs b/parquet/src/encryption/ciphers.rs
+index 576469467..11d94d7d1 100644
+--- a/parquet/src/encryption/ciphers.rs
++++ b/parquet/src/encryption/ciphers.rs
+@@ -21,6 +21,7 @@ use crate::errors::Result;
+ use ring::aead::{Aad, LessSafeKey, NonceSequence, UnboundKey, AES_128_GCM};
+ use ring::rand::{SecureRandom, SystemRandom};
+ use std::fmt::Debug;
++use std::sync::Arc;
+ 
+ const RIGHT_TWELVE: u128 = 0x0000_0000_ffff_ffff_ffff_ffff_ffff_ffff;
+ pub(crate) const NONCE_LEN: usize = 12;
+@@ -108,6 +109,16 @@ impl CounterNonce {
+     pub fn get_bytes(&self) -> [u8; NONCE_LEN] {
+         self.counter.to_le_bytes()[0..NONCE_LEN].try_into().unwrap()
+     }
++
++    pub(crate) fn advance_bytes(&mut self) -> Result<[u8; NONCE_LEN]> {
++        if (self.counter & RIGHT_TWELVE) == (self.start & RIGHT_TWELVE) {
++            Err(General("Nonce sequence exhausted".to_string()))
++        } else {
++            let buf = self.get_bytes();
++            self.counter = self.counter.wrapping_add(1);
++            Ok(buf)
++        }
++    }
+ }
+ 
+ impl NonceSequence for CounterNonce {
+@@ -178,10 +189,176 @@ impl BlockEncryptor for RingGcmBlockEncryptor {
+     }
+ }
+ 
++pub(crate) const CTR_IV_LEN: usize = 16;
++
++fn build_ctr_iv(nonce: &[u8; NONCE_LEN]) -> [u8; CTR_IV_LEN] {
++    let mut iv = [0u8; CTR_IV_LEN];
++    iv[..NONCE_LEN].copy_from_slice(nonce);
++    // Parquet CTR IV: 12-byte nonce + 4-byte counter field with value 1
++    iv[CTR_IV_LEN - 1] = 1;
++    iv
++}
++
++#[derive(Debug, Clone)]
++pub(crate) struct CtrBlockDecryptor {
++    key: Arc<aws_lc_rs::cipher::DecryptingKey>,
++}
++
++impl CtrBlockDecryptor {
++    pub(crate) fn new(key_bytes: &[u8]) -> Result<Self> {
++        let key = aws_lc_rs::cipher::UnboundCipherKey::new(&aws_lc_rs::cipher::AES_128, key_bytes)
++            .map_err(|_| General("Failed to create AES key".to_string()))?;
++        let key = aws_lc_rs::cipher::DecryptingKey::ctr(key)
++            .map_err(|_| General("Failed to create AES-CTR key".to_string()))?;
++        Ok(Self { key: Arc::new(key)})
++    }
++}
++
++/// CTR module format: `[length (4 LE) | nonce (12) | ciphertext]`.
++/// `length` is the size of `nonce || ciphertext`, excluding the length prefix.
++fn split_ctr_module(length_and_ciphertext: &[u8]) -> Result<([u8; NONCE_LEN], &[u8])> {
++    if length_and_ciphertext.len() < SIZE_LEN {
++        return Err(General(format!(
++            "Invalid CTR ciphertext: expected at least {SIZE_LEN} bytes for length prefix, got {}",
++            length_and_ciphertext.len()
++        )));
++    }
++
++    let declared_len = u32::from_le_bytes(length_and_ciphertext[..SIZE_LEN].try_into().unwrap())
++        as usize;
++    let expected_len = SIZE_LEN
++        .checked_add(declared_len)
++        .ok_or_else(|| General("Invalid CTR ciphertext: length prefix overflow".to_string()))?;
++
++    if length_and_ciphertext.len() != expected_len {
++        return Err(General(format!(
++            "Invalid CTR ciphertext: length prefix is {declared_len} but buffer has {} bytes after prefix",
++            length_and_ciphertext.len() - SIZE_LEN
++        )));
++    }
++    if declared_len < NONCE_LEN {
++        return Err(General(format!(
++            "Invalid CTR ciphertext: length prefix {declared_len} is smaller than nonce length {NONCE_LEN}"
++        )));
++    }
++
++    let mut nonce = [0u8; NONCE_LEN];
++    nonce.copy_from_slice(&length_and_ciphertext[SIZE_LEN..SIZE_LEN + NONCE_LEN]);
++    let ciphertext = &length_and_ciphertext[SIZE_LEN + NONCE_LEN..];
++    Ok((nonce, ciphertext))
++}
++
++impl BlockDecryptor for CtrBlockDecryptor {
++    fn decrypt(&self, length_and_ciphertext: &[u8], _aad: &[u8]) -> Result<Vec<u8>> {
++        let (nonce, ciphertext) = split_ctr_module(length_and_ciphertext)?;
++        let iv = build_ctr_iv(&nonce);
++
++        let mut result = ciphertext.to_vec();
++        let context = aws_lc_rs::cipher::DecryptionContext::Iv128(
++            aws_lc_rs::iv::FixedLength::<CTR_IV_LEN>::from(iv),
++        );
++        self.key
++            .decrypt(&mut result, context)
++            .map_err(|_| General("CTR decryption failed".to_string()))?;
++        Ok(result)
++    }
++
++    fn compute_plaintext_tag(&self, _aad: &[u8], _plaintext: &[u8]) -> Result<Vec<u8>> {
++        Err(general_err!("CTR cipher does not support authentication tags"))
++    }
++}
++
++#[derive(Debug, Clone)]
++pub(crate) struct CtrBlockEncryptor {
++    key: Arc<aws_lc_rs::cipher::EncryptingKey>,
++    nonce_sequence: CounterNonce,
++}
++
++impl CtrBlockEncryptor {
++    pub(crate) fn new(key_bytes: &[u8]) -> Result<Self> {
++        let rng = SystemRandom::new();
++        let key = aws_lc_rs::cipher::UnboundCipherKey::new(&aws_lc_rs::cipher::AES_128, key_bytes)
++            .map_err(|_| General("Failed to create AES key".to_string()))?;
++        let key = aws_lc_rs::cipher::EncryptingKey::ctr(key)
++            .map_err(|_| General("Failed to create AES-CTR key".to_string()))?;
++        let nonce_sequence = CounterNonce::new(&rng)?;
++        Ok(Self {
++            key: Arc::new(key),
++            nonce_sequence,
++        })
++    }
++}
++
++impl BlockEncryptor for CtrBlockEncryptor {
++    fn encrypt(&mut self, plaintext: &[u8], _aad: &[u8]) -> Result<Vec<u8>> {
++        let ciphertext_length: u32 = (NONCE_LEN + plaintext.len())
++            .try_into()
++            .map_err(|err| General(format!("Plaintext data too long. {:?}", err)))?;
++
++        let mut ciphertext = Vec::with_capacity(SIZE_LEN + ciphertext_length as usize);
++        ciphertext.extend(ciphertext_length.to_le_bytes());
++
++        let nonce = self.nonce_sequence.advance_bytes()?;
++        ciphertext.extend(nonce);
++        ciphertext.extend_from_slice(plaintext);
++
++        let iv = build_ctr_iv(&nonce);
++        let context = aws_lc_rs::cipher::EncryptionContext::Iv128(
++            aws_lc_rs::iv::FixedLength::<CTR_IV_LEN>::from(iv),
++        );
++        self.key
++            .less_safe_encrypt(&mut ciphertext[SIZE_LEN + NONCE_LEN..], context)
++            .map_err(|_| General("CTR encryption failed".to_string()))?;
++
++        debug_assert_eq!(SIZE_LEN + ciphertext_length as usize, ciphertext.len());
++        Ok(ciphertext)
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn test_ctr_round_trip() {
++        let key = [0u8; 16];
++        let mut encryptor = CtrBlockEncryptor::new(&key).unwrap();
++        let decryptor = CtrBlockDecryptor::new(&key).unwrap();
++
++        let plaintext = b"hello, ctr world!";
++        let ciphertext = encryptor.encrypt(plaintext, b"").unwrap();
++        let decrypted = decryptor.decrypt(&ciphertext, b"").unwrap();
++
++        assert_eq!(plaintext, decrypted.as_slice());
++    }
++
++    #[test]
++    fn test_ctr_decrypt_rejects_truncated_buffer() {
++        let decryptor = CtrBlockDecryptor::new(&[0u8; 16]).unwrap();
++        // Too short to contain length prefix + nonce
++        let err = decryptor.decrypt(&[1, 2, 3], b"").unwrap_err();
++        assert!(err.to_string().contains("Invalid CTR ciphertext"));
++    }
++
++    #[test]
++    fn test_ctr_decrypt_rejects_length_prefix_mismatch() {
++        let decryptor = CtrBlockDecryptor::new(&[0u8; 16]).unwrap();
++        // Declares 20 bytes after prefix, but only nonce (12) is present
++        let mut buf = vec![20, 0, 0, 0];
++        buf.extend_from_slice(&[0u8; NONCE_LEN]);
++        let err = decryptor.decrypt(&buf, b"").unwrap_err();
++        assert!(err.to_string().contains("length prefix is 20"));
++    }
++
++    #[test]
++    fn test_ctr_decrypt_rejects_declared_length_smaller_than_nonce() {
++        let decryptor = CtrBlockDecryptor::new(&[0u8; 16]).unwrap();
++        let mut buf = vec![4, 0, 0, 0];
++        buf.extend_from_slice(&[1, 2, 3, 4]);
++        let err = decryptor.decrypt(&buf, b"").unwrap_err();
++        assert!(err.to_string().contains("smaller than nonce length"));
++    }
++
+     #[test]
+     fn test_round_trip() {
+         let key = [0u8; 16];
+diff --git a/parquet/src/encryption/decrypt.rs b/parquet/src/encryption/decrypt.rs
+index 43b2bb493..ef3a57012 100644
+--- a/parquet/src/encryption/decrypt.rs
++++ b/parquet/src/encryption/decrypt.rs
+@@ -17,7 +17,7 @@
+ 
+ //! Configuration and utilities for decryption of files using Parquet Modular Encryption
+ 
+-use crate::encryption::ciphers::{BlockDecryptor, RingGcmBlockDecryptor, TAG_LEN};
++use crate::encryption::ciphers::{BlockDecryptor, CtrBlockDecryptor, RingGcmBlockDecryptor, TAG_LEN};
+ use crate::encryption::modules::{create_footer_aad, create_module_aad, ModuleType};
+ use crate::errors::{ParquetError, Result};
+ use crate::file::column_crypto_metadata::ColumnCryptoMetaData;
+@@ -143,8 +143,7 @@ impl CryptoContext {
+     ) -> Result<Self> {
+         let (data_decryptor, metadata_decryptor) = match column_crypto_metadata {
+             ColumnCryptoMetaData::EncryptionWithFooterKey => {
+-                // TODO: In GCM-CTR mode will this need to be a non-GCM decryptor?
+-                let data_decryptor = file_decryptor.get_footer_decryptor()?;
++                let data_decryptor = file_decryptor.get_footer_data_decryptor()?;
+                 let metadata_decryptor = file_decryptor.get_footer_decryptor()?;
+                 (data_decryptor, metadata_decryptor)
+             }
+@@ -538,12 +537,16 @@ impl DecryptionPropertiesBuilderWithRetriever {
+ pub(crate) struct FileDecryptor {
+     decryption_properties: FileDecryptionProperties,
+     footer_decryptor: Arc<dyn BlockDecryptor>,
++    footer_data_decryptor: Arc<dyn BlockDecryptor>,
++    uses_ctr_for_pages: bool,
+     file_aad: Vec<u8>,
+ }
+ 
+ impl PartialEq for FileDecryptor {
+     fn eq(&self, other: &Self) -> bool {
+-        self.decryption_properties == other.decryption_properties && self.file_aad == other.file_aad
++        self.decryption_properties == other.decryption_properties
++            && self.file_aad == other.file_aad
++            && self.uses_ctr_for_pages == other.uses_ctr_for_pages
+     }
+ }
+ 
+@@ -553,6 +556,7 @@ impl FileDecryptor {
+         footer_key_metadata: Option<&[u8]>,
+         aad_file_unique: Vec<u8>,
+         aad_prefix: Vec<u8>,
++        uses_ctr_for_pages: bool,
+     ) -> Result<Self> {
+         let file_aad = [aad_prefix.as_slice(), aad_file_unique.as_slice()].concat();
+         let footer_key = decryption_properties.footer_key(footer_key_metadata)?;
+@@ -562,14 +566,25 @@ impl FileDecryptor {
+                 e.to_string().replace("Parquet error: ", "")
+             )
+         })?;
++        let footer_data_decryptor: Arc<dyn BlockDecryptor> = if uses_ctr_for_pages {
++            Arc::new(CtrBlockDecryptor::new(&footer_key)?)
++        } else {
++            Arc::new(footer_decryptor.clone())
++        };
+ 
+         Ok(Self {
+             footer_decryptor: Arc::new(footer_decryptor),
++            footer_data_decryptor,
+             decryption_properties: decryption_properties.clone(),
++            uses_ctr_for_pages,
+             file_aad,
+         })
+     }
+ 
++    pub(crate) fn get_footer_data_decryptor(&self) -> Result<Arc<dyn BlockDecryptor>> {
++        Ok(self.footer_data_decryptor.clone())
++    }
++
+     pub(crate) fn get_footer_decryptor(&self) -> Result<Arc<dyn BlockDecryptor>> {
+         Ok(self.footer_decryptor.clone())
+     }
+@@ -601,7 +616,11 @@ impl FileDecryptor {
+         let column_key = self
+             .decryption_properties
+             .column_key(column_name, key_metadata)?;
+-        Ok(Arc::new(RingGcmBlockDecryptor::new(&column_key)?))
++        if self.uses_ctr_for_pages {
++            Ok(Arc::new(CtrBlockDecryptor::new(&column_key)?))
++        } else {
++            Ok(Arc::new(RingGcmBlockDecryptor::new(&column_key)?))
++        }
+     }
+ 
+     pub(crate) fn get_column_metadata_decryptor(
+@@ -609,8 +628,10 @@ impl FileDecryptor {
+         column_name: &str,
+         key_metadata: Option<&[u8]>,
+     ) -> Result<Arc<dyn BlockDecryptor>> {
+-        // Once GCM CTR mode is implemented, data and metadata decryptors may be different
+-        self.get_column_data_decryptor(column_name, key_metadata)
++        let column_key = self
++            .decryption_properties
++            .column_key(column_name, key_metadata)?;
++        Ok(Arc::new(RingGcmBlockDecryptor::new(&column_key)?))
+     }
+ 
+     pub(crate) fn file_aad(&self) -> &Vec<u8> {
+diff --git a/parquet/src/encryption/encrypt.rs b/parquet/src/encryption/encrypt.rs
+index c8d3ffc0e..e195385c7 100644
+--- a/parquet/src/encryption/encrypt.rs
++++ b/parquet/src/encryption/encrypt.rs
+@@ -18,7 +18,7 @@
+ //! Configuration and utilities for Parquet Modular Encryption
+ 
+ use crate::encryption::ciphers::{
+-    BlockEncryptor, RingGcmBlockEncryptor, NONCE_LEN, SIZE_LEN, TAG_LEN,
++    BlockEncryptor, CtrBlockEncryptor, RingGcmBlockEncryptor, NONCE_LEN, SIZE_LEN, TAG_LEN,
+ };
+ use crate::errors::{ParquetError, Result};
+ use crate::file::column_crypto_metadata::{ColumnCryptoMetaData, EncryptionWithColumnKey};
+@@ -96,6 +96,7 @@ pub struct FileEncryptionProperties {
+     column_keys: HashMap<String, EncryptionKey>,
+     aad_prefix: Option<Vec<u8>>,
+     store_aad_prefix: bool,
++    uses_ctr_for_pages: bool,
+ }
+ 
+ impl FileEncryptionProperties {
+@@ -144,6 +145,11 @@ impl FileEncryptionProperties {
+         self.store_aad_prefix && self.aad_prefix.is_some()
+     }
+ 
++    /// Whether page data is encrypted with AES-CTR (AES_GCM_CTR_V1 algorithm)
++    pub(crate) fn uses_ctr_for_pages(&self) -> bool {
++        self.uses_ctr_for_pages
++    }
++
+     /// Checks if columns that are to be encrypted are present in schema
+     pub(crate) fn validate_encrypted_column_names(
+         &self,
+@@ -186,6 +192,7 @@ pub struct EncryptionPropertiesBuilder {
+     column_keys: HashMap<String, EncryptionKey>,
+     aad_prefix: Option<Vec<u8>>,
+     store_aad_prefix: bool,
++    uses_ctr_for_pages: bool,
+ }
+ 
+ impl EncryptionPropertiesBuilder {
+@@ -197,6 +204,7 @@ impl EncryptionPropertiesBuilder {
+             aad_prefix: None,
+             encrypt_footer: true,
+             store_aad_prefix: false,
++            uses_ctr_for_pages: false,
+         }
+     }
+ 
+@@ -274,6 +282,12 @@ impl EncryptionPropertiesBuilder {
+         self
+     }
+ 
++    /// Use the AES_GCM_CTR_V1 algorithm: metadata modules use AES-GCM, page data uses AES-CTR.
++    pub fn with_aes_gcm_ctr_v1(mut self) -> Self {
++        self.uses_ctr_for_pages = true;
++        self
++    }
++
+     /// Build the encryption properties
+     pub fn build(self) -> Result<FileEncryptionProperties> {
+         Ok(FileEncryptionProperties {
+@@ -282,6 +296,7 @@ impl EncryptionPropertiesBuilder {
+             column_keys: self.column_keys,
+             aad_prefix: self.aad_prefix,
+             store_aad_prefix: self.store_aad_prefix,
++            uses_ctr_for_pages: self.uses_ctr_for_pages,
+         })
+     }
+ }
+@@ -348,19 +363,47 @@ impl FileEncryptor {
+         )?))
+     }
+ 
++    fn column_key_bytes(&self, column_path: &str) -> Result<&Vec<u8>> {
++        if self.properties.column_keys.is_empty() {
++            Ok(&self.properties.footer_key.key)
++        } else {
++            match self.properties.column_keys.get(column_path) {
++                None => Err(general_err!("Column '{}' is not encrypted", column_path)),
++                Some(column_key) => Ok(column_key.key()),
++            }
++        }
++    }
++
++    /// Get the encryptor for column page data.
++    pub(crate) fn get_column_data_encryptor(
++        &self,
++        column_path: &str,
++    ) -> Result<Box<dyn BlockEncryptor>> {
++        let key = self.column_key_bytes(column_path)?;
++        if self.properties.uses_ctr_for_pages {
++            Ok(Box::new(CtrBlockEncryptor::new(key)?))
++        } else {
++            Ok(Box::new(RingGcmBlockEncryptor::new(key)?))
++        }
++    }
++
++    /// Get the encryptor for column metadata modules (always AES-GCM).
++    pub(crate) fn get_column_metadata_encryptor(
++        &self,
++        column_path: &str,
++    ) -> Result<Box<dyn BlockEncryptor>> {
++        Ok(Box::new(RingGcmBlockEncryptor::new(
++            self.column_key_bytes(column_path)?,
++        )?))
++    }
++
+     /// Get the encryptor for a column.
+     /// Will return an error if the column is not an encrypted column.
+     pub(crate) fn get_column_encryptor(
+         &self,
+         column_path: &str,
+     ) -> Result<Box<dyn BlockEncryptor>> {
+-        if self.properties.column_keys.is_empty() {
+-            return self.get_footer_encryptor();
+-        }
+-        match self.properties.column_keys.get(column_path) {
+-            None => Err(general_err!("Column '{}' is not encrypted", column_path)),
+-            Some(column_key) => Ok(Box::new(RingGcmBlockEncryptor::new(column_key.key())?)),
+-        }
++        self.get_column_metadata_encryptor(column_path)
+     }
+ }
+ 
+diff --git a/parquet/src/file/metadata/reader.rs b/parquet/src/file/metadata/reader.rs
+index 356713837..cf4540821 100644
+--- a/parquet/src/file/metadata/reader.rs
++++ b/parquet/src/file/metadata/reader.rs
+@@ -915,7 +915,7 @@ impl ParquetMetaDataReader {
+                         .map_err(|e| general_err!("Could not parse crypto metadata: {}", e))?;
+                 let supply_aad_prefix = match &t_file_crypto_metadata.encryption_algorithm {
+                     EncryptionAlgorithm::AESGCMV1(algo) => algo.supply_aad_prefix,
+-                    _ => Some(false),
++                    EncryptionAlgorithm::AESGCMCTRV1(algo) => algo.supply_aad_prefix,
+                 }
+                 .unwrap_or(false);
+                 if supply_aad_prefix && file_decryption_properties.aad_prefix().is_none() {
+@@ -1067,7 +1067,11 @@ fn get_file_decryptor(
+     footer_key_metadata: Option<&[u8]>,
+     file_decryption_properties: &FileDecryptionProperties,
+ ) -> Result<FileDecryptor> {
+-    match encryption_algorithm {
++    let uses_ctr_for_pages = matches!(
++        encryption_algorithm,
++        EncryptionAlgorithm::AESGCMCTRV1(_)
++    );
++    let (aad_file_unique, file_aad_prefix) = match encryption_algorithm {
+         EncryptionAlgorithm::AESGCMV1(algo) => {
+             let aad_file_unique = algo
+                 .aad_file_unique
+@@ -1077,18 +1081,28 @@ fn get_file_decryptor(
+             } else {
+                 algo.aad_prefix.unwrap_or_default()
+             };
+-
+-            FileDecryptor::new(
+-                file_decryption_properties,
+-                footer_key_metadata,
+-                aad_file_unique,
+-                aad_prefix,
+-            )
++            (aad_file_unique, aad_prefix)
+         }
+-        EncryptionAlgorithm::AESGCMCTRV1(_) => Err(nyi_err!(
+-            "The AES_GCM_CTR_V1 encryption algorithm is not yet supported"
+-        )),
+-    }
++        EncryptionAlgorithm::AESGCMCTRV1(algo) => {
++            let aad_file_unique = algo
++                .aad_file_unique
++                .ok_or_else(|| general_err!("AAD unique file identifier is not set"))?;
++            let aad_prefix = if let Some(aad_prefix) = file_decryption_properties.aad_prefix() {
++                aad_prefix.clone()
++            } else {
++                algo.aad_prefix.unwrap_or_default()
++            };
++            (aad_file_unique, aad_prefix)
++        }
++    };
++
++    FileDecryptor::new(
++        file_decryption_properties,
++        footer_key_metadata,
++        aad_file_unique,
++        file_aad_prefix,
++        uses_ctr_for_pages,
++    )
+ }
+ 
+ #[cfg(test)]
+diff --git a/parquet/src/file/metadata/writer.rs b/parquet/src/file/metadata/writer.rs
+index 0320d1e47..38f915c04 100644
+--- a/parquet/src/file/metadata/writer.rs
++++ b/parquet/src/file/metadata/writer.rs
+@@ -30,7 +30,7 @@ use crate::file::page_index::index::Index;
+ use crate::file::writer::{get_file_magic, TrackedWrite};
+ use crate::format::EncryptionAlgorithm;
+ #[cfg(feature = "encryption")]
+-use crate::format::{AesGcmV1, ColumnCryptoMetaData};
++use crate::format::{AesGcmCtrV1, AesGcmV1, ColumnCryptoMetaData};
+ use crate::format::{ColumnChunk, ColumnIndex, FileMetaData, OffsetIndex, RowGroup};
+ use crate::schema::types;
+ use crate::schema::types::{SchemaDescPtr, SchemaDescriptor, TypePtr};
+@@ -664,11 +664,20 @@ impl MetadataObjectWriter {
+         } else {
+             None
+         };
+-        EncryptionAlgorithm::AESGCMV1(AesGcmV1 {
+-            aad_prefix,
+-            aad_file_unique: Some(file_encryptor.aad_file_unique().clone()),
+-            supply_aad_prefix,
+-        })
++        let aad_file_unique = Some(file_encryptor.aad_file_unique().clone());
++        if file_encryptor.properties().uses_ctr_for_pages() {
++            EncryptionAlgorithm::AESGCMCTRV1(AesGcmCtrV1 {
++                aad_prefix,
++                aad_file_unique,
++                supply_aad_prefix,
++            })
++        } else {
++            EncryptionAlgorithm::AESGCMV1(AesGcmV1 {
++                aad_prefix,
++                aad_file_unique,
++                supply_aad_prefix,
++            })
++        }
+     }
+ 
+     fn file_crypto_metadata(
+diff --git a/parquet/src/file/serialized_reader.rs b/parquet/src/file/serialized_reader.rs
+index ac43381ae..570ace054 100644
+--- a/parquet/src/file/serialized_reader.rs
++++ b/parquet/src/file/serialized_reader.rs
+@@ -758,10 +758,10 @@ impl SerializedPageReaderContext {
+                 Ok(PageHeader::read_from_in_protocol(&mut prot)?)
+             }
+             Some(page_crypto_context) => {
+-                let data_decryptor = page_crypto_context.data_decryptor();
++                let metadata_decryptor = page_crypto_context.metadata_decryptor();
+                 let aad = page_crypto_context.create_page_header_aad()?;
+ 
+-                let buf = read_and_decrypt(data_decryptor, input, aad.as_ref()).map_err(|_| {
++                let buf = read_and_decrypt(metadata_decryptor, input, aad.as_ref()).map_err(|_| {
+                     ParquetError::General(format!(
+                         "Error decrypting page header for column {}, decryption key may be wrong",
+                         page_crypto_context.column_ordinal
+diff --git a/parquet/tests/encryption/encryption.rs b/parquet/tests/encryption/encryption.rs
+index 7079e91d1..2688caf1d 100644
+--- a/parquet/tests/encryption/encryption.rs
++++ b/parquet/tests/encryption/encryption.rs
+@@ -224,18 +224,7 @@ fn test_aes_ctr_encryption() {
+         .build()
+         .unwrap();
+ 
+-    let options =
+-        ArrowReaderOptions::default().with_file_decryption_properties(decryption_properties);
+-    let metadata = ArrowReaderMetadata::load(&file, options);
+-
+-    match metadata {
+-        Err(parquet::errors::ParquetError::NYI(s)) => {
+-            assert!(s.contains("AES_GCM_CTR_V1"));
+-        }
+-        _ => {
+-            panic!("Expected ParquetError::NYI");
+-        }
+-    };
++    verify_encryption_test_file_read(file, decryption_properties);
+ }
+ 
+ #[test]
+diff --git a/parquet/tests/encryption/encryption_async.rs b/parquet/tests/encryption/encryption_async.rs
+index e0fbbcdfa..39137b57b 100644
+--- a/parquet/tests/encryption/encryption_async.rs
++++ b/parquet/tests/encryption/encryption_async.rs
+@@ -213,25 +213,17 @@ async fn test_aes_ctr_encryption() {
+ 
+     let footer_key = "0123456789012345".as_bytes().to_vec();
+     let column_1_key = "1234567890123450".as_bytes().to_vec();
+-    //let column_2_key = "1234567890123451".as_bytes().to_vec();
++    let column_2_key = "1234567890123451".as_bytes().to_vec();
+ 
+     let decryption_properties = FileDecryptionProperties::builder(footer_key)
+-        .with_column_key("double_field", column_1_key.clone())
+-        .with_column_key("float_field", column_1_key)
++        .with_column_key("double_field", column_1_key)
++        .with_column_key("float_field", column_2_key)
+         .build()
+         .unwrap();
+ 
+-    let options = ArrowReaderOptions::new().with_file_decryption_properties(decryption_properties);
+-    let metadata = ArrowReaderMetadata::load_async(&mut file, options).await;
+-
+-    match metadata {
+-        Err(ParquetError::NYI(s)) => {
+-            assert!(s.contains("AES_GCM_CTR_V1"));
+-        }
+-        _ => {
+-            panic!("Expected ParquetError::NYI");
+-        }
+-    };
++    verify_encryption_test_file_read_async(&mut file, decryption_properties)
++        .await
++        .unwrap();
+ }
+ 
+ #[tokio::test]
