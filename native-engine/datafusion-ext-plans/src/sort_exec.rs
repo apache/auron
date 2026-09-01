@@ -261,8 +261,9 @@ impl SortExec {
         context: Arc<TaskContext>,
         projection: &[usize],
     ) -> Result<SendableRecordBatchStream> {
+        let output_schema = Arc::new(self.schema().project(projection)?);
         let exec_ctx =
-            ExecutionContext::new(context.clone(), partition, self.schema(), &self.metrics);
+            ExecutionContext::new(context.clone(), partition, output_schema, &self.metrics);
         let sorter = self.init_sorter(exec_ctx.clone(), projection)?;
 
         let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
@@ -307,8 +308,9 @@ impl SortExec {
         context: Arc<TaskContext>,
         projection: &[usize],
     ) -> Result<SendableRecordBatchWithKeyRowsStream> {
+        let output_schema = Arc::new(self.schema().project(projection)?);
         let exec_ctx =
-            ExecutionContext::new(context.clone(), partition, self.schema(), &self.metrics);
+            ExecutionContext::new(context.clone(), partition, output_schema, &self.metrics);
         let sorter = self.init_sorter(exec_ctx.clone(), projection)?;
 
         let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
@@ -1212,12 +1214,12 @@ impl PruneSortKeysFromBatch {
         let mut relation = vec![];
         for (expr_idx, expr) in exprs.iter().enumerate() {
             if let Some(col) = expr.expr.as_any().downcast_ref::<Column>() {
-                if let Some(projected_idx) = input_projection
-                    .iter()
-                    .position(|&input_idx| input_idx == col.index())
-                {
-                    relation.push((expr_idx, projected_idx));
-                }
+                // Relation indices are consumed against the projected schema below.
+                relation.extend(input_projection.iter().enumerate().filter_map(
+                    |(projected_idx, &input_idx)| {
+                        (input_idx == col.index()).then_some((expr_idx, projected_idx))
+                    },
+                ));
             }
         }
 
@@ -1579,6 +1581,7 @@ mod test {
         physical_plan::{ExecutionPlan, common, test::TestMemoryExec},
         prelude::SessionContext,
     };
+    use futures::TryStreamExt;
 
     use super::common_prefix_len;
     use crate::sort_exec::SortExec;
@@ -1676,6 +1679,45 @@ mod test {
         ];
         assert_batches_eq!(expected, &batches);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sort_projected_with_key_rows_excludes_sort_key() -> Result<()> {
+        MemManager::init(100);
+        let task_ctx = SessionContext::new().task_ctx();
+        let input = build_table(
+            ("key", &vec![3, 1, 2]),
+            ("value", &vec![30, 10, 20]),
+            ("unused", &vec![300, 100, 200]),
+        )?;
+        let sort = SortExec::new(
+            input,
+            vec![PhysicalSortExpr {
+                expr: Arc::new(Column::new("key", 0)),
+                options: SortOptions::default(),
+            }],
+            None,
+            0,
+        );
+
+        let output = sort.execute_projected_with_key_rows(0, task_ctx, &[1])?;
+        assert_eq!(output.schema().fields().len(), 1);
+        assert_eq!(output.schema().field(0).name(), "value");
+        let batches = output
+            .map_ok(|batch| batch.batch)
+            .try_collect::<Vec<_>>()
+            .await?;
+        let expected = vec![
+            "+-------+",
+            "| value |",
+            "+-------+",
+            "| 10    |",
+            "| 20    |",
+            "| 30    |",
+            "+-------+",
+        ];
+        assert_batches_eq!(expected, &batches);
         Ok(())
     }
 
