@@ -73,4 +73,9 @@ sonic-rs = { workspace = true }
 procfs = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
 rand = { workspace = true }
+
+[[bench]]
+name = "join_hash_map"
+harness = false
