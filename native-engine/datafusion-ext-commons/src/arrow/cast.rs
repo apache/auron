@@ -223,7 +223,8 @@ pub fn cast_impl(
         (&DataType::Utf8, DataType::Decimal128(..)) => {
             arrow::compute::kernels::cast::cast(&to_plain_string_array(array), cast_type)?
         }
-        // spark compatible float to decimal
+        // Spark formats finite floats as shortest round-trip strings before exact rescaling;
+        // non-finite values become NULL.
         (&DataType::Float32, DataType::Decimal128(..))
         | (&DataType::Float64, DataType::Decimal128(..)) => {
             let floats = arrow::compute::cast(array, &DataType::Float64)?;
@@ -670,6 +671,13 @@ mod test {
             as_decimal128_array(&casted)?,
             &Decimal128Array::from(vec![100_000_001_490_116_120i128])
                 .with_precision_and_scale(20, 18)?
+        );
+
+        let rounding_array: ArrayRef = Arc::new(Float64Array::from(vec![1.25, -1.25, -0.0]));
+        let casted = cast(&rounding_array, &DataType::Decimal128(2, 1))?;
+        assert_eq!(
+            as_decimal128_array(&casted)?,
+            &Decimal128Array::from(vec![13, -13, 0]).with_precision_and_scale(2, 1)?
         );
         Ok(())
     }
