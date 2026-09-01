@@ -20,6 +20,8 @@ import java.io.File
 
 import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 import org.apache.auron.util.SparkVersionUtil
@@ -61,6 +63,12 @@ trait BaseAuronSQLSuite extends SharedSparkSession {
       .set("spark.ui.enabled", "false")
       .set("spark.sql.warehouse.dir", warehouseDir)
       .set("spark.auron.udf.singleChildFallback.enabled", "false")
+      .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+      .set(SQLConf.CODEGEN_FACTORY_MODE.key, CodegenObjectFactoryMode.CODEGEN_ONLY.toString)
+      .set(
+        "spark.sql.hive.metastore.barrierPrefixes",
+        "org.apache.spark.sql.hive.execution.PairSerDe")
+      .set("spark.hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false")
 
     if (SparkVersionUtil.isSparkV40OrGreater) {
       // Spark 4.0+: Disable session artifact isolation, align with Spark 3.x behavior
