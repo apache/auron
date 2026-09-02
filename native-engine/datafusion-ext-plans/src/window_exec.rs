@@ -38,7 +38,10 @@ use once_cell::sync::OnceCell;
 
 use crate::{
     common::execution_context::{ExecutionContext, WrappedRecordBatchSender},
-    window::{WindowExpr, WindowFunctionProcessor, window_context::WindowContext},
+    window::{
+        WindowExpr, WindowFunctionProcessor, group_limit_processor::WindowGroupLimitProcessor,
+        window_context::WindowContext,
+    },
 };
 
 #[derive(Debug)]
@@ -215,11 +218,34 @@ fn execute_window(
             let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
             sender.exclude_time(&elapsed_compute);
 
-            let mut processors = window_ctx
-                .window_exprs
-                .iter()
-                .map(|expr: &WindowExpr| expr.create_processor(&window_ctx))
-                .collect::<Result<Vec<_>>>()?;
+            let partial_group_limit = if window_ctx.output_window_cols {
+                None
+            } else {
+                window_ctx.group_limit
+            };
+            let mut group_limit_processor = match partial_group_limit {
+                Some(limit) => match window_ctx.window_exprs.as_slice() {
+                    [expr] => match expr.rank_type() {
+                        Some(rank_type) => Some(WindowGroupLimitProcessor::new(rank_type, limit)),
+                        None => return datafusion::common::internal_err!(
+                            "WindowGroupLimit requires a row_number, rank, or dense_rank expression"
+                        ),
+                    },
+                    _ => return datafusion::common::internal_err!(
+                        "WindowGroupLimit requires exactly one window expression"
+                    ),
+                },
+                None => None,
+            };
+            let mut processors = if group_limit_processor.is_some() {
+                vec![]
+            } else {
+                window_ctx
+                    .window_exprs
+                    .iter()
+                    .map(|expr: &WindowExpr| expr.create_processor(&window_ctx))
+                    .collect::<Result<Vec<_>>>()?
+            };
 
             if window_ctx.requires_full_partition() {
                 // Functions like percent_rank/lead need a complete window partition,
@@ -294,8 +320,11 @@ fn execute_window(
 
             while let Some(batch) = input.next().await.transpose()? {
                 let _timer = elapsed_compute.timer();
-                let output_batch =
-                    process_window_batch(batch, &window_ctx, processors.as_mut_slice())?;
+                let output_batch = if let Some(processor) = &mut group_limit_processor {
+                    process_partial_group_limit_batch(batch, &window_ctx, processor)?
+                } else {
+                    process_window_batch(batch, &window_ctx, processors.as_mut_slice())?
+                };
                 exec_ctx
                     .baseline_metrics()
                     .record_output(output_batch.num_rows());
@@ -303,6 +332,15 @@ fn execute_window(
             }
             Ok(())
         }))
+}
+
+fn process_partial_group_limit_batch(
+    batch: RecordBatch,
+    window_ctx: &WindowContext,
+    processor: &mut WindowGroupLimitProcessor,
+) -> Result<RecordBatch> {
+    let selection = processor.process_batch(window_ctx, &batch)?;
+    Ok(arrow::compute::filter_record_batch(&batch, &selection)?)
 }
 
 async fn flush_window_batches(
@@ -787,6 +825,123 @@ mod test {
             "+----+----+----+---------------+",
         ];
         assert_batches_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[test]
+    fn test_window_expr_rank_type() {
+        for rank_type in [
+            WindowRankType::RowNumber,
+            WindowRankType::Rank,
+            WindowRankType::DenseRank,
+        ] {
+            let expr = WindowExpr::new(
+                WindowFunction::RankLike(rank_type),
+                vec![],
+                Arc::new(Field::new("rank", DataType::Int32, false)),
+                DataType::Int32,
+            );
+            assert!(matches!(expr.rank_type(), Some(actual) if actual == rank_type));
+        }
+
+        let expr = WindowExpr::new(
+            WindowFunction::PercentRank,
+            vec![],
+            Arc::new(Field::new("percent_rank", DataType::Float64, false)),
+            DataType::Float64,
+        );
+        assert!(expr.rank_type().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_partial_window_group_limit_rank_like_functions()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+
+        let cases = [
+            (
+                WindowRankType::RowNumber,
+                vec![
+                    "+----+----+----+",
+                    "| a1 | b1 | c1 |",
+                    "+----+----+----+",
+                    "| 1  | 1  | 0  |",
+                    "| 1  | 2  | 0  |",
+                    "| 2  | 1  | 0  |",
+                    "| 2  | 1  | 0  |",
+                    "+----+----+----+",
+                ],
+            ),
+            (
+                WindowRankType::Rank,
+                vec![
+                    "+----+----+----+",
+                    "| a1 | b1 | c1 |",
+                    "+----+----+----+",
+                    "| 1  | 1  | 0  |",
+                    "| 1  | 2  | 0  |",
+                    "| 1  | 2  | 0  |",
+                    "| 2  | 1  | 0  |",
+                    "| 2  | 1  | 0  |",
+                    "+----+----+----+",
+                ],
+            ),
+            (
+                WindowRankType::DenseRank,
+                vec![
+                    "+----+----+----+",
+                    "| a1 | b1 | c1 |",
+                    "+----+----+----+",
+                    "| 1  | 1  | 0  |",
+                    "| 1  | 2  | 0  |",
+                    "| 1  | 2  | 0  |",
+                    "| 2  | 1  | 0  |",
+                    "| 2  | 1  | 0  |",
+                    "| 2  | 2  | 0  |",
+                    "+----+----+----+",
+                ],
+            ),
+        ];
+
+        for (rank_type, expected) in cases {
+            let batch1 = build_table_i32(
+                ("a1", &vec![1, 1]),
+                ("b1", &vec![1, 2]),
+                ("c1", &vec![0; 2]),
+            )?;
+            let batch2 = build_table_i32(
+                ("a1", &vec![1, 1, 2, 2, 2, 2]),
+                ("b1", &vec![2, 3, 1, 1, 2, 3]),
+                ("c1", &vec![0; 6]),
+            )?;
+            let input = Arc::new(TestMemoryExec::try_new(
+                &[vec![batch1.clone(), batch2]],
+                batch1.schema(),
+                None,
+            )?);
+            let window_exprs = vec![WindowExpr::new(
+                WindowFunction::RankLike(rank_type),
+                vec![],
+                Arc::new(Field::new("rank", DataType::Int32, false)),
+                DataType::Int32,
+            )];
+            let window = Arc::new(WindowExec::try_new(
+                input,
+                window_exprs,
+                vec![Arc::new(Column::new("a1", 0))],
+                vec![PhysicalSortExpr {
+                    expr: Arc::new(Column::new("b1", 1)),
+                    options: Default::default(),
+                }],
+                Some(2),
+                false,
+            )?);
+
+            let stream = window.execute(0, task_ctx.clone())?;
+            let batches = datafusion::physical_plan::common::collect(stream).await?;
+            assert_batches_eq!(expected, &batches);
+        }
         Ok(())
     }
 
