@@ -31,7 +31,8 @@ use arrow::{
 };
 use auron_jni_bridge::{
     conf::{
-        IntConf, LongConf, METRICS_UPDATE_INTERVAL_MS, TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU,
+        BooleanConf, IntConf, LongConf, METRICS_UPDATE_ENABLED, METRICS_UPDATE_INTERVAL_MS,
+        TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU,
     },
     is_task_running, jni_call, jni_call_static, jni_convert_byte_array, jni_exception_check,
     jni_exception_occurred, jni_new_global_ref, jni_new_object, jni_new_string,
@@ -338,6 +339,10 @@ fn spawn_metrics_ticker(
     metric_state: Arc<Mutex<MetricSnapshot>>,
     is_finalizing: Arc<AtomicBool>,
 ) -> Option<JoinHandle<()>> {
+    let enabled = METRICS_UPDATE_ENABLED.value().unwrap_or(false);
+    if !enabled {
+        return None;
+    }
     let interval_ms = METRICS_UPDATE_INTERVAL_MS.value().unwrap_or(1000);
     if interval_ms <= 0 {
         return None;

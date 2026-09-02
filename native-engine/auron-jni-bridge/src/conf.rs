@@ -63,6 +63,7 @@ define_conf!(BooleanConf, ORC_SCHEMA_CASE_SENSITIVE);
 define_conf!(IntConf, UDAF_FALLBACK_NUM_UDAFS_TRIGGER_SORT_AGG);
 define_conf!(BooleanConf, PARSE_JSON_ERROR_FALLBACK);
 define_conf!(StringConf, NATIVE_LOG_LEVEL);
+define_conf!(BooleanConf, METRICS_UPDATE_ENABLED);
 define_conf!(LongConf, METRICS_UPDATE_INTERVAL_MS);
 
 pub trait BooleanConf {
