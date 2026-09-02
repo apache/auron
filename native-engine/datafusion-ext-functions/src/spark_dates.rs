@@ -297,6 +297,29 @@ pub fn spark_last_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     Ok(ColumnarValue::Array(Arc::new(last_day)))
 }
 
+pub fn spark_datediff(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let dates = ColumnarValue::values_to_arrays(args)?;
+    let end_date = cast(&dates[0], &DataType::Date32)?;
+    let start_date = cast(&dates[1], &DataType::Date32)?;
+    let end_date = end_date
+        .as_any()
+        .downcast_ref::<Date32Array>()
+        .expect("cast to Date32 must succeed");
+    let start_date = start_date
+        .as_any()
+        .downcast_ref::<Date32Array>()
+        .expect("cast to Date32 must succeed");
+    let result = Int32Array::from_iter(end_date.iter().zip(start_date.iter()).map(
+        |(end_date, start_date)| {
+            end_date
+                .zip(start_date)
+                .map(|(end_date, start_date)| end_date.wrapping_sub(start_date))
+        },
+    ));
+
+    Ok(ColumnarValue::Array(Arc::new(result)))
+}
+
 pub fn spark_make_date(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 4 {
         return Err(DataFusionError::Execution(
@@ -662,6 +685,48 @@ mod tests {
             None,
         ]));
         assert_eq!(&spark_last_day(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_datediff() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let end_date = Arc::new(Date32Array::from(vec![
+            Some(date(2009, 7, 31)),
+            Some(date(2009, 7, 30)),
+            Some(date(2024, 1, 1)),
+            Some(date(2024, 3, 1)),
+            Some(date(2025, 1, 1)),
+            None,
+            Some(date(2024, 1, 1)),
+        ]));
+        let start_date = Arc::new(Date32Array::from(vec![
+            Some(date(2009, 7, 30)),
+            Some(date(2009, 7, 31)),
+            Some(date(2024, 1, 1)),
+            Some(date(2024, 2, 28)),
+            Some(date(2024, 12, 31)),
+            Some(date(2024, 1, 1)),
+            None,
+        ]));
+        let args = vec![
+            ColumnarValue::Array(end_date),
+            ColumnarValue::Array(start_date),
+        ];
+        let expected_ret: ArrayRef = Arc::new(Int32Array::from(vec![
+            Some(1),
+            Some(-1),
+            Some(0),
+            Some(2),
+            Some(1),
+            None,
+            None,
+        ]));
+        assert_eq!(&spark_datediff(&args)?.into_array(7)?, &expected_ret);
         Ok(())
     }
 

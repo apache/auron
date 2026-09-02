@@ -1002,6 +1002,8 @@ object NativeConverters extends Logging {
         buildTimePartExt("Spark_Quarter", child, isPruningExpr, fallback)
       case e: LastDay =>
         buildExtScalarFunction("Spark_LastDay", e.children, e.dataType)
+      case e: DateDiff =>
+        buildExtScalarFunction("Spark_DateDiff", e.children, e.dataType)
 
       case e: Levenshtein =>
         buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)
