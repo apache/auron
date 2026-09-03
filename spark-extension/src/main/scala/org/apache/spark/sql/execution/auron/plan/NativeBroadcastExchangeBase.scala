@@ -27,7 +27,6 @@ import scala.collection.immutable.SortedMap
 import scala.concurrent.Promise
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.Partition
 import org.apache.spark.SparkException
@@ -145,18 +144,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
       .map(_.copy())
       .toArray
 
-    val broadcast = relationFuture.get // broadcast must be resolved
-    val v = mode.transform(dataRows)
-    val dummyBroadcasted = new Broadcast[Any](-1) {
-      override protected def getValue(): Any = v
-      override protected def doUnpersist(blocking: Boolean): Unit = {
-        MethodUtils.invokeMethod(broadcast, true, "doUnpersist", Array(blocking))
-      }
-      override protected def doDestroy(blocking: Boolean): Unit = {
-        MethodUtils.invokeMethod(broadcast, true, "doDestroy", Array(blocking))
-      }
-    }
-    dummyBroadcasted.asInstanceOf[Broadcast[T]]
+    sparkContext.broadcast(mode.transform(dataRows)).asInstanceOf[Broadcast[T]]
   }
 
   def doExecuteBroadcastNative[T](): broadcast.Broadcast[T] = {
