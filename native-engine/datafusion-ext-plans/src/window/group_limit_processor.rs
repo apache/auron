@@ -13,10 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use arrow::{
-    array::{BooleanArray, BooleanBuilder},
-    record_batch::RecordBatch,
-};
+use std::ops::Range;
+
+use arrow::record_batch::RecordBatch;
 use datafusion::common::Result;
 
 use crate::window::{WindowRankType, window_context::WindowContext};
@@ -46,7 +45,7 @@ impl WindowGroupLimitProcessor {
         &mut self,
         context: &WindowContext,
         batch: &RecordBatch,
-    ) -> Result<BooleanArray> {
+    ) -> Result<Vec<Range<usize>>> {
         let partition_rows = context.get_partition_rows(batch)?;
         let order_rows = match self.rank_type {
             WindowRankType::RowNumber => None,
@@ -54,7 +53,8 @@ impl WindowGroupLimitProcessor {
                 Some(context.get_order_rows(batch)?)
             }
         };
-        let mut builder = BooleanBuilder::with_capacity(batch.num_rows());
+        let mut selected_ranges = vec![];
+        let mut selected_start = None;
 
         for row_idx in 0..batch.num_rows() {
             let same_partition = !context.has_partition() || {
@@ -98,8 +98,15 @@ impl WindowGroupLimitProcessor {
                     }
                 }
             }
-            builder.append_value(self.cur_rank <= self.limit);
+            if self.cur_rank <= self.limit {
+                selected_start.get_or_insert(row_idx);
+            } else if let Some(start) = selected_start.take() {
+                selected_ranges.push(start..row_idx);
+            }
         }
-        Ok(builder.finish())
+        if let Some(start) = selected_start {
+            selected_ranges.push(start..batch.num_rows());
+        }
+        Ok(selected_ranges)
     }
 }

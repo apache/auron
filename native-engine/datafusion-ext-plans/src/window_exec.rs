@@ -13,11 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{any::Any, fmt::Formatter, mem, sync::Arc};
+use std::{any::Any, fmt::Formatter, mem, ops::Range, sync::Arc};
 
 use arrow::{
-    array::{Array, ArrayRef, Int32Array},
-    compute::concat_batches,
+    array::{Array, ArrayRef, BooleanArray, BooleanBufferBuilder, Int32Array},
+    compute::{concat_batches, filter_record_batch},
     datatypes::SchemaRef,
     record_batch::{RecordBatch, RecordBatchOptions},
 };
@@ -339,8 +339,32 @@ fn process_partial_group_limit_batch(
     window_ctx: &WindowContext,
     processor: &mut WindowGroupLimitProcessor,
 ) -> Result<RecordBatch> {
-    let selection = processor.process_batch(window_ctx, &batch)?;
-    Ok(arrow::compute::filter_record_batch(&batch, &selection)?)
+    let selected_ranges = processor.process_batch(window_ctx, &batch)?;
+    select_batch_ranges(batch, &selected_ranges)
+}
+
+fn select_batch_ranges(
+    batch: RecordBatch,
+    selected_ranges: &[Range<usize>],
+) -> Result<RecordBatch> {
+    match selected_ranges {
+        [] => Ok(batch.slice(0, 0)),
+        [range] => Ok(batch.slice(range.start, range.len())),
+        ranges => {
+            let mut selection = BooleanBufferBuilder::new(batch.num_rows());
+            let mut offset = 0;
+            for range in ranges {
+                selection.append_n(range.start - offset, false);
+                selection.append_n(range.len(), true);
+                offset = range.end;
+            }
+            selection.append_n(batch.num_rows() - offset, false);
+            Ok(filter_record_batch(
+                &batch,
+                &BooleanArray::new(selection.finish(), None),
+            )?)
+        }
+    }
 }
 
 async fn flush_window_batches(
@@ -429,7 +453,7 @@ mod test {
     use crate::{
         agg::AggFunction,
         window::{WindowExpr, WindowFunction, WindowRankType},
-        window_exec::WindowExec,
+        window_exec::{WindowExec, select_batch_ranges},
     };
 
     fn build_table_i32(
@@ -466,6 +490,33 @@ mod test {
             schema,
             None,
         )?))
+    }
+
+    #[test]
+    fn test_select_batch_ranges_uses_zero_copy_slice_for_single_range() -> Result<()> {
+        let batch = build_table_i32(
+            ("a", &vec![1, 2, 3, 4]),
+            ("b", &vec![5, 6, 7, 8]),
+            ("c", &vec![9, 10, 11, 12]),
+        )?;
+        let input_buffer = batch.column(0).to_data().buffers()[0].data_ptr();
+
+        let selected = select_batch_ranges(batch, &[1..3])?;
+
+        assert_eq!(selected.num_rows(), 2);
+        assert_eq!(
+            selected
+                .column(0)
+                .as_primitive::<Int32Type>()
+                .values()
+                .as_ref(),
+            &[2, 3]
+        );
+        assert_eq!(
+            selected.column(0).to_data().buffers()[0].data_ptr(),
+            input_buffer
+        );
+        Ok(())
     }
 
     fn build_nullable_utf8_table(

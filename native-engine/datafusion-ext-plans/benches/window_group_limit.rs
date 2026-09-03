@@ -36,18 +36,17 @@ use datafusion_ext_plans::{
 };
 use test::{Bencher, black_box};
 
-const NUM_PARTITIONS: usize = 100;
-const ROWS_PER_PARTITION: usize = 1_000;
-const PEER_GROUP_SIZE: usize = 10;
-const GROUP_LIMIT: usize = 10;
-
-fn create_batch() -> RecordBatch {
-    let num_rows = NUM_PARTITIONS * ROWS_PER_PARTITION;
+fn create_batch(
+    num_partitions: usize,
+    rows_per_partition: usize,
+    peer_group_size: usize,
+) -> RecordBatch {
+    let num_rows = num_partitions * rows_per_partition;
     let partitions = (0..num_rows)
-        .map(|row| (row / ROWS_PER_PARTITION) as i32)
+        .map(|row| (row / rows_per_partition) as i32)
         .collect::<Vec<_>>();
     let order_values = (0..num_rows)
-        .map(|row| ((row % ROWS_PER_PARTITION) / PEER_GROUP_SIZE) as i32)
+        .map(|row| ((row % rows_per_partition) / peer_group_size) as i32)
         .collect::<Vec<_>>();
     let payloads = (0..num_rows as i32).collect::<Vec<_>>();
     let schema = Arc::new(Schema::new(vec![
@@ -63,8 +62,14 @@ fn create_batch() -> RecordBatch {
     RecordBatch::try_new(schema, columns).expect("benchmark batch should be valid")
 }
 
-fn create_window_group_limit(rank_type: WindowRankType) -> Arc<dyn ExecutionPlan> {
-    let batch = create_batch();
+fn create_window_group_limit(
+    rank_type: WindowRankType,
+    num_partitions: usize,
+    rows_per_partition: usize,
+    peer_group_size: usize,
+    group_limit: usize,
+) -> Arc<dyn ExecutionPlan> {
+    let batch = create_batch(num_partitions, rows_per_partition, peer_group_size);
     let input = Arc::new(
         TestMemoryExec::try_new(&[vec![batch.clone()]], batch.schema(), None)
             .expect("benchmark input should be valid"),
@@ -84,7 +89,7 @@ fn create_window_group_limit(rank_type: WindowRankType) -> Arc<dyn ExecutionPlan
                 expr: Arc::new(Column::new("order", 1)),
                 options: Default::default(),
             }],
-            Some(GROUP_LIMIT),
+            Some(group_limit),
             false,
         )
         .expect("benchmark WindowGroupLimit should be valid"),
@@ -106,32 +111,84 @@ fn execute(
         .expect("benchmark output should be collected")
 }
 
-fn bench_window_group_limit(b: &mut Bencher, rank_type: WindowRankType) {
+fn expected_rows(
+    rank_type: WindowRankType,
+    num_partitions: usize,
+    rows_per_partition: usize,
+    peer_group_size: usize,
+    group_limit: usize,
+) -> usize {
+    let rows_per_partition = match rank_type {
+        WindowRankType::RowNumber => group_limit.min(rows_per_partition),
+        WindowRankType::Rank => group_limit
+            .div_ceil(peer_group_size)
+            .saturating_mul(peer_group_size)
+            .min(rows_per_partition),
+        WindowRankType::DenseRank => group_limit
+            .saturating_mul(peer_group_size)
+            .min(rows_per_partition),
+    };
+    num_partitions * rows_per_partition
+}
+
+fn bench_window_group_limit(
+    b: &mut Bencher,
+    rank_type: WindowRankType,
+    num_partitions: usize,
+    rows_per_partition: usize,
+    peer_group_size: usize,
+    group_limit: usize,
+) {
     let runtime = tokio::runtime::Runtime::new().expect("benchmark runtime should be created");
     let task_ctx = SessionContext::new().task_ctx();
-    let exec = create_window_group_limit(rank_type);
-    let expected_rows = match rank_type {
-        WindowRankType::RowNumber | WindowRankType::Rank => NUM_PARTITIONS * GROUP_LIMIT,
-        WindowRankType::DenseRank => NUM_PARTITIONS * GROUP_LIMIT * PEER_GROUP_SIZE,
-    };
+    let exec = create_window_group_limit(
+        rank_type,
+        num_partitions,
+        rows_per_partition,
+        peer_group_size,
+        group_limit,
+    );
     let output = execute(&runtime, &task_ctx, &exec);
     assert_eq!(
         output.iter().map(RecordBatch::num_rows).sum::<usize>(),
-        expected_rows
+        expected_rows(
+            rank_type,
+            num_partitions,
+            rows_per_partition,
+            peer_group_size,
+            group_limit,
+        )
     );
 
     b.iter(|| black_box(execute(&runtime, &task_ctx, &exec)));
 }
 
-macro_rules! benchmark {
-    ($name:ident, $rank_type:expr) => {
-        #[bench]
-        fn $name(b: &mut Bencher) {
-            bench_window_group_limit(b, $rank_type);
-        }
-    };
+#[bench]
+fn window_group_limit_row_number_slice(b: &mut Bencher) {
+    bench_window_group_limit(b, WindowRankType::RowNumber, 1, 100_000, 10, 10);
 }
 
-benchmark!(window_group_limit_row_number, WindowRankType::RowNumber);
-benchmark!(window_group_limit_rank, WindowRankType::Rank);
-benchmark!(window_group_limit_dense_rank, WindowRankType::DenseRank);
+#[bench]
+fn window_group_limit_rank_slice(b: &mut Bencher) {
+    bench_window_group_limit(b, WindowRankType::Rank, 1, 100_000, 10, 10);
+}
+
+#[bench]
+fn window_group_limit_dense_rank_slice(b: &mut Bencher) {
+    bench_window_group_limit(b, WindowRankType::DenseRank, 1, 100_000, 10, 10);
+}
+
+#[bench]
+fn window_group_limit_row/_number(b: &mut Bencher) {
+    bench_window_group_limit(b, WindowRankType::RowNumber, 100, 1_000, 10, 10);
+}
+
+#[bench]
+fn window_group_limit_rank(b: &mut Bencher) {
+    bench_window_group_limit(b, WindowRankType::Rank, 100, 1_000, 10, 10);
+}
+
+#[bench]
+fn window_group_limit_dense_rank(b: &mut Bencher) {
+    bench_window_group_limit(b, WindowRankType::DenseRank, 100, 1_000, 10, 10);
+}
