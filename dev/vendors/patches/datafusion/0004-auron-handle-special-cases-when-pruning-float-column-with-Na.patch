@@ -1,7 +1,7 @@
 From c9fda37e2cfd77d13698f59f3ff594dd17b38d6a Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sun, 15 Sep 2024 22:59:40 +0800
-Subject: [PATCH] blaze: handle special cases when pruning float column with
+Subject: [PATCH] auron: handle special cases when pruning float column with
  NaN values
 
 ---

@@ -1,7 +1,7 @@
 From 308b3c77cd28c654a84b38df46871cf0a88444f3 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sun, 15 Sep 2024 21:24:51 +0800
-Subject: [PATCH] blaze: fix 'Statistics null count is negative (-1)' error
+Subject: [PATCH] auron: fix 'Statistics null count is negative (-1)' error
 
 ---
  parquet/src/file/statistics.rs | 3 ++-
@@ -17,7 +17,7 @@ index b7522a76f..b7849e4f9 100644
              // see https://github.com/apache/arrow-rs/pull/6216/files
 -            let null_count = stats.null_count.unwrap_or(0);
 +            let null_count = stats.null_count.unwrap_or(0)
-+                .max(0); // blaze - fix 'Statistics null count is negative (-1)' error
++                .max(0); // auron - fix 'Statistics null count is negative (-1)' error
  
              if null_count < 0 {
                  return Err(ParquetError::General(format!(

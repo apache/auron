@@ -1,7 +1,7 @@
 From 5de02520ca6c9f8f092b4b364906dc0507002cbb Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sat, 21 Dec 2024 02:16:53 +0800
-Subject: [PATCH] blaze: parquet supports processing old-style
+Subject: [PATCH] auron: parquet supports processing old-style
  array<struct<..>> represented as `REPEATED group field_nme {..}`
 
 ---
@@ -20,7 +20,7 @@ index af70b8684..bf497fb77 100644
 -                    "incompatible arrow schema, expected struct got {}",
 -                    d
 -                ))
-+                // blaze: match old-style array<struct<..>> represented as
++                // auron: match old-style array<struct<..>> represented as
 +                // `REPEATED group field_nme {..}`
 +                let mut old_style_fields = None;
 +                if let DataType::List(f) = d {

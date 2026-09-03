@@ -1,7 +1,7 @@
 From ed4ace347da4acfe0c3453e1b34ede067de894e2 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sun, 15 Sep 2024 20:54:37 +0800
-Subject: [PATCH] blaze: fix NaN comparison semantic
+Subject: [PATCH] auron: fix NaN comparison semantic
 
 ---
  arrow-array/src/arithmetic.rs | 19 ++++++++++++++++++-
@@ -16,7 +16,7 @@ index b5f4a106f..c4e88b91a 100644
              #[inline]
              fn compare(self, rhs: Self) -> Ordering {
 -                <$t>::total_cmp(&self, &rhs)
-+                // blaze:
++                // auron:
 +                // nan-safe version according to semantics where NaN == NaN and
 +                // NaN is greater than any non-NaN double.
 +                if self.is_nan() && rhs.is_nan() {
@@ -35,7 +35,7 @@ index b5f4a106f..c4e88b91a 100644
                  // Equivalent to `self.total_cmp(&rhs).is_eq()`
                  // but LLVM isn't able to realise this is bitwise equality
                  // https://rust.godbolt.org/z/347nWGxoW
-+                // blaze:
++                // auron:
 +                // nan-safe version according to semantics where NaN == NaN and
 +                // NaN is greater than any non-NaN double.
 +                if self.is_nan() && rhs.is_nan() {

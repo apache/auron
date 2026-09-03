@@ -1,7 +1,7 @@
 From 80f119b76b2e6a24b5eb7f4dd1639dff838caa97 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Mon, 16 Sep 2024 11:27:42 +0800
-Subject: [PATCH] blaze: use case-insensitive comparing in processing parquet
+Subject: [PATCH] auron: use case-insensitive comparing in processing parquet
  file schema
 
 ---

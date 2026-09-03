@@ -202,7 +202,7 @@ zstd = "0.13.3"
 rdkafka = { version = "0.36.0", features = ["tokio"] }
 
 [patch.crates-io]
-# datafusion: branch=v49.0.0-blaze
+# datafusion: branch=v49.0.0-auron
 datafusion = { path = "./dev/vendors/packages/datafusion/datafusion/core"}
 datafusion-common = { path = "./dev/vendors/packages/datafusion/datafusion/common"}
 datafusion-expr = { path = "./dev/vendors/packages/datafusion/datafusion/expr"}
@@ -214,7 +214,7 @@ datafusion-physical-expr = { path = "./dev/vendors/packages/datafusion/datafusio
 datafusion-spark = { path = "./dev/vendors/packages/datafusion/datafusion/spark"}
 orc-rust = { path = "./dev/vendors/packages/orc-rust"}
 
-# arrow: branch=v55.2.0-blaze
+# arrow: branch=v55.2.0-auron
 arrow = { path = "./dev/vendors/packages/arrow-rs/arrow"}
 arrow-arith = { path = "./dev/vendors/packages/arrow-rs/arrow-arith"}
 arrow-array = { path = "./dev/vendors/packages/arrow-rs/arrow-array"}
@@ -229,5 +229,5 @@ arrow-select = { path = "./dev/vendors/packages/arrow-rs/arrow-select"}
 arrow-string = { path = "./dev/vendors/packages/arrow-rs/arrow-string"}
 parquet = { path = "./dev/vendors/packages/arrow-rs/parquet"}
 
-# serde_json: branch=v1.0.96-blaze
+# serde_json: branch=v1.0.96-auron
 serde_json = { path = "./dev/vendors/packages/serde_json" }

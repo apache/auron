@@ -1,7 +1,7 @@
 From 0f9132f81a3a6d69ed2b893a5bc5d7820f819a4d Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Mon, 16 Sep 2024 00:16:57 +0800
-Subject: [PATCH] blaze: expose fields of AsyncReader/ArrowReaderBuilder to
+Subject: [PATCH] auron: expose fields of AsyncReader/ArrowReaderBuilder to
  public
 
 ---
