@@ -1,7 +1,7 @@
 From 833c0abf2721625258ed9cc08bb8546cdc7fdb64 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@zhangli20deMacBook-Pro.local>
 Date: Tue, 12 Aug 2025 16:45:29 +0800
-Subject: [PATCH] blaze: implement TestMemoryExec.as_any()
+Subject: [PATCH] auron: implement TestMemoryExec.as_any()
 
 ---
  datafusion/physical-plan/src/test.rs | 2 +-

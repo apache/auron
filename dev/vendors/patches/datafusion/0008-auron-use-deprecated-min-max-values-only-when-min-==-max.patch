@@ -1,7 +1,7 @@
 From da84929cc253eeb4b14b20f6f141145da2a14d05 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Mon, 16 Sep 2024 11:15:48 +0800
-Subject: [PATCH] blaze: use deprecated min/max values only when min == max
+Subject: [PATCH] auron: use deprecated min/max values only when min == max
 
 ---
  .../src/row_group_filter.rs                   | 40 +++++++++++++++++--

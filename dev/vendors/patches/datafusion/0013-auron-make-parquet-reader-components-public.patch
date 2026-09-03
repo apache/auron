@@ -1,7 +1,7 @@
 From 948d5bc4cd7e4a63c99d0927dc8070420534ba0d Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Tue, 17 Sep 2024 21:01:01 +0800
-Subject: [PATCH] blaze: make parquet reader components public
+Subject: [PATCH] auron: make parquet reader components public
 
 ---
  datafusion/datasource-parquet/src/mod.rs    | 4 ++--

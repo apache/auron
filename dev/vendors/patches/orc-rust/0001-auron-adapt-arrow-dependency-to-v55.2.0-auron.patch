@@ -1,7 +1,7 @@
 From de680c77ada706215ef25b9a2c8c949fb0315bd0 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Mon, 27 Jul 2026 02:04:47 +0800
-Subject: [PATCH] blaze: adapt arrow dependency to v55.2.0-blaze
+Subject: [PATCH] auron: adapt arrow dependency to v55.2.0-auron
 
 ---
  Cargo.toml | 6 +++---
