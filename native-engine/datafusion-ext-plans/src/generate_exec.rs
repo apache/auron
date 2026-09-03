@@ -277,9 +277,9 @@ fn execute_generate(
                             Some(generated_outputs) if outer => {
                                 take_cols(&generated_outputs.cols, generated_ids)?
                             }
-                            // Without outer rows, generated_ids is always the identity
-                            // sequence 0..generated_outputs.len(). Reuse the generated
-                            // arrays instead of copying them through Arrow take.
+                            // When outer is false, generated_ids is the identity sequence
+                            // 0..generated_outputs.row_ids.len(). Reuse the generated arrays
+                            // instead of copying them through Arrow take.
                             Some(generated_outputs) => generated_outputs.cols,
                             None => generator_output_schema
                                 .fields()
