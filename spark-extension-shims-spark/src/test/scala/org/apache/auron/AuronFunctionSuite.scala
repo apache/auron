@@ -202,6 +202,24 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("datediff function") {
+    withTable("t1") {
+      sql("create table t1(end_date date, start_date date) using parquet")
+      sql("""insert into t1 values
+          |  (date'2009-07-31', date'2009-07-30'),
+          |  (date'2009-07-30', date'2009-07-31'),
+          |  (date'2024-03-01', date'2024-02-28'),
+          |  (date'2024-01-01', date'2024-01-01'),
+          |  (date'2025-01-01', date'2024-12-31'),
+          |  (null, date'2024-01-01'),
+          |  (date'2024-01-01', null)
+          |""".stripMargin)
+
+      checkSparkAnswerAndOperator(
+        "select datediff(end_date, start_date), datediff(end_date, date'2024-01-01') from t1")
+    }
+  }
+
   test("date-part functions with non-UTC timezone") {
     withTable("t1") {
       sql("create table t1(c1 timestamp) using parquet")
