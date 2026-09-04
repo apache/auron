@@ -501,7 +501,8 @@ mod test {
         )?;
         let input_buffer = batch.column(0).to_data().buffers()[0].data_ptr();
 
-        let selected = select_batch_ranges(batch, &[1..3])?;
+        let selected_range = 1..3;
+        let selected = select_batch_ranges(batch, std::slice::from_ref(&selected_range))?;
 
         assert_eq!(selected.num_rows(), 2);
         assert_eq!(
