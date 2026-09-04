@@ -15,7 +15,11 @@
 
 use std::sync::Arc;
 
-use arrow::{array::ArrayRef, datatypes::DataType, record_batch::RecordBatch};
+use arrow::{
+    array::{ArrayRef, new_empty_array},
+    datatypes::DataType,
+    record_batch::RecordBatch,
+};
 use datafusion::{
     common::{DataFusionError, Result, ScalarValue},
     physical_expr::PhysicalExprRef,
@@ -36,15 +40,19 @@ impl LeadProcessor {
 
 impl WindowFunctionProcessor for LeadProcessor {
     fn process_batch(&mut self, context: &WindowContext, batch: &RecordBatch) -> Result<ArrayRef> {
-        assert_eq!(
-            self.children.len(),
-            3,
-            "lead expects input/offset/default children",
-        );
+        if self.children.len() != 3 {
+            return Err(DataFusionError::Execution(format!(
+                "lead expects input/offset/default children, got {}",
+                self.children.len()
+            )));
+        }
 
         let input_values = self.children[0]
             .evaluate(batch)
             .and_then(|v| v.into_array(batch.num_rows()))?;
+        if batch.num_rows() == 0 {
+            return Ok(new_empty_array(input_values.data_type()));
+        }
 
         let offset_values = self.children[1]
             .evaluate(batch)

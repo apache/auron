@@ -61,4 +61,43 @@ class AuronWindowSuite extends AuronQueryTest with BaseAuronSQLSuite with AuronS
       }
     }
   }
+
+  test("lag window function") {
+    withSQLConf("spark.auron.enable.window" -> "true") {
+      withTable("t1") {
+        sql("create table t1(id int, grp int, v string) using parquet")
+        sql("insert into t1 values (1, 1, 'a'), (2, 1, null), (3, 1, 'c'), (4, 2, 'x')")
+
+        checkSparkAnswerAndOperator("""select
+            |  id,
+            |  grp,
+            |  v,
+            |  lag(v) over (partition by grp order by id) as prev_v,
+            |  lag(v, 2, 'fallback') over (partition by grp order by id) as prev2_v
+            |from t1
+            |""".stripMargin)
+      }
+    }
+  }
+
+  test("lag window function with ignore nulls falls back") {
+    if (AuronTestUtils.isSparkV32OrGreater) {
+      withSQLConf("spark.auron.enable.window" -> "true") {
+        withTable("t1") {
+          sql("create table t1(id int, grp int, v string) using parquet")
+          sql("insert into t1 values (1, 1, 'a'), (2, 1, null), (3, 1, 'c'), (4, 2, 'x')")
+
+          val df = checkSparkAnswer("""select
+              |  id,
+              |  grp,
+              |  lag(v, 1, 'fallback') ignore nulls
+              |    over (partition by grp order by id) as prev_non_null_v
+              |from t1
+              |""".stripMargin)
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(plan.collectFirst { case _: NativeWindowBase => true }.isEmpty)
+        }
+      }
+    }
+  }
 }
