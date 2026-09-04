@@ -370,10 +370,10 @@ fn publish_plan_metrics(
     plan: &Arc<dyn ExecutionPlan>,
     metric_state: &Mutex<MetricSnapshot>,
 ) -> Result<()> {
+    let mut snapshot = metric_state.lock();
     let metrics = jni_call!(
         AuronCallNativeWrapper(native_wrapper.as_obj()).getMetrics() -> JObject
     )?;
-    let mut snapshot = metric_state.lock();
     update_metric_node(metrics.as_obj(), plan.clone(), &mut snapshot)?;
     Ok(())
 }
