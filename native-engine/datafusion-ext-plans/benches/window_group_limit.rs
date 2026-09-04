@@ -179,7 +179,7 @@ fn window_group_limit_dense_rank_slice(b: &mut Bencher) {
 }
 
 #[bench]
-fn window_group_limit_row/_number(b: &mut Bencher) {
+fn window_group_limit_row_number(b: &mut Bencher) {
     bench_window_group_limit(b, WindowRankType::RowNumber, 100, 1_000, 10, 10);
 }
 
