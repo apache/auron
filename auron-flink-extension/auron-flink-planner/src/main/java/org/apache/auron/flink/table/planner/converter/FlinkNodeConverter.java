@@ -61,4 +61,23 @@ public interface FlinkNodeConverter<T> {
      * @throws IllegalArgumentException if the element type does not match {@link #getNodeClass()}
      */
     PhysicalExprNode convert(T node, ConverterContext context);
+
+    /**
+     * Thrown from {@link #convert} to decline a node this converter positively recognised but
+     * cannot represent natively. It is the ordinary fallback signal rather than a fault, so the
+     * factory records it without the noise an unexpected failure deserves.
+     */
+    class UnsupportedNodeException extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * Creates the exception.
+         *
+         * @param message what could not be represented, and why
+         */
+        public UnsupportedNodeException(String message) {
+            super(message);
+        }
+    }
 }
