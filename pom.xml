@@ -424,6 +424,9 @@
 
             <arg>-Wconf:msg=method newInstance in class Class is deprecated:s</arg>
             <arg>-Wconf:msg=class ThreadDeath in package lang is deprecated:s</arg>
+            <!-- Proxy.getProxyClass is the only way to obtain a proxy Class for a pinned loader,
+                 which NativeConverters needs when deserializing expression graphs. -->
+            <arg>-Wconf:msg=method getProxyClass in class Proxy is deprecated:s</arg>
             <!-- Auron implements Spark plugin SPIs whose contracts use `private[spark]` types
                  (e.g. ElementTrackingStore, SparkUI, IndexShuffleBlockResolver,
                  ShuffleWriteMetricsReporter). Exposing them is required by Spark, not a defect. -->
@@ -1326,6 +1329,8 @@
                 <arg>-Wconf:msg=object JavaConverters in package collection is deprecated:s</arg>
                 <arg>-Wconf:msg=method newInstance in class Class is deprecated:s</arg>
                 <arg>-Wconf:msg=class ThreadDeath in package lang is deprecated:s</arg>
+                <!-- See note in base profile: Proxy.getProxyClass is required by NativeConverters. -->
+                <arg>-Wconf:msg=method getProxyClass in class Proxy is deprecated:s</arg>
                 <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
                 <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
                 <arg>-Wconf:cat=unused-nowarn:s</arg>

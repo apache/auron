@@ -23,7 +23,8 @@ case class SuiteArgs(
     extraSparkConf: Map[String, String] = Map.empty,
     auronOnly: Boolean = false,
     enablePlanCheck: Boolean = false,
-    regenGoldenFiles: Boolean = false)
+    regenGoldenFiles: Boolean = false,
+    printPlan: Boolean = false)
 
 abstract class Suite(val args: SuiteArgs) {
   protected lazy val sessions: SessionManager = new SessionManager(args.extraSparkConf)
