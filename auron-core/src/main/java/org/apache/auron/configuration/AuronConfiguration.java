@@ -65,6 +65,35 @@ public abstract class AuronConfiguration {
                             + "if not configured, the default value of 1 is used.")
             .withDefaultValue(1);
 
+    /**
+     * Whether the native runtime periodically publishes DataFusion metrics to {@code MetricNode}
+     * while a task is running. Disabled by default so Spark batch jobs keep finalize-only
+     * reporting. Flink overrides this option to {@code true} because long-running tasks never
+     * finalize.
+     */
+    public static final ConfigOption<Boolean> METRICS_UPDATE_ENABLED = new ConfigOption<>(Boolean.class)
+            .withKey("auron.metrics.update.enabled")
+            .withCategory("Runtime Configuration")
+            .withDescription("Enable periodic native metric publishing to MetricNode while a task is running. "
+                    + "Disabled by default (Spark finalize-only). Flink enables this so long-running tasks "
+                    + "report live counters. When enabled, auron.metrics.update.interval.ms controls the "
+                    + "publish interval.")
+            .withDefaultValue(false);
+
+    /**
+     * How often the native runtime publishes DataFusion metrics to {@code MetricNode} while a task
+     * is running. Used only when {@link #METRICS_UPDATE_ENABLED} is true. Java {@code
+     * MetricNode.add} is incremental, so the native side sends positive deltas. {@code 0} disables
+     * the timer and publishes only when the native runtime finalizes.
+     */
+    public static final ConfigOption<Long> METRICS_UPDATE_INTERVAL_MS = new ConfigOption<>(Long.class)
+            .withKey("auron.metrics.update.interval.ms")
+            .withCategory("Runtime Configuration")
+            .withDescription("Interval in milliseconds for publishing native execution metrics to MetricNode "
+                    + "during a running task when auron.metrics.update.enabled is true. Set to 0 to publish "
+                    + "only when the native runtime finalizes. Default is 1000ms.")
+            .withDefaultValue(1000L);
+
     public abstract <T> Optional<T> getOptional(ConfigOption<T> option);
 
     public <T> T get(ConfigOption<T> option) {
