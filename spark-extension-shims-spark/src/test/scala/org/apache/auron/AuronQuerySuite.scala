@@ -18,7 +18,10 @@ package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.NativeRDD
+import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
+import org.apache.spark.sql.execution.auron.plan.NativeBroadcastJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeFilterBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
@@ -1142,6 +1145,90 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       // OR drops the b-branch -> pushes only `id = 5` -> row groups without id=5 are skipped,
       // losing the row where b='900000'
       checkSparkAnswerAndOperator("select * from orc_or where id = 5 or b = 900000")
+    }
+  }
+
+  private def withLinkTestTables(body: => Unit): Unit = {
+    withTable("t1", "t2") {
+      sql("create table t1 using parquet as select id as c1, id + 1 as c2 from range(10)")
+      sql("create table t2 using parquet as select id as c3 from range(5)")
+      body
+    }
+  }
+
+  // Before Spark 3.2, TreeNode.withNewChildren is overridable and copies tags only by way of
+  // makeCopy. The native plan nodes override it with a plain copy of the case class, so no tag
+  // survives a child rebuild on those versions. The converter still sets the logical link
+  // everywhere, but adaptive execution drops it again as soon as it substitutes a query stage
+  // into the tree, so only the versions below can be asserted on the executed plan.
+  private def assumeTagsSurviveChildRebuild(): Unit =
+    assume(
+      sparkver.matchVersion("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2"),
+      "native plan nodes drop tags on withNewChildren before Spark 3.2")
+
+  test("the same DataFrame can be executed more than once") {
+    withLinkTestTables {
+      val df =
+        checkSparkAnswerAndOperator("select c1 from t1 where c2 > (select max(c3) from t2)")
+
+      // Re-executing the same DataFrame re-enters adaptive stage creation, this time against
+      // the plan Auron produced rather than the plan Spark planned.
+      checkAnswer(df, (4L to 9L).map(Row(_)))
+    }
+  }
+
+  test("converted native plans carry Spark's logical link") {
+    assumeTagsSurviveChildRebuild()
+    withLinkTestTables {
+      val df =
+        checkSparkAnswerAndOperator("select c1 from t1 where c2 > (select max(c3) from t2)")
+
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val nativeNodes = plan.collect { case p: NativeSupports => p }
+      assert(nativeNodes.nonEmpty, s"expected native operators in:\n$plan")
+
+      // Every native node is checked because this query needs no exchange in the main tree.
+      assert(
+        nativeNodes.forall(_.logicalLink.isDefined),
+        "native operators without a logical link: " +
+          s"${nativeNodes.filter(_.logicalLink.isEmpty).map(_.nodeName).mkString(", ")}\n$plan")
+    }
+  }
+
+  test("converted native plans keep one logical link per operator") {
+    assumeTagsSurviveChildRebuild()
+    withLinkTestTables {
+      val df =
+        checkSparkAnswerAndOperator("select t1.c1, t2.c3 from t1 join t2 on t1.c2 = t2.c3")
+
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val links = plan.collect { case p: NativeSupports => p }.flatMap(_.logicalLink)
+      val distinctLinks = links.foldLeft(Seq.empty[LogicalPlan]) { (acc, link) =>
+        if (acc.exists(_.eq(link))) acc else acc :+ link
+      }
+
+      // A strategy plans one logical node into a whole physical subtree and links only that
+      // subtree's root, so nodes within one planning unit legitimately share a link. Across
+      // units the links must differ. Comparing by reference keeps two units of the same kind
+      // distinct.
+      assert(
+        distinctLinks.size > 1,
+        "native operators share a single logical link: " +
+          s"${distinctLinks.map(_.nodeName).mkString(", ")}\n$plan")
+
+      // Counting links cannot tell a correct labelling from one shifted a level up the tree,
+      // where every node carries its parent's link and the count is unchanged. Pin the join.
+      val joinNodes = plan.collect {
+        case p: NativeBroadcastJoinBase => p
+        case p: NativeSortMergeJoinBase => p
+        case p: NativeShuffledHashJoinBase => p
+      }
+      assert(joinNodes.size == 1, s"expected exactly one native join in:\n$plan")
+      assert(
+        joinNodes.head.logicalLink.exists(_.isInstanceOf[Join]),
+        "native join is linked to " +
+          s"${joinNodes.head.logicalLink.map(_.nodeName).getOrElse("nothing")}, not a Join" +
+          s"\n$plan")
     }
   }
 }
