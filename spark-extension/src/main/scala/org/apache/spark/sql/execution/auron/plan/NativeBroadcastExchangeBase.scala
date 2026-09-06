@@ -126,8 +126,14 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
 
   // Mixed native/Spark execution needs a second JVM broadcast; otherwise the transformed relation
   // would be serialized with every Spark task.
+  // Build it under a separate lock because relationFuture initializes lazy fields on another thread.
   @transient
-  private lazy val sparkBroadcast: Broadcast[Any] = {
+  private lazy val sparkBroadcastLock = new Object
+
+  @transient
+  private var sparkBroadcast: Broadcast[Any] = _
+
+  private def createSparkBroadcast(): Broadcast[Any] = {
     val singlePartition = new Partition() {
       override def index: Int = 0
     }
@@ -150,8 +156,12 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
     sparkContext.broadcast(mode.transform(dataRows))
   }
 
-  override def doExecuteBroadcast[T](): Broadcast[T] =
+  override def doExecuteBroadcast[T](): Broadcast[T] = sparkBroadcastLock.synchronized {
+    if (sparkBroadcast == null) {
+      sparkBroadcast = createSparkBroadcast()
+    }
     sparkBroadcast.asInstanceOf[Broadcast[T]]
+  }
 
   def doExecuteBroadcastNative[T](): broadcast.Broadcast[T] = {
     val timeout: Long = SQLConf.get.broadcastTimeout
