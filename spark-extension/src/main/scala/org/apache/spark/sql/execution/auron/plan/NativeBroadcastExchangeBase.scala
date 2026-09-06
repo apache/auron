@@ -124,7 +124,10 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
     relationFuture
   }
 
-  override def doExecuteBroadcast[T](): Broadcast[T] = {
+  // Mixed native/Spark execution needs a second JVM broadcast; otherwise the transformed relation
+  // would be serialized with every Spark task.
+  @transient
+  private lazy val sparkBroadcast: Broadcast[Any] = {
     val singlePartition = new Partition() {
       override def index: Int = 0
     }
@@ -144,8 +147,11 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
       .map(_.copy())
       .toArray
 
-    sparkContext.broadcast(mode.transform(dataRows)).asInstanceOf[Broadcast[T]]
+    sparkContext.broadcast(mode.transform(dataRows))
   }
+
+  override def doExecuteBroadcast[T](): Broadcast[T] =
+    sparkBroadcast.asInstanceOf[Broadcast[T]]
 
   def doExecuteBroadcastNative[T](): broadcast.Broadcast[T] = {
     val timeout: Long = SQLConf.get.broadcastTimeout
