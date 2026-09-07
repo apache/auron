@@ -76,15 +76,41 @@ pub enum IdxSelection<'a> {
     Single(usize),
     Indices(&'a [usize]),
     IndicesU32(&'a [u32]),
+    IndicesWithMax(&'a [usize], Option<usize>),
+    IndicesU32WithMax(&'a [u32], Option<usize>),
     Range(usize, usize),
 }
 
 impl IdxSelection<'_> {
+    /// Cache slice maxima once before sharing the selection across
+    /// accumulators.
+    pub fn with_cached_max(self) -> Self {
+        match self {
+            Self::Indices(indices) => Self::IndicesWithMax(indices, self.max_index()),
+            Self::IndicesU32(indices) => Self::IndicesU32WithMax(indices, self.max_index()),
+            _ => self,
+        }
+    }
+
+    pub fn max_index(&self) -> Option<usize> {
+        match *self {
+            Self::Single(idx) => Some(idx),
+            Self::Indices(indices) => indices.iter().copied().max(),
+            Self::IndicesU32(indices) => indices.iter().copied().max().map(|idx| idx as usize),
+            Self::IndicesWithMax(_, max) | Self::IndicesU32WithMax(_, max) => max,
+            Self::Range(begin, end) => (begin < end).then(|| end - 1),
+        }
+    }
+
     pub fn len(&self) -> usize {
         match *self {
             IdxSelection::Single(_) => 1,
-            IdxSelection::Indices(indices) => indices.len(),
-            IdxSelection::IndicesU32(indices) => indices.len(),
+            IdxSelection::Indices(indices) | IdxSelection::IndicesWithMax(indices, _) => {
+                indices.len()
+            }
+            IdxSelection::IndicesU32(indices) | IdxSelection::IndicesU32WithMax(indices, _) => {
+                indices.len()
+            }
             IdxSelection::Range(begin, end) => end - begin,
         }
     }
@@ -109,11 +135,11 @@ macro_rules! idx_with_iter {
                 let mut $iter_var = [idx].into_iter();
                 $($s)*
             }
-            IdxSelection::Indices(indices) => {
+            IdxSelection::Indices(indices) | IdxSelection::IndicesWithMax(indices, _) => {
                 let mut $iter_var = indices.iter().copied();
                 $($s)*
             }
-            IdxSelection::IndicesU32(indices) => {
+            IdxSelection::IndicesU32(indices) | IdxSelection::IndicesU32WithMax(indices, _) => {
                 let mut $iter_var = indices.iter().map(|v| *v as usize);
                 $($s)*
             }

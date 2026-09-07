@@ -276,6 +276,7 @@ impl AggContext {
 
         // Every group needs an accumulator slot even when FILTER excludes all of its
         // rows.
+        let acc_idx = acc_idx.with_cached_max();
         acc_table.ensure_size(acc_idx);
 
         // partial update
@@ -331,10 +332,12 @@ impl AggContext {
                         filter_array,
                     );
                     if !filtered_acc.is_empty() {
+                        let filtered_acc_idx =
+                            IdxSelection::Indices(&filtered_acc).with_cached_max();
                         if let Ok(udaf_agg) = downcast_any!(agg, SparkUDAFWrapper) {
                             udaf_agg.partial_update_with_indices_cache(
                                 acc_col,
-                                IdxSelection::Indices(&filtered_acc),
+                                filtered_acc_idx,
                                 &input_arrays[*agg_idx],
                                 IdxSelection::Indices(&filtered_input),
                                 &udaf_indices_cache,
@@ -342,7 +345,7 @@ impl AggContext {
                         } else {
                             agg.partial_update(
                                 acc_col,
-                                IdxSelection::Indices(&filtered_acc),
+                                filtered_acc_idx,
                                 &input_arrays[*agg_idx],
                                 IdxSelection::Indices(&filtered_input),
                             )?;
@@ -467,7 +470,7 @@ impl AggContext {
                 }
             }
             // Per-row accumulator indices (used by sort aggregation).
-            IdxSelection::Indices(indices) => {
+            IdxSelection::Indices(indices) | IdxSelection::IndicesWithMax(indices, _) => {
                 for i in batch_start_idx..batch_end_idx {
                     if filter_array.value(i) {
                         filtered_acc.push(indices[i - batch_start_idx]);
@@ -476,7 +479,7 @@ impl AggContext {
                 }
             }
             // Per-row accumulator indices as u32 (used by hash aggregation).
-            IdxSelection::IndicesU32(indices) => {
+            IdxSelection::IndicesU32(indices) | IdxSelection::IndicesU32WithMax(indices, _) => {
                 for i in batch_start_idx..batch_end_idx {
                     if filter_array.value(i) {
                         filtered_acc.push(indices[i - batch_start_idx] as usize);
@@ -505,6 +508,7 @@ impl AggContext {
         input_idx: IdxSelection,
     ) -> Result<()> {
         if self.need_partial_update {
+            let acc_idx = acc_idx.with_cached_max();
             let udaf_indices_cache = OnceCell::new();
             for (agg_idx, agg) in &self.need_partial_update_aggs {
                 let acc_col = &mut acc_table.cols_mut()[*agg_idx];
@@ -533,6 +537,7 @@ impl AggContext {
         merging_acc_idx: IdxSelection,
     ) -> Result<()> {
         if self.need_partial_merge {
+            let acc_idx = acc_idx.with_cached_max();
             let udaf_indices_cache = OnceCell::new();
             for (agg_idx, agg) in &self.need_partial_merge_aggs {
                 let acc_col = &mut acc_table.cols_mut()[*agg_idx];

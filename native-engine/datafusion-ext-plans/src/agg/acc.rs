@@ -50,10 +50,8 @@ pub trait AccColumn: Send {
 
     fn ensure_size(&mut self, idx: IdxSelection<'_>) {
         let idx_max_value = match idx {
-            IdxSelection::Single(v) => v,
-            IdxSelection::Indices(v) => v.iter().copied().max().unwrap_or(0),
-            IdxSelection::IndicesU32(v) => v.iter().copied().max().unwrap_or(0) as usize,
             IdxSelection::Range(_begin, end) => end,
+            _ => idx.max_index().unwrap_or(0),
         };
         if idx_max_value >= self.num_records() {
             self.resize(idx_max_value + 1);
@@ -62,6 +60,52 @@ pub trait AccColumn: Send {
 }
 
 pub type AccColumnRef = Box<dyn AccColumn>;
+
+#[cfg(test)]
+mod selection_cache_tests {
+    use super::*;
+
+    #[test]
+    fn cached_selection_preserves_indices_and_capacity() {
+        let selections = [
+            IdxSelection::Single(4),
+            IdxSelection::Indices(&[2, 7, 1, 7]),
+            IdxSelection::IndicesU32(&[2, 7, 1, 7]),
+            IdxSelection::Indices(&[]),
+            IdxSelection::IndicesU32(&[]),
+            IdxSelection::Range(3, 8),
+            IdxSelection::Range(0, 0),
+        ];
+        for selection in selections {
+            let cached = selection.with_cached_max();
+            assert_eq!(cached.len(), selection.len());
+            assert_eq!(cached.to_int32_vec(), selection.to_int32_vec());
+            assert_eq!(cached.max_index(), selection.max_index());
+            assert!(cached.with_cached_max() == cached);
+            for initial_size in [0, 3, 10] {
+                let mut original_col = AccBooleanColumn::new(initial_size);
+                let mut cached_col = AccBooleanColumn::new(initial_size);
+                original_col.ensure_size(selection);
+                cached_col.ensure_size(cached);
+                assert_eq!(cached_col.num_records(), original_col.num_records());
+                let mut original_table = AccTable::new(
+                    vec![Box::new(AccBooleanColumn::new(initial_size))],
+                    initial_size,
+                );
+                let mut cached_table = AccTable::new(
+                    vec![Box::new(AccBooleanColumn::new(initial_size))],
+                    initial_size,
+                );
+                original_table.ensure_size(selection);
+                cached_table.ensure_size(cached);
+                assert_eq!(
+                    cached_table.cols()[0].num_records(),
+                    original_table.cols()[0].num_records()
+                );
+            }
+        }
+    }
+}
 
 pub type AccBytes = SmallVec<u8, 24>;
 const _ACC_BYTES_SIZE_CHECKER: [(); 32] = [(); size_of::<AccBytes>()];
@@ -90,16 +134,8 @@ impl AccTable {
 
     pub fn ensure_size(&mut self, idx: IdxSelection<'_>) {
         let num_records = match idx {
-            IdxSelection::Single(idx) => idx + 1,
-            IdxSelection::Indices(indices) => {
-                indices.iter().copied().max().map_or(0, |idx| idx + 1)
-            }
-            IdxSelection::IndicesU32(indices) => indices
-                .iter()
-                .copied()
-                .max()
-                .map_or(0, |idx| idx as usize + 1),
             IdxSelection::Range(_, end) => end,
+            _ => idx.max_index().map_or(0, |idx| idx + 1),
         };
         self.cols
             .iter_mut()
