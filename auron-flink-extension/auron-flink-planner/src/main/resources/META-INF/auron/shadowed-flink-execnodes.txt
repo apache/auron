@@ -19,3 +19,4 @@
 # a matching <exclude> in auron-flink-assembly/pom.xml's shade <filters>. Blank lines and lines
 # starting with '#' are ignored.
 org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecCalc
+org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecCalc
