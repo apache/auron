@@ -66,6 +66,119 @@ mod selection_cache_tests {
     use super::*;
 
     #[test]
+    fn cached_selection_grows_all_column_types() -> Result<()> {
+        for selection in [
+            IdxSelection::Indices(&[2, 19, 2, 7]),
+            IdxSelection::IndicesU32(&[2, 19, 2, 7]),
+            IdxSelection::Single(19),
+            IdxSelection::Range(2, 20),
+            IdxSelection::Indices(&[]),
+            IdxSelection::IndicesU32(&[]),
+            IdxSelection::Range(0, 0),
+        ] {
+            for initial_size in [0, 3, 24] {
+                let make_columns = || -> Vec<AccColumnRef> {
+                    let mut boolean = AccBooleanColumn::new(initial_size);
+                    let mut primitive = AccPrimColumn::<i64>::new(initial_size, DataType::Int64);
+                    let mut bytes = AccBytesColumn::new(initial_size, DataType::Utf8);
+                    let mut scalar = AccScalarValueColumn::new(DataType::Int64, initial_size);
+                    if initial_size > 0 {
+                        boolean.set_value(0, Some(true));
+                        primitive.set_value(0, Some(42));
+                        bytes.set_value(0, Some(AccBytes::from_slice(b"value")));
+                        scalar.set_value(0, ScalarValue::Int64(Some(42)));
+                    }
+                    vec![
+                        Box::new(boolean),
+                        Box::new(primitive),
+                        Box::new(bytes),
+                        Box::new(scalar),
+                    ]
+                };
+                let cached = selection.with_cached_max();
+                let mut original = make_columns();
+                let mut columns = make_columns();
+                for (original, column) in original.iter_mut().zip(&mut columns) {
+                    original.ensure_size(selection);
+                    column.ensure_size(cached);
+                    assert_eq!(column.num_records(), original.num_records());
+                    let size = column.num_records();
+                    column.ensure_size(cached);
+                    assert_eq!(column.num_records(), size);
+                    assert_eq!(
+                        column.freeze_to_arrays(IdxSelection::Range(0, size))?,
+                        original.freeze_to_arrays(IdxSelection::Range(0, size))?
+                    );
+                }
+                let mut table = AccTable::new(make_columns(), initial_size);
+                // Columns can already have different sizes after individual updates.
+                table.cols_mut()[0].resize(32);
+                table.ensure_size(cached);
+                let expected = initial_size.max(selection.max_index().map_or(0, |i| i + 1));
+                assert_eq!(table.cols()[0].num_records(), 32);
+                for column in &table.cols()[1..] {
+                    assert_eq!(column.num_records(), expected);
+                }
+                table.ensure_size(cached);
+                assert_eq!(table.cols()[0].num_records(), 32);
+                for column in &table.cols()[1..] {
+                    assert_eq!(column.num_records(), expected);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cached_selection_pairs_and_broadcasts() {
+        for selection in [
+            IdxSelection::Indices(&[2, 19, 2, 7]),
+            IdxSelection::IndicesU32(&[2, 19, 2, 7]),
+        ] {
+            let cached = selection.with_cached_max();
+            let mut pairs = vec![];
+            crate::idx_for_zipped! { ((a, b) in (cached, IdxSelection::Range(3, 7))) => {
+                pairs.push((a, b));
+            }}
+            assert_eq!(pairs, vec![(2, 3), (19, 4), (2, 5), (7, 6)]);
+            for (left, right, expected) in [
+                (
+                    cached,
+                    IdxSelection::Single(5),
+                    vec![(2, 5), (19, 5), (2, 5), (7, 5)],
+                ),
+                (
+                    IdxSelection::Single(5),
+                    cached,
+                    vec![(5, 2), (5, 19), (5, 2), (5, 7)],
+                ),
+                (cached, cached, vec![(2, 2), (19, 19), (2, 2), (7, 7)]),
+                (
+                    cached,
+                    IdxSelection::IndicesU32(&[3, 4, 5, 6]).with_cached_max(),
+                    vec![(2, 3), (19, 4), (2, 5), (7, 6)],
+                ),
+                (
+                    IdxSelection::Indices(&[]).with_cached_max(),
+                    IdxSelection::Single(5),
+                    vec![],
+                ),
+                (
+                    IdxSelection::Single(5),
+                    IdxSelection::IndicesU32(&[]).with_cached_max(),
+                    vec![],
+                ),
+            ] {
+                let mut pairs = vec![];
+                crate::idx_for_zipped! { ((a, b) in (left, right)) => {
+                    pairs.push((a, b));
+                }}
+                assert_eq!(pairs, expected);
+            }
+        }
+    }
+
+    #[test]
     fn cached_selection_preserves_indices_and_capacity() {
         let selections = [
             IdxSelection::Single(4),

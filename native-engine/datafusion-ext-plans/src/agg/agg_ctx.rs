@@ -470,7 +470,7 @@ impl AggContext {
                 }
             }
             // Per-row accumulator indices (used by sort aggregation).
-            IdxSelection::Indices(indices) | IdxSelection::IndicesWithMax(indices, _) => {
+            IdxSelection::Indices(indices) => {
                 for i in batch_start_idx..batch_end_idx {
                     if filter_array.value(i) {
                         filtered_acc.push(indices[i - batch_start_idx]);
@@ -479,13 +479,29 @@ impl AggContext {
                 }
             }
             // Per-row accumulator indices as u32 (used by hash aggregation).
-            IdxSelection::IndicesU32(indices) | IdxSelection::IndicesU32WithMax(indices, _) => {
+            IdxSelection::IndicesU32(indices) => {
                 for i in batch_start_idx..batch_end_idx {
                     if filter_array.value(i) {
                         filtered_acc.push(indices[i - batch_start_idx] as usize);
                         filtered_input.push(i);
                     }
                 }
+            }
+            IdxSelection::IndicesWithMax(cached) => {
+                return Self::build_filtered_indices(
+                    IdxSelection::Indices(cached.indices()),
+                    batch_start_idx,
+                    batch_end_idx,
+                    filter_array,
+                );
+            }
+            IdxSelection::IndicesU32WithMax(cached) => {
+                return Self::build_filtered_indices(
+                    IdxSelection::IndicesU32(cached.indices()),
+                    batch_start_idx,
+                    batch_end_idx,
+                    filter_array,
+                );
             }
             // Contiguous accumulator range (used by merge / partial-skip paths).
             IdxSelection::Range(start, _end) => {
@@ -630,5 +646,244 @@ impl AggContext {
     pub fn get_or_try_init_udaf_mem_tracker(&self) -> Result<&SparkUDAFMemTracker> {
         self.udaf_mem_tracker
             .get_or_try_init(|| SparkUDAFMemTracker::try_new())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use arrow::{
+        array::{Float64Array, Int64Array},
+        datatypes::DataType,
+    };
+    use datafusion::physical_expr::expressions::Column;
+
+    use super::*;
+    use crate::agg::{AggFunction, agg::create_agg};
+
+    #[test]
+    fn filtered_cached_indices_preserve_slice_mapping() {
+        let filter = BooleanArray::from(vec![
+            Some(true),
+            Some(true),
+            Some(false),
+            None,
+            Some(true),
+            Some(true),
+        ]);
+        for (selection, expected) in [
+            (IdxSelection::Indices(&[2, 19, 2, 7]), vec![2, 7]),
+            (IdxSelection::IndicesU32(&[2, 19, 2, 7]), vec![2, 7]),
+            (IdxSelection::Single(7), vec![7, 7]),
+            (IdxSelection::Range(3, 7), vec![3, 6]),
+        ] {
+            for selection in [selection, selection.with_cached_max()] {
+                assert_eq!(
+                    AggContext::build_filtered_indices(selection, 1, 5, &filter),
+                    (expected.clone(), vec![1, 4])
+                );
+                assert_eq!(
+                    AggContext::build_filtered_indices(selection, 2, 2, &filter),
+                    (vec![], vec![])
+                );
+                let excluded = BooleanArray::from(vec![false; 6]);
+                assert_eq!(
+                    AggContext::build_filtered_indices(selection, 1, 5, &excluded),
+                    (vec![], vec![])
+                );
+            }
+        }
+    }
+
+    fn context(
+        exec_mode: AggExecMode,
+        input_schema: SchemaRef,
+        mode: AggMode,
+        aggs: &[AggExpr],
+    ) -> Result<AggContext> {
+        AggContext::try_new(
+            exec_mode,
+            input_schema,
+            vec![],
+            aggs.iter()
+                .cloned()
+                .map(|mut agg| {
+                    agg.mode = mode;
+                    if mode != AggMode::Partial {
+                        agg.filter = None;
+                    }
+                    agg
+                })
+                .collect(),
+            false,
+            false,
+        )
+    }
+
+    #[test]
+    fn filtered_aggregates_through_sliced_partial_merge_and_final() -> Result<()> {
+        for exec_mode in [AggExecMode::HashAgg, AggExecMode::SortAgg] {
+            for multiple_batches in [false, true] {
+                check_filtered_aggregates(exec_mode, multiple_batches)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn check_filtered_aggregates(exec_mode: AggExecMode, multiple_batches: bool) -> Result<()> {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("value", DataType::Float64, true),
+            Field::new("filter", DataType::Boolean, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Float64Array::from(vec![
+                    999., 10., 20., 30., 40., 50., 999.,
+                ])),
+                Arc::new(BooleanArray::from(vec![
+                    Some(true),
+                    Some(true),
+                    Some(false),
+                    Some(true),
+                    None,
+                    Some(true),
+                    Some(true),
+                ])),
+            ],
+        )?;
+        let value: PhysicalExprRef = Arc::new(Column::new("value", 0));
+        let filter: PhysicalExprRef = Arc::new(Column::new("filter", 1));
+        let aggs = [AggFunction::Count, AggFunction::Sum, AggFunction::Avg]
+            .into_iter()
+            .map(|function| {
+                Ok(AggExpr {
+                    field_name: format!("{function:?}"),
+                    mode: AggMode::Partial,
+                    agg: create_agg(function, &[value.clone()], &schema, DataType::Float64)?,
+                    filter: Some(filter.clone()),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let partial = context(exec_mode, schema, AggMode::Partial, &aggs)?;
+        let mut table = partial.create_acc_table(0);
+        // Group 19 has no matching rows, but must still have all accumulator slots.
+        partial.update_batch_slice_to_acc_table(
+            &batch,
+            1,
+            6,
+            &mut table,
+            IdxSelection::IndicesU32(&[2, 7, 2, 19, 7]).with_cached_max(),
+        )?;
+        assert!(table.cols().iter().all(|col| col.num_records() >= 20));
+        if multiple_batches {
+            let next_batch = RecordBatch::try_new(
+                batch.schema(),
+                vec![
+                    Arc::new(Float64Array::from(vec![
+                        Some(999.),
+                        None,
+                        Some(70.),
+                        Some(80.),
+                        Some(90.),
+                        Some(999.),
+                    ])),
+                    Arc::new(BooleanArray::from(vec![
+                        Some(true),
+                        Some(true),
+                        Some(true),
+                        Some(false),
+                        None,
+                        Some(true),
+                    ])),
+                ],
+            )?;
+            // Reuse the table: the selected NULL must not increment COUNT(value)
+            // or AVG's count. Group 2 accumulates 70; new group 31 is filtered out.
+            partial.update_batch_slice_to_acc_table(
+                &next_batch,
+                1,
+                5,
+                &mut table,
+                IdxSelection::IndicesU32(&[2, 2, 7, 31]).with_cached_max(),
+            )?;
+            assert!(table.cols().iter().all(|col| col.num_records() >= 32));
+        }
+        let partial_batch = RecordBatch::try_new(
+            partial.output_schema.clone(),
+            partial.build_agg_columns(
+                &mut table,
+                IdxSelection::Indices(&[19, 2, 7, 2, 19, 19]).with_cached_max(),
+            )?,
+        )?;
+
+        let merging = context(
+            exec_mode,
+            partial_batch.schema(),
+            AggMode::PartialMerge,
+            &aggs,
+        )?;
+        let mut table = merging.create_acc_table(0);
+        // Merge group 2 twice and group 7 once. The second batch adds 70
+        // to group 2, so its contribution is also merged twice.
+        let (expected_count, expected_sum) = if multiple_batches {
+            (7, 270.)
+        } else {
+            (5, 130.)
+        };
+        let expected_avg = expected_sum / expected_count as f64;
+        merging.update_batch_slice_to_acc_table(
+            &partial_batch,
+            1,
+            5,
+            &mut table,
+            IdxSelection::Indices(&[4, 4, 4, 9]).with_cached_max(),
+        )?;
+        let merged_batch = RecordBatch::try_new(
+            merging.output_schema.clone(),
+            merging.build_agg_columns(
+                &mut table,
+                IdxSelection::IndicesU32(&[9, 4, 9]).with_cached_max(),
+            )?,
+        )?;
+
+        let final_ctx = context(exec_mode, merged_batch.schema(), AggMode::Final, &aggs)?;
+        let mut table = final_ctx.create_acc_table(0);
+        final_ctx.update_batch_slice_to_acc_table(
+            &merged_batch,
+            1,
+            3,
+            &mut table,
+            IdxSelection::IndicesU32(&[8, 15]).with_cached_max(),
+        )?;
+        let results = final_ctx.build_agg_columns(
+            &mut table,
+            IdxSelection::Indices(&[8, 15]).with_cached_max(),
+        )?;
+        assert_eq!(
+            results[0].as_ref(),
+            &Int64Array::from(vec![expected_count, 0])
+        );
+        assert_eq!(
+            results[1].as_ref(),
+            &Float64Array::from(vec![Some(expected_sum), None])
+        );
+        assert_eq!(
+            results[2].as_ref(),
+            &Float64Array::from(vec![Some(expected_avg), None])
+        );
+
+        // A Single destination broadcasts across the sliced partial buffers.
+        let mut table = final_ctx.create_acc_table(0);
+        final_ctx.update_batch_slice_to_acc_table(
+            &merged_batch,
+            1,
+            3,
+            &mut table,
+            IdxSelection::Single(6),
+        )?;
+        let results = final_ctx.build_agg_columns(&mut table, IdxSelection::Single(6))?;
+        assert_eq!(results[0].as_ref(), &Int64Array::from(vec![expected_count]));
+        assert_eq!(results[2].as_ref(), &Float64Array::from(vec![expected_avg]));
+        Ok(())
     }
 }
