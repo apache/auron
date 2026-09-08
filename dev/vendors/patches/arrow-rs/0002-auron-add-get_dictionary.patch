@@ -1,17 +1,17 @@
 From 83e2918853b9519b669a3143293943df9626fd6b Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sun, 15 Sep 2024 21:00:43 +0800
-Subject: [PATCH] blaze: add get_dictionary
+Subject: [PATCH] auron: add get_dictionary
 
 ---
  parquet/src/arrow/array_reader/mod.rs |   2 +-
  parquet/src/arrow/async_reader/mod.rs |  12 +-
  parquet/src/arrow/mod.rs              |   4 +-
- parquet/src/blaze.rs                  | 274 ++++++++++++++++++++++++++
+ parquet/src/auron.rs                  | 274 ++++++++++++++++++++++++++
  parquet/src/column/reader.rs          |   2 +-
  parquet/src/lib.rs                    |   4 +
  6 files changed, 293 insertions(+), 5 deletions(-)
- create mode 100644 parquet/src/blaze.rs
+ create mode 100644 parquet/src/auron.rs
 
 diff --git a/parquet/src/arrow/array_reader/mod.rs b/parquet/src/arrow/array_reader/mod.rs
 index 94d61c9ea..06b06c9de 100644
@@ -36,9 +36,9 @@ index 611d6999e..248de5be3 100644
      ) -> BoxFuture<'a, Result<Arc<ParquetMetaData>>>;
 +
 +    /// Sync version of get_bytes
-+    /// this is only used by blaze, for reading dictionary values for row group pruning
++    /// this is only used by auron, for reading dictionary values for row group pruning
 +    fn get_bytes_sync(&mut self, range: Range<u64>) -> Result<Bytes> {
-+        unimplemented!("blaze only")
++        unimplemented!("auron only")
 +    }
  }
 
@@ -71,11 +71,11 @@ index e33d6a05a..4afcb9464 100644
  mod decoder;
 
  #[cfg(feature = "async")]
-diff --git a/parquet/src/blaze.rs b/parquet/src/blaze.rs
+diff --git a/parquet/src/auron.rs b/parquet/src/auron.rs
 new file mode 100644
 index 000000000..88ab30d1e
 --- /dev/null
-+++ b/parquet/src/blaze.rs
++++ b/parquet/src/auron.rs
 @@ -0,0 +1,274 @@
 +use std::io::Read;
 +use std::sync::{Arc, Mutex};
@@ -285,7 +285,7 @@ index 000000000..88ab30d1e
 +    use crate::arrow::arrow_reader::ArrowReaderOptions;
 +    use crate::arrow::async_reader::AsyncFileReader;
 +    use crate::arrow::ParquetRecordBatchStreamBuilder;
-+    use crate::blaze::get_dictionary_for_pruning;
++    use crate::auron::get_dictionary_for_pruning;
 +    use crate::errors::ParquetError;
 +    use crate::file::footer::{decode_footer, decode_metadata};
 +    use crate::file::FOOTER_SIZE;
@@ -325,7 +325,7 @@ index 000000000..88ab30d1e
 +    #[tokio::test]
 +    async fn test_get_dictionary() -> crate::errors::Result<()> {
 +        let input = AsyncLocalFileReader(
-+            File::open("/Volumes/Workspace/blaze-init/arrow-rs/with-dict-2.parquet")?
++            File::open("/Volumes/Workspace/auron-init/arrow-rs/with-dict-2.parquet")?
 +        );
 +        let mut builder = ParquetRecordBatchStreamBuilder::new_with_options(
 +            input,
@@ -375,7 +375,7 @@ index f814ddeb0..b69d85ba8 100644
 +
 +#[cfg(feature = "arrow")]
 +#[cfg(feature = "async")]
-+pub mod blaze;
++pub mod auron;
 --
 2.50.1
 

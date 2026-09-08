@@ -1,7 +1,7 @@
 From 0ed0f11556f78301050d71d4c40b77d46ecba52a Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sun, 15 Sep 2024 21:14:08 +0800
-Subject: [PATCH] blaze: skip parquet utf-8 validating
+Subject: [PATCH] auron: skip parquet utf-8 validating
 
 ---
  arrow-array/src/types.rs                  | 40 +++++++++++------------
@@ -114,7 +114,7 @@ index 5051dce12..802df6ed0 100644
      /// [`Self::try_push`] can perform this validation check on insertion
      pub fn check_valid_utf8(&self, start_offset: usize) -> Result<()> {
 -        check_valid_utf8(&self.values.as_slice()[start_offset..])
-+        // blaze: ignore utf8 validation
++        // auron: ignore utf8 validation
 +        // check_valid_utf8(&self.values.as_slice()[start_offset..])
 +        Ok(())
      }

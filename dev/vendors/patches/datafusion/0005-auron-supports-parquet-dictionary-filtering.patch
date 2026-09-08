@@ -1,7 +1,7 @@
 From a887b7659f10ec62ed9102aa9a3e9fd5d2e9ea0c Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sun, 15 Sep 2024 22:02:24 +0800
-Subject: [PATCH] blaze: supports parquet dictionary filtering
+Subject: [PATCH] auron: supports parquet dictionary filtering
 
 ---
  datafusion-examples/examples/pruning.rs       |   4 +
@@ -118,7 +118,7 @@ index 51d50d780..982eed293 100644
  
          assert_eq!(groups.len(), self.access_plan.len());
          // Indexes of row groups still to scan
-+        // blaze: for less reading of dictionary pages, we still prune in separated passes
++        // auron: for less reading of dictionary pages, we still prune in separated passes
          let row_group_indexes = self.access_plan.row_group_indexes();
 -        let row_group_metadatas = row_group_indexes
 -            .iter()
@@ -213,7 +213,7 @@ index 51d50d780..982eed293 100644
 -    fn metadata_iter(&'a self) -> impl Iterator<Item = &'a RowGroupMetaData> + 'a {
 -        self.row_group_metadatas.iter().copied()
 +    fn metadata_iter(&self) -> impl Iterator<Item = &'a RowGroupMetaData> + 'a {
-+        // blaze: bypass lifetime checker
++        // auron: bypass lifetime checker
 +        let unchecked_self: &'a Self = unsafe {
 +            std::mem::transmute(self)
 +        };
@@ -225,7 +225,7 @@ index 51d50d780..982eed293 100644
 +        &self,
          column: &'b Column,
      ) -> Result<StatisticsConverter<'a>> {
-+        // blaze: bypass lifetime checker
++        // auron: bypass lifetime checker
 +        let unchecked_self: &'a Self = unsafe {
 +            std::mem::transmute(self)
 +        };
@@ -235,7 +235,7 @@ index 51d50d780..982eed293 100644
 -            self.parquet_schema,
 +            unchecked_self.arrow_schema,
 +            unsafe {
-+                // blaze: bypass lifetime checker
++                // auron: bypass lifetime checker
 +                std::mem::transmute(unchecked_self.builder.borrow_mut().parquet_schema())
 +            }
          )?)
@@ -271,7 +271,7 @@ index 51d50d780..982eed293 100644
 +            let mut values = vec![];
 +            for row_group_metadata in self.metadata_iter() {
 +                let dict_values =
-+                    parquet::blaze::get_dictionary_for_pruning(
++                    parquet::auron::get_dictionary_for_pruning(
 +                        &mut self.builder.borrow_mut().input.0,
 +                        row_group_metadata,
 +                        col_idx,

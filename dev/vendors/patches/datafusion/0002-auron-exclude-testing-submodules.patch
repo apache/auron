@@ -1,7 +1,7 @@
 From a3f528a1ea0d3e64992dbda9d764774fbc6185b0 Mon Sep 17 00:00:00 2001
 From: zhangli20 <richselian@gmail.com>
 Date: Wed, 13 Aug 2025 11:34:56 +0800
-Subject: [PATCH] blaze: exclude testing submodules
+Subject: [PATCH] auron: exclude testing submodules
 
 ---
  .gitmodules        | 20 ++++++++++----------

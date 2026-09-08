@@ -1,7 +1,7 @@
 From 95fa6cbac6b7146a8883f5ce761316d11282399b Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Thu, 18 May 2023 14:26:01 +0800
-Subject: [PATCH] blaze do not force escaping control characters
+Subject: [PATCH] auron do not force escaping control characters
 
 ---
  src/read.rs | 8 ++++++--
@@ -20,7 +20,7 @@ index cac8132..b88606d 100644
 +        // CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 0
 +        // CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 1
 +
-+        // blaze: will not escape any characters other than \0
++        // auron: will not escape any characters other than \0
 +        CT, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 0
 +        __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 1
          __, __, QU, __, __, __, __, __, __, __, __, __, __, __, __, __, // 2

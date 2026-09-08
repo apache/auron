@@ -1,7 +1,7 @@
 From 533456f6af70c9f51256b108f3bf2a189133d0f8 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Mon, 16 Sep 2024 11:43:47 +0800
-Subject: [PATCH] blaze: supports pruning with starts_with
+Subject: [PATCH] auron: supports pruning with starts_with
 
 ---
  datafusion/pruning/src/pruning_predicate.rs | 56 +++++++++++++++++++++

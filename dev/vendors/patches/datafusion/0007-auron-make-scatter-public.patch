@@ -1,7 +1,7 @@
 From b781bce65fef561bb3e4006c874d8f88291b637d Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Mon, 16 Sep 2024 10:04:54 +0800
-Subject: [PATCH] blaze: make scatter() public
+Subject: [PATCH] auron: make scatter() public
 
 ---
  datafusion/physical-expr-common/src/physical_expr.rs | 2 +-

@@ -1,7 +1,7 @@
 From 634a09f0df511ef69ec0026a43e16d70188166d6 Mon Sep 17 00:00:00 2001
 From: zhangli20 <richselian@gmail.com>
 Date: Wed, 13 Aug 2025 15:53:27 +0800
-Subject: [PATCH] blaze: revert substr() to v45.0.0 for unsupported string view
+Subject: [PATCH] auron: revert substr() to v45.0.0 for unsupported string view
  types
 
 ---

@@ -1,7 +1,7 @@
 From 4ddde6d86cd299607efcf177fd24784f5ca1ede0 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Mon, 16 Sep 2024 14:17:08 +0800
-Subject: [PATCH] blaze: supports short circuiting And/Or
+Subject: [PATCH] auron: supports short circuiting And/Or
 
 ---
  Cargo.lock                                    |   1 +
@@ -49,7 +49,7 @@ index 000000000..f47a65f90
 --- /dev/null
 +++ b/datafusion/physical-expr/src/expressions/short_circuiting.rs
 @@ -0,0 +1,352 @@
-+// Copyright 2022 The Blaze Authors
++// Copyright 2022 The Auron Authors
 +//
 +// Licensed under the Apache License, Version 2.0 (the "License");
 +// you may not use this file except in compliance with the License.
