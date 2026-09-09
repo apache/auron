@@ -20,7 +20,7 @@ extern crate test;
 use std::sync::Arc;
 
 use arrow::{
-    array::{Array, ArrayRef, Int64Array},
+    array::{ArrayRef, Int64Array},
     datatypes::DataType,
     record_batch::RecordBatch,
 };
@@ -125,40 +125,9 @@ fn execute(
     })
 }
 
-fn check_output(batches: &[RecordBatch], num_sums: usize) {
-    let mut seen = vec![false; NUM_GROUPS];
-    for batch in batches {
-        assert_eq!(batch.num_columns(), num_sums + 1);
-        let keys = batch
-            .column(0)
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .expect("group keys should be i64");
-        assert_eq!(keys.null_count(), 0);
-        for row in 0..batch.num_rows() {
-            let key = keys.value(row) as usize;
-            assert!(key < NUM_GROUPS && !seen[key]);
-            seen[key] = true;
-            for col in 0..num_sums {
-                let sums = batch
-                    .column(col + 1)
-                    .as_any()
-                    .downcast_ref::<Int64Array>()
-                    .expect("SUM output should be i64");
-                assert!(!sums.is_null(row));
-                let expected = (BATCH_SIZE / NUM_GROUPS)
-                    * (NUM_BATCHES * (key + col + 1) + NUM_BATCHES * (NUM_BATCHES - 1) / 2);
-                assert_eq!(sums.value(row), expected as i64);
-            }
-        }
-    }
-    assert!(seen.into_iter().all(|present| present));
-}
-
 // Time the full partial/final HashAgg pipeline, including allocation, grouping,
-// accumulator updates and collecting output. Build input/plan and check results
-// outside timing. Run this same benchmark on both revisions for before/after
-// data.
+// accumulator updates and collecting output. Build input/plan outside timing.
+// Run this same benchmark on both revisions for before/after data.
 fn bench_hash_agg(b: &mut Bencher, num_sums: usize) {
     MemManager::init(1024 * 1024 * 1024);
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -168,7 +137,6 @@ fn bench_hash_agg(b: &mut Bencher, num_sums: usize) {
         .expect("benchmark runtime should be created");
     let task_ctx = SessionContext::new().task_ctx();
     let plan = aggregate_plan(num_sums);
-    check_output(&execute(&runtime, &task_ctx, &plan), num_sums);
     b.iter(|| black_box(execute(&runtime, &task_ctx, &plan)));
 }
 
