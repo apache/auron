@@ -40,19 +40,18 @@ use test::{Bencher, black_box};
 
 const NUM_BATCHES: usize = 32;
 const BATCH_SIZE: usize = 8192;
-const NUM_GROUPS: usize = 1024;
 
-fn aggregate_plan(num_sums: usize) -> Arc<dyn ExecutionPlan> {
+fn aggregate_plan(num_sums: usize, num_groups: usize) -> Arc<dyn ExecutionPlan> {
     let batches = (0..NUM_BATCHES)
         .map(|batch_idx| {
             let keys: ArrayRef = Arc::new(Int64Array::from_iter_values(
-                (0..BATCH_SIZE).map(|row| ((row * 31 + 17) % NUM_GROUPS) as i64),
+                (0..BATCH_SIZE).map(|row| ((row * 31 + 17) % num_groups) as i64),
             ));
             let mut columns = vec![("key".to_owned(), keys)];
             for col in 0..num_sums {
                 let values: ArrayRef =
                     Arc::new(Int64Array::from_iter_values((0..BATCH_SIZE).map(|row| {
-                        let key = (row * 31 + 17) % NUM_GROUPS;
+                        let key = (row * 31 + 17) % num_groups;
                         (key + col + batch_idx + 1) as i64
                     })));
                 columns.push((format!("value_{col}"), values));
@@ -128,7 +127,7 @@ fn execute(
 // Time the full partial/final HashAgg pipeline, including allocation, grouping,
 // accumulator updates and collecting output. Build input/plan outside timing.
 // Run this same benchmark on both revisions for before/after data.
-fn bench_hash_agg(b: &mut Bencher, num_sums: usize) {
+fn bench_hash_agg(b: &mut Bencher, num_sums: usize, num_groups: usize) {
     MemManager::init(1024 * 1024 * 1024);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1)
@@ -136,21 +135,36 @@ fn bench_hash_agg(b: &mut Bencher, num_sums: usize) {
         .build()
         .expect("benchmark runtime should be created");
     let task_ctx = SessionContext::new().task_ctx();
-    let plan = aggregate_plan(num_sums);
+    let plan = aggregate_plan(num_sums, num_groups);
     b.iter(|| black_box(execute(&runtime, &task_ctx, &plan)));
 }
 
 #[bench]
-fn hash_agg_1_sum(b: &mut Bencher) {
-    bench_hash_agg(b, 1);
+fn hash_agg_1_sum_1024_groups(b: &mut Bencher) {
+    bench_hash_agg(b, 1, 1024);
 }
 
 #[bench]
-fn hash_agg_8_sums(b: &mut Bencher) {
-    bench_hash_agg(b, 8);
+fn hash_agg_8_sums_1024_groups(b: &mut Bencher) {
+    bench_hash_agg(b, 8, 1024);
 }
 
 #[bench]
-fn hash_agg_4_sums(b: &mut Bencher) {
-    bench_hash_agg(b, 4);
+fn hash_agg_4_sums_1024_groups(b: &mut Bencher) {
+    bench_hash_agg(b, 4, 1024);
+}
+
+#[bench]
+fn hash_agg_1_sum_8192_groups(b: &mut Bencher) {
+    bench_hash_agg(b, 1, 8192);
+}
+
+#[bench]
+fn hash_agg_4_sums_8192_groups(b: &mut Bencher) {
+    bench_hash_agg(b, 4, 8192);
+}
+
+#[bench]
+fn hash_agg_8_sums_8192_groups(b: &mut Bencher) {
+    bench_hash_agg(b, 8, 8192);
 }
