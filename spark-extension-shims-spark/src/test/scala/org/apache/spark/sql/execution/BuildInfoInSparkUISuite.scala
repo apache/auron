@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 import java.io.File
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.execution.ui.AuronSQLAppStatusListener
 import org.apache.spark.util.Utils
 
@@ -48,6 +48,15 @@ class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
     val listener = listeners(0)
     spark.sparkContext.listenerBus.waitUntilEmpty()
     assert(listener.getAuronBuildInfo() == 1)
+  }
+
+  test("test convert table in spark UI ") {
+    withTable("t1") {
+      sql(
+        "create table t1 using parquet PARTITIONED BY (part) as select 1 as c1, 2 as c2, 'test test' as part")
+      val df = sql("select * from t1")
+      checkAnswer(df, Seq(Row(1, 2, "test test")))
+    }
   }
 
 }
