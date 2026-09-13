@@ -55,6 +55,7 @@ abstract class NativeFileSourceScanBase(basedFileScan: FileSourceScanExec)
   override val output: Seq[Attribute] = basedFileScan.output
   override val outputPartitioning: Partitioning = basedFileScan.outputPartitioning
 
+  @transient
   protected val inputFileScanRDD: FileScanRDD = {
     MethodUtils.invokeMethod(basedFileScan, true, "prepare")
     MethodUtils.invokeMethod(basedFileScan, true, "waitForSubqueries")

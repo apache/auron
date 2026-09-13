@@ -16,12 +16,43 @@
  */
 package org.apache.auron
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeExec
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 
 class AuronCheckConvertBroadcastExchangeSuite extends AuronQueryTest with BaseAuronSQLSuite {
   import testImplicits._
+
+  test("do not serialize the broadcast relation with Spark tasks") {
+    withSQLConf(
+      "spark.auron.enable.broadcastExchange" -> "true",
+      "spark.auron.enable.bhj" -> "false") {
+      val payload = "x" * 4096
+      (0 until 256)
+        .map(i => (i, s"$i$payload"))
+        .toDF("key", "payload")
+        .createOrReplaceTempView("broad_cast_table1")
+      Seq(0, 255).toDF("key").createOrReplaceTempView("broad_cast_table2")
+
+      val df = spark.sql(
+        "select /*+ broadcast(a)*/ b.key, a.payload from broad_cast_table1 a " +
+          "inner join broad_cast_table2 b on a.key = b.key")
+
+      checkAnswer(df, Seq(Row(0, s"0$payload"), Row(255, s"255$payload")))
+      val exchange = collectFirst(df.queryExecution.executedPlan) {
+        case broadcastExchangeExec: NativeBroadcastExchangeExec => broadcastExchangeExec
+      }.get
+      val broadcast = exchange.executeBroadcast[Any]()
+      try {
+        assert(broadcast eq exchange.executeBroadcast[Any]())
+        val serialized = SparkEnv.get.closureSerializer.newInstance().serialize(broadcast)
+        assert(serialized.remaining() < 64 * 1024)
+      } finally {
+        broadcast.destroy()
+      }
+    }
+  }
 
   test(
     "test bhj broadcastExchange to native where spark.auron.enable.broadcastExchange is true") {
