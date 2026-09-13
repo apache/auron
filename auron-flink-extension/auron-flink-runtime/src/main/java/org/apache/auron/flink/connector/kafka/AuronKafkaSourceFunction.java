@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
+import org.apache.auron.flink.functions.FlinkAuronTaskContext;
 import org.apache.auron.flink.runtime.operator.AuronPlanTreeRewriter;
 import org.apache.auron.flink.runtime.operator.FlinkAuronFunction;
 import org.apache.auron.flink.table.data.AuronColumnarRowData;
@@ -140,6 +141,20 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     // Partition discovery related
     private transient ScheduledExecutorService partitionDiscoveryScheduler;
     private transient volatile int knownPartitionCount;
+
+    // Per-subtask registry of UDF wrappers, published onto the native runtime's worker threads so
+    // a wrapper callback arriving on one can resolve the user function belonging to this subtask.
+    // Assigned once in open() and read only through the synchronized helpers below, so exactly one
+    // caller can take the context and run each user function's close(). The assignment itself is
+    // unsynchronized and needs no ordering of its own: open() runs on the task thread and the
+    // source thread that reads the field is started afterwards, so Thread.start() already places
+    // the write before every read.
+    private transient FlinkAuronTaskContext taskContext;
+
+    // Whether run() has reached native-runtime creation. Once it has, run() owns the teardown of
+    // both the runtime and the context, and close() must not touch them. Read and written only
+    // inside the synchronized helpers, so a check and a take cannot interleave.
+    private transient boolean nativeRuntimeStarted;
 
     // Watermark related: per-partition WatermarkGenerator with alignment
     private WatermarkStrategy<RowData> watermarkStrategy;
@@ -294,10 +309,45 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
             }
         }
 
+        // Build this subtask's wrapper registry and every wrapper the plan carries, on the task
+        // thread and from the fused plan, so the payloads of a merged Calc are included. Building
+        // them here rather than on first evaluation runs each user function's open() on the thread
+        // Flink would have run it on, instead of on a tokio worker; and it gives a subtask that
+        // never receives a row a matching open()/close() pair.
+        this.taskContext = new FlinkAuronTaskContext(runtimeContext);
+        for (byte[] payload : AuronPlanTreeRewriter.collectUdfWrapperPayloads(physicalPlanNode)) {
+            taskContext.getOrCreateWrapper(payload);
+        }
+
         // Mark the source as running only after initialization completes. The run() loop
         // collects rows only while isRunning is true on both the watermark and no-watermark
         // paths, so this must be set regardless of whether a watermark strategy is present.
         this.isRunning = true;
+    }
+
+    /**
+     * Marks that {@code run()} owns teardown of the native runtime and the task context from here
+     * on, and returns the context to publish. Synchronized with the take below so {@code close()}
+     * cannot remove the context between the mark and the publish.
+     */
+    private synchronized FlinkAuronTaskContext claimTaskContextForRun() {
+        nativeRuntimeStarted = true;
+        return taskContext;
+    }
+
+    /**
+     * Removes the task context and hands it to the caller, so exactly one caller closes it. Closing
+     * it runs every user function's {@code close()}, which must happen once.
+     */
+    private synchronized FlinkAuronTaskContext takeTaskContext() {
+        FlinkAuronTaskContext taken = taskContext;
+        taskContext = null;
+        return taken;
+    }
+
+    /** Takes the task context only while {@code run()} has not claimed ownership of it. */
+    private synchronized FlinkAuronTaskContext takeTaskContextUnlessRunOwnsIt() {
+        return nativeRuntimeStarted ? null : takeTaskContext();
     }
 
     /**
@@ -373,66 +423,104 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         // Pre-check watermark flag to avoid per-record null checks in the hot path
         final boolean enableWatermark = partitionWatermarkTrackers != null && !partitionWatermarkTrackers.isEmpty();
 
-        AuronCallNativeWrapper wrapper = new AuronCallNativeWrapper(
-                FlinkArrowUtils.getRootAllocator(),
-                physicalPlanNode,
-                nativeMetric,
-                0,
-                0,
-                0,
-                AuronAdaptor.getInstance().getAuronConfiguration().getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE));
+        // Claiming the context transfers teardown to this method, so construction of the native
+        // runtime has to sit inside the try below: a failure there must still reach the finally that
+        // closes the context, because close() steps aside once the claim is made.
+        final FlinkAuronTaskContext runTaskContext = claimTaskContextForRun();
+        AuronCallNativeWrapper wrapper = null;
+        try {
+            // Native runtime construction reads the published task context from this very frame and
+            // installs it, with the user-code classloader, on every worker thread of the pool it
+            // builds; publishing anywhere else, or after the constructor returns, has no effect.
+            // Clearing it afterwards keeps this thread from retaining a user-code classloader for
+            // the rest of its life. The workers keep their copy until they exit, and the pool is
+            // shut down without being joined, so a worker can briefly outlive the plan it served.
+            FlinkAuronTaskContext.setCurrent(runTaskContext);
+            try {
+                wrapper = new AuronCallNativeWrapper(
+                        FlinkArrowUtils.getRootAllocator(),
+                        physicalPlanNode,
+                        nativeMetric,
+                        0,
+                        0,
+                        0,
+                        AuronAdaptor.getInstance()
+                                .getAuronConfiguration()
+                                .getLong(FlinkAuronConfiguration.NATIVE_MEMORY_SIZE));
+            } finally {
+                FlinkAuronTaskContext.clearCurrent();
+            }
 
-        if (enableWatermark) {
-            // Per-partition watermark path: each partition has its own WatermarkGenerator
-            // with a capture-only WatermarkOutput. Combined watermark = min(non-idle partitions).
-            while (wrapper.loadNextBatch(batch -> {
-                if (isRunning) {
-                    Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
-                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, metaCount);
-                    for (int i = 0; i < batch.getRowCount(); i++) {
-                        AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
-                        int partitionId = tmpRowData.getInt(partitionIdx);
-                        long offset = tmpRowData.getLong(offsetIdx);
-                        long kafkaTimestamp = tmpRowData.getLong(timestampIdx);
-                        tmpOffsets.put(partitionId, offset);
+            if (enableWatermark) {
+                // Per-partition watermark path: each partition has its own WatermarkGenerator
+                // with a capture-only WatermarkOutput. Combined watermark = min(non-idle partitions).
+                while (wrapper.loadNextBatch(batch -> {
+                    if (isRunning) {
+                        Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
+                        FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, metaCount);
+                        for (int i = 0; i < batch.getRowCount(); i++) {
+                            AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
+                            int partitionId = tmpRowData.getInt(partitionIdx);
+                            long offset = tmpRowData.getLong(offsetIdx);
+                            long kafkaTimestamp = tmpRowData.getLong(timestampIdx);
+                            tmpOffsets.put(partitionId, offset);
 
-                        // Feed into the partition's own generator (output captures, does NOT forward)
-                        PartitionWatermarkTracker tracker = getOrCreateTracker(partitionId);
-                        tracker.generator.onEvent(tmpRowData, kafkaTimestamp, tracker.output);
+                            // Feed into the partition's own generator (output captures, does NOT forward)
+                            PartitionWatermarkTracker tracker = getOrCreateTracker(partitionId);
+                            tracker.generator.onEvent(tmpRowData, kafkaTimestamp, tracker.output);
 
-                        sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
+                            sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
+                        }
+                        // After batch: trigger onPeriodicEmit for all partitions, then combine and emit
+                        for (PartitionWatermarkTracker tracker : partitionWatermarkTrackers.values()) {
+                            tracker.generator.onPeriodicEmit(tracker.output);
+                        }
+                        emitCombinedWatermark(sourceContext);
+                        synchronized (lock) {
+                            currentOffsets = tmpOffsets;
+                        }
                     }
-                    // After batch: trigger onPeriodicEmit for all partitions, then combine and emit
-                    for (PartitionWatermarkTracker tracker : partitionWatermarkTrackers.values()) {
-                        tracker.generator.onPeriodicEmit(tracker.output);
+                })) {}
+            } else {
+                // No-watermark path: still use collectWithTimestamp with kafka timestamp
+                while (wrapper.loadNextBatch(batch -> {
+                    if (isRunning) {
+                        Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
+                        FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, metaCount);
+                        for (int i = 0; i < batch.getRowCount(); i++) {
+                            AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
+                            int partitionId = tmpRowData.getInt(partitionIdx);
+                            long offset = tmpRowData.getLong(offsetIdx);
+                            long kafkaTimestamp = tmpRowData.getLong(timestampIdx);
+                            tmpOffsets.put(partitionId, offset);
+                            sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
+                        }
+                        synchronized (lock) {
+                            currentOffsets = tmpOffsets;
+                        }
                     }
-                    emitCombinedWatermark(sourceContext);
-                    synchronized (lock) {
-                        currentOffsets = tmpOffsets;
-                    }
+                })) {}
+            }
+            LOG.info("Auron kafka source run end");
+        } finally {
+            // The native runtime may only be finalized from the thread that drives it: finalizing
+            // drops the receiver that a concurrent loadNextBatch is blocked on, through the same
+            // raw pointer. By this point the output stream has been run to exhaustion or has
+            // failed, so no evaluation is outstanding and the wrappers can be closed. The loops
+            // above normally close the wrapper themselves, in which case this call does nothing,
+            // and the wrapper is null when its construction is what failed. Closing the context
+            // from a nested finally keeps a failure there from stranding the user functions.
+            try {
+                if (wrapper != null) {
+                    wrapper.close();
                 }
-            })) {}
-        } else {
-            // No-watermark path: still use collectWithTimestamp with kafka timestamp
-            while (wrapper.loadNextBatch(batch -> {
-                if (isRunning) {
-                    Map<Integer, Long> tmpOffsets = new HashMap<>(currentOffsets);
-                    FlinkArrowReader arrowReader = FlinkArrowReader.create(batch, auronOutputRowType, metaCount);
-                    for (int i = 0; i < batch.getRowCount(); i++) {
-                        AuronColumnarRowData tmpRowData = (AuronColumnarRowData) arrowReader.read(i);
-                        int partitionId = tmpRowData.getInt(partitionIdx);
-                        long offset = tmpRowData.getLong(offsetIdx);
-                        long kafkaTimestamp = tmpRowData.getLong(timestampIdx);
-                        tmpOffsets.put(partitionId, offset);
-                        sourceContext.collectWithTimestamp(tmpRowData, kafkaTimestamp);
-                    }
-                    synchronized (lock) {
-                        currentOffsets = tmpOffsets;
-                    }
+            } finally {
+                FlinkAuronTaskContext finished = takeTaskContext();
+                if (finished != null) {
+                    finished.close();
                 }
-            })) {}
+            }
         }
-        LOG.info("Auron kafka source run end");
     }
 
     @Override
@@ -444,21 +532,34 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     public void close() throws Exception {
         this.isRunning = false;
 
-        // Shut down partition discovery scheduler before closing the consumer it uses
-        if (partitionDiscoveryScheduler != null) {
-            try {
-                partitionDiscoveryScheduler.shutdownNow();
-            } catch (Exception e) {
-                LOG.warn("Fail to shut down kafka partition discovery thread pool", e);
+        // Backstop for the case where open() succeeded but run() was never entered: the wrappers
+        // open() pre-built still owe their user functions a close(). Once run() has started the
+        // native runtime it owns this teardown instead, because closing wrappers here would run
+        // user code while a worker thread of that runtime can still evaluate. User code runs first
+        // but from its own try, so a function that throws on close cannot strand the Kafka
+        // resources below.
+        try {
+            FlinkAuronTaskContext neverRan = takeTaskContextUnlessRunOwnsIt();
+            if (neverRan != null) {
+                neverRan.close();
             }
-        }
+        } finally {
+            // Shut down partition discovery scheduler before closing the consumer it uses
+            if (partitionDiscoveryScheduler != null) {
+                try {
+                    partitionDiscoveryScheduler.shutdownNow();
+                } catch (Exception e) {
+                    LOG.warn("Fail to shut down kafka partition discovery thread pool", e);
+                }
+            }
 
-        // Close the metadata-only Kafka Consumer
-        if (kafkaConsumer != null) {
-            kafkaConsumer.close();
-        }
+            // Close the metadata-only Kafka Consumer
+            if (kafkaConsumer != null) {
+                kafkaConsumer.close();
+            }
 
-        super.close();
+            super.close();
+        }
     }
 
     @Override
