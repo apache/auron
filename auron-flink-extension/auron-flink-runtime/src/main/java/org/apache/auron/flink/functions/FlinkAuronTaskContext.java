@@ -46,8 +46,10 @@ import org.apache.flink.api.common.functions.RuntimeContext;
  * payloads two subtasks present are byte-identical and could not tell them apart. A wrapper reuses
  * an output row and its generated invoker's own state across evaluations, and each subtask is
  * entitled to its own {@code ScalarFunction} instance, so two subtasks sharing one wrapper would
- * corrupt results. Confining the registry to one subtask limits sharing to identical wrapper nodes
- * within a single subtask's own plan, which is the case the wrapper's own reuse argument covers.
+ * corrupt results. Confining the registry to one subtask, and giving every wrapper node in a plan a
+ * payload no other node in that plan can match, leaves one thing sharing an entry: the repeated
+ * arrivals of a single wrapper node across that subtask's drain cycles, which is exactly the reuse
+ * the wrapper is built for.
  */
 public final class FlinkAuronTaskContext implements AutoCloseable {
 

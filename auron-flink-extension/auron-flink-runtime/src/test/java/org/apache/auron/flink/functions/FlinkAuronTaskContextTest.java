@@ -17,6 +17,7 @@
 package org.apache.auron.flink.functions;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -103,6 +104,31 @@ public class FlinkAuronTaskContextTest {
             AuronUDFWrapperContext two = context.getOrCreateWrapper(payloadBytes(2));
 
             assertNotSame(one, two);
+            assertEquals(2, context.wrapperCount());
+        }
+    }
+
+    /**
+     * Contract: two payloads that differ in nothing but their node ordinal resolve to two wrappers,
+     * so two call sites of one function never share an instance.
+     *
+     * <p>The case above separates payloads that differ in the user function they carry. This one
+     * holds the function, the argument types and the return type fixed, leaving {@code
+     * FlinkUDFPayload}'s node ordinal as the only difference &mdash; the only field that can tell
+     * two structurally identical call sites apart. Drop the ordinal from the serialized form and
+     * the two collapse onto one wrapper, and therefore onto one user function instance.
+     */
+    @Test
+    public void testPayloadsDifferingOnlyInNodeOrdinalGetSeparateWrappers() throws Exception {
+        byte[] first = payloadBytesWithOrdinal(0);
+        byte[] second = payloadBytesWithOrdinal(1);
+        assertFalse(Arrays.equals(first, second), "the ordinal must reach the serialized form");
+
+        try (FlinkAuronTaskContext context = newContext()) {
+            AuronUDFWrapperContext one = context.getOrCreateWrapper(first);
+            AuronUDFWrapperContext two = context.getOrCreateWrapper(second);
+
+            assertNotSame(one, two, "two call sites of one function must not share a wrapper");
             assertEquals(2, context.wrapperCount());
         }
     }
@@ -275,6 +301,12 @@ public class FlinkAuronTaskContextTest {
     private static byte[] payloadBytes(int addend) throws Exception {
         return GeneratedUdfTestSupport.payloadBytes(
                 new LifecycleFunction(addend), new DataType[] {DataTypes.INT()}, DataTypes.INT(), 0);
+    }
+
+    /** Serializes the same function and types under a given wrapper-node ordinal. */
+    private static byte[] payloadBytesWithOrdinal(int nodeOrdinal) throws Exception {
+        return GeneratedUdfTestSupport.payloadBytes(
+                new LifecycleFunction(1), new DataType[] {DataTypes.INT()}, DataTypes.INT(), nodeOrdinal);
     }
 
     /** Serializes a payload whose function fails in {@code close}. */

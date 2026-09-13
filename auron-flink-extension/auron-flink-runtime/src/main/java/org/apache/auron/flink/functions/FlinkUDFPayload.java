@@ -50,10 +50,18 @@ public final class FlinkUDFPayload implements Serializable {
      * <p>Nothing reads it back; its whole job is to be part of the serialized form. The runtime
      * keys its per-subtask wrapper registry on the payload bytes, because the native callback
      * carries nothing else, so two nodes whose payloads were byte-equal would resolve to one
-     * wrapper and therefore to one user function instance. That is observable whenever the
-     * function keeps instance state, and it diverges from Flink, which hands each call site its
-     * own copy of the function. Two calls of one function on arguments of the same types produce
-     * exactly such a pair, since the arguments travel outside the payload.
+     * wrapper and therefore share one user function instance between two call sites.
+     *
+     * <p>It is the deliberate half of that separation rather than the operative one. The bytes
+     * already differ without it: {@link #className} comes from Flink's {@code CodeGenUtils.newName},
+     * which appends an incrementing counter, and {@link #code} embeds that name. Carrying an explicit
+     * ordinal keeps the guarantee off an incidental property of a code-generation helper this class
+     * neither owns nor pins.
+     *
+     * <p>Separating call sites at all is stricter than Flink's own code generation, which names the
+     * generated field after the function's identity rather than after the call site and deduplicates
+     * the resulting member and lifecycle statements, so two call sites of one function share a
+     * single instance there.
      */
     private final int nodeOrdinal;
 
@@ -69,8 +77,8 @@ public final class FlinkUDFPayload implements Serializable {
      * @param returnType the type of the value {@code eval} produces
      * @param udfClassName the user function's class name, carried so a failure crossing back to the
      *     native side can name it
-     * @param nodeOrdinal a value unique to this wrapper node within its plan, which is what keeps
-     *     two call sites of one function from resolving to a single shared wrapper at runtime
+     * @param nodeOrdinal a value unique to this wrapper node within its plan, carried so that two
+     *     call sites of one function cannot resolve to a single shared wrapper at runtime
      */
     public FlinkUDFPayload(
             String className,
