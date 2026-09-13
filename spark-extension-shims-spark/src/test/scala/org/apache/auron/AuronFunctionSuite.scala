@@ -220,6 +220,76 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("date_add and date_sub functions") {
+    withTable("t1") {
+      sql("create table t1(start_date date, days int) using parquet")
+      sql("""insert into t1 values
+          |  (date'2024-02-28', 1),
+          |  (date'2024-03-01', -1),
+          |  (date'2023-03-01', 1),
+          |  (date'2024-01-31', 1),
+          |  (date'2024-12-31', 1),
+          |  (date'1969-12-31', 1),
+          |  (date'2024-01-01', 0),
+          |  (null, 1),
+          |  (date'2024-01-01', null)
+          |""".stripMargin)
+
+      for (ansi <- Seq("false", "true"); dayType <- Seq("tinyint", "smallint", "int")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator(s"""select
+              |  date_add(start_date, cast(days as $dayType)),
+              |  date_sub(start_date, cast(days as $dayType)),
+              |  date_add(start_date, 1), date_sub(start_date, -1),
+              |  date_add(date'2024-01-01', cast(days as $dayType)),
+              |  date_sub(date'2024-01-01', cast(days as $dayType))
+              |from t1""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("date_add and date_sub integer overflow") {
+    withTable("t1") {
+      sql("create table t1(start_date date, days int) using parquet")
+      sql("""insert into t1 values
+          |  (date'1970-01-02', 2147483647),
+          |  (date'1969-12-31', -2147483648),
+          |  (date'1970-01-01', -2147483648),
+          |  (date'1970-01-01', 2147483647)
+          |""".stripMargin)
+
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          // Compare epoch days without converting extreme dates to java.sql.Date.
+          checkSparkAnswerAndOperator("""select
+              |  datediff(date_add(start_date, days), date'1970-01-01'),
+              |  datediff(date_sub(start_date, days), date'1970-01-01')
+              |from t1""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("date_add and date_sub timestamp and string inputs") {
+    withTable("t1") {
+      sql("create table t1(ts timestamp, dt string, days int) using parquet")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        sql("""insert into t1 values
+            |  (timestamp'1970-01-01 04:30:00', '1969-12-31', 1),
+            |  (timestamp'2024-03-01 04:30:00', '2024-02-29', -1),
+            |  (null, null, 1)
+            |""".stripMargin)
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        checkSparkAnswerAndOperator("""select
+            |  date_add(ts, days), date_sub(ts, days),
+            |  date_add(dt, days), date_sub(dt, days)
+            |from t1""".stripMargin)
+      }
+    }
+  }
+
   test("date-part functions with non-UTC timezone") {
     withTable("t1") {
       sql("create table t1(c1 timestamp) using parquet")
