@@ -35,6 +35,7 @@ import org.apache.flink.table.runtime.generated.CompileUtils;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.InstantiationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -137,6 +138,13 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
      * so a missing dependency of it arrives as {@code NoClassDefFoundError} and a throwing static
      * initializer as {@code ExceptionInInitializerError}. Nothing is swallowed — every catch here
      * rethrows.
+     *
+     * <p>Errors that leave the JVM unable to continue are exempt from the wrapping. Rewriting an
+     * {@code OutOfMemoryError} into an ordinary exception hides it from the handlers that exist to
+     * fail the process on it, and this one crosses the native boundary, so it would surface as a
+     * plain UDF failure on a JVM that can no longer be trusted. Those are rethrown unchanged;
+     * {@code LinkageError} and its subclasses stay catchable, which is the split the paragraph
+     * above depends on.
      */
     private AuronGeneratedUDF instantiate(FlinkUDFPayload payload, ClassLoader userCodeClassLoader) {
         try {
@@ -144,6 +152,7 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
             return (AuronGeneratedUDF)
                     compiled.getConstructor(Object[].class).newInstance((Object) payload.getReferences());
         } catch (Throwable t) {
+            ExceptionUtils.rethrowIfFatalErrorOrOOM(t);
             LOG.debug(
                     "Generated invoker for Flink UDF {} failed to load. Source:\n{}",
                     udfClassName,
@@ -201,6 +210,12 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
 
             Data.exportVectorSchemaRoot(allocator, outputRoot, dictionaries, exportArray);
         } catch (Throwable t) {
+            // The caller is the native side, which clears the pending throwable and turns it into
+            // an error string, so rethrowing does not carry a fatal error to a JVM handler. What it
+            // buys is not building the wrapper below: an OutOfMemoryError would otherwise be
+            // answered by concatenating a message and allocating an exception on a heap that just
+            // failed to satisfy an allocation.
+            ExceptionUtils.rethrowIfFatalErrorOrOOM(t);
             throw new IllegalStateException("Flink UDF " + udfClassName + " failed during evaluation", t);
         }
     }

@@ -329,6 +329,9 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
      * Marks that {@code run()} owns teardown of the native runtime and the task context from here
      * on, and returns the context to publish. Synchronized with the take below so {@code close()}
      * cannot remove the context between the mark and the publish.
+     *
+     * <p>Returns {@code null} when {@code close()} already took the context, which tells
+     * {@code run()} to abort instead of starting a native runtime over a torn-down subtask.
      */
     private synchronized FlinkAuronTaskContext claimTaskContextForRun() {
         nativeRuntimeStarted = true;
@@ -427,6 +430,19 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
         // runtime has to sit inside the try below: a failure there must still reach the finally that
         // closes the context, because close() steps aside once the claim is made.
         final FlinkAuronTaskContext runTaskContext = claimTaskContextForRun();
+        if (runTaskContext == null) {
+            // close() took the context and closed it before this method reached the claim, which is
+            // what a cancellation that lands between open() and the start of the source thread looks
+            // like. There is nothing left to publish, and the user functions the context held are
+            // already closed, so a native runtime built now would fail its first UDF callback with
+            // no task context published on the calling thread. Returning emits no rows and leaves
+            // nothing to tear down: the claim above keeps a later close() from closing twice, and
+            // the Kafka resources belong to close() either way. Logged at info because a source torn
+            // down before it ran is an ordinary cancellation rather than a fault, but the zero rows
+            // it produces still need an explanation in the log.
+            LOG.info("Auron kafka source was closed before run() started; skipping native runtime startup");
+            return;
+        }
         AuronCallNativeWrapper wrapper = null;
         try {
             // Native runtime construction reads the published task context from this very frame and

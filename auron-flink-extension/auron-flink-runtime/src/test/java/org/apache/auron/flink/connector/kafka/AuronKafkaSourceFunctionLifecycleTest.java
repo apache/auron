@@ -32,8 +32,11 @@ import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.auron.protobuf.PhysicalUDFWrapperExprNode;
 import org.apache.auron.protobuf.ProjectionExecNode;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
+import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.types.DataType;
@@ -123,6 +126,61 @@ class AuronKafkaSourceFunctionLifecycleTest {
         source.close();
 
         assertEquals(0, LifecycleFunction.closeCount.get(), "no context was built, so no user function was closed");
+    }
+
+    /**
+     * Contract: when {@code close()} has already taken and closed the task context, {@code run()}
+     * must abort instead of starting a native runtime. A runtime started at that point has no
+     * published context, so its first UDF callback fails, and it would be driving user functions
+     * that are already closed.
+     *
+     * <p>The closing assertion is the one that pins the abort: reaching the native runtime would
+     * either fault on the missing context or, once past it, take the teardown that close() already
+     * performed.
+     */
+    @Test
+    void testRunAbortsWhenCloseAlreadyTookTheContext() throws Exception {
+        AuronKafkaSourceFunction source = newSourceWithUdf();
+
+        source.open(new Configuration());
+        source.close();
+        assertEquals(1, LifecycleFunction.closeCount.get(), "close() must have closed the context first");
+
+        CountingSourceContext sourceContext = new CountingSourceContext();
+        source.run(sourceContext);
+
+        assertEquals(0, sourceContext.collected.get(), "an aborted run must emit no rows");
+        assertEquals(1, LifecycleFunction.closeCount.get(), "an aborted run must not close the user function again");
+    }
+
+    /** Source context that only counts what a run would emit. */
+    private static class CountingSourceContext implements SourceFunction.SourceContext<RowData> {
+        final AtomicInteger collected = new AtomicInteger();
+        private final Object checkpointLock = new Object();
+
+        @Override
+        public void collect(RowData element) {
+            collected.incrementAndGet();
+        }
+
+        @Override
+        public void collectWithTimestamp(RowData element, long timestamp) {
+            collected.incrementAndGet();
+        }
+
+        @Override
+        public void emitWatermark(Watermark mark) {}
+
+        @Override
+        public void markAsTemporarilyIdle() {}
+
+        @Override
+        public Object getCheckpointLock() {
+            return checkpointLock;
+        }
+
+        @Override
+        public void close() {}
     }
 
     private AuronKafkaSourceFunction newSourceWithUdf() throws Exception {
