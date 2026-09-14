@@ -380,34 +380,49 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
     }
 
     /**
-     * Two call sites of one function must not share a wrapper, and therefore must not share a
-     * function instance.
+     * Two call sites of one function each get their own function instance, where Flink's own
+     * generated code gives the two of them a single instance, and the values a state-carrying
+     * function returns differ accordingly.
      *
      * <p>The two calls carry byte-identical payloads — same function, same argument and return
      * types — because the arguments themselves travel outside the payload, so only the node
      * ordinal separates them. The function counts its own invocations from state {@code open}
-     * initialises, which is what makes sharing produce a wrong answer rather than merely a shared
-     * object: each call site evaluates the whole batch in turn, so one shared counter yields
-     * {@code (1,4) (2,5) (3,6)} where two independent ones yield {@code (1,1) (2,2) (3,3)}.
+     * initialises, so the counts it returns are exactly what the two evaluation models produce: a
+     * call site here evaluates the whole batch in turn against its own counter, and Flink evaluates
+     * both call sites per row against one shared counter.
+     *
+     * <p>Both answers come from a running job rather than from a claim about Flink written here, so
+     * a change to either side fails this and names which side moved.
      */
     @Test
-    public void testTwoCallSitesOfOneFunctionDoNotShareInstanceState() throws Exception {
+    public void testTwoCallSitesOfOneFunctionDoNotShareInstanceState() {
         environment.setParallelism(1);
         tableEnvironment.createTemporarySystemFunction("auron_call_count", CallCountingFunction.class);
+        tableEnvironment.createTemporarySystemFunction("auron_second_of", SecondOfFunction.class);
+
         UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> nativeRows = collectSorted("select auron_call_count(`int`), auron_call_count(`int` * 2) from T1");
+        int nativeFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
 
-        TableResult result =
-                tableEnvironment.executeSql("select auron_call_count(`int`), auron_call_count(`int` * 2) from T1");
-        List<Row> rows = CollectionUtil.iteratorToList(result.collect());
-        result.await();
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> flinkRows = collectLeadingColumnsSorted(
+                "select auron_call_count(`int`), auron_call_count(`int` * 2), auron_second_of(`int`) from T1", 2);
+        int comparisonFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
 
-        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+        assertThat(nativeFallbacks)
                 .as("a non-zero fallback count means the Calc did not run natively")
                 .isZero();
-        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
-        assertThat(rows)
-                .as("the two call sites shared one function instance")
+        assertThat(comparisonFallbacks)
+                .as("the comparison run recorded no fallback; that and the expected Flink rows below are"
+                        + " two independent signals that it left the native path")
+                .isNotZero();
+        assertThat(nativeRows)
+                .as("the two call sites shared one counter, so they shared one function instance")
                 .isEqualTo(Arrays.asList(Row.of(1, 1), Row.of(2, 2), Row.of(3, 3)));
+        assertThat(flinkRows)
+                .as("Flink's own generated code no longer runs the two call sites per row against a single"
+                        + " shared counter")
+                .isEqualTo(Arrays.asList(Row.of(1, 2), Row.of(3, 4), Row.of(5, 6)));
     }
 
     /**
@@ -567,27 +582,36 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
         return rows;
     }
 
+    /** Runs a query and returns only its first column, in a stable order. */
+    private List<Row> collectFirstColumnSorted(String sql) {
+        return collectLeadingColumnsSorted(sql, 1);
+    }
+
     /**
-     * Runs a query and returns only its first column, in a stable order.
+     * Runs a query and returns its leading {@code columns} columns, in a stable order.
      *
      * <p>A comparison run appends a companion expression the converter declines, which takes the
-     * whole Calc back to Flink's own generated code and leaves the expression under test evaluated
-     * the way it would be without Auron. Dropping that companion column here is what makes the two
+     * whole Calc back to Flink's own generated code and leaves the expressions under test evaluated
+     * the way they would be without Auron. Dropping that companion column here is what makes the two
      * collections comparable.
      *
      * <p>Each row keeps its own kind rather than being rebuilt as an insertion, so that the
      * collection this returns differs from {@link #collectSorted} in its width alone. A comparison
      * that silently normalised the kind on one side could not see a change of kind as a difference.
      */
-    private List<Row> collectFirstColumnSorted(String sql) {
+    private List<Row> collectLeadingColumnsSorted(String sql, int columns) {
         List<Row> rows =
                 CollectionUtil.iteratorToList(tableEnvironment.executeSql(sql).collect());
-        List<Row> firstColumn = new ArrayList<>(rows.size());
+        List<Row> narrowed = new ArrayList<>(rows.size());
         for (Row row : rows) {
-            firstColumn.add(Row.ofKind(row.getKind(), row.getField(0)));
+            Object[] fields = new Object[columns];
+            for (int i = 0; i < columns; i++) {
+                fields[i] = row.getField(i);
+            }
+            narrowed.add(Row.ofKind(row.getKind(), fields));
         }
-        firstColumn.sort(Comparator.comparing(Row::toString));
-        return firstColumn;
+        narrowed.sort(Comparator.comparing(Row::toString));
+        return narrowed;
     }
 
     private static Throwable rootCauseOf(Throwable t) {

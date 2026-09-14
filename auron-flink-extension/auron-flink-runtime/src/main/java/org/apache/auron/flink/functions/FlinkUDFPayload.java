@@ -61,7 +61,9 @@ public final class FlinkUDFPayload implements Serializable {
      * <p>Separating call sites at all is stricter than Flink's own code generation, which names the
      * generated field after the function's identity rather than after the call site and deduplicates
      * the resulting member and lifecycle statements, so two call sites of one function share a
-     * single instance there.
+     * single instance there. A function whose result depends on state it carries across invocations
+     * therefore returns different values here than it does on Flink's own generated code, and gets
+     * one {@code open}/{@code close} pair per call site rather than one pair in total.
      */
     private final int nodeOrdinal;
 
