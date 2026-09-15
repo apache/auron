@@ -426,6 +426,95 @@ public class AuronFlinkUDFITCase extends AuronFlinkTableTestBase {
     }
 
     /**
+     * A user function whose argument is another user function converts as a wrapper nested inside a
+     * wrapper, and returns the rows Flink's own generated code returns.
+     *
+     * <p>Nothing bounds that nesting. An operand is converted through the same factory as any other
+     * expression, so a call reached through an operand builds a second wrapper that becomes a
+     * parameter of the first, and neither the admitted type set nor the {@code eval} overload check
+     * inspects an operand's kind. The shape is therefore reachable from ordinary SQL and recursive
+     * in depth.
+     *
+     * <p>The inner function carries state and the outer is pure, which is where the two evaluation
+     * models are furthest apart: the wrapper evaluates its parameter over the whole batch before
+     * invoking the outer function for the first row, where Flink's generated code runs the pair per
+     * row. Row order is preserved on both sides, so the inner is still invoked once per row in row
+     * order and the outer still receives that same sequence, and the values agree. The rows expose
+     * the values alone; the order the two functions interleave in is not something they can show.
+     */
+    @Test
+    public void testStatefulUdfNestedInsideAPureUdfMatchesFlink() {
+        environment.setParallelism(1);
+        tableEnvironment.createTemporarySystemFunction("auron_call_count", CallCountingFunction.class);
+        tableEnvironment.createTemporarySystemFunction("auron_times_ten", TimesTenFunction.class);
+        tableEnvironment.createTemporarySystemFunction("auron_second_of", SecondOfFunction.class);
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> nativeRows = collectSorted("select auron_times_ten(auron_call_count(`int`)) from T1");
+        int nativeFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> flinkRows = collectFirstColumnSorted(
+                "select auron_times_ten(auron_call_count(`int`)), auron_second_of(`int`) from T1");
+        int comparisonFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        assertThat(nativeFallbacks)
+                .as("a non-zero fallback count means the nested call declined instead of running natively,"
+                        + " which would leave the comparison below Flink against Flink")
+                .isZero();
+        assertThat(comparisonFallbacks)
+                .as("the comparison run recorded no fallback, the only signal available that it left the"
+                        + " native path")
+                .isNotZero();
+        assertThat(nativeRows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .isEqualTo(Arrays.asList(Row.of(10), Row.of(20), Row.of(30)));
+        assertThat(nativeRows)
+                .as("the nested call returned different values than Flink's own generated code")
+                .isEqualTo(flinkRows);
+    }
+
+    /**
+     * The mirror of the nested shape above, with the state in the outer function and a pure inner.
+     *
+     * <p>The outer function is invoked once per row against its own instance under both engines, so
+     * its counter advances identically even though its parameter was already evaluated over the
+     * whole batch before the first invocation. State on either side of the nesting is therefore not
+     * by itself enough to part the two answers, which the case above cannot establish on its own.
+     */
+    @Test
+    public void testPureUdfNestedInsideAStatefulUdfMatchesFlink() {
+        environment.setParallelism(1);
+        tableEnvironment.createTemporarySystemFunction("auron_plus_one", PlusOneFunction.class);
+        tableEnvironment.createTemporarySystemFunction("auron_call_count", CallCountingFunction.class);
+        tableEnvironment.createTemporarySystemFunction("auron_second_of", SecondOfFunction.class);
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> nativeRows = collectSorted("select auron_call_count(auron_plus_one(`int`)) from T1");
+        int nativeFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> flinkRows = collectFirstColumnSorted(
+                "select auron_call_count(auron_plus_one(`int`)), auron_second_of(`int`) from T1");
+        int comparisonFallbacks = UnsupportedFlinkNodeRecorder.peekEmitCount();
+
+        assertThat(nativeFallbacks)
+                .as("a non-zero fallback count means the nested call declined instead of running natively,"
+                        + " which would leave the comparison below Flink against Flink")
+                .isZero();
+        assertThat(comparisonFallbacks)
+                .as("the comparison run recorded no fallback, the only signal available that it left the"
+                        + " native path")
+                .isNotZero();
+        assertThat(nativeRows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .isEqualTo(Arrays.asList(Row.of(1), Row.of(2), Row.of(3)));
+        assertThat(nativeRows)
+                .as("the nested call returned different values than Flink's own generated code")
+                .isEqualTo(flinkRows);
+    }
+
+    /**
      * A function declaring two {@code eval} overloads both invokable for the call's argument runs
      * natively, and produces the overload Flink itself would have chosen.
      *
