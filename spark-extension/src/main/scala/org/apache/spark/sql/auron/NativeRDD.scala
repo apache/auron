@@ -36,7 +36,7 @@ import org.apache.auron.util.SparkVersionUtil
 class NativeRDD(
     @transient private val rddSparkContext: SparkContext,
     val metrics: SparkMetricNode,
-    private val rddPartitions: Array[Partition],
+    @transient private val rddPartitions: Array[Partition],
     private val rddPartitioner: Option[Partitioner],
     private val rddDependencies: Seq[Dependency[_]],
     private val rddShuffleReadFull: Boolean,
@@ -45,6 +45,8 @@ class NativeRDD(
     extends RDD[InternalRow](rddSparkContext, rddDependencies)
     with Logging
     with Serializable {
+
+  private val numRddPartitions: Int = rddPartitions.length
 
   // use serializable wrapper to avoid serializing nativePlan
   val nativePlanWrapper = new NativePlanWrapper(nativePlan)
@@ -60,7 +62,10 @@ class NativeRDD(
   def isShuffleReadFull: Boolean = Shims.get.getRDDShuffleReadFull(this)
   Shims.get.setRDDShuffleReadFull(this, rddShuffleReadFull)
 
-  override protected def getPartitions: Array[Partition] = rddPartitions
+  // Spark 4+ needs the number of partitions
+  override protected def getPartitions: Array[Partition] =
+    if (rddPartitions != null) rddPartitions
+    else Array.tabulate(numRddPartitions)(i => new Partition { override def index: Int = i })
   override protected def getDependencies: Seq[Dependency[_]] = rddDependencies
   override val partitioner: Option[Partitioner] = rddPartitioner
 
@@ -99,6 +104,15 @@ class EmptyNativeRDD(@transient private val rddSparkContext: SparkContext)
     throw new UnsupportedOperationException("empty RDD")
   }
 
+}
+
+case class NativePartition[P](override val index: Int, payload: P) extends Partition {}
+
+object NativePartition {
+  def unwrap(partition: Partition): Partition = partition match {
+    case np: NativePartition[_] => np.payload.asInstanceOf[Partition]
+    case other => other
+  }
 }
 
 class NativePlanWrapper(var p: (Partition, TaskContext) => PhysicalPlanNode)

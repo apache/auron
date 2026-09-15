@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.auron.memory
 
-import java.io.{File, RandomAccessFile}
+import java.io.{File, IOException, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.util
@@ -25,6 +25,12 @@ import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
+
+/**
+ * Thrown when spilling fails because of an underlying IO problem (for example the spark local
+ * directory tree being removed by an external process) rather than because of memory exhaustion.
+ */
+class SpillIOException(message: String, cause: Throwable) extends IOException(message, cause)
 
 abstract class SpillBuf {
   def write(buf: ByteBuffer): Unit
@@ -85,15 +91,59 @@ class MemBasedSpillBuf extends SpillBuf with Logging {
     logWarning(s"spilling in-mem spill buffer to disk, size=${Utils.bytesToString(size)}")
 
     val startTimeNs = System.nanoTime()
-    val file = hsm.blockManager.diskBlockManager.createTempLocalBlock()._2
-    val channel = new RandomAccessFile(file, "rw").getChannel
-
-    while (!bufs.isEmpty) {
-      val buf = bufs.removeFirst().nioBuffer()
-      while (buf.remaining() > 0) {
-        channel.write(buf)
+    val file =
+      try {
+        hsm.blockManager.diskBlockManager.createTempLocalBlock()._2
+      } catch {
+        case e: IOException =>
+          throw new SpillIOException(
+            s"failed to create spill file under spark local dirs, the local directory tree" +
+              s" may have been removed by an external process: ${e.getMessage}",
+            e)
       }
+
+    val channel =
+      try {
+        new RandomAccessFile(file, "rw").getChannel
+      } catch {
+        case e: IOException =>
+          throw new SpillIOException(
+            s"failed to open spill file ${file.getAbsolutePath}, it may have been removed" +
+              s" by an external process: ${e.getMessage}",
+            e)
+      }
+
+    // Keep each buffer in the deque until it has been fully written, so that a
+    // partial failure does not silently discard buffered data. On failure the
+    // remaining buffers are released and the accounted memory is handed back to
+    // the caller-visible state via `release()`.
+    try {
+      while (!bufs.isEmpty) {
+        val head = bufs.peekFirst()
+        val buf = head.nioBuffer()
+        while (buf.remaining() > 0) {
+          channel.write(buf)
+        }
+        bufs.removeFirst()
+        mem -= head.capacity()
+      }
+    } catch {
+      case e: IOException =>
+        // the spill file is unusable, drop it and free everything we still hold
+        try {
+          channel.close()
+        } catch {
+          case _: IOException => // ignore, we are already failing
+        }
+        if (file.exists() && !file.delete()) {
+          logWarning(s"Was unable to delete partial spill file: ${file.getAbsolutePath}")
+        }
+        release()
+        throw new SpillIOException(
+          s"failed to write spill file ${file.getAbsolutePath}: ${e.getMessage}",
+          e)
     }
+
     val endTimeNs = System.nanoTime
     new FileBasedSpillBuf(numWrittenBytes, file, channel, endTimeNs - startTimeNs)
   }

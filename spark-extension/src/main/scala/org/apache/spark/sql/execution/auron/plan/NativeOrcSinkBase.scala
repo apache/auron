@@ -29,9 +29,11 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
@@ -85,10 +87,13 @@ abstract class NativeOrcSinkBase(
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeDependencies = new OneToOneDependency(inputRDD) :: Nil
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
     new NativeRDD(
       sparkSession.sparkContext,
       nativeMetrics,
-      inputRDD.partitions,
+      nativePartitions.toArray,
       inputRDD.partitioner,
       nativeDependencies,
       inputRDD.isShuffleReadFull,
@@ -116,7 +121,7 @@ abstract class NativeOrcSinkBase(
               .setValue(entry.getValue)
               .build())
 
-        val inputPartition = inputRDD.partitions(partition.index)
+        val inputPartition = NativePartition.unwrap(partition)
         val orcSink = OrcSinkExecNode
           .newBuilder()
           .setInput(inputRDD.nativePlan(inputPartition, context))
