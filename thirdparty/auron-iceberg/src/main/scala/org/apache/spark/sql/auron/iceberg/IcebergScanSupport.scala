@@ -340,7 +340,7 @@ object IcebergScanSupport extends Logging {
         partitionSchema,
         pruningPredicates,
         fieldIdsByName),
-      filteredTasks.map(_.contentTask))
+      filteredTasks.map(_.changelogTask))
   }
 
   private def inspectFieldIdSupport(
@@ -563,10 +563,9 @@ object IcebergScanSupport extends Logging {
 
   private case class NativeChangelogDataFileTask(
       file: DataFile,
-      contentTask: ContentScanTask[DataFile],
       start: Long,
       length: Long,
-      changelogTask: ChangelogScanTask)
+      changelogTask: ChangelogScanTask with ContentScanTask[DataFile])
 
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
@@ -605,16 +604,10 @@ object IcebergScanSupport extends Logging {
       case added: AddedRowsScanTask
           if added.operation() == ChangelogOperation.INSERT &&
             deletesEmpty(added.deletes()) =>
-        Some(
-          NativeChangelogDataFileTask(added.file(), added, added.start(), added.length(), added))
+        Some(NativeChangelogDataFileTask(added.file(), added.start(), added.length(), added))
       case deleted: DeletedDataFileScanTask if deletesEmpty(deleted.existingDeletes()) =>
         Some(
-          NativeChangelogDataFileTask(
-            deleted.file(),
-            deleted,
-            deleted.start(),
-            deleted.length(),
-            deleted))
+          NativeChangelogDataFileTask(deleted.file(), deleted.start(), deleted.length(), deleted))
       case _ =>
         None
     }
