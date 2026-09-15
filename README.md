@@ -97,6 +97,13 @@ spark.executor.memoryOverhead 4096
 spark-sql -f tpcds/q01.sql
 ```
 
+For ORC files with large String/Binary values, set `spark.auron.orc.batchSize` to a
+smaller positive row count (for example, `--conf spark.auron.orc.batchSize=1024`)
+when starting the application. It defaults to `spark.auron.batchSize` and only
+controls native ORC decoding; downstream operators may coalesce these batches.
+Smaller batches reduce the risk of offset overflow but cannot accommodate an
+individual value that exceeds Arrow's offset limit.
+
 ## Performance
 
 TPC-DS 1TB Benchmark Results:

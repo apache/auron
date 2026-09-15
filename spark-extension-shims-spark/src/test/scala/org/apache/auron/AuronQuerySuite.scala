@@ -20,12 +20,16 @@ import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
 import org.apache.spark.sql.execution.auron.plan.NativeFilterBase
+import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
+import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
+import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
+import org.apache.auron.jni.JniBridge
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.util.AuronTestUtils
 
@@ -50,6 +54,81 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     // Primary key wins when both are set to conflicting values.
     withSQLConf("spark.auron.enabled" -> "true", "spark.auron.enable" -> "false") {
       assert(SparkAuronConfiguration.AURON_ENABLED.get())
+    }
+  }
+
+  test("ORC reader batch size configuration") {
+    assert(JniBridge.intConf("ORC_BATCH_SIZE") == 10000)
+    Seq(128, 256).foreach { globalBatchSize =>
+      withSparkConf("spark.auron.batchSize" -> globalBatchSize.toString) {
+        assert(JniBridge.intConf("ORC_BATCH_SIZE") == globalBatchSize)
+        withSparkConf("spark.auron.orc.batchSize" -> "2") {
+          assert(JniBridge.intConf("ORC_BATCH_SIZE") == 2)
+          assert(JniBridge.intConf("BATCH_SIZE") == globalBatchSize)
+        }
+        assert(JniBridge.intConf("ORC_BATCH_SIZE") == globalBatchSize)
+      }
+    }
+    Seq("0", "-1", "invalid", "2147483648").foreach { value =>
+      withSparkConf("spark.auron.orc.batchSize" -> value) {
+        intercept[IllegalArgumentException] {
+          JniBridge.intConf("ORC_BATCH_SIZE")
+        }
+      }
+    }
+  }
+
+  Seq("orc", "parquet").foreach { format =>
+    test(s"ORC reader batch size only changes ORC batches: $format") {
+      withTempPath { path =>
+        // Keep each decoded row above the coalescer's memory threshold so that
+        // the project's input batch count exposes the reader's batch boundaries.
+        val valueSize = 3 * 1024 * 1024
+        withSQLConf("spark.auron.enabled" -> "false") {
+          spark
+            .range(7)
+            .selectExpr(
+              "id",
+              s"CASE WHEN id = 0 THEN NULL WHEN id = 1 THEN '' ELSE repeat('x', $valueSize) END AS s",
+              s"CAST(CASE WHEN id = 2 THEN NULL WHEN id = 3 THEN '' ELSE repeat('y', $valueSize) END AS BINARY) AS b")
+            .coalesce(1)
+            .write
+            .format(format)
+            .save(path.getCanonicalPath)
+        }
+        val expected = (0L until 7L).map { id =>
+          Row(
+            id,
+            if (id == 0) null else if (id == 1) 0 else valueSize,
+            if (id == 2) null else if (id == 3) 0 else valueSize)
+        }
+        val batchCounts = Seq(1, 2, 3, 16).map { batchSize =>
+          var batchCount = 0L
+          withSparkConf("spark.auron.orc.batchSize" -> batchSize.toString) {
+            val df = spark.read
+              .format(format)
+              .load(path.getCanonicalPath)
+              .selectExpr("id", "length(s)", "octet_length(b)")
+            assert(df.collect().toSeq.sortBy(_.getLong(0)) == expected)
+            assertPlanIsNative(df)
+            val plan = df.queryExecution.executedPlan
+            assert(collectFirst(plan) {
+              case _: NativeOrcScanBase if format == "orc" => true
+              case _: NativeParquetScanBase if format == "parquet" => true
+            }.contains(true))
+            val project = collectFirst(plan) { case p: NativeProjectBase => p }.get
+            batchCount = project.metrics("input_batch_count").value
+            if (format == "orc") {
+              assert(batchCount == (7 + batchSize - 1) / batchSize)
+            }
+          }
+          batchCount
+        }
+        if (format == "parquet") {
+          // Parquet chooses an adaptive batch size independently of the ORC setting.
+          assert(batchCounts.head > 0 && batchCounts.distinct.size == 1)
+        }
+      }
     }
   }
 

@@ -298,6 +298,16 @@ public class SparkAuronConfiguration extends AuronConfiguration {
                             + "Default is 1MB (1,048,576 bytes).")
             .withDefaultValue(1048576);
 
+    public static final ConfigOption<Integer> ORC_BATCH_SIZE = new ConfigOption<>(Integer.class)
+            .withKey("auron.orc.batchSize")
+            .withCategory("Data Sources")
+            .withDescription("Number of rows per native ORC reader batch. Must be positive. "
+                    + "Defaults to spark.auron.batchSize. Reduce this for large String/Binary values "
+                    + "to avoid offset overflow during decoding. Downstream operators may coalesce batches. "
+                    + "Set this in SparkConf before starting the application.")
+            .withDynamicDefaultValue(config -> config.getInteger(AuronConfiguration.BATCH_SIZE))
+            .checkValue(v -> v > 0, "must be > 0");
+
     public static final ConfigOption<Boolean> ORC_FORCE_POSITIONAL_EVOLUTION = new ConfigOption<>(Boolean.class)
             .withKey("auron.orc.force.positional.evolution")
             .withCategory("Data Sources")
