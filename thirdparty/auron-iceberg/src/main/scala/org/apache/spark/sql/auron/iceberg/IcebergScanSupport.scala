@@ -618,17 +618,12 @@ object IcebergScanSupport extends Logging {
     changelogTaskPredicate(condition, partitionSchema)
       .map(predicate =>
         tasks.filter { task =>
-          task.changelogTask match {
-            case _: AddedRowsScanTask =>
-              val values = metadataPartitionValues(
-                task.file.location(),
-                task.file.specId(),
-                Some(task.changelogTask),
-                partitionSchema)
-              predicate(values)
-            case _ =>
-              true
-          }
+          val values = metadataPartitionValues(
+            task.file.location(),
+            task.file.specId(),
+            Some(task.changelogTask),
+            partitionSchema)
+          predicate(values)
         })
       .getOrElse(tasks)
   }

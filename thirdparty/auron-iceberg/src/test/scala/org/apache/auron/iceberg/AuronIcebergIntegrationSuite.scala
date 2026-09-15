@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.iceberg.{AddedRowsScanTask, ChangelogScanTask, FileFormat, FileScanTask, MetadataColumns, ScanTask}
+import org.apache.iceberg.{AddedRowsScanTask, ChangelogScanTask, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, ScanTask}
 import org.apache.iceberg.data.{GenericAppenderFactory, Record}
 import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
@@ -32,7 +32,8 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.AuronColumnarOverrides
 import org.apache.spark.sql.auron.iceberg.{IcebergConvertProvider, IcebergScanSupport}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, EqualTo, In, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, EqualTo, Expression, In, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.{FilterExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.collectFirst
@@ -818,7 +819,110 @@ class AuronIcebergIntegrationSuite
         withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
           val df = sql(metadataFilterQuery)
           checkAnswer(df, Seq.empty)
+          // The changelog view's row processing prevents pushing this filter down to the scan.
           assert(executedNativeIcebergTableScanExec(df).metrics("numFiles").value == 1L)
+        }
+      }
+    }
+  }
+
+  test(
+    "iceberg native changelog scan prunes full-data-file delete tasks by metadata predicates") {
+    val tableName = "local.db.t_changelog_delete_pruning"
+    withTable(tableName) {
+      sql(s"""
+             |create table $tableName (id int, p int)
+             |using iceberg
+             |partitioned by (p)
+             |tblproperties ('format-version' = '2')
+             |""".stripMargin)
+      sql(s"insert into $tableName values (1, 1), (2, 2)")
+      val startSnapshotId = currentSnapshotId(tableName)
+      sql(s"delete from $tableName where p = 1")
+      val firstDeleteSnapshotId = currentSnapshotId(tableName)
+      sql(s"insert into $tableName values (3, 3)")
+      val insertSnapshotId = currentSnapshotId(tableName)
+      sql(s"delete from $tableName where p = 2")
+      val endSnapshotId = currentSnapshotId(tableName)
+
+      val scan = rawChangelogScan(tableName, startSnapshotId, endSnapshotId)
+      val tasks = scan.scan.toBatch.planInputPartitions().toSeq.flatMap(icebergScanTasks)
+      assert(tasks.size == 3)
+      assert(tasks.count(_.isInstanceOf[AddedRowsScanTask]) == 1)
+      val deleteTasks = tasks.collect { case task: DeletedDataFileScanTask => task }
+      assert(deleteTasks.size == 2)
+      assert(deleteTasks.forall(_.existingDeletes().isEmpty))
+
+      val firstDelete = Row(1, 1, "DELETE", 0, firstDeleteSnapshotId)
+      val insert = Row(3, 3, "INSERT", 1, insertSnapshotId)
+      val secondDelete = Row(2, 2, "DELETE", 2, endSnapshotId)
+      val cases: Seq[(Map[String, Attribute] => Expression, Seq[Row])] = Seq(
+        (
+          attributes => EqualTo(attributes("_change_type"), Literal("DELETE")),
+          Seq(firstDelete, secondDelete)),
+        (attributes => EqualTo(attributes("_change_type"), Literal("INSERT")), Seq(insert)),
+        (
+          attributes => EqualTo(attributes("_commit_snapshot_id"), Literal(endSnapshotId)),
+          Seq(secondDelete)),
+        (
+          attributes =>
+            In(
+              attributes("_commit_snapshot_id"),
+              Seq(Literal(firstDeleteSnapshotId), Literal(insertSnapshotId))),
+          Seq(firstDelete, insert)),
+        (attributes => EqualTo(attributes("_change_ordinal"), Literal(0)), Seq(firstDelete)),
+        (
+          attributes => In(attributes("_change_ordinal"), Seq(Literal(1), Literal(2))),
+          Seq(insert, secondDelete)),
+        (
+          attributes =>
+            And(
+              EqualTo(attributes("_change_type"), Literal("DELETE")),
+              EqualTo(attributes("_commit_snapshot_id"), Literal(firstDeleteSnapshotId))),
+          Seq(firstDelete)),
+        (
+          attributes => EqualTo(attributes("_commit_snapshot_id"), Literal(startSnapshotId)),
+          Seq.empty),
+        (
+          attributes =>
+            And(
+              EqualTo(attributes("_change_type"), Literal("INSERT")),
+              EqualTo(attributes("_change_ordinal"), Literal(0))),
+          Seq.empty))
+
+      cases.foreach { case (condition, expected) =>
+        def filteredScan: FilterExec = {
+          val scan = rawChangelogScan(tableName, startSnapshotId, endSnapshotId)
+          FilterExec(
+            condition(scan.output.map(attribute => attribute.name -> attribute).toMap),
+            scan)
+        }
+
+        def checkRows(plan: SparkPlan): Unit = {
+          val schema = plan.schema
+          val rows = plan
+            .execute()
+            .mapPartitions { rows =>
+              val toScala = CatalystTypeConverters.createToScalaConverter(schema)
+              rows.map(row => toScala(row).asInstanceOf[Row])
+            }
+            .collect()
+            .toSeq
+          assert(rows.sortBy(_.getInt(0)) == expected.sortBy(_.getInt(0)), plan.treeString)
+        }
+
+        withSQLConf("spark.auron.enable" -> "false") {
+          checkRows(filteredScan)
+        }
+        withSQLConf("spark.auron.enable" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+          val transformed =
+            AuronColumnarOverrides(spark).preColumnarTransitions.apply(filteredScan)
+          val nativeScan = transformed.collectFirst { case native: NativeIcebergTableScanExec =>
+            native
+          }.get
+          assert(nativeScan.staticPlan.scanTasks.size == expected.size)
+          checkRows(transformed)
+          assert(nativeScan.metrics("numFiles").value == expected.size)
         }
       }
     }
