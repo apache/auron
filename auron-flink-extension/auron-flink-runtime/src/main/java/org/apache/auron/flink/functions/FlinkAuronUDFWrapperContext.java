@@ -188,6 +188,9 @@ public final class FlinkAuronUDFWrapperContext implements AuronUDFWrapperContext
      */
     @Override
     public void eval(long importFFIArrayPtr, long exportFFIArrayPtr) {
+        // The native caller owns both C-Data structs; wrapping an address neither takes ownership
+        // of it nor releases it, so the declaration order here carries no lifetime meaning. The
+        // import moves the argument buffers into paramsRoot, so nothing outlives the block.
         try (VectorSchemaRoot paramsRoot = VectorSchemaRoot.create(paramsArrowSchema, allocator);
                 VectorSchemaRoot outputRoot = VectorSchemaRoot.create(outputArrowSchema, allocator);
                 ArrowArray importArray = ArrowArray.wrap(importFFIArrayPtr);
