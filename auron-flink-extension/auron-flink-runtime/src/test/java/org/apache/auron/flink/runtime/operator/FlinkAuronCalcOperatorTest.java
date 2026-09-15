@@ -678,6 +678,25 @@ public class FlinkAuronCalcOperatorTest {
         assertEquals(1, CloseCountingFunction.closeCount, "close() must close the retained UDF");
     }
 
+    /**
+     * Contract: {@code close()} clears the task context field even when closing it throws, so a
+     * user function that fails on close cannot leave the operator holding the subtask's user-code
+     * classloader and runtime context.
+     */
+    @Test
+    public void testCloseClearsTaskContextWhenUserFunctionCloseThrows() throws Exception {
+        FakeExporterTrackingOperator op = newUdfOperator((a, p, m, mem) -> new OneShotNativeRuntime());
+        op.open();
+        FlinkAuronTaskContext taskContext = readTaskContext(op);
+        assertNotNull(taskContext, "open() must build the operator's task context");
+        taskContext.getOrCreateWrapper(GeneratedUdfTestSupport.payloadBytes(
+                new ThrowingCloseFunction(), new DataType[] {DataTypes.INT()}, DataTypes.INT(), 0));
+
+        assertThrows(RuntimeException.class, op::close, "a UDF failing on close must surface");
+
+        assertNull(readTaskContext(op), "close() must release the task context even when it throws");
+    }
+
     // =====================================================================
     // Construction helpers
     // =====================================================================
@@ -1192,6 +1211,20 @@ public class FlinkAuronCalcOperatorTest {
 
         public Integer eval(Integer value) {
             return value == null ? null : value + 1;
+        }
+    }
+
+    /** Fails on {@code close}, the way a user function releasing an external resource can. */
+    public static class ThrowingCloseFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public void close() {
+            throw new IllegalStateException("user function failed to close");
+        }
+
+        public Integer eval(Integer value) {
+            return value;
         }
     }
 

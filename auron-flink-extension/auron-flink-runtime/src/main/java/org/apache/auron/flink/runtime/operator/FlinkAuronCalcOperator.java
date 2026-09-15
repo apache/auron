@@ -79,7 +79,8 @@ import org.apache.flink.table.types.logical.RowType;
  *       are needed.
  *   <li>{@link #close()} signals end-of-input, performs a final drain, then closes the native
  *       runtime, the subtask context, exporter, and child allocator in nested try/finally so
- *       partial failure still releases resources. Idempotent: fields are nulled after close.
+ *       partial failure still releases resources. Idempotent: each field is cleared before its
+ *       resource is closed, so a close that throws still releases the reference.
  * </ul>
  *
  * <p>A {@link FlinkAuronTaskContext} built in {@code open()} carries the subtask's user-code
@@ -219,39 +220,44 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         try {
             // drainNative is responsible for constructing the native runtime on demand when
             // the exporter has rows, so close() only needs to guard against open() failing
-            // before the exporter was created. Each resource is null-guarded individually in
-            // the nested finally below so partial-init still releases what exists.
+            // before the exporter was created. Each resource below is taken out of its field
+            // before being closed, so partial-init still releases what exists and a close()
+            // that throws cannot leave the field holding a released object.
             if (exporter != null) {
                 drainNative();
             }
         } finally {
+            NativeRuntime runtime = nativeRuntime;
+            nativeRuntime = null;
             try {
-                if (nativeRuntime != null) {
-                    nativeRuntime.close();
-                    nativeRuntime = null;
+                if (runtime != null) {
+                    runtime.close();
                 }
             } finally {
+                // After the native runtime, whose finalize cancels the pending streams and
+                // aborts the producer task. It shuts the tokio pool down in the background
+                // without joining, so this ordering does not by itself prove no worker thread
+                // is alive; what makes the drain loop above sufficient is that it runs the
+                // output stream to exhaustion, leaving no evaluation outstanding.
+                FlinkAuronTaskContext context = taskContext;
+                taskContext = null;
                 try {
-                    // After the native runtime, whose finalize cancels the pending streams and
-                    // aborts the producer task. It shuts the tokio pool down in the background
-                    // without joining, so this ordering does not by itself prove no worker thread
-                    // is alive; what makes the drain loop above sufficient is that it runs the
-                    // output stream to exhaustion, leaving no evaluation outstanding.
-                    if (taskContext != null) {
-                        taskContext.close();
-                        taskContext = null;
+                    if (context != null) {
+                        context.close();
                     }
                 } finally {
+                    FlinkArrowFFIExporter batchExporter = exporter;
+                    exporter = null;
                     try {
-                        if (exporter != null) {
-                            exporter.close();
-                            exporter = null;
+                        if (batchExporter != null) {
+                            batchExporter.close();
                         }
                     } finally {
+                        BufferAllocator allocator = childAllocator;
+                        childAllocator = null;
                         try {
-                            if (childAllocator != null) {
-                                childAllocator.close();
-                                childAllocator = null;
+                            if (allocator != null) {
+                                allocator.close();
                             }
                         } finally {
                             super.close();
