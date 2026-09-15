@@ -16,7 +16,13 @@
  */
 package org.apache.auron.flink.runtime.operator;
 
+import com.google.protobuf.Descriptors.FieldDescriptor;
+import com.google.protobuf.Message;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.function.UnaryOperator;
+import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 
 /**
@@ -74,5 +80,44 @@ public final class AuronPlanTreeRewriter {
                     .build();
         }
         throw new IllegalArgumentException(unexpectedShapeMessage + node.getPhysicalPlanTypeCase());
+    }
+
+    /**
+     * Collects the serialized payload of every UDF wrapper expression in {@code node}, in the order
+     * the walk reaches them.
+     *
+     * <p>The walk is generic over the protobuf field graph rather than a switch over the node and
+     * expression kinds a Calc plan can hold. An enumeration silently misses whatever kind is left
+     * out of it, and a missed wrapper is one whose user function never gets opened on the task
+     * thread, which is exactly the case this collection exists to prevent.
+     *
+     * @param node the plan tree to scan
+     * @return one entry per wrapper expression found, with duplicates preserved
+     */
+    public static List<byte[]> collectUdfWrapperPayloads(PhysicalPlanNode node) {
+        List<byte[]> payloads = new ArrayList<>();
+        collectUdfWrapperPayloads(node, payloads);
+        return payloads;
+    }
+
+    private static void collectUdfWrapperPayloads(Message message, List<byte[]> payloads) {
+        if (message instanceof PhysicalExprNode) {
+            PhysicalExprNode expr = (PhysicalExprNode) message;
+            if (expr.getExprTypeCase() == PhysicalExprNode.ExprTypeCase.UDF_WRAPPER_EXPR) {
+                payloads.add(expr.getUdfWrapperExpr().getSerialized().toByteArray());
+            }
+        }
+        for (Map.Entry<FieldDescriptor, Object> field : message.getAllFields().entrySet()) {
+            if (field.getKey().getJavaType() != FieldDescriptor.JavaType.MESSAGE) {
+                continue;
+            }
+            if (field.getKey().isRepeated()) {
+                for (Object element : (List<?>) field.getValue()) {
+                    collectUdfWrapperPayloads((Message) element, payloads);
+                }
+            } else {
+                collectUdfWrapperPayloads((Message) field.getValue(), payloads);
+            }
+        }
     }
 }

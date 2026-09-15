@@ -35,6 +35,13 @@ public class ConverterContext {
     private final RowType inputType;
 
     /**
+     * Counts the UDF wrapper nodes emitted while converting one plan, so each can be given an
+     * ordinal that distinguishes it from its siblings. One context covers one Calc conversion,
+     * which is the scope the ordinals have to be unique over.
+     */
+    private int udfWrapperCount;
+
+    /**
      * Creates a new converter context.
      *
      * @param tableConfig Flink table-level configuration
@@ -69,10 +76,24 @@ public class ConverterContext {
     }
 
     /**
+     * Returns an ordinal no other wrapper node in this conversion will receive.
+     *
+     * <p>The value is written into the node's serialized payload at plan time and travels inside
+     * the operator, so it is fixed for the life of the job rather than recomputed per drain cycle.
+     *
+     * @return the next unused wrapper ordinal
+     */
+    public int nextUdfWrapperOrdinal() {
+        return udfWrapperCount++;
+    }
+
+    /**
      * Returns the input schema of the node being converted.
      *
      * <p>Converters use this to resolve {@code RexInputRef} column references to concrete types,
      * check type support, and determine if casts are needed.
+     *
+     * @return the input schema of the node being converted
      */
     public RowType getInputType() {
         return inputType;
