@@ -1132,6 +1132,28 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("aggregate filter excludes null predicates") {
+    withTable("t_filter_agg_null") {
+      sql("""CREATE TABLE t_filter_agg_null(category STRING, amount INT, flag BOOLEAN)
+        |USING parquet""".stripMargin)
+      sql("""INSERT INTO t_filter_agg_null VALUES
+        |('a', 10, true), ('a', 100, NULL), ('a', 1, false), ('b', 200, NULL)
+        |""".stripMargin)
+
+      checkAnswer(
+        checkSparkAnswerAndOperator("""SELECT
+          |SUM(amount) FILTER (WHERE NOT flag), COUNT(*) FILTER (WHERE NOT flag)
+          |FROM t_filter_agg_null""".stripMargin),
+        Seq(Row(1L, 1L)))
+
+      checkAnswer(
+        checkSparkAnswerAndOperator("""SELECT category,
+          |SUM(amount) FILTER (WHERE NOT flag), COUNT(*) FILTER (WHERE NOT flag)
+          |FROM t_filter_agg_null GROUP BY category""".stripMargin),
+        Seq(Row("a", 1L, 1L), Row("b", null, 0L)))
+    }
+  }
+
   test("test OR pushdown with an unconvertible disjunct for orc table") {
     withTable("orc_or") {
       sql("create table orc_or(id int, b string) using orc")
