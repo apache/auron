@@ -366,6 +366,10 @@ fn execute_agg_sorted(
                 // compute grouping rows
                 let grouping_rows = agg_ctx.create_grouping_rows(&batch)?;
 
+                // acc arrays of the whole batch are unfrozen at most once, then
+                // shared by all partial merges of this batch
+                let mut merging_acc_table = None;
+
                 // update to current record
                 let mut batch_range_start = 0;
                 let mut batch_range_end = 0;
@@ -381,6 +385,7 @@ fn execute_agg_sorted(
                                 batch_range_end,
                                 &mut staging_acc_table,
                                 IdxSelection::Indices(&acc_indices),
+                                &mut merging_acc_table,
                             )?;
                             acc_indices.clear();
                             batch_range_start = batch_range_end;
@@ -398,6 +403,7 @@ fn execute_agg_sorted(
                     batch_range_end,
                     &mut staging_acc_table,
                     IdxSelection::Indices(&acc_indices),
+                    &mut merging_acc_table,
                 )?;
                 acc_indices.clear();
             }
