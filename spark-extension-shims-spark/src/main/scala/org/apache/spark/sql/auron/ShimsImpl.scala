@@ -651,6 +651,19 @@ class ShimsImpl extends Shims with Logging {
             .build()
         }
 
+      case e if isUnixDateConversion(e) =>
+        // Date32 and Int32 share the same epoch-day representation.
+        Some(
+          pb.PhysicalExprNode
+            .newBuilder()
+            .setTryCast(
+              pb.PhysicalTryCastNode
+                .newBuilder()
+                .setExpr(NativeConverters
+                  .convertExprWithFallback(e.children.head, isPruningExpr, fallback))
+                .setArrowType(NativeConverters.convertDataType(e.dataType)))
+            .build())
+
       case e: TaggingExpression =>
         Some(NativeConverters.convertExprWithFallback(e.child, isPruningExpr, fallback))
       case e =>
@@ -664,6 +677,16 @@ class ShimsImpl extends Shims with Logging {
         }
         None
     }
+  }
+
+  @sparkver("3.0")
+  @nowarn("cat=unused")
+  private def isUnixDateConversion(e: Expression): Boolean = false
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  private def isUnixDateConversion(e: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.{DateFromUnixDate, UnixDate}
+    e.isInstanceOf[UnixDate] || e.isInstanceOf[DateFromUnixDate]
   }
 
   private def literalStringSplitPattern(pattern: String): Option[String] = {
