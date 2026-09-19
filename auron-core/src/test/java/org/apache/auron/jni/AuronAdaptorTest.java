@@ -36,6 +36,8 @@ public class AuronAdaptorTest {
         assertEquals(auronConfig.getInteger(AuronConfiguration.BATCH_SIZE), 10000);
         assertEquals(auronConfig.getDouble(AuronConfiguration.MEMORY_FRACTION), 0.6, 0.0);
         assertEquals(auronConfig.getString(AuronConfiguration.NATIVE_LOG_LEVEL), "info");
+        assertEquals(auronConfig.getLong(AuronConfiguration.METRICS_UPDATE_INTERVAL_MS), 1000L);
+        assertEquals(auronConfig.getBoolean(AuronConfiguration.METRICS_UPDATE_ENABLED), false);
     }
 
     @Test
