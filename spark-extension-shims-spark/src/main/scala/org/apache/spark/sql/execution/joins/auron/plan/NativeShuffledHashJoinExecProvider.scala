@@ -135,6 +135,15 @@ case object NativeShuffledHashJoinExecProvider {
         HashJoin.rewriteKeyExpr(exprs)
 
       override def outputOrdering: Seq[SortOrder] = {
+        import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+
+        // Spark 3.1 HashJoin rejects these build sides; native SHJ supports them without ordering.
+        (joinType, buildSide) match {
+          case (LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin, JoinBuildLeft) =>
+            return Nil
+          case (RightOuter, JoinBuildRight) => return Nil
+          case _ =>
+        }
         val sparkBuildSide = buildSide match {
           case JoinBuildLeft => org.apache.spark.sql.catalyst.optimizer.BuildLeft
           case JoinBuildRight => org.apache.spark.sql.catalyst.optimizer.BuildRight

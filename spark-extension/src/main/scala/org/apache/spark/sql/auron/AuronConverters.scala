@@ -48,8 +48,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
-import org.apache.spark.sql.catalyst.plans.InnerLike
-import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -599,7 +597,7 @@ object AuronConverters extends Logging {
           JoinBuildRight
         }
 
-      validateNativeInnerJoinCondition(joinType, condition)
+      validateNativeJoinCondition(condition)
       return Shims.get.createNativeShuffledHashJoinExec(
         addRenameColumnsExec(convertToNative(left.children(0))),
         addRenameColumnsExec(convertToNative(right.children(0))),
@@ -652,7 +650,7 @@ object AuronConverters extends Logging {
         "condition" -> condition,
         "buildSide" -> buildSide))
     try {
-      validateNativeInnerJoinCondition(joinType, condition)
+      validateNativeJoinCondition(condition)
       Shims.get.createNativeShuffledHashJoinExec(
         addRenameColumnsExec(convertToNative(left)),
         addRenameColumnsExec(convertToNative(right)),
@@ -698,15 +696,6 @@ object AuronConverters extends Logging {
         smj.setTagValue(convertToNonNativeTag, true)
         smj
     }
-  }
-
-  private def validateNativeInnerJoinCondition(
-      joinType: JoinType,
-      condition: Option[Expression]): Unit = {
-    validateNativeJoinCondition(condition)
-    assert(
-      condition.isEmpty || joinType.isInstanceOf[InnerLike],
-      "join condition is not supported")
   }
 
   private def validateNativeJoinCondition(condition: Option[Expression]): Unit = {
