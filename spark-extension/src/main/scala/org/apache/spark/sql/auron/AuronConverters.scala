@@ -749,7 +749,7 @@ object AuronConverters extends Logging {
           "joinType" -> joinType,
           "condition" -> condition,
           "buildSide" -> buildSide))
-      validateNativeInnerJoinCondition(joinType, condition)
+      validateNativeJoinCondition(condition)
 
       // verify build side is native
       buildSide match {
