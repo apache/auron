@@ -102,7 +102,6 @@ abstract class NativeSortMergeJoinBase(
     condition.map(NativeConverters.convertJoinFilter(_, left.output, right.output))
 
   // check whether native converting is supported
-  assert(condition.isEmpty || joinType.isInstanceOf[InnerLike], "join condition is not supported")
   nativeSchema
   nativeSortOptions
   nativeJoinOn

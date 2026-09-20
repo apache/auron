@@ -168,14 +168,47 @@ impl StreamCursor {
         self.batches.len() - 1
     }
 
-    pub fn clean_out_dated_batches(&mut self) {
-        if self.cur_idx.0 > 1 {
-            self.batches.splice(1..self.cur_idx.0, std::iter::empty());
-            self.keys.splice(1..self.cur_idx.0, std::iter::empty());
+    #[inline]
+    pub fn cur_batch_num_rows(&self) -> usize {
+        self.batches[self.cur_idx.0].num_rows()
+    }
+
+    /// Whether the keys of the given batch contain nulls. If the whole batch
+    /// has no null keys, the per-row [`Self::is_null_key`] check can be
+    /// skipped during scanning.
+    #[inline]
+    pub fn key_batch_has_nulls(&self, batch_idx: usize) -> bool {
+        self.key_has_nulls[batch_idx].is_some()
+    }
+
+    /// Position the cursor at the last row of the current batch, so that the
+    /// next `cur_forward!` advances to (and fetches) the next batch.
+    #[inline]
+    pub fn seek_to_current_batch_end(&mut self) {
+        self.cur_idx.1 = self.cur_batch_num_rows() - 1;
+    }
+
+    /// Discard buffered batches before `first_needed`, keeping the leading
+    /// null batch. Returns the amount by which each externally held [`Idx`]
+    /// (satisfying `idx.0 > 0`) must be shifted down.
+    ///
+    /// The caller is responsible for determining which batches are still
+    /// referenced: rows already collected into output index buffers must be
+    /// fully materialized, and rows still held elsewhere must be covered by
+    /// `first_needed`.
+    pub fn clean_batches_before(&mut self, first_needed: usize) -> usize {
+        // When the stream ends `cur_idx.0 == batches.len()`, so all data
+        // batches can be discarded
+        let first_needed = first_needed.min(self.cur_idx.0).max(1);
+        let shift = first_needed - 1;
+        if shift > 0 {
+            self.batches.splice(1..first_needed, std::iter::empty());
+            self.keys.splice(1..first_needed, std::iter::empty());
             self.key_has_nulls
-                .splice(1..self.cur_idx.0, std::iter::empty());
-            self.cur_idx.0 = 1;
+                .splice(1..first_needed, std::iter::empty());
+            self.cur_idx.0 -= shift;
         }
+        shift
     }
 
     pub fn batches(&self) -> &[RecordBatch] {
