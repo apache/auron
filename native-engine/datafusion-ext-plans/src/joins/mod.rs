@@ -354,18 +354,6 @@ pub fn ranges_iter(ranges: &[IdxRange]) -> impl Iterator<Item = Idx> + Clone + '
     ranges.iter().flat_map(|range| range.iter())
 }
 
-#[inline]
-pub fn ranges_idx_at(ranges: &[IdxRange], n: usize) -> Idx {
-    let mut n = n;
-    for range in ranges {
-        if n < range.len() {
-            return (range.batch_idx, range.start + n);
-        }
-        n -= range.len();
-    }
-    panic!("index {n} out of range");
-}
-
 /// Lazily yield Cartesian blocks of at most `max_pairs`, without crossing batch
 /// boundaries. Offsets are group-relative; iterator state stays constant-sized.
 pub fn product_blocks<'a>(

@@ -310,7 +310,7 @@ impl JoinFilter {
         let _timer = self.post_filter_time.timer();
         let ctx = EvalCtx::new(cols, self.num_left_cols, runs);
         let evaluated = ctx.eval(&self.analyzed_filter_expr)?;
-        ctx.into_pairs(evaluated, out)
+        ctx.write_pairs(evaluated, out)
     }
 
     /// Evaluate pair-aligned `cols` (left then right), returning matching row
@@ -928,7 +928,7 @@ impl<'a> EvalCtx<'a> {
     }
 
     /// Expand one-sided results only for surviving pairs.
-    fn into_pairs(&self, evaluated: Evaluated, out: &mut Pairs) -> Result<()> {
+    fn write_pairs(&self, evaluated: Evaluated, out: &mut Pairs) -> Result<()> {
         out.clear();
 
         match evaluated {
@@ -1079,7 +1079,8 @@ mod tests {
     }
 
     fn apply(expr: PhysicalExprRef) -> Vec<bool> {
-        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default()).unwrap();
+        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default())
+            .expect("valid test join filter");
         apply_mask(&filter, &cols(), 3, 2)
     }
 
@@ -1092,15 +1093,19 @@ mod tests {
             .enumerate()
             .map(|(i, col)| {
                 let indices = if i < 2 { &left_indices } else { &right_indices };
-                take(col.as_ref(), indices, None).unwrap()
+                take(col.as_ref(), indices, None).expect("valid test take indices")
             })
             .collect::<Vec<_>>();
-        let batch = RecordBatch::try_new(schema(), taken).unwrap();
-        let array = expr.evaluate(&batch).unwrap().into_array(6).unwrap();
+        let batch = RecordBatch::try_new(schema(), taken).expect("valid test batch");
+        let array = expr
+            .evaluate(&batch)
+            .expect("test expression evaluation succeeds")
+            .into_array(6)
+            .expect("test result converts to array");
         array
             .as_any()
             .downcast_ref::<BooleanArray>()
-            .unwrap()
+            .expect("expected test array type")
             .iter()
             .collect()
     }
@@ -1119,9 +1124,9 @@ mod tests {
     #[test]
     fn test_string_compare_across_sides() {
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-            phys_expr::col("l_str", &schema()).unwrap(),
+            phys_expr::col("l_str", &schema()).expect("test column exists"),
             Operator::Eq,
-            phys_expr::col("r_str", &schema()).unwrap(),
+            phys_expr::col("r_str", &schema()).expect("test column exists"),
         ));
         assert_eq!(check(expr), vec![false, true, true, false, false, false]);
     }
@@ -1141,8 +1146,10 @@ mod tests {
             DataType::Int32,
             None,
         ));
-        let case =
-            Arc::new(CaseExpr::try_new(None, vec![(condition, cast)], Some(lit(0))).unwrap());
+        let case = Arc::new(
+            CaseExpr::try_new(None, vec![(condition, cast)], Some(lit(0)))
+                .expect("valid test case expression"),
+        );
         let expr = Arc::new(BinaryExpr::new(
             case,
             Operator::Lt,
@@ -1187,9 +1194,10 @@ mod tests {
                 )],
                 Some(Arc::new(Literal::new(ScalarValue::Boolean(Some(false))))),
             )
-            .unwrap(),
+            .expect("valid test case expression"),
         );
-        let filter = JoinFilter::try_new(expr, s, 2, Time::default()).unwrap();
+        let filter =
+            JoinFilter::try_new(expr, s, 2, Time::default()).expect("valid test join filter");
         assert_eq!(
             apply_mask(&filter, &columns, 3, 2),
             vec![true, false, false, false, false, false]
@@ -1259,7 +1267,8 @@ mod tests {
             } else {
                 Arc::new(SCOrExpr::new(guard, selected))
             };
-            let filter = JoinFilter::try_new(expr, s.clone(), 2, Time::default()).unwrap();
+            let filter = JoinFilter::try_new(expr, s.clone(), 2, Time::default())
+                .expect("valid test join filter");
             assert_eq!(
                 apply_mask(&filter, &columns, 2, 2),
                 vec![false, true, op == Operator::Or, op == Operator::Or],
@@ -1322,7 +1331,10 @@ mod tests {
                 rows: rows.clone(),
             }));
             let expr = Arc::new(BinaryExpr::new(
-                Arc::new(ScalarFunctionExpr::try_new(udf, args, &schema()).unwrap()),
+                Arc::new(
+                    ScalarFunctionExpr::try_new(udf, args, &schema())
+                        .expect("valid test scalar function"),
+                ),
                 Operator::Lt,
                 Arc::new(Column::new("r_int", 3)),
             ));
@@ -1334,9 +1346,9 @@ mod tests {
     #[test]
     fn test_int_compare_across_sides() {
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-            phys_expr::col("l_int", &schema()).unwrap(),
+            phys_expr::col("l_int", &schema()).expect("test column exists"),
             Operator::Lt,
-            phys_expr::col("r_int", &schema()).unwrap(),
+            phys_expr::col("r_int", &schema()).expect("test column exists"),
         ));
         assert_eq!(check(expr), vec![true, true, false, true, false, false]);
     }
@@ -1344,7 +1356,7 @@ mod tests {
     #[test]
     fn test_string_compare_with_literal() {
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-            phys_expr::col("l_str", &schema()).unwrap(),
+            phys_expr::col("l_str", &schema()).expect("test column exists"),
             Operator::Eq,
             Arc::new(Literal::new(ScalarValue::Utf8(Some("aa".to_owned())))),
         ));
@@ -1354,7 +1366,7 @@ mod tests {
     #[test]
     fn test_non_comparison_expression() {
         let expr: PhysicalExprRef = Arc::new(StringStartsWithExpr::new(
-            phys_expr::col("l_str", &schema()).unwrap(),
+            phys_expr::col("l_str", &schema()).expect("test column exists"),
             "a".to_owned(),
         ));
         assert_eq!(check(expr), vec![true, true, false, false, false, false]);
@@ -1365,15 +1377,15 @@ mod tests {
         let s = schema();
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
             Arc::new(BinaryExpr::new(
-                phys_expr::col("l_str", &s).unwrap(),
+                phys_expr::col("l_str", &s).expect("test column exists"),
                 Operator::Eq,
-                phys_expr::col("r_str", &s).unwrap(),
+                phys_expr::col("r_str", &s).expect("test column exists"),
             )),
             Operator::And,
             Arc::new(BinaryExpr::new(
-                phys_expr::col("l_int", &s).unwrap(),
+                phys_expr::col("l_int", &s).expect("test column exists"),
                 Operator::Lt,
-                phys_expr::col("r_int", &s).unwrap(),
+                phys_expr::col("r_int", &s).expect("test column exists"),
             )),
         ));
         assert_eq!(check(expr), vec![false, true, false, false, false, false]);
@@ -1382,7 +1394,7 @@ mod tests {
     #[test]
     fn test_is_not_null() {
         let expr: PhysicalExprRef = Arc::new(IsNotNullExpr::new(
-            phys_expr::col("l_str", &schema()).unwrap(),
+            phys_expr::col("l_str", &schema()).expect("test column exists"),
         ));
         assert_eq!(check(expr), vec![true, true, true, true, false, false]);
     }
@@ -1390,11 +1402,12 @@ mod tests {
     #[test]
     fn test_empty_indices() {
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-            phys_expr::col("l_str", &schema()).unwrap(),
+            phys_expr::col("l_str", &schema()).expect("test column exists"),
             Operator::Eq,
-            phys_expr::col("r_str", &schema()).unwrap(),
+            phys_expr::col("r_str", &schema()).expect("test column exists"),
         ));
-        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default()).unwrap();
+        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default())
+            .expect("valid test join filter");
         let result = apply_mask(&filter, &cols(), 0, 0);
         assert!(result.is_empty());
     }
@@ -1415,9 +1428,9 @@ mod tests {
                     true => ("r_str", "l_str"),
                 };
                 let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-                    phys_expr::col(lhs, &schema()).unwrap(),
+                    phys_expr::col(lhs, &schema()).expect("test column exists"),
                     op,
-                    phys_expr::col(rhs, &schema()).unwrap(),
+                    phys_expr::col(rhs, &schema()).expect("test column exists"),
                 ));
                 let optimized = apply(expr.clone());
                 assert_eq!(
@@ -1454,11 +1467,12 @@ mod tests {
 
         for (lcol, rcol) in [("l_int", "r_int"), ("l_str", "r_str")] {
             let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-                phys_expr::col(lcol, &schema()).unwrap(),
+                phys_expr::col(lcol, &schema()).expect("test column exists"),
                 Operator::Lt,
-                phys_expr::col(rcol, &schema()).unwrap(),
+                phys_expr::col(rcol, &schema()).expect("test column exists"),
             ));
-            let filter = JoinFilter::try_new(expr, schema(), 2, Time::default()).unwrap();
+            let filter = JoinFilter::try_new(expr, schema(), 2, Time::default())
+                .expect("valid test join filter");
             let mut pairs = Pairs::default();
             filter
                 .apply(&cols, &[run], &mut pairs)
@@ -1498,9 +1512,9 @@ mod tests {
                     true => ("r_int", "l_int"),
                 };
                 let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-                    phys_expr::col(lhs, &schema()).unwrap(),
+                    phys_expr::col(lhs, &schema()).expect("test column exists"),
                     op,
-                    phys_expr::col(rhs, &schema()).unwrap(),
+                    phys_expr::col(rhs, &schema()).expect("test column exists"),
                 ));
                 let optimized = apply(expr.clone());
                 assert_eq!(
@@ -1516,11 +1530,12 @@ mod tests {
     #[test]
     fn test_primitive_comparison_null_shapes() {
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-            phys_expr::col("l_int", &schema()).unwrap(),
+            phys_expr::col("l_int", &schema()).expect("test column exists"),
             Operator::Lt,
-            phys_expr::col("r_int", &schema()).unwrap(),
+            phys_expr::col("r_int", &schema()).expect("test column exists"),
         ));
-        let filter = JoinFilter::try_new(expr.clone(), schema(), 2, Time::default()).unwrap();
+        let filter = JoinFilter::try_new(expr.clone(), schema(), 2, Time::default())
+            .expect("valid test join filter");
 
         for (lvalues, rvalues) in [
             (vec![Some(1), Some(5), None], vec![Some(2), None]),
@@ -1539,8 +1554,14 @@ mod tests {
             ];
             let got = apply_mask(&filter, &cols, lnum, rnum);
 
-            let lvals = lcol.as_any().downcast_ref::<Int32Array>().unwrap();
-            let rvals = rcol.as_any().downcast_ref::<Int32Array>().unwrap();
+            let lvals = lcol
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .expect("expected test array type");
+            let rvals = rcol
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .expect("expected test array type");
             let expected = (0..lnum)
                 .flat_map(|l| {
                     (0..rnum).map(move |r| {
@@ -1560,11 +1581,12 @@ mod tests {
         let cols = [cols, vec![right, Arc::new(Int32Array::from(vec![0; 5]))]].concat();
 
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-            phys_expr::col("l_str", &schema()).unwrap(),
+            phys_expr::col("l_str", &schema()).expect("test column exists"),
             Operator::Lt,
-            phys_expr::col("r_str", &schema()).unwrap(),
+            phys_expr::col("r_str", &schema()).expect("test column exists"),
         ));
-        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default()).unwrap();
+        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default())
+            .expect("valid test join filter");
         let result = apply_diagonal(&filter, &cols, 5);
 
         assert_eq!(result, vec![true, false, false, true, false]);
@@ -1581,11 +1603,12 @@ mod tests {
             Arc::new(BinaryArray::from_vec(vec![b"ab", b"bb"])),
         ];
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-            phys_expr::col("l_bin", &bin_schema).unwrap(),
+            phys_expr::col("l_bin", &bin_schema).expect("test column exists"),
             Operator::Lt,
-            phys_expr::col("r_bin", &bin_schema).unwrap(),
+            phys_expr::col("r_bin", &bin_schema).expect("test column exists"),
         ));
-        let filter = JoinFilter::try_new(expr, bin_schema, 1, Time::default()).unwrap();
+        let filter = JoinFilter::try_new(expr, bin_schema, 1, Time::default())
+            .expect("valid test join filter");
         let result = apply_diagonal(&filter, &cols, 2);
         assert_eq!(result, vec![true, false]);
     }
@@ -1595,8 +1618,8 @@ mod tests {
         let expr: PhysicalExprRef = Arc::new(LikeExpr::new(
             false,
             false,
-            phys_expr::col("l_str", &schema()).unwrap(),
-            phys_expr::col("r_str", &schema()).unwrap(),
+            phys_expr::col("l_str", &schema()).expect("test column exists"),
+            phys_expr::col("r_str", &schema()).expect("test column exists"),
         ));
         let cols: Vec<ArrayRef> = vec![
             Arc::new(StringArray::from(vec!["aa", "bb"])),
@@ -1604,7 +1627,8 @@ mod tests {
             Arc::new(StringArray::from(vec!["bb", "aa"])),
             Arc::new(Int32Array::from(vec![0, 0])),
         ];
-        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default()).unwrap();
+        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default())
+            .expect("valid test join filter");
         let result = apply_mask(&filter, &cols, 2, 2);
 
         assert_eq!(result, vec![false, true, true, false]);
@@ -1619,20 +1643,20 @@ mod tests {
     }
 
     fn lbatches() -> Vec<RecordBatch> {
-        vec![RecordBatch::try_new(lschema(), cols()[..2].to_vec()).unwrap()]
+        vec![RecordBatch::try_new(lschema(), cols()[..2].to_vec()).expect("valid test batch")]
     }
 
     fn rbatches() -> Vec<RecordBatch> {
-        vec![RecordBatch::try_new(rschema(), cols()[2..].to_vec()).unwrap()]
+        vec![RecordBatch::try_new(rschema(), cols()[2..].to_vec()).expect("valid test batch")]
     }
 
     fn lbatches_split() -> Vec<RecordBatch> {
         let cols = cols();
         vec![
             RecordBatch::try_new(lschema(), cols[..2].iter().map(|c| c.slice(0, 2)).collect())
-                .unwrap(),
+                .expect("valid test batch"),
             RecordBatch::try_new(lschema(), cols[..2].iter().map(|c| c.slice(2, 1)).collect())
-                .unwrap(),
+                .expect("valid test batch"),
         ]
     }
 
@@ -1642,27 +1666,27 @@ mod tests {
     fn test_apply_runs_answer_independently() {
         for expr in [
             Arc::new(BinaryExpr::new(
-                phys_expr::col("l_int", &schema()).unwrap(),
+                phys_expr::col("l_int", &schema()).expect("test column exists"),
                 Operator::Lt,
-                phys_expr::col("r_int", &schema()).unwrap(),
+                phys_expr::col("r_int", &schema()).expect("test column exists"),
             )) as PhysicalExprRef,
             Arc::new(BinaryExpr::new(
-                phys_expr::col("r_int", &schema()).unwrap(),
+                phys_expr::col("r_int", &schema()).expect("test column exists"),
                 Operator::Gt,
-                phys_expr::col("l_int", &schema()).unwrap(),
+                phys_expr::col("l_int", &schema()).expect("test column exists"),
             )),
             Arc::new(BinaryExpr::new(
-                phys_expr::col("l_str", &schema()).unwrap(),
+                phys_expr::col("l_str", &schema()).expect("test column exists"),
                 Operator::Eq,
-                phys_expr::col("r_str", &schema()).unwrap(),
+                phys_expr::col("r_str", &schema()).expect("test column exists"),
             )),
             Arc::new(BinaryExpr::new(
-                phys_expr::col("l_int", &schema()).unwrap(),
+                phys_expr::col("l_int", &schema()).expect("test column exists"),
                 Operator::Lt,
                 Arc::new(Literal::new(ScalarValue::Int32(Some(2)))),
             )),
             Arc::new(BinaryExpr::new(
-                phys_expr::col("r_int", &schema()).unwrap(),
+                phys_expr::col("r_int", &schema()).expect("test column exists"),
                 Operator::Lt,
                 Arc::new(Literal::new(ScalarValue::Int32(Some(9)))),
             )),
@@ -1672,7 +1696,8 @@ mod tests {
                 Arc::new(Literal::new(ScalarValue::Int32(Some(2)))),
             )),
         ] {
-            let filter = JoinFilter::try_new(expr, schema(), 2, Time::default()).unwrap();
+            let filter = JoinFilter::try_new(expr, schema(), 2, Time::default())
+                .expect("valid test join filter");
             let cols = cols();
             let runs = [
                 Run {
@@ -1699,7 +1724,9 @@ mod tests {
             let mut expected = vec![];
             let (mut loff, mut roff) = (0, 0);
             for run in &runs {
-                filter.apply(&cols, &[*run], &mut pairs).unwrap();
+                filter
+                    .apply(&cols, &[*run], &mut pairs)
+                    .expect("test filter evaluation succeeds");
                 expected.extend(
                     pairs
                         .lpos
@@ -1711,7 +1738,9 @@ mod tests {
                 roff += run.rnum;
             }
 
-            filter.apply(&cols, &runs, &mut pairs).unwrap();
+            filter
+                .apply(&cols, &runs, &mut pairs)
+                .expect("test filter evaluation succeeds");
             let got = pairs
                 .lpos
                 .iter()
@@ -1816,7 +1845,8 @@ mod tests {
 
     fn check_group(expr: PhysicalExprRef) {
         let expected = product_naive(expr.clone());
-        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default()).unwrap();
+        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default())
+            .expect("valid test join filter");
         let rranges = [IdxRange {
             batch_idx: 0,
             start: 0,
@@ -1833,32 +1863,32 @@ mod tests {
     #[test]
     fn test_group_matches_whole_product() {
         check_group(Arc::new(BinaryExpr::new(
-            phys_expr::col("l_int", &schema()).unwrap(),
+            phys_expr::col("l_int", &schema()).expect("test column exists"),
             Operator::Lt,
-            phys_expr::col("r_int", &schema()).unwrap(),
+            phys_expr::col("r_int", &schema()).expect("test column exists"),
         )));
         check_group(Arc::new(BinaryExpr::new(
-            phys_expr::col("r_int", &schema()).unwrap(),
+            phys_expr::col("r_int", &schema()).expect("test column exists"),
             Operator::GtEq,
-            phys_expr::col("l_int", &schema()).unwrap(),
+            phys_expr::col("l_int", &schema()).expect("test column exists"),
         )));
         check_group(Arc::new(BinaryExpr::new(
-            phys_expr::col("l_str", &schema()).unwrap(),
+            phys_expr::col("l_str", &schema()).expect("test column exists"),
             Operator::Eq,
-            phys_expr::col("r_str", &schema()).unwrap(),
+            phys_expr::col("r_str", &schema()).expect("test column exists"),
         )));
         check_group(Arc::new(BinaryExpr::new(
-            phys_expr::col("l_int", &schema()).unwrap(),
+            phys_expr::col("l_int", &schema()).expect("test column exists"),
             Operator::Lt,
             Arc::new(Literal::new(ScalarValue::Int32(Some(2)))),
         )));
         check_group(Arc::new(BinaryExpr::new(
-            phys_expr::col("l_int", &schema()).unwrap(),
+            phys_expr::col("l_int", &schema()).expect("test column exists"),
             Operator::Gt,
             Arc::new(Literal::new(ScalarValue::Int32(Some(1000)))),
         )));
         check_group(Arc::new(BinaryExpr::new(
-            phys_expr::col("r_int", &schema()).unwrap(),
+            phys_expr::col("r_int", &schema()).expect("test column exists"),
             Operator::Lt,
             Arc::new(Literal::new(ScalarValue::Int32(Some(1000)))),
         )));
@@ -1877,11 +1907,12 @@ mod tests {
     #[test]
     fn test_group_empty_side() {
         let expr: PhysicalExprRef = Arc::new(BinaryExpr::new(
-            phys_expr::col("l_int", &schema()).unwrap(),
+            phys_expr::col("l_int", &schema()).expect("test column exists"),
             Operator::Lt,
-            phys_expr::col("r_int", &schema()).unwrap(),
+            phys_expr::col("r_int", &schema()).expect("test column exists"),
         ));
-        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default()).unwrap();
+        let filter = JoinFilter::try_new(expr, schema(), 2, Time::default())
+            .expect("valid test join filter");
         let one = [IdxRange {
             batch_idx: 0,
             start: 0,
