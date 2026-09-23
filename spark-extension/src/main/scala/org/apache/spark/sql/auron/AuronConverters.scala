@@ -30,6 +30,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
 import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
+import org.apache.spark.sql.auron.join.JoinBuildSides
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
@@ -783,6 +784,10 @@ object AuronConverters extends Logging {
         exec,
         Seq("joinType" -> joinType, "condition" -> condition, "buildSide" -> buildSide))
 
+      // Preserving broadcast-side rows requires global match tracking across probe partitions.
+      require(
+        JoinBuildSides.supportsBroadcastJoin(joinType, buildSide),
+        s"native broadcast join does not support $joinType with $buildSide")
       assert(condition.isEmpty, "join condition is not supported")
 
       // verify build side is native

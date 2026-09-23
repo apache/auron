@@ -241,6 +241,51 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("unix_date and date_from_unix_date functions") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t1") {
+        sql("create table t1(dt date, days int) using parquet")
+        sql("""insert into t1 values
+            |  (date'1970-01-01', 0),
+            |  (date'1969-12-31', -1),
+            |  (date'1970-01-02', 1),
+            |  (date'2000-02-29', 11016),
+            |  (null, null)
+            |""".stripMargin)
+
+        for (ansi <- Seq("false", "true")) {
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            checkSparkAnswerAndOperator("""select
+                |  unix_date(dt), date_from_unix_date(days),
+                |  date_from_unix_date(unix_date(dt)),
+                |  unix_date(date_from_unix_date(days))
+                |from t1""".stripMargin)
+          }
+        }
+      }
+    }
+  }
+
+  test("unix_date and date_from_unix_date integer boundaries") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t1") {
+        sql("create table t1(days int) using parquet")
+        sql("insert into t1 values (-2147483648), (2147483647), (0), (null)")
+
+        for (ansi <- Seq("false", "true")) {
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            // Compare epoch days without converting extreme dates to java.sql.Date.
+            checkSparkAnswerAndOperator("""select
+                |  unix_date(date_add(date'1970-01-01', days)),
+                |  datediff(date_from_unix_date(days), date'1970-01-01'),
+                |  unix_date(date_from_unix_date(days))
+                |from t1""".stripMargin)
+          }
+        }
+      }
+    }
+  }
+
   test("date_add and date_sub functions") {
     withTable("t1") {
       sql("create table t1(start_date date, days int) using parquet")
@@ -307,6 +352,103 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
             |  date_add(ts, days), date_sub(ts, days),
             |  date_add(dt, days), date_sub(dt, days)
             |from t1""".stripMargin)
+      }
+    }
+  }
+
+  test("add_months function") {
+    withTable("t1") {
+      sql("create table t1(start_date date, months int) using parquet")
+      sql("""insert into t1 values
+          |  (date'2016-08-31', 1),
+          |  (date'2024-01-31', 1),
+          |  (date'2023-01-31', 1),
+          |  (date'2024-03-31', -1),
+          |  (date'2024-02-29', 12),
+          |  (date'2024-02-29', 1),
+          |  (date'2024-12-31', 2),
+          |  (date'1969-12-31', -13),
+          |  (date'2024-01-31', 0),
+          |  (null, 1),
+          |  (date'2024-01-01', null),
+          |  (null, null)
+          |""".stripMargin)
+
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator("""select
+              |  add_months(start_date, months),
+              |  add_months(start_date, 1), add_months(start_date, -1),
+              |  add_months(date'2024-01-31', months)
+              |from t1""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("add_months date range and overflow") {
+    withTable("t1") {
+      sql("create table t1(days int, months int) using parquet")
+      sql("""insert into t1 values
+          |  (2147483647, 0), (-2147483648, 0),
+          |  (2147483647, -1), (-2147483648, 1),
+          |  (100000000, -4800), (-100000000, 4800),
+          |  (0, 4800), (0, -4800)
+          |""".stripMargin)
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          // Compare epoch days to avoid java.sql.Date conversion for extreme dates.
+          checkSparkAnswerAndOperator("""select datediff(
+              |  add_months(date_add(date'1970-01-01', days), months), date'1970-01-01')
+              |from t1""".stripMargin)
+        }
+      }
+    }
+
+    withTable("t1") {
+      sql("create table t1(days int, months int) using parquet")
+      sql("""insert into t1 values
+          |  (2147483647, 1), (-2147483648, -1),
+          |  (0, 2147483647), (0, -2147483648)
+          |""".stripMargin)
+      val query = """select datediff(
+          |  add_months(date_add(date'1970-01-01', days), months), date'1970-01-01')
+          |from t1""".stripMargin
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          if (AuronTestUtils.isSparkV31OrGreater) {
+            for (enabled <- Seq("false", "true")) {
+              withSQLConf("spark.auron.enable" -> enabled) {
+                val df = sql(query)
+                val error = intercept[Exception](df.collect())
+                if (enabled == "true") {
+                  assertPlanIsNative(df)
+                }
+                assert(
+                  allCauseMessages(error).toLowerCase(java.util.Locale.ROOT).contains("overflow"))
+              }
+            }
+          } else {
+            checkSparkAnswerAndOperator(query)
+          }
+        }
+      }
+    }
+  }
+
+  test("add_months timestamp and string inputs") {
+    withTable("t1") {
+      sql("create table t1(ts timestamp, dt string, months int) using parquet")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        sql("""insert into t1 values
+            |  (timestamp'2024-03-01 04:30:00', '2024-02-29', 1),
+            |  (timestamp'1970-01-01 04:30:00', '1969-12-31', -1),
+            |  (null, null, 1)
+            |""".stripMargin)
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        checkSparkAnswerAndOperator(
+          "select add_months(ts, months), add_months(dt, months) from t1")
       }
     }
   }

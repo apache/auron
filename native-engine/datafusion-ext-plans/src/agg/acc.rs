@@ -344,7 +344,7 @@ impl<T: ArrowNativeType> AccColumn for AccPrimColumn<T> {
 
         // fill values
         let buffer = array_data.buffer::<T>(0);
-        self.values = buffer[array_data.offset()..][..array_data.len()].to_vec();
+        self.values = buffer[..array_data.len()].to_vec();
 
         // fill valids
         if let Some(nb) = array_data.nulls() {
@@ -540,7 +540,7 @@ impl AccColumn for AccBytesColumn {
 
         // fill values
         let offset_buffer = array_data.buffer::<i32>(0);
-        let data_buffer = array_data.buffer::<u8>(1);
+        let data_buffer = array_data.buffers()[1].as_slice();
         for i in 0..array_data.len() {
             if array_data.is_valid(i) {
                 let offset_begin = offset_buffer[i] as usize;
