@@ -99,6 +99,7 @@ pub fn create_auron_ext_function(
         "Spark_DateDiff" => shared_function!(spark_dates::spark_datediff),
         "Spark_DateAdd" => shared_function!(spark_dates::spark_date_add),
         "Spark_DateSub" => shared_function!(spark_dates::spark_date_sub),
+        "Spark_AddMonths" => shared_function!(spark_dates::spark_add_months),
         "Spark_MakeDate" => shared_function!(spark_dates::spark_make_date),
         "Spark_Hour" => shared_function!(spark_dates::spark_hour),
         "Spark_Minute" => shared_function!(spark_dates::spark_minute),
