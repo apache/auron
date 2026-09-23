@@ -458,12 +458,8 @@ impl AggContext {
     /// - `filtered_input`: input batch row indices to read from
     ///
     /// Only rows in `[batch_start_idx, batch_end_idx)` where the filter is
-    /// true are included. The mapping logic handles all `IdxSelection`
-    /// variants.
-    ///
-    /// NULL handling: `BooleanArray::value(i)` returns `false` for null slots,
-    /// which matches SQL FILTER semantics where NULL is treated as not-true and
-    /// the row is excluded from the aggregate.
+    /// non-null and true are included. The mapping logic handles all
+    /// `IdxSelection` variants.
     fn build_filtered_indices(
         acc_idx: IdxSelection,
         batch_start_idx: usize,
@@ -476,7 +472,7 @@ impl AggContext {
             // Single accumulator for all rows in this group.
             IdxSelection::Single(idx) => {
                 for i in batch_start_idx..batch_end_idx {
-                    if filter_array.value(i) {
+                    if filter_array.is_valid(i) && filter_array.value(i) {
                         filtered_acc.push(idx);
                         filtered_input.push(i);
                     }
@@ -485,7 +481,7 @@ impl AggContext {
             // Per-row accumulator indices (used by sort aggregation).
             IdxSelection::Indices(indices) => {
                 for i in batch_start_idx..batch_end_idx {
-                    if filter_array.value(i) {
+                    if filter_array.is_valid(i) && filter_array.value(i) {
                         filtered_acc.push(indices[i - batch_start_idx]);
                         filtered_input.push(i);
                     }
@@ -494,7 +490,7 @@ impl AggContext {
             // Per-row accumulator indices as u32 (used by hash aggregation).
             IdxSelection::IndicesU32(indices) => {
                 for i in batch_start_idx..batch_end_idx {
-                    if filter_array.value(i) {
+                    if filter_array.is_valid(i) && filter_array.value(i) {
                         filtered_acc.push(indices[i - batch_start_idx] as usize);
                         filtered_input.push(i);
                     }
@@ -519,7 +515,7 @@ impl AggContext {
             // Contiguous accumulator range (used by merge / partial-skip paths).
             IdxSelection::Range(start, _end) => {
                 for i in batch_start_idx..batch_end_idx {
-                    if filter_array.value(i) {
+                    if filter_array.is_valid(i) && filter_array.value(i) {
                         filtered_acc.push(start + (i - batch_start_idx));
                         filtered_input.push(i);
                     }
