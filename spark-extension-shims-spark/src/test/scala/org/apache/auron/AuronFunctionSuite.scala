@@ -220,6 +220,51 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("unix_date and date_from_unix_date functions") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t1") {
+        sql("create table t1(dt date, days int) using parquet")
+        sql("""insert into t1 values
+            |  (date'1970-01-01', 0),
+            |  (date'1969-12-31', -1),
+            |  (date'1970-01-02', 1),
+            |  (date'2000-02-29', 11016),
+            |  (null, null)
+            |""".stripMargin)
+
+        for (ansi <- Seq("false", "true")) {
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            checkSparkAnswerAndOperator("""select
+                |  unix_date(dt), date_from_unix_date(days),
+                |  date_from_unix_date(unix_date(dt)),
+                |  unix_date(date_from_unix_date(days))
+                |from t1""".stripMargin)
+          }
+        }
+      }
+    }
+  }
+
+  test("unix_date and date_from_unix_date integer boundaries") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t1") {
+        sql("create table t1(days int) using parquet")
+        sql("insert into t1 values (-2147483648), (2147483647), (0), (null)")
+
+        for (ansi <- Seq("false", "true")) {
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            // Compare epoch days without converting extreme dates to java.sql.Date.
+            checkSparkAnswerAndOperator("""select
+                |  unix_date(date_add(date'1970-01-01', days)),
+                |  datediff(date_from_unix_date(days), date'1970-01-01'),
+                |  unix_date(date_from_unix_date(days))
+                |from t1""".stripMargin)
+          }
+        }
+      }
+    }
+  }
+
   test("date_add and date_sub functions") {
     withTable("t1") {
       sql("create table t1(start_date date, days int) using parquet")
