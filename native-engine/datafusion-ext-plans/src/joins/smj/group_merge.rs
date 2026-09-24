@@ -379,15 +379,21 @@ mod tests {
             DataType::Int32,
             sort_options,
         )])
-        .unwrap();
+        .expect("valid test sort fields");
 
         let converter = Arc::new(parking_lot::Mutex::new(converter));
         let batches = batches
             .into_iter()
             .map(|values| {
                 let col = Arc::new(Int32Array::from(values)) as ArrayRef;
-                let key_rows = Arc::new(converter.lock().convert_columns(&[col.clone()]).unwrap());
-                let batch = RecordBatch::try_new(schema.clone(), vec![col]).unwrap();
+                let key_rows = Arc::new(
+                    converter
+                        .lock()
+                        .convert_columns(&[col.clone()])
+                        .expect("valid test key columns"),
+                );
+                let batch =
+                    RecordBatch::try_new(schema.clone(), vec![col]).expect("valid test batch");
                 Ok(RecordBatchWithKeyRows::new(
                     batch,
                     key_rows,
@@ -404,7 +410,8 @@ mod tests {
                 sort_options,
             )],
         );
-        StreamCursor::try_new(Box::pin(stream), Time::default(), &[DataType::Int32]).unwrap()
+        StreamCursor::try_new(Box::pin(stream), Time::default(), &[DataType::Int32])
+            .expect("valid test cursor")
     }
 
     /// Runs the merge to completion, describing each action by the key values
@@ -413,7 +420,9 @@ mod tests {
         lbatches: Vec<Vec<Option<i32>>>,
         rbatches: Vec<Vec<Option<i32>>>,
     ) -> Vec<String> {
-        actions_impl(lbatches, rbatches).await.unwrap()
+        actions_impl(lbatches, rbatches)
+            .await
+            .expect("test merge succeeds")
     }
 
     async fn actions_impl(
@@ -428,7 +437,10 @@ mod tests {
             ranges_iter(ranges)
                 .map(|(b, r)| {
                     let col = cur.batches()[b].column(0);
-                    let col = col.as_any().downcast_ref::<Int32Array>().unwrap();
+                    let col = col
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .expect("expected test array type");
                     match col.is_valid(r) {
                         true => col.value(r).to_string(),
                         false => "N".to_owned(),
@@ -531,10 +543,15 @@ mod tests {
                 arrow::row::SortField::new(DataType::Int32),
                 arrow::row::SortField::new(DataType::Int32),
             ])
-            .unwrap();
+            .expect("valid test sort fields");
             let converter = Arc::new(parking_lot::Mutex::new(converter));
-            let rows = Arc::new(converter.lock().convert_columns(&columns).unwrap());
-            let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+            let rows = Arc::new(
+                converter
+                    .lock()
+                    .convert_columns(&columns)
+                    .expect("valid test key columns"),
+            );
+            let batch = RecordBatch::try_new(schema.clone(), columns).expect("valid test batch");
             let stream = RecordBatchWithKeyRowsStreamAdapter::new(
                 futures::stream::iter(vec![Ok(RecordBatchWithKeyRows::new(
                     batch,
@@ -552,7 +569,7 @@ mod tests {
                 Time::default(),
                 &[DataType::Int32, DataType::Int32],
             )
-            .unwrap()
+            .expect("valid test cursor")
         }
 
         // Nullness is true, true, false, true despite lexicographically sorted keys.
@@ -573,7 +590,11 @@ mod tests {
             cur_forward!(rcur);
             let mut merger = GroupMerger::new();
             let mut matched = 0;
-            while let Some(action) = merger.next(&mut lcur, &mut rcur).await.unwrap() {
+            while let Some(action) = merger
+                .next(&mut lcur, &mut rcur)
+                .await
+                .expect("test merge advances")
+            {
                 if action == GroupAction::Both {
                     matched +=
                         ranges_iter(merger.lgroup()).count() * ranges_iter(merger.rgroup()).count();

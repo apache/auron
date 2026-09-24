@@ -62,13 +62,13 @@ fn batch(prefix: &str, keys: &[i32], values: &[i32]) -> RecordBatch {
             Arc::new(Int32Array::from(values.to_vec())) as ArrayRef,
         ],
     )
-    .unwrap()
+    .expect("valid test batch")
 }
 
 fn cursor(batch: RecordBatch, input_batch_size: usize, read: &[usize]) -> StreamCursor {
     let schema = batch.schema();
     let converter = Arc::new(parking_lot::Mutex::new(
-        RowConverter::new(vec![SortField::new(DataType::Int32)]).unwrap(),
+        RowConverter::new(vec![SortField::new(DataType::Int32)]).expect("valid test sort fields"),
     ));
     let batches = (0..batch.num_rows())
         .step_by(input_batch_size)
@@ -78,10 +78,10 @@ fn cursor(batch: RecordBatch, input_batch_size: usize, read: &[usize]) -> Stream
                 converter
                     .lock()
                     .convert_columns(&[batch.column(0).clone()])
-                    .unwrap(),
+                    .expect("valid test key columns"),
             );
             Ok(RecordBatchWithKeyRows::new(
-                batch.project(read).unwrap(),
+                batch.project(read).expect("valid test projection"),
                 rows,
                 converter.clone(),
             ))
@@ -89,13 +89,14 @@ fn cursor(batch: RecordBatch, input_batch_size: usize, read: &[usize]) -> Stream
         .collect::<Vec<_>>();
     let stream = RecordBatchWithKeyRowsStreamAdapter::new(
         futures::stream::iter(batches),
-        Arc::new(schema.project(read).unwrap()),
+        Arc::new(schema.project(read).expect("valid test projection")),
         vec![PhysicalSortExpr::new(
             Arc::new(Column::new(schema.field(0).name(), 0)),
             SortOptions::default(),
         )],
     );
-    StreamCursor::try_new(Box::pin(stream), Time::default(), &[DataType::Int32]).unwrap()
+    StreamCursor::try_new(Box::pin(stream), Time::default(), &[DataType::Int32])
+        .expect("valid test cursor")
 }
 
 async fn run(
@@ -166,7 +167,7 @@ async fn run(
     let collector = tokio::spawn(async move {
         let mut batches = vec![];
         while let Some(batch) = rx.recv().await {
-            batches.push(batch.unwrap());
+            batches.push(batch.expect("test output batch succeeds"));
         }
         batches
     });
@@ -185,7 +186,7 @@ async fn run(
     cur_forward!(rcur);
     joiner.as_mut().join(&mut lcur, &mut rcur).await?;
     drop(joiner);
-    Ok(collector.await.unwrap())
+    Ok(collector.await.expect("test collector completes"))
 }
 
 #[tokio::test]
@@ -214,7 +215,7 @@ async fn test_filtered_outer_and_anti_preserve_key_order() -> Result<()> {
                             .column(key_column)
                             .as_any()
                             .downcast_ref::<Int32Array>()
-                            .unwrap()
+                            .expect("expected test array type")
                             .values()
                             .to_vec()
                     })
@@ -264,7 +265,7 @@ async fn test_outer_order_survives_mid_group_output_flush() -> Result<()> {
                         .column(key_column)
                         .as_any()
                         .downcast_ref::<Int32Array>()
-                        .unwrap()
+                        .expect("expected test array type")
                         .values()
                         .to_vec()
                 })
@@ -344,7 +345,7 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                 Arc::new(Int32Array::from(values)) as ArrayRef,
             ],
         )
-        .unwrap()
+        .expect("valid test batch")
     };
     let left_batch = make_batch("l", lkeys.clone(), lvalues.clone());
     let right_batch = make_batch("r", rkeys.clone(), rvalues.clone());
@@ -441,7 +442,10 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                             batch.slice(start, input_batch_size.min(batch.num_rows() - start))
                         })
                         .collect::<Vec<_>>();
-                    Arc::new(TestMemoryExec::try_new(&[batches], batch.schema(), None).unwrap())
+                    Arc::new(
+                        TestMemoryExec::try_new(&[batches], batch.schema(), None)
+                            .expect("valid test memory input"),
+                    )
                 };
                 let (left, right) = (input(&left_batch), input(&right_batch));
                 let schema = if join_type == JoinType::Existence {
@@ -524,7 +528,7 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                                         column
                                             .as_any()
                                             .downcast_ref::<BooleanArray>()
-                                            .unwrap()
+                                            .expect("expected test array type")
                                             .value(row)
                                             .to_string()
                                     }
