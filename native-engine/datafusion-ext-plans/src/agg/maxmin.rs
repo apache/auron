@@ -46,9 +46,7 @@ fn spark_float_cmp<T: num::Float>(left: T, right: T) -> Ordering {
         Ordering::Equal
     } else if left.is_nan() {
         Ordering::Greater
-    } else if right.is_nan() {
-        Ordering::Less
-    } else if left < right {
+    } else if right.is_nan() || left < right {
         Ordering::Less
     } else {
         Ordering::Greater
