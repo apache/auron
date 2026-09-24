@@ -202,6 +202,63 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("next_day function") {
+    withTable("t1") {
+      sql("create table t1(start_date date, weekday string) using parquet")
+      sql("""insert into t1 values
+          |  (date'2024-01-01', 'MON'),
+          |  (date'2024-01-01', 'tuE'),
+          |  (date'2024-02-29', 'FRIDAY'),
+          |  (date'2024-12-31', 'TH'),
+          |  (date'1969-12-31', 'THURSDAY'),
+          |  (null, 'MON'),
+          |  (date'2024-01-01', null)
+          |""".stripMargin)
+
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator("""select
+              |  next_day(start_date, weekday),
+              |  next_day(start_date, 'MON'),
+              |  next_day(date'2024-01-01', weekday)
+              |from t1""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("next_day invalid weekday") {
+    withTable("t1") {
+      sql("create table t1(start_date date, weekday string) using parquet")
+      sql("""insert into t1 values
+          |  (date'2024-01-01', 'NODAY'),
+          |  (date'2024-01-01', ' MON ')
+          |""".stripMargin)
+      val query = "select next_day(start_date, weekday) from t1"
+
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkSparkAnswerAndOperator(query)
+      }
+      if (AuronTestUtils.isSparkV32OrGreater) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          for (enabled <- Seq("false", "true")) {
+            withSQLConf("spark.auron.enable" -> enabled) {
+              val df = sql(query)
+              val error = intercept[Exception](df.collect())
+              if (enabled == "true") {
+                assertPlanIsNative(df)
+              }
+              assert(
+                allCauseMessages(error)
+                  .toLowerCase(java.util.Locale.ROOT)
+                  .contains("day of week"))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("datediff function") {
     withTable("t1") {
       sql("create table t1(end_date date, start_date date) using parquet")
