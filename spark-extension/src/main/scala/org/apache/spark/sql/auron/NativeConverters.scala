@@ -279,7 +279,7 @@ object NativeConverters extends Logging {
     override def toString(): String = s"$getClass() dataType:$dataType)"
   }
 
-  private def buildSparkUdfWrapperExpr(
+  private def buildUdfWrapperExpr(
       sparkExpr: Expression,
       fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
     // update subquery result if needed
@@ -316,8 +316,8 @@ object NativeConverters extends Logging {
 
     pb.PhysicalExprNode
       .newBuilder()
-      .setSparkUdfWrapperExpr(
-        pb.PhysicalSparkUDFWrapperExprNode
+      .setUdfWrapperExpr(
+        pb.PhysicalUDFWrapperExprNode
           .newBuilder()
           .setSerialized(ByteString.copyFrom(serialized))
           .setReturnType(convertDataType(bound.dataType))
@@ -374,7 +374,7 @@ object NativeConverters extends Logging {
     } catch {
       case e: NotImplementedError =>
         logWarning(s"Falling back expression: $e")
-        buildSparkUdfWrapperExpr(sparkExpr, fallbackToError)
+        buildUdfWrapperExpr(sparkExpr, fallbackToError)
     }
   }
 
@@ -488,7 +488,7 @@ object NativeConverters extends Logging {
         if (involvesDateOrTimestamp) {
           // Keep timestamp/date casts executable in native projects by wrapping
           // the Spark expression, since native cast does not support these types directly.
-          buildSparkUdfWrapperExpr(cast, fallback)
+          buildUdfWrapperExpr(cast, fallback)
         } else {
           val castChild =
             if (cast.child.dataType == StringType &&
