@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use arrow::{
     array::{
-        ArrayRef, BooleanArray, Date32Array, Date32Builder, Float64Array, Int32Array,
+        ArrayRef, BooleanArray, Date32Array, Date32Builder, Float64Array, Int32Array, StringArray,
         TimestampMillisecondArray, as_primitive_array,
     },
     compute::{DatePart, binary, date_part, try_binary},
@@ -296,6 +296,72 @@ pub fn spark_last_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }));
 
     Ok(ColumnarValue::Array(Arc::new(last_day)))
+}
+
+pub fn spark_next_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 3 {
+        return Err(DataFusionError::Execution(
+            "next_day requires three arguments".to_string(),
+        ));
+    }
+    let fail_on_error = match &args[2] {
+        ColumnarValue::Scalar(ScalarValue::Boolean(Some(value))) => *value,
+        _ => {
+            return Err(DataFusionError::Execution(
+                "next_day failOnError must be a boolean scalar".to_string(),
+            ));
+        }
+    };
+    let scalar_result = args[..2]
+        .iter()
+        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
+    let arrays = ColumnarValue::values_to_arrays(&args[..2])?;
+    let dates = cast(&arrays[0], &DataType::Date32)?;
+    let weekdays = cast(&arrays[1], &DataType::Utf8)?;
+    let dates = as_primitive_array::<Date32Type>(&dates);
+    let weekdays = weekdays
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .expect("cast to Utf8 must succeed");
+    let mut result = Date32Builder::with_capacity(dates.len());
+
+    for (date, weekday) in dates.iter().zip(weekdays.iter()) {
+        match (date, weekday) {
+            (Some(date), Some(weekday)) => {
+                // Spark numbers weekdays from Thursday (1970-01-01) = 0.
+                let day_of_week: i32 = match weekday.to_uppercase().as_str() {
+                    "SU" | "SUN" | "SUNDAY" => 3,
+                    "MO" | "MON" | "MONDAY" => 4,
+                    "TU" | "TUE" | "TUESDAY" => 5,
+                    "WE" | "WED" | "WEDNESDAY" => 6,
+                    "TH" | "THU" | "THURSDAY" => 0,
+                    "FR" | "FRI" | "FRIDAY" => 1,
+                    "SA" | "SAT" | "SATURDAY" => 2,
+                    _ if fail_on_error => {
+                        return Err(DataFusionError::Execution(format!(
+                            "Illegal input for day of week: {weekday}"
+                        )));
+                    }
+                    _ => {
+                        result.append_null();
+                        continue;
+                    }
+                };
+                let offset = (day_of_week - 1).wrapping_sub(date).rem_euclid(7);
+                result.append_value(date.wrapping_add(1).wrapping_add(offset));
+            }
+            _ => result.append_null(),
+        }
+    }
+
+    let result: ArrayRef = Arc::new(result.finish());
+    if scalar_result {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(result))
+    }
 }
 
 pub fn spark_datediff(args: &[ColumnarValue]) -> Result<ColumnarValue> {
@@ -774,6 +840,87 @@ mod tests {
             None,
         ]));
         assert_eq!(&spark_last_day(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_next_day() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let monday = date(2024, 1, 1);
+        let dates = Arc::new(Date32Array::from(vec![
+            Some(monday),
+            Some(monday),
+            Some(monday),
+            Some(monday),
+            Some(monday),
+            Some(monday),
+            Some(monday),
+            Some(date(2024, 12, 31)),
+            Some(date(1969, 12, 31)),
+            Some(monday),
+            None,
+            Some(monday),
+        ]));
+        let weekdays = Arc::new(StringArray::from(vec![
+            Some("MON"),
+            Some("tuE"),
+            Some("WEDNESDAY"),
+            Some("TH"),
+            Some("FRI"),
+            Some("SAT"),
+            Some("SUNDAY"),
+            Some("THURSDAY"),
+            Some("TH"),
+            Some(" MON "),
+            Some("MO"),
+            None,
+        ]));
+        let expected: ArrayRef = Arc::new(Date32Array::from(vec![
+            Some(date(2024, 1, 8)),
+            Some(date(2024, 1, 2)),
+            Some(date(2024, 1, 3)),
+            Some(date(2024, 1, 4)),
+            Some(date(2024, 1, 5)),
+            Some(date(2024, 1, 6)),
+            Some(date(2024, 1, 7)),
+            Some(date(2025, 1, 2)),
+            Some(date(1970, 1, 1)),
+            None,
+            None,
+            None,
+        ]));
+        let function = crate::create_auron_ext_function("Spark_NextDay", 0)?;
+        let result = function(&[
+            ColumnarValue::Array(dates),
+            ColumnarValue::Array(weekdays),
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(false))),
+        ])?;
+        assert_eq!(&result.into_array(12)?, &expected);
+
+        let args = [
+            ColumnarValue::Scalar(ScalarValue::Date32(Some(monday))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("MO".to_string()))),
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))),
+        ];
+        assert!(matches!(
+            function(&args)?,
+            ColumnarValue::Scalar(ScalarValue::Date32(Some(value))) if value == date(2024, 1, 8)
+        ));
+        let invalid = [
+            args[0].clone(),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(" MON ".to_string()))),
+            args[2].clone(),
+        ];
+        assert!(
+            function(&invalid)
+                .unwrap_err()
+                .to_string()
+                .contains("Illegal input for day of week")
+        );
         Ok(())
     }
 
