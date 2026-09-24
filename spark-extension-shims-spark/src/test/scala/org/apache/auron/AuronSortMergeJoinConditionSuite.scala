@@ -16,6 +16,8 @@
  */
 package org.apache.auron
 
+import org.apache.spark.sql.catalyst.expressions.LessThan
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 
 class AuronSortMergeJoinConditionSuite extends AuronJoinConditionTestBase {
@@ -52,13 +54,21 @@ class AuronSortMergeJoinConditionSuite extends AuronJoinConditionTestBase {
 
   test("SMJ existence condition and condition-only columns") {
     withSortMergeJoin {
-      checkJoinPlan(
-        """
-          |SELECT l.k, EXISTS(
-          |  SELECT 1 FROM condition_right r WHERE l.k = r.k AND l.v < r.v) AS matched
-          |FROM condition_left l
-          |""".stripMargin,
-        _.isInstanceOf[NativeSortMergeJoinBase])
+      // OR preserves an ExistenceJoin without projecting EXISTS, unsupported by Spark 3.0.
+      for (predicate <- Seq("EXISTS", "NOT EXISTS")) {
+        checkJoinPlan(
+          s"""
+            |SELECT l.k FROM condition_left l
+            |WHERE l.k = 3 OR $predicate (
+            |  SELECT 1 FROM condition_right r WHERE l.k = r.k AND l.v < r.v)
+            |""".stripMargin,
+          {
+            case join: NativeSortMergeJoinBase =>
+              join.productIterator.exists(_.isInstanceOf[ExistenceJoin]) &&
+              join.expressions.exists(_.isInstanceOf[LessThan])
+            case _ => false
+          })
+      }
     }
   }
 
