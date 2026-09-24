@@ -628,7 +628,7 @@ object AuronConverters extends Logging {
         "joinType" -> joinType,
         "condition" -> condition))
 
-    validateNativeInnerJoinCondition(joinType, condition)
+    validateNativeJoinCondition(condition)
     Shims.get.createNativeSortMergeJoinExec(
       addRenameColumnsExec(convertToNative(left)),
       addRenameColumnsExec(convertToNative(right)),
@@ -703,16 +703,22 @@ object AuronConverters extends Logging {
   private def validateNativeInnerJoinCondition(
       joinType: JoinType,
       condition: Option[Expression]): Unit = {
+    validateNativeJoinCondition(condition)
+    assert(
+      condition.isEmpty || joinType.isInstanceOf[InnerLike],
+      "join condition is not supported")
+  }
+
+  private def validateNativeJoinCondition(condition: Option[Expression]): Unit = {
     condition.foreach { expr =>
       assert(
         SparkAuronConfiguration.ENABLE_NATIVE_JOIN_CONDITION.get(),
         "native join condition is disabled")
-      assert(joinType.isInstanceOf[InnerLike], "join condition is not supported")
-      validateNativeInnerJoinConditionExpr(expr)
+      validateNativeJoinConditionExpr(expr)
     }
   }
 
-  private def validateNativeInnerJoinConditionExpr(condition: Expression): Unit = {
+  private def validateNativeJoinConditionExpr(condition: Expression): Unit = {
     Shims.get.shimVersion match {
       case "spark-3.0" | "spark-3.1" =>
         NativeConverters.convertExprWithFallback(

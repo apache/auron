@@ -27,7 +27,7 @@ use datafusion::{
         tree_node::{Transformed, TransformedResult, TreeNode},
     },
     physical_expr::{PhysicalExprRef, expressions::Column, utils::collect_columns},
-    physical_plan::ColumnarValue,
+    physical_plan::{ColumnarValue, metrics::Time},
 };
 use datafusion_ext_commons::df_execution_err;
 use stream_cursor::StreamCursor;
@@ -56,6 +56,8 @@ pub struct JoinParams {
     pub sort_options: Vec<SortOptions>,
     pub projection: JoinProjection,
     pub join_filter: Option<JoinFilter>,
+    pub residual_filter: Option<Arc<join_filter::JoinFilter>>,
+    pub output_time: Time,
     pub batch_size: usize,
     pub is_null_aware_anti_join: bool,
 }
