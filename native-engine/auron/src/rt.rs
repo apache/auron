@@ -21,6 +21,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         mpsc::Receiver,
     },
+    time::Duration,
 };
 
 use arrow::{
@@ -29,7 +30,10 @@ use arrow::{
     record_batch::RecordBatch,
 };
 use auron_jni_bridge::{
-    conf::{IntConf, TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU},
+    conf::{
+        BooleanConf, IntConf, LongConf, METRICS_UPDATE_ENABLED, METRICS_UPDATE_INTERVAL_MS,
+        TASK_CPUS, TOKIO_WORKER_THREADS_PER_CPU,
+    },
     is_task_running, jni_call, jni_call_static, jni_convert_byte_array, jni_exception_check,
     jni_exception_occurred, jni_new_global_ref, jni_new_object, jni_new_string,
 };
@@ -52,13 +56,14 @@ use datafusion_ext_plans::{
 };
 use futures::{FutureExt, StreamExt};
 use jni::objects::{GlobalRef, JObject};
+use parking_lot::Mutex;
 use prost::Message;
 use tokio::{runtime::Runtime, task::JoinHandle};
 
 use crate::{
     handle_unwinded_scope,
     logging::{THREAD_PARTITION_ID, THREAD_STAGE_ID, THREAD_TID},
-    metrics::update_metric_node,
+    metrics::{MetricSnapshot, update_metric_node},
 };
 
 pub struct NativeExecutionRuntime {
@@ -68,6 +73,8 @@ pub struct NativeExecutionRuntime {
     batch_receiver: Receiver<Result<Option<RecordBatch>>>,
     tokio_runtime: Runtime,
     join_handle: JoinHandle<()>,
+    metrics_ticker: Option<JoinHandle<()>>,
+    metric_state: Arc<Mutex<MetricSnapshot>>,
     // Flag to indicate runtime is being finalized - used to gracefully handle SendError
     is_finalizing: Arc<AtomicBool>,
 }
@@ -119,6 +126,7 @@ impl NativeExecutionRuntime {
         let classloader_global = jni_new_global_ref!(classloader.as_obj())?;
         let mut tokio_runtime_builder = tokio::runtime::Builder::new_multi_thread();
         tokio_runtime_builder
+            .enable_time()
             .thread_name(format!(
                 "auron-native-stage-{stage_id}-part-{partition_id}-tid-{tid}"
             ))
@@ -238,6 +246,15 @@ impl NativeExecutionRuntime {
             });
         });
 
+        let metric_state = Arc::new(Mutex::new(MetricSnapshot::new()));
+        let metrics_ticker = spawn_metrics_ticker(
+            &tokio_runtime,
+            native_wrapper.clone(),
+            execution_plan.clone(),
+            metric_state.clone(),
+            is_finalizing.clone(),
+        );
+
         let native_execution_runtime = Self {
             exec_ctx: exec_ctx.clone(),
             native_wrapper: native_wrapper.clone(),
@@ -245,6 +262,8 @@ impl NativeExecutionRuntime {
             tokio_runtime,
             batch_receiver,
             join_handle,
+            metrics_ticker,
+            metric_state,
             is_finalizing,
         };
         Ok(native_execution_runtime)
@@ -288,13 +307,18 @@ impl NativeExecutionRuntime {
         let partition = self.exec_ctx.partition_id();
 
         log::info!("(partition={partition}) native execution finalizing");
+        // Stop the ticker before the last flush so it cannot JNI into MetricNode
+        // after we drop native_wrapper. Abort does not wait; the mutex serializes
+        // an in-flight publish with this final update.
+        self.is_finalizing.store(true, Ordering::Release);
+        if let Some(metrics_ticker) = &self.metrics_ticker {
+            metrics_ticker.abort();
+        }
         self.update_metrics().unwrap_or_default();
         drop(self.plan);
 
-        // Set finalizing flag before dropping receiver and native_wrapper to prevent
-        // concurrent set_error calls from next_batch/tokio workers from accessing a
-        // freed GlobalRef after finalize completes.
-        self.is_finalizing.store(true, Ordering::Release);
+        // Drop receiver after is_finalizing so concurrent next_batch/tokio workers
+        // skip set_error instead of touching a freed GlobalRef.
         drop(self.batch_receiver);
 
         cancel_all_tasks(&self.exec_ctx.task_ctx()); // cancel all pending streams
@@ -304,12 +328,54 @@ impl NativeExecutionRuntime {
     }
 
     fn update_metrics(&self) -> Result<()> {
-        let metrics = jni_call!(
-            AuronCallNativeWrapper(self.native_wrapper.as_obj()).getMetrics() -> JObject
-        )?;
-        update_metric_node(metrics.as_obj(), self.plan.clone())?;
-        Ok(())
+        publish_plan_metrics(&self.native_wrapper, &self.plan, &self.metric_state)
     }
+}
+
+fn spawn_metrics_ticker(
+    tokio_runtime: &Runtime,
+    native_wrapper: GlobalRef,
+    plan: Arc<dyn ExecutionPlan>,
+    metric_state: Arc<Mutex<MetricSnapshot>>,
+    is_finalizing: Arc<AtomicBool>,
+) -> Option<JoinHandle<()>> {
+    let enabled = METRICS_UPDATE_ENABLED.value().unwrap_or(false);
+    if !enabled {
+        return None;
+    }
+    let interval_ms = METRICS_UPDATE_INTERVAL_MS.value().unwrap_or(1000);
+    if interval_ms <= 0 {
+        return None;
+    }
+
+    Some(tokio_runtime.spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(interval_ms as u64));
+        // The first tick completes immediately; skip it so we do not JNI all-zero
+        // metrics.
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            if is_finalizing.load(Ordering::Acquire) {
+                break;
+            }
+            if let Err(err) = publish_plan_metrics(&native_wrapper, &plan, &metric_state) {
+                log::warn!("periodic metric update failed: {err}");
+            }
+        }
+    }))
+}
+
+fn publish_plan_metrics(
+    native_wrapper: &GlobalRef,
+    plan: &Arc<dyn ExecutionPlan>,
+    metric_state: &Mutex<MetricSnapshot>,
+) -> Result<()> {
+    let mut snapshot = metric_state.lock();
+    let metrics = jni_call!(
+        AuronCallNativeWrapper(native_wrapper.as_obj()).getMetrics() -> JObject
+    )?;
+    update_metric_node(metrics.as_obj(), plan.clone(), &mut snapshot)?;
+    Ok(())
 }
 
 fn set_error(native_wrapper: &GlobalRef, message: &str, cause: Option<JObject>) -> Result<()> {

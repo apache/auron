@@ -153,7 +153,7 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
         String opIdWithSubtask = rc.getOperatorUniqueID() + "-" + rc.getIndexOfThisSubtask();
 
         this.childAllocator = FlinkArrowUtils.createChildAllocator("FlinkAuronCalc-" + opIdWithSubtask);
-        this.metricNode = buildMetricTree(plan, getMetricGroup());
+        this.metricNode = FlinkMetricNode.fromPlan(plan, getMetricGroup());
         this.exporter = new FlinkArrowFFIExporter(childAllocator, inputRowType, BATCH_ROW_LIMIT);
         // UUID disambiguates re-runs after operator restart so a stale registration cannot
         // collide with the new one.
@@ -316,31 +316,6 @@ public class FlinkAuronCalcOperator extends TableStreamOperator<RowData>
                         .build(),
                 "FlinkAuronCalcOperator expects Project[Filter[FFIReader]] / "
                         + "Project[FFIReader] / Filter[FFIReader] / FFIReader shape; got: ");
-    }
-
-    /**
-     * Recursively constructs a {@link FlinkMetricNode} whose shape mirrors {@code node}'s plan
-     * tree. Native code walks the plan tree at finalization time and indexes into the parallel
-     * metric tree via {@link org.apache.auron.metric.MetricNode#getChild(int)}; an empty children
-     * list would throw {@link IndexOutOfBoundsException} on the first {@code getChild(0)} call.
-     * All levels share the same Flink {@link org.apache.flink.metrics.MetricGroup} so named
-     * counters aggregate at the operator scope.
-     */
-    private static FlinkMetricNode buildMetricTree(PhysicalPlanNode node, org.apache.flink.metrics.MetricGroup mg) {
-        final List<org.apache.auron.metric.MetricNode> children;
-        if (node.hasFfiReader()) {
-            children = Collections.emptyList();
-        } else if (node.hasProjection()) {
-            children = Collections.singletonList(
-                    buildMetricTree(node.getProjection().getInput(), mg));
-        } else if (node.hasFilter()) {
-            children =
-                    Collections.singletonList(buildMetricTree(node.getFilter().getInput(), mg));
-        } else {
-            throw new IllegalArgumentException(
-                    "Unexpected plan node type for metric tree: " + node.getPhysicalPlanTypeCase());
-        }
-        return new FlinkMetricNode(mg, children);
     }
 
     // ====================================================================

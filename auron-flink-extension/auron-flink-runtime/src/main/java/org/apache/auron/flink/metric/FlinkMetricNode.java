@@ -16,10 +16,12 @@
  */
 package org.apache.auron.flink.metric;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.auron.metric.MetricNode;
+import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.MetricGroup;
 
@@ -52,6 +54,40 @@ public class FlinkMetricNode extends MetricNode {
     public FlinkMetricNode(MetricGroup metricGroup, List<MetricNode> children) {
         super(children);
         this.metricGroup = Objects.requireNonNull(metricGroup, "metricGroup");
+    }
+
+    /**
+     * Recursively constructs a {@link FlinkMetricNode} whose shape mirrors {@code node}'s plan
+     * tree. Native code walks the execution plan during periodic metric updates and at
+     * finalization, indexing into the parallel metric tree via {@link MetricNode#getChild(int)};
+     * an empty children list would throw {@link IndexOutOfBoundsException} on the first {@code
+     * getChild(0)} call. All levels share the same Flink {@link MetricGroup} so named counters
+     * aggregate at the operator scope.
+     *
+     * <p>Supported leaves are {@code FFIReader} (standalone Calc) and {@code KafkaScan} (Kafka
+     * source, including after Calc fusion). Supported unary nodes are {@code Projection} and
+     * {@code Filter}.
+     *
+     * @param node the physical plan whose shape the metric tree must match; must not be null
+     * @param metricGroup the Flink metric group all tree levels register counters against; must
+     *     not be null
+     * @return the root of the mirrored metric tree
+     */
+    public static FlinkMetricNode fromPlan(PhysicalPlanNode node, MetricGroup metricGroup) {
+        Objects.requireNonNull(node, "node");
+        Objects.requireNonNull(metricGroup, "metricGroup");
+        final List<MetricNode> children;
+        if (node.hasFfiReader() || node.hasKafkaScan()) {
+            children = Collections.emptyList();
+        } else if (node.hasProjection()) {
+            children = Collections.singletonList(fromPlan(node.getProjection().getInput(), metricGroup));
+        } else if (node.hasFilter()) {
+            children = Collections.singletonList(fromPlan(node.getFilter().getInput(), metricGroup));
+        } else {
+            throw new IllegalArgumentException(
+                    "Unexpected plan node type for metric tree: " + node.getPhysicalPlanTypeCase());
+        }
+        return new FlinkMetricNode(metricGroup, children);
     }
 
     /**
