@@ -40,6 +40,28 @@ use crate::{
 pub type AggMax = AggMaxMin<AggMaxParams>;
 pub type AggMin = AggMaxMin<AggMinParams>;
 
+fn spark_float_cmp<T: num::Float>(left: T, right: T) -> Ordering {
+    // Spark places all NaNs last and treats signed zeros as equal.
+    if left == right || (left.is_nan() && right.is_nan()) {
+        Ordering::Equal
+    } else if left.is_nan() {
+        Ordering::Greater
+    } else if right.is_nan() || left < right {
+        Ordering::Less
+    } else {
+        Ordering::Greater
+    }
+}
+
+macro_rules! compare_primitive {
+    (spark, $left:expr, $right:expr) => {
+        Some(spark_float_cmp($left, $right))
+    };
+    (partial, $left:expr, $right:expr) => {
+        $left.partial_cmp(&$right)
+    };
+}
+
 pub struct AggMaxMin<P: AggMaxMinParams> {
     child: PhysicalExprRef,
     data_type: DataType,
@@ -108,15 +130,16 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
         accs.ensure_size(acc_idx);
 
         macro_rules! handle_primitive {
-            ($array:expr) => {{
+            ($array:expr, $compare:ident) => {{
                 let partial_arg = $array;
                 let accs = downcast_any!(accs, mut AccPrimColumn<_>)?;
                 idx_for_zipped! {
                      ((acc_idx, partial_arg_idx) in (acc_idx, partial_arg_idx)) => {
                          if partial_arg.is_valid(partial_arg_idx) {
-                             let partial_value = partial_arg.value(partial_arg_idx);
-                             accs.update_value(acc_idx, partial_value, |v| {
-                                 if v.partial_cmp(&partial_value) == Some(P::ORD) {
+                            let partial_value = partial_arg.value(partial_arg_idx);
+                            accs.update_value(acc_idx, partial_value, |v| {
+                                let ord = compare_primitive!($compare, v, partial_value);
+                                if ord == Some(P::ORD) || ord == Some(Ordering::Equal) {
                                      v
                                  } else {
                                      partial_value
@@ -167,30 +190,38 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
             }};
         }
 
-        downcast_primitive_array! {
-            partial_arg => handle_primitive!(partial_arg),
-            DataType::Boolean => handle_boolean!(downcast_any!(partial_arg, BooleanArray)?),
-            DataType::Binary => handle_bytes!(downcast_any!(partial_arg, BinaryArray)?),
-            DataType::Utf8 => handle_bytes!(downcast_any!(partial_arg, StringArray)?),
-            DataType::Null => {}
-            _ => {
-                let accs = downcast_any!(accs, mut AccScalarValueColumn)?;
-                idx_for_zipped! {
-                    ((acc_idx, partial_arg_idx) in (acc_idx, partial_arg_idx)) => {
-                        if partial_args[0].is_valid(partial_arg_idx) {
-                            let partial_arg_scalar = compacted_scalar_value_from_array(
-                                &partial_args[0],
-                                partial_arg_idx,
-                            )?;
-                            let acc_scalar = accs.value(acc_idx);
-                            if !acc_scalar.is_null() && acc_scalar.partial_cmp(&partial_arg_scalar) == Some(P::ORD) {
-                                continue;
+        match partial_arg.data_type() {
+            DataType::Float32 => {
+                handle_primitive!(downcast_any!(partial_arg, Float32Array)?, spark)
+            }
+            DataType::Float64 => {
+                handle_primitive!(downcast_any!(partial_arg, Float64Array)?, spark)
+            }
+            _ => downcast_primitive_array! {
+                partial_arg => handle_primitive!(partial_arg, partial),
+                DataType::Boolean => handle_boolean!(downcast_any!(partial_arg, BooleanArray)?),
+                DataType::Binary => handle_bytes!(downcast_any!(partial_arg, BinaryArray)?),
+                DataType::Utf8 => handle_bytes!(downcast_any!(partial_arg, StringArray)?),
+                DataType::Null => {}
+                _ => {
+                    let accs = downcast_any!(accs, mut AccScalarValueColumn)?;
+                    idx_for_zipped! {
+                        ((acc_idx, partial_arg_idx) in (acc_idx, partial_arg_idx)) => {
+                            if partial_args[0].is_valid(partial_arg_idx) {
+                                let partial_arg_scalar = compacted_scalar_value_from_array(
+                                    &partial_args[0],
+                                    partial_arg_idx,
+                                )?;
+                                let acc_scalar = accs.value(acc_idx);
+                                if !acc_scalar.is_null() && acc_scalar.partial_cmp(&partial_arg_scalar) == Some(P::ORD) {
+                                    continue;
+                                }
+                                accs.set_value(acc_idx, partial_arg_scalar);
                             }
-                            accs.set_value(acc_idx, partial_arg_scalar);
                         }
                     }
                 }
-            }
+            },
         }
         Ok(())
     }
@@ -205,7 +236,10 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
         accs.ensure_size(acc_idx);
 
         macro_rules! handle_primitive {
-            ($ty:ty) => {{
+            ($ty:ty) => {
+                handle_primitive!($ty, partial)
+            };
+            ($ty:ty, $compare:ident) => {{
                 type TNative = <$ty as ArrowPrimitiveType>::Native;
                 let accs = downcast_any!(accs, mut AccPrimColumn<TNative>)?;
                 let merging_accs = downcast_any!(merging_accs, mut AccPrimColumn<_>)?;
@@ -213,7 +247,8 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
                     ((acc_idx, merging_acc_idx) in (acc_idx, merging_acc_idx)) => {
                         if let Some(merging_value) = merging_accs.value(merging_acc_idx) {
                             accs.update_value(acc_idx, merging_value, |v| {
-                                if v.partial_cmp(&merging_value) == Some(P::ORD) {
+                                let ord = compare_primitive!($compare, v, merging_value);
+                                if ord == Some(P::ORD) || ord == Some(Ordering::Equal) {
                                     v
                                 } else {
                                     merging_value
@@ -266,28 +301,32 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
                 }
             }};
         }
-        downcast_primitive! {
-            (&self.data_type) => (handle_primitive),
-            DataType::Boolean => handle_boolean!(),
-            DataType::Utf8 | DataType::Binary => handle_bytes!(),
-            DataType::Null => {},
-            _ => {
-                let accs = downcast_any!(accs, mut AccScalarValueColumn)?;
-                let merging_accs = downcast_any!(merging_accs, mut AccScalarValueColumn)?;
-                idx_for_zipped! {
-                    ((acc_idx, merging_acc_idx) in (acc_idx, merging_acc_idx)) => {
-                        let merging_value = merging_accs.take_value(merging_acc_idx);
-                        if merging_value.is_null() {
-                            continue;
+        match &self.data_type {
+            DataType::Float32 => handle_primitive!(Float32Type, spark),
+            DataType::Float64 => handle_primitive!(Float64Type, spark),
+            _ => downcast_primitive! {
+                (&self.data_type) => (handle_primitive),
+                DataType::Boolean => handle_boolean!(),
+                DataType::Utf8 | DataType::Binary => handle_bytes!(),
+                DataType::Null => {},
+                _ => {
+                    let accs = downcast_any!(accs, mut AccScalarValueColumn)?;
+                    let merging_accs = downcast_any!(merging_accs, mut AccScalarValueColumn)?;
+                    idx_for_zipped! {
+                        ((acc_idx, merging_acc_idx) in (acc_idx, merging_acc_idx)) => {
+                            let merging_value = merging_accs.take_value(merging_acc_idx);
+                            if merging_value.is_null() {
+                                continue;
+                            }
+                            let w = accs.value(acc_idx);
+                            if !w.is_null() && w.partial_cmp(&merging_value) == Some(P::ORD) {
+                                continue;
+                            }
+                            accs.set_value(acc_idx, merging_value);
                         }
-                        let w = accs.value(acc_idx);
-                        if !w.is_null() && w.partial_cmp(&merging_value) == Some(P::ORD) {
-                            continue;
-                        }
-                        accs.set_value(acc_idx, merging_value);
                     }
                 }
-            }
+            },
         }
         Ok(())
     }
@@ -313,4 +352,112 @@ impl AggMaxMinParams for AggMaxParams {
 impl AggMaxMinParams for AggMinParams {
     const NAME: &'static str = "min";
     const ORD: Ordering = Ordering::Less;
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::{common::ScalarValue, physical_expr::expressions::Literal};
+
+    use super::*;
+
+    fn result(agg: &dyn Agg, acc: &mut AccColumnRef) -> Result<f64> {
+        let array = agg.final_merge(acc, IdxSelection::Single(0))?;
+        Ok(downcast_any!(array, Float64Array)?.value(0))
+    }
+
+    #[test]
+    fn float_ordering() {
+        assert_eq!(spark_float_cmp(0.0_f64, -0.0), Ordering::Equal);
+        assert_eq!(spark_float_cmp(f64::NAN, f64::NAN), Ordering::Equal);
+        assert_eq!(
+            spark_float_cmp(f64::from_bits(0xfff8_0000_0000_0001), f64::INFINITY),
+            Ordering::Greater
+        );
+        assert_eq!(spark_float_cmp(0.0_f32, -0.0), Ordering::Equal);
+        assert_eq!(
+            spark_float_cmp(f32::from_bits(0xffc0_0001), f32::INFINITY),
+            Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn float_max_min_update_and_merge() -> Result<()> {
+        let child: PhysicalExprRef = Arc::new(Literal::new(ScalarValue::Float64(None)));
+        let max = AggMax::try_new(child.clone(), DataType::Float64)?;
+        let min = AggMin::try_new(child, DataType::Float64)?;
+        let negative_nan = f64::from_bits(0xfff8_0000_0000_0001);
+
+        let mut max_acc = max.create_acc_column(1);
+        let max_values: ArrayRef = Arc::new(Float64Array::from(vec![
+            f64::INFINITY,
+            negative_nan,
+            f64::MAX,
+        ]));
+        max.partial_update(
+            &mut max_acc,
+            IdxSelection::Indices(&[0, 0, 0]),
+            &[max_values],
+            IdxSelection::Range(0, 3),
+        )?;
+        let mut max_merged = max.create_acc_column(1);
+        max.partial_update(
+            &mut max_merged,
+            IdxSelection::Single(0),
+            &[Arc::new(Float64Array::from(vec![f64::INFINITY]))],
+            IdxSelection::Single(0),
+        )?;
+        max.partial_merge(
+            &mut max_merged,
+            IdxSelection::Single(0),
+            &mut max_acc,
+            IdxSelection::Single(0),
+        )?;
+        assert!(result(&max, &mut max_merged)?.is_nan());
+
+        let mut min_acc = min.create_acc_column(1);
+        let min_values: ArrayRef = Arc::new(Float64Array::from(vec![
+            -1.0,
+            f64::NEG_INFINITY,
+            negative_nan,
+        ]));
+        min.partial_update(
+            &mut min_acc,
+            IdxSelection::Indices(&[0, 0, 0]),
+            &[min_values],
+            IdxSelection::Range(0, 3),
+        )?;
+        let mut min_merged = min.create_acc_column(1);
+        min.partial_update(
+            &mut min_merged,
+            IdxSelection::Single(0),
+            &[Arc::new(Float64Array::from(vec![f64::NAN]))],
+            IdxSelection::Single(0),
+        )?;
+        min.partial_merge(
+            &mut min_acc,
+            IdxSelection::Single(0),
+            &mut min_merged,
+            IdxSelection::Single(0),
+        )?;
+        assert_eq!(result(&min, &mut min_acc)?, f64::NEG_INFINITY);
+
+        let mut max_zero = max.create_acc_column(1);
+        max.partial_update(
+            &mut max_zero,
+            IdxSelection::Indices(&[0, 0]),
+            &[Arc::new(Float64Array::from(vec![-0.0, 0.0]))],
+            IdxSelection::Range(0, 2),
+        )?;
+        assert_eq!(result(&max, &mut max_zero)?.to_bits(), (-0.0_f64).to_bits());
+
+        let mut min_zero = min.create_acc_column(1);
+        min.partial_update(
+            &mut min_zero,
+            IdxSelection::Indices(&[0, 0]),
+            &[Arc::new(Float64Array::from(vec![0.0, -0.0]))],
+            IdxSelection::Range(0, 2),
+        )?;
+        assert_eq!(result(&min, &mut min_zero)?.to_bits(), 0.0_f64.to_bits());
+        Ok(())
+    }
 }

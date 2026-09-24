@@ -26,6 +26,42 @@ import org.apache.auron.util.AuronTestUtils
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
+  test("float comparisons follow Spark NaN and signed zero ordering") {
+    withTable("t_float_ordering") {
+      sql(
+        "create table t_float_ordering (d1 double, d2 double, f1 float, f2 float) using parquet")
+      sql("""insert into t_float_ordering values
+          |  (0.0, -0.0, cast(0.0 as float), cast(-0.0 as float)),
+          |  (cast('NaN' as double), cast('NaN' as double),
+          |   cast('NaN' as float), cast('NaN' as float)),
+          |  (cast('NaN' as double), cast('Infinity' as double),
+          |   cast('NaN' as float), cast('Infinity' as float)),
+          |  (null, 1.0, null, cast(1.0 as float))
+          |""".stripMargin)
+
+      checkSparkAnswerAndOperator("""select
+          |  d1 = d2, not (d1 = d2), d1 < d2, d1 <= d2, d1 > d2, d1 >= d2, d1 <=> d2,
+          |  f1 = f2, not (f1 = f2), f1 < f2, f1 <= f2, f1 > f2, f1 >= f2, f1 <=> f2
+          |from t_float_ordering
+          |""".stripMargin)
+    }
+  }
+
+  test("float min and max follow Spark NaN ordering") {
+    withTable("t_float_ordering") {
+      sql("create table t_float_ordering (d double, f float) using parquet")
+      sql("""insert into t_float_ordering values
+          |  (cast('Infinity' as double), cast('Infinity' as float)),
+          |  (cast('NaN' as double), cast('NaN' as float)),
+          |  (-1.0, cast(-1.0 as float)),
+          |  (null, null)
+          |""".stripMargin)
+
+      checkSparkAnswerAndOperator(
+        "select isnan(max(d)), min(d), isnan(max(f)), min(f) from t_float_ordering")
+    }
+  }
+
   test("sum function with float input") {
     if (AuronTestUtils.isSparkV31OrGreater) {
       withTable("t1") {
