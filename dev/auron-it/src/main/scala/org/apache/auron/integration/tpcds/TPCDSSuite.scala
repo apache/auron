@@ -53,6 +53,14 @@ class TPCDSSuite(args: SuiteArgs) extends Suite(args) with TPCDSFeatures {
     setupTables(args.dataLocation, sessions.auronSession)
     val auronResults = queryRunner.runQueries(sessions.auronSession, queries)
 
+    if (args.printPlan) {
+      queries.foreach { queryId =>
+        println(s"=== Auron physical plan for $queryId ===")
+        println(auronResults(queryId).plan)
+        println(s"=== End of Auron physical plan for $queryId ===")
+      }
+    }
+
     val baseComparisons: Seq[ComparisonResult] =
       if (args.auronOnly) {
         queries.map { qid =>
