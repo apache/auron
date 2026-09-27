@@ -917,7 +917,7 @@ mod tests {
         ];
         assert!(
             function(&invalid)
-                .unwrap_err()
+                .expect_err("invalid weekday must fail")
                 .to_string()
                 .contains("Illegal input for day of week")
         );
