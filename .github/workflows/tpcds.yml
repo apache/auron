@@ -113,6 +113,33 @@ jobs:
       hadoop-profile: 'hadoop3'
       sparktests: 'true'
 
+  test-spark-41-jdk17-scala-2-13-with-bloomfilter-optimizer-enabled:
+    name: Test spark-4.1 JDK17 Scala-2.13 with bloomFilter optimizer enabled
+    uses: ./.github/workflows/tpcds-reusable.yml
+    with:
+      sparkver: spark-4.1
+      javaver: '17'
+      scalaver: '2.13'
+      hadoop-profile: 'hadoop3'
+      sparktests: 'true'
+      # Keep Auron off the system classpath so Spark's MutableURLClassLoader defines it rather
+      # than the application class loader. The runtime bloom-filter ScalarSubquery
+      # deserialization defect (AURON #2386) cannot reproduce when the jar is in
+      # $SPARK_HOME/jars. The job asserts this arrangement rather than assuming it.
+      jar-on-system-classpath: 'false'
+      # q1, q2 and q3 are the queries the runtime bloom filter rewrites into the scalar
+      # subquery that triggered AURON #2386; running the other 96 adds no coverage here.
+      queries: '["q1,q2,q3"]'
+      # might_contain is the runtime bloom-filter probe, so its presence proves the optimizer
+      # still produced the plan this job exists to cover.
+      assert-log-matches: 'might_contain'
+      # The AURON #2386 signature specifically, not any ClassCastException.
+      assert-log-not-matches: 'ClassCastException.*DefaultSerializationProxy'
+      extrasparkconf: >-
+        --conf spark.sql.optimizer.runtime.bloomFilter.enabled=true
+        --conf spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold=1B
+        --conf spark.sql.autoBroadcastJoinThreshold=-1
+
   test-spark-42-jdk21-scala-2-13:
     name: Test spark-4.2 JDK21 Scala-2.13
     uses: ./.github/workflows/tpcds-reusable.yml
