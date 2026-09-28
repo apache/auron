@@ -15,14 +15,14 @@
 - limitations under the License.
 -->
 
-# Apache Auron (Incubating)
+# Apache Auron
 
 [![TPC-DS](https://github.com/apache/auron/actions/workflows/tpcds.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/tpcds.yml)
 [![master-amd64-builds](https://github.com/apache/auron/actions/workflows/build-amd64-releases.yml/badge.svg?branch=master)](https://github.com/apache/auron/actions/workflows/build-amd64-releases.yml)
 
 <p align="center"><img src="./dev/auron-logo.png" alt="Auron logo" /></p>
 
-Apache Auron(Incubating) is an accelerator for big data engines, leveraging native vectorized execution to accelerate query processing. It combines
+Apache Auron is an accelerator for big data engines, leveraging native vectorized execution to accelerate query processing. It combines
 the power of the [Apache DataFusion](https://arrow.apache.org/datafusion/) library and the scale of the distributed
 computing framework.
 
