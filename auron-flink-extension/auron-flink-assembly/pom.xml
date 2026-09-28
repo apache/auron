@@ -70,7 +70,7 @@
               <resource>META-INF/services/org.apache.flink.table.factories.TableFactory</resource>
             </transformer>
             <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
-              <projectName>Apache Auron (Incubating)</projectName>
+              <projectName>Apache Auron</projectName>
               <organizationName>The Apache Software Foundation</organizationName>
               <organizationURL>https://www.apache.org/</organizationURL>
               <inceptionYear>2025</inceptionYear>

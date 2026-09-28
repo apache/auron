@@ -30,7 +30,7 @@
   <packaging>pom</packaging>
 
   <name>Apache Auron Parent Pom</name>
-  <description>Apache Auron (incubating)</description>
+  <description>Apache Auron</description>
   <url>https://github.com/apache/auron.git</url>
 
   <modules>
