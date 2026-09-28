@@ -15,7 +15,7 @@
 - limitations under the License.
 -->
 
-# Agent Guidelines for Apache Auron (Incubating)
+# Agent Guidelines for Apache Auron
 
 Entry point for AI coding agents and contributors making code changes.
 
