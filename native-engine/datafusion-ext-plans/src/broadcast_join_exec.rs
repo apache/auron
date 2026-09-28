@@ -185,6 +185,8 @@ impl BroadcastJoinExec {
             sort_options: vec![SortOptions::default(); self.on.len()],
             projection,
             join_filter: self.join_filter.clone(),
+            residual_filter: None,
+            output_time: Time::new(),
             key_data_types,
             is_null_aware_anti_join: self.is_null_aware_anti_join,
         })

@@ -85,7 +85,6 @@ class AuronSparkTestSettings extends SparkTestSettings {
     .exclude("SPARK-35955: Aggregate avg should not return wrong results for decimal overflow")
     .exclude("NaN is greater than all other non-NaN numeric values")
     .exclude("SPARK-20897: cached self-join should not fail")
-    .exclude("SPARK-22271: mean overflows and returns null for some decimal variables")
     .exclude("SPARK-32764: -0.0 and 0.0 should be equal")
     .exclude("SPARK-41048: Improve output partitioning and ordering with AQE cache")
 

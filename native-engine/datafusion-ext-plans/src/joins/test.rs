@@ -30,7 +30,10 @@ mod tests {
         assert_batches_sorted_eq,
         common::{JoinSide, Result},
         logical_expr::Operator,
-        physical_expr::expressions::{BinaryExpr, Column},
+        physical_expr::{
+            PhysicalSortExpr,
+            expressions::{BinaryExpr, Column},
+        },
         physical_plan::{ExecutionPlan, common, joins::utils::*, test::TestMemoryExec},
         prelude::{SessionConfig, SessionContext},
     };
@@ -38,10 +41,12 @@ mod tests {
     use crate::{
         broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
         broadcast_join_exec::BroadcastJoinExec,
+        common::column_pruning::ExecuteWithColumnPruning,
         joins::{
             ColumnIndex, JoinFilter,
             join_utils::{JoinType, JoinType::*},
         },
+        sort_exec::SortExec,
         sort_merge_join_exec::SortMergeJoinExec,
     };
 
@@ -480,6 +485,67 @@ mod tests {
             // The output order is important as SMJ preserves sortedness
             assert_batches_sorted_eq!(expected, &batches);
         }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn sort_merge_join_projects_non_key_columns_from_sorted_inputs() -> Result<()> {
+        MemManager::init(1000000);
+        let session_ctx = SessionContext::new();
+        let task_ctx = session_ctx.task_ctx();
+        let left_input = build_table(
+            ("left_key", &vec![2, 1]),
+            ("left_unused", &vec![200, 100]),
+            ("left_value", &vec![20, 10]),
+        )?;
+        let right_input = build_table(
+            ("right_key", &vec![1, 2]),
+            ("right_unused", &vec![1000, 2000]),
+            ("right_value", &vec![100, 200]),
+        )?;
+        let left_key = Arc::new(Column::new("left_key", 0));
+        let right_key = Arc::new(Column::new("right_key", 0));
+        let left: Arc<dyn ExecutionPlan> = Arc::new(SortExec::new(
+            left_input,
+            vec![PhysicalSortExpr {
+                expr: left_key.clone(),
+                options: SortOptions::default(),
+            }],
+            None,
+            0,
+        ));
+        let right: Arc<dyn ExecutionPlan> = Arc::new(SortExec::new(
+            right_input,
+            vec![PhysicalSortExpr {
+                expr: right_key.clone(),
+                options: SortOptions::default(),
+            }],
+            None,
+            0,
+        ));
+        let schema = build_join_schema_for_test(&left.schema(), &right.schema(), Inner)?;
+        let join = SortMergeJoinExec::try_new(
+            schema,
+            left,
+            right,
+            vec![(left_key, right_key)],
+            Inner,
+            None,
+            vec![SortOptions::default()],
+        )?;
+
+        let stream = join.execute_projected(0, task_ctx, &[2, 1, 0, 5, 4, 3])?;
+        let batches = common::collect(stream).await?;
+        let expected = vec![
+            "+------------+-------------+----------+-------------+--------------+-----------+",
+            "| left_value | left_unused | left_key | right_value | right_unused | right_key |",
+            "+------------+-------------+----------+-------------+--------------+-----------+",
+            "| 10         | 100         | 1        | 100         | 1000         | 1         |",
+            "| 20         | 200         | 2        | 200         | 2000         | 2         |",
+            "+------------+-------------+----------+-------------+--------------+-----------+",
+        ];
+        assert_batches_sorted_eq!(expected, &batches);
+
         Ok(())
     }
 
