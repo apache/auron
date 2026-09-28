@@ -18,12 +18,13 @@ use std::sync::Arc;
 use arrow::{
     array::{
         ArrayRef, BooleanArray, Date32Array, Date32Builder, Float64Array, Int32Array,
-        TimestampMillisecondArray,
+        TimestampMillisecondArray, as_primitive_array,
     },
-    compute::{DatePart, date_part},
-    datatypes::{DataType, TimeUnit},
+    compute::{DatePart, binary, date_part, try_binary},
+    datatypes::{DataType, Date32Type, Int32Type, TimeUnit},
+    error::ArrowError,
 };
-use chrono::{Duration, LocalResult, NaiveDate, Offset, TimeZone, Utc, prelude::*};
+use chrono::{Duration, LocalResult, Months, NaiveDate, Offset, TimeZone, Utc, prelude::*};
 use chrono_tz::Tz;
 use datafusion::{
     common::{DataFusionError, Result, ScalarValue},
@@ -277,6 +278,14 @@ pub fn spark_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     )?))
 }
 
+pub fn spark_dayofyear(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let local = resolve_local_date32(args)?;
+    Ok(ColumnarValue::Array(date_part(
+        &(Arc::new(local) as ArrayRef),
+        DatePart::DayOfYear,
+    )?))
+}
+
 pub fn spark_last_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let input = resolve_local_date32(args)?;
     let last_day = Date32Array::from_iter(input.iter().map(|opt_days| {
@@ -287,6 +296,117 @@ pub fn spark_last_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }));
 
     Ok(ColumnarValue::Array(Arc::new(last_day)))
+}
+
+pub fn spark_datediff(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let dates = ColumnarValue::values_to_arrays(args)?;
+    let end_date = cast(&dates[0], &DataType::Date32)?;
+    let start_date = cast(&dates[1], &DataType::Date32)?;
+    let end_date = end_date
+        .as_any()
+        .downcast_ref::<Date32Array>()
+        .expect("cast to Date32 must succeed");
+    let start_date = start_date
+        .as_any()
+        .downcast_ref::<Date32Array>()
+        .expect("cast to Date32 must succeed");
+    let result = Int32Array::from_iter(end_date.iter().zip(start_date.iter()).map(
+        |(end_date, start_date)| {
+            end_date
+                .zip(start_date)
+                .map(|(end_date, start_date)| end_date.wrapping_sub(start_date))
+        },
+    ));
+
+    Ok(ColumnarValue::Array(Arc::new(result)))
+}
+
+pub fn spark_date_add(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    spark_date_add_sub(args, i32::wrapping_add)
+}
+
+pub fn spark_date_sub(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    spark_date_add_sub(args, i32::wrapping_sub)
+}
+
+fn spark_date_add_sub(
+    args: &[ColumnarValue],
+    op: impl Fn(i32, i32) -> i32,
+) -> Result<ColumnarValue> {
+    if args.len() != 2 {
+        return Err(DataFusionError::Execution(
+            "date_add/date_sub requires two arguments".to_string(),
+        ));
+    }
+    let arrays = ColumnarValue::values_to_arrays(args)?;
+    let dates = cast(&arrays[0], &DataType::Date32)?;
+    let days = cast(&arrays[1], &DataType::Int32)?;
+    // Spark wraps date arithmetic even in ANSI mode.
+    let result: Date32Array = binary(
+        as_primitive_array::<Date32Type>(&dates),
+        as_primitive_array::<Int32Type>(&days),
+        op,
+    )?;
+    if args
+        .iter()
+        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)))
+    {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(Arc::new(result)))
+    }
+}
+
+pub fn spark_add_months(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 3 {
+        return Err(DataFusionError::Execution(
+            "add_months requires three arguments".to_string(),
+        ));
+    }
+    let check_overflow = match &args[2] {
+        ColumnarValue::Scalar(ScalarValue::Boolean(Some(value))) => *value,
+        _ => {
+            return Err(DataFusionError::Execution(
+                "add_months checkOverflow must be a boolean scalar".to_string(),
+            ));
+        }
+    };
+    let arrays = ColumnarValue::values_to_arrays(&args[..2])?;
+    let dates = cast(&arrays[0], &DataType::Date32)?;
+    let months = cast(&arrays[1], &DataType::Int32)?;
+    let result: Date32Array = try_binary(
+        as_primitive_array::<Date32Type>(&dates),
+        as_primitive_array::<Int32Type>(&months),
+        |days, months| {
+            // Gregorian dates repeat every 400 years (146097 days, 4800 months).
+            // Reduce both inputs by whole cycles to cover Date32's full range with Chrono.
+            let cycles = i64::from(days.div_euclid(146097)) + i64::from(months.div_euclid(4800));
+            let date = NaiveDate::from_epoch_days(days.rem_euclid(146097))
+                .expect("date within a Gregorian cycle must be valid")
+                .checked_add_months(Months::new(months.rem_euclid(4800) as u32))
+                .expect("adding less than 400 years must stay within Chrono's range");
+            let result = cycles * 146097 + i64::from(date.to_epoch_days());
+            if check_overflow {
+                i32::try_from(result)
+                    .map_err(|_| ArrowError::ComputeError("add_months date overflow".to_string()))
+            } else {
+                // Spark 3.0 wraps overflow; Spark 3.1+ throws, independently of ANSI mode.
+                Ok(result as i32)
+            }
+        },
+    )?;
+    if args[..2]
+        .iter()
+        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)))
+    {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(Arc::new(result)))
+    }
 }
 
 pub fn spark_make_date(args: &[ColumnarValue]) -> Result<ColumnarValue> {
@@ -608,6 +728,30 @@ mod tests {
     }
 
     #[test]
+    fn test_spark_dayofyear() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let input = Arc::new(Date32Array::from(vec![
+            Some(date(2016, 4, 9)),
+            Some(date(2023, 12, 31)),
+            Some(date(2024, 12, 31)),
+            None,
+        ]));
+        let args = vec![ColumnarValue::Array(input)];
+        let expected_ret: ArrayRef = Arc::new(Int32Array::from(vec![
+            Some(100),
+            Some(365),
+            Some(366),
+            None,
+        ]));
+        assert_eq!(&spark_dayofyear(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
     fn test_spark_last_day() -> Result<()> {
         let date = |year, month, day| {
             NaiveDate::from_ymd_opt(year, month, day)
@@ -630,6 +774,291 @@ mod tests {
             None,
         ]));
         assert_eq!(&spark_last_day(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_datediff() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let end_date = Arc::new(Date32Array::from(vec![
+            Some(date(2009, 7, 31)),
+            Some(date(2009, 7, 30)),
+            Some(date(2024, 1, 1)),
+            Some(date(2024, 3, 1)),
+            Some(date(2025, 1, 1)),
+            None,
+            Some(date(2024, 1, 1)),
+        ]));
+        let start_date = Arc::new(Date32Array::from(vec![
+            Some(date(2009, 7, 30)),
+            Some(date(2009, 7, 31)),
+            Some(date(2024, 1, 1)),
+            Some(date(2024, 2, 28)),
+            Some(date(2024, 12, 31)),
+            Some(date(2024, 1, 1)),
+            None,
+        ]));
+        let args = vec![
+            ColumnarValue::Array(end_date),
+            ColumnarValue::Array(start_date),
+        ];
+        let expected_ret: ArrayRef = Arc::new(Int32Array::from(vec![
+            Some(1),
+            Some(-1),
+            Some(0),
+            Some(2),
+            Some(1),
+            None,
+            None,
+        ]));
+        assert_eq!(&spark_datediff(&args)?.into_array(7)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_date_add_sub() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        // start date, offset, expected date_add, expected date_sub
+        let cases = [
+            (date(2024, 2, 28), 1, date(2024, 2, 29), date(2024, 2, 27)),
+            (date(2024, 3, 1), -1, date(2024, 2, 29), date(2024, 3, 2)),
+            (date(2023, 3, 1), 1, date(2023, 3, 2), date(2023, 2, 28)),
+            (date(2024, 1, 31), 1, date(2024, 2, 1), date(2024, 1, 30)),
+            (date(2024, 12, 31), 1, date(2025, 1, 1), date(2024, 12, 30)),
+            (date(1969, 12, 31), 1, 0, date(1969, 12, 30)),
+            (0, 0, 0, 0),
+            (i32::MAX, 1, i32::MIN, i32::MAX - 1),
+            (i32::MIN, 1, i32::MIN + 1, i32::MAX),
+            (0, i32::MIN, i32::MIN, i32::MIN),
+            (-1, i32::MIN, i32::MAX, i32::MAX),
+        ];
+        let dates = Date32Array::from_iter(cases.iter().map(|c| Some(c.0)).chain([None, Some(0)]));
+        let days = Int32Array::from_iter(cases.iter().map(|c| Some(c.1)).chain([Some(1), None]));
+        let args = [
+            ColumnarValue::Array(Arc::new(dates)),
+            ColumnarValue::Array(Arc::new(days)),
+        ];
+        for (name, expected) in [
+            (
+                "Spark_DateAdd",
+                cases.iter().map(|c| Some(c.2)).collect::<Vec<_>>(),
+            ),
+            (
+                "Spark_DateSub",
+                cases.iter().map(|c| Some(c.3)).collect::<Vec<_>>(),
+            ),
+        ] {
+            let function = crate::create_auron_ext_function(name, 0)?;
+            let expected: ArrayRef = Arc::new(Date32Array::from_iter(
+                expected.into_iter().chain([None, None]),
+            ));
+            assert_eq!(&function(&args)?.into_array(expected.len())?, &expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_date_add_sub_shapes_and_day_types() -> Result<()> {
+        for (name, direction) in [("Spark_DateAdd", 1), ("Spark_DateSub", -1)] {
+            let function = crate::create_auron_ext_function(name, 0)?;
+            for day_type in [DataType::Int8, DataType::Int16, DataType::Int32] {
+                let days = cast(&Int32Array::from(vec![Some(1), Some(-1), None]), &day_type)?;
+                let day = ScalarValue::try_from_array(&days, 0)?;
+                let null_day = ScalarValue::try_from_array(&days, 2)?;
+                let dates: ArrayRef = Arc::new(Date32Array::from(vec![Some(0), Some(0), None]));
+                for (start, offset, expected) in [
+                    (
+                        ColumnarValue::Array(dates.clone()),
+                        ColumnarValue::Array(days.clone()),
+                        vec![Some(direction), Some(-direction), None],
+                    ),
+                    (
+                        ColumnarValue::Scalar(ScalarValue::Date32(Some(0))),
+                        ColumnarValue::Array(days),
+                        vec![Some(direction), Some(-direction), None],
+                    ),
+                    (
+                        ColumnarValue::Array(dates.clone()),
+                        ColumnarValue::Scalar(day.clone()),
+                        vec![Some(direction), Some(direction), None],
+                    ),
+                    (
+                        ColumnarValue::Array(dates),
+                        ColumnarValue::Scalar(null_day),
+                        vec![None, None, None],
+                    ),
+                ] {
+                    let expected: ArrayRef = Arc::new(Date32Array::from(expected));
+                    assert_eq!(&function(&[start, offset])?.into_array(3)?, &expected);
+                }
+                let result = function(&[
+                    ColumnarValue::Scalar(ScalarValue::Date32(Some(0))),
+                    ColumnarValue::Scalar(day.clone()),
+                ])?;
+                assert!(
+                    matches!(result, ColumnarValue::Scalar(ScalarValue::Date32(Some(v))) if v == direction)
+                );
+                let result = function(&[
+                    ColumnarValue::Scalar(ScalarValue::Date32(None)),
+                    ColumnarValue::Scalar(day.clone()),
+                ])?;
+                assert!(matches!(
+                    result,
+                    ColumnarValue::Scalar(ScalarValue::Date32(None))
+                ));
+                let empty = function(&[
+                    ColumnarValue::Array(Arc::new(Date32Array::from(Vec::<i32>::new()))),
+                    ColumnarValue::Scalar(day),
+                ])?
+                .into_array(0)?;
+                assert_eq!(empty.data_type(), &DataType::Date32);
+                assert!(empty.is_empty());
+            }
+            assert!(function(&[]).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_add_months() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let cases = [
+            (date(2016, 8, 31), 1, date(2016, 9, 30)),
+            (date(2024, 1, 31), 1, date(2024, 2, 29)),
+            (date(2023, 1, 31), 1, date(2023, 2, 28)),
+            (date(2024, 3, 31), -1, date(2024, 2, 29)),
+            (date(2024, 2, 29), 12, date(2025, 2, 28)),
+            (date(2024, 2, 29), 1, date(2024, 3, 29)),
+            (date(2024, 12, 31), 2, date(2025, 2, 28)),
+            (date(1969, 12, 31), -13, date(1968, 11, 30)),
+            (date(0, 1, 31), 1, date(0, 2, 29)),
+            (date(-1, 12, 31), 2, date(0, 2, 29)),
+            (i32::MAX, 0, i32::MAX),
+            (i32::MIN, 0, i32::MIN),
+            (100000000, -4800, 100000000 - 146097),
+            (-100000000, 4800, -100000000 + 146097),
+            (0, 4800, 146097),
+            (0, -4800, -146097),
+        ];
+        let dates = Date32Array::from_iter(cases.iter().map(|c| Some(c.0)).chain([None, Some(0)]));
+        let months = Int32Array::from_iter(
+            cases
+                .iter()
+                .map(|c| Some(c.1))
+                .chain([Some(i32::MAX), None]),
+        );
+        let expected: ArrayRef = Arc::new(Date32Array::from_iter(
+            cases.iter().map(|c| Some(c.2)).chain([None, None]),
+        ));
+        let function = crate::create_auron_ext_function("Spark_AddMonths", 0)?;
+        for check_overflow in [false, true] {
+            let args = [
+                ColumnarValue::Array(Arc::new(dates.clone())),
+                ColumnarValue::Array(Arc::new(months.clone())),
+                ColumnarValue::Scalar(ScalarValue::Boolean(Some(check_overflow))),
+            ];
+            assert_eq!(&function(&args)?.into_array(expected.len())?, &expected);
+            let sliced_args = [
+                ColumnarValue::Array(Arc::new(dates.slice(1, dates.len() - 1))),
+                ColumnarValue::Array(Arc::new(months.slice(1, months.len() - 1))),
+                args[2].clone(),
+            ];
+            assert_eq!(
+                &function(&sliced_args)?.into_array(expected.len() - 1)?,
+                &expected.slice(1, expected.len() - 1)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_add_months_shapes_and_overflow() -> Result<()> {
+        let function = crate::create_auron_ext_function("Spark_AddMonths", 0)?;
+        let check_overflow = ColumnarValue::Scalar(ScalarValue::Boolean(Some(true)));
+        let start = ColumnarValue::Scalar(ScalarValue::Date32(Some(0)));
+        let offset = ColumnarValue::Scalar(ScalarValue::Int32(Some(1)));
+        for (dates, months, expected) in [
+            (
+                start.clone(),
+                ColumnarValue::Array(Arc::new(Int32Array::from(vec![Some(1), None, Some(-1)]))),
+                vec![Some(31), None, Some(-31)],
+            ),
+            (
+                ColumnarValue::Array(Arc::new(Date32Array::from(vec![Some(0), None]))),
+                offset.clone(),
+                vec![Some(31), None],
+            ),
+            (
+                ColumnarValue::Array(Arc::new(Date32Array::from(Vec::<i32>::new()))),
+                offset.clone(),
+                vec![],
+            ),
+        ] {
+            let expected: ArrayRef = Arc::new(Date32Array::from(expected));
+            assert_eq!(
+                &function(&[dates, months, check_overflow.clone()])?.into_array(expected.len())?,
+                &expected
+            );
+        }
+        assert!(matches!(
+            function(&[start, offset, check_overflow.clone()])?,
+            ColumnarValue::Scalar(ScalarValue::Date32(Some(31)))
+        ));
+        for (days, months) in [(None, Some(i32::MIN)), (Some(i32::MAX), None)] {
+            assert!(matches!(
+                function(&[
+                    ColumnarValue::Scalar(ScalarValue::Date32(days)),
+                    ColumnarValue::Scalar(ScalarValue::Int32(months)),
+                    check_overflow.clone(),
+                ])?,
+                ColumnarValue::Scalar(ScalarValue::Date32(None))
+            ));
+        }
+        // Spark 3.0 uses LocalDate.plusMonths(...).toEpochDay.toInt.
+        for (days, months, wrapped) in [
+            (i32::MAX, 1, -2147483618),
+            (i32::MIN, -1, 2147483617),
+            (0, i32::MAX, 938181888),
+            (0, i32::MIN, -938181920),
+        ] {
+            let mut args = [
+                ColumnarValue::Scalar(ScalarValue::Date32(Some(days))),
+                ColumnarValue::Scalar(ScalarValue::Int32(Some(months))),
+                check_overflow.clone(),
+            ];
+            assert!(
+                function(&args)
+                    .expect_err("date overflow must fail")
+                    .to_string()
+                    .contains("overflow")
+            );
+            args[2] = ColumnarValue::Scalar(ScalarValue::Boolean(Some(false)));
+            assert!(matches!(
+                function(&args)?,
+                ColumnarValue::Scalar(ScalarValue::Date32(Some(value))) if value == wrapped
+            ));
+        }
+        assert!(function(&[]).is_err());
+        assert!(
+            function(&[
+                check_overflow.clone(),
+                check_overflow,
+                ColumnarValue::Scalar(ScalarValue::Boolean(None))
+            ])
+            .is_err()
+        );
         Ok(())
     }
 
@@ -1325,6 +1754,8 @@ mod tests {
         let out_month =
             spark_month(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
         let out_day = spark_day(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
+        let out_doy =
+            spark_dayofyear(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
         let out_quarter =
             spark_quarter(&[ColumnarValue::Array(ts.clone()), tz.clone()])?.into_array(1)?;
         let out_dow = spark_dayofweek(&[ColumnarValue::Array(ts), tz])?.into_array(1)?;
@@ -1332,12 +1763,14 @@ mod tests {
         let expected_year: ArrayRef = Arc::new(Int32Array::from(vec![Some(2022)]));
         let expected_month: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         let expected_day: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
+        let expected_doy: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         let expected_quarter: ArrayRef = Arc::new(Int32Array::from(vec![Some(1)]));
         let expected_dow: ArrayRef = Arc::new(Int32Array::from(vec![Some(7)])); // Saturday
 
         assert_eq!(&out_year, &expected_year);
         assert_eq!(&out_month, &expected_month);
         assert_eq!(&out_day, &expected_day);
+        assert_eq!(&out_doy, &expected_doy);
         assert_eq!(&out_quarter, &expected_quarter);
         assert_eq!(&out_dow, &expected_dow);
         Ok(())

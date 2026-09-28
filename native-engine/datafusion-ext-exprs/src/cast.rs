@@ -105,13 +105,69 @@ mod test {
     use std::{error::Error, sync::Arc};
 
     use arrow::{
-        array::{ArrayRef, Float32Array, Int32Array, StringArray},
+        array::{ArrayRef, Date32Array, Float32Array, Int32Array, StringArray},
         datatypes::{DataType, Field, Schema},
         record_batch::RecordBatch,
     };
-    use datafusion::physical_expr::{PhysicalExpr, expressions as phys_expr};
+    use datafusion::{
+        physical_expr::{PhysicalExpr, expressions as phys_expr},
+        scalar::ScalarValue,
+    };
 
     use crate::cast::TryCastExpr;
+
+    #[test]
+    fn test_epoch_date_cast() -> Result<(), Box<dyn Error>> {
+        let values = vec![
+            Some(i32::MIN),
+            Some(-1),
+            Some(0),
+            Some(1),
+            Some(i32::MAX),
+            None,
+        ];
+        let days: ArrayRef = Arc::new(Int32Array::from(values.clone()));
+        let dates: ArrayRef = Arc::new(Date32Array::from(values.clone()));
+        let batch = RecordBatch::try_from_iter([("days", days.clone()), ("dates", dates.clone())])?;
+
+        for (column, cast_type, expected) in [
+            ("days", DataType::Date32, dates),
+            ("dates", DataType::Int32, days),
+        ] {
+            let expr = TryCastExpr::new(phys_expr::col(column, &batch.schema())?, cast_type);
+            assert_eq!(
+                &expr.evaluate(&batch)?.into_array(batch.num_rows())?,
+                &expected
+            );
+            let sliced = batch.slice(1, 5);
+            assert_eq!(
+                &expr.evaluate(&sliced)?.into_array(sliced.num_rows())?,
+                &expected.slice(1, 5)
+            );
+        }
+
+        for value in values {
+            for (input, cast_type, expected) in [
+                (
+                    ScalarValue::Int32(value),
+                    DataType::Date32,
+                    ScalarValue::Date32(value),
+                ),
+                (
+                    ScalarValue::Date32(value),
+                    DataType::Int32,
+                    ScalarValue::Int32(value),
+                ),
+            ] {
+                let expr = TryCastExpr::new(phys_expr::lit(input), cast_type);
+                assert_eq!(
+                    &expr.evaluate(&batch)?.into_array(1)?,
+                    &expected.to_array()?
+                );
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_ok_1() -> Result<(), Box<dyn Error>> {

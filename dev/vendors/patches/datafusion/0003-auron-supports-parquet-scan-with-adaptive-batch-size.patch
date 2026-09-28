@@ -1,7 +1,7 @@
 From feeca02d670231014a2144293331e311494e31c6 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sun, 15 Sep 2024 18:43:15 +0800
-Subject: [PATCH] blaze: supports parquet scan with adaptive batch size
+Subject: [PATCH] auron: supports parquet scan with adaptive batch size
 
 ---
  datafusion/datasource-parquet/src/opener.rs | 28 +++++++++++++++++++++
@@ -15,7 +15,7 @@ index 7c208d142..ffeaaf63c 100644
                  builder = builder.with_limit(limit)
              }
  
-+            // blaze:
++            // auron:
 +            // target batch size is usually 1MB ~ 16MB as there are lightweight compressions
 +            // like RLE/DICT encodings
 +            let adaptive_mem_size = 1048576;

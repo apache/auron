@@ -83,6 +83,7 @@ import org.apache.spark.util.Utils
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
+import org.apache.auron.util.SparkVersionUtil
 
 object NativeConverters extends Logging {
   def udfJsonEnabled: Boolean = SparkAuronConfiguration.UDF_JSON_ENABLED.get()
@@ -992,6 +993,8 @@ object NativeConverters extends Logging {
         buildTimePartExt("Spark_Month", child, isPruningExpr, fallback)
       case DayOfMonth(child) =>
         buildTimePartExt("Spark_Day", child, isPruningExpr, fallback)
+      case DayOfYear(child) =>
+        buildTimePartExt("Spark_DayOfYear", child, isPruningExpr, fallback)
       case DayOfWeek(child) =>
         buildTimePartExt("Spark_DayOfWeek", child, isPruningExpr, fallback)
       case WeekOfYear(child) =>
@@ -1000,6 +1003,18 @@ object NativeConverters extends Logging {
         buildTimePartExt("Spark_Quarter", child, isPruningExpr, fallback)
       case e: LastDay =>
         buildExtScalarFunction("Spark_LastDay", e.children, e.dataType)
+      case e: DateDiff =>
+        buildExtScalarFunction("Spark_DateDiff", e.children, e.dataType)
+      case e: DateAdd =>
+        buildExtScalarFunction("Spark_DateAdd", e.children, e.dataType)
+      case e: DateSub =>
+        buildExtScalarFunction("Spark_DateSub", e.children, e.dataType)
+      case e: AddMonths =>
+        // Spark 3.0 wraps date overflow; Spark 3.1+ throws even with ANSI disabled.
+        buildExtScalarFunction(
+          "Spark_AddMonths",
+          e.children :+ Literal(SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"),
+          e.dataType)
 
       case e: Levenshtein =>
         buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)

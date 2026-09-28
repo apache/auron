@@ -1,7 +1,7 @@
 From ac1cb670bf1d82289c9a7aacca46a438905a8fcd Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Sun, 15 Sep 2024 21:21:14 +0800
-Subject: [PATCH] blaze: map_field's name fixed to 'entries'
+Subject: [PATCH] auron: map_field's name fixed to 'entries'
 
 ---
  parquet/src/arrow/async_reader/metadata.rs | 6 ++++++
@@ -18,9 +18,9 @@ index e0f7bdbbe..9a985e885 100644
      fn fetch_suffix(&mut self, suffix: usize) -> BoxFuture<'_, Result<Bytes>>;
 +
 +    /// Sync version of get_bytes
-+    /// this is only used by blaze, for reading dictionary values for row group pruning
++    /// this is only used by auron, for reading dictionary values for row group pruning
 +    fn get_bytes_sync(&mut self, range: Range<usize>) -> Result<Bytes> {
-+        unimplemented!("blaze only")
++        unimplemented!("auron only")
 +    }
  }
  
@@ -34,7 +34,7 @@ index 16d46bd85..af70b8684 100644
  
                  let map_field = Field::new_struct(
 -                    map_key_value.name(),
-+                    "entries", // blaze: map_field's name fixed to 'entries'
++                    "entries", // auron: map_field's name fixed to 'entries'
                      [key_field, value_field],
                      false, // The inner map field is always non-nullable (#1697)
                  )

@@ -58,8 +58,8 @@ fi
 
 RELEASE_TAG="v${RELEASE_VERSION}-rc${RELEASE_RC_NO}"
 
-SVN_STAGING_REPO="https://dist.apache.org/repos/dist/dev/incubator/auron"
-SVN_RELEASE_REPO="https://dist.apache.org/repos/dist/release/incubator/auron"
+SVN_STAGING_REPO="https://dist.apache.org/repos/dist/dev/auron"
+SVN_RELEASE_REPO="https://dist.apache.org/repos/dist/release/auron"
 
 RELEASE_DIR="${PROJECT_DIR}/tmp"
 SVN_STAGING_DIR="${PROJECT_DIR}/tmp/svn-dev"

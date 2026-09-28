@@ -1,7 +1,7 @@
 From 534651739be8f95b6dedf34b06fe7c355611af70 Mon Sep 17 00:00:00 2001
 From: zhangli20 <zhangli20@kuaishou.com>
 Date: Mon, 16 Sep 2024 10:03:29 +0800
-Subject: [PATCH] blaze: allow nullable parquet scan partition key
+Subject: [PATCH] auron: allow nullable parquet scan partition key
 
 ---
  datafusion/datasource/src/file_scan_config.rs | 7 ++++---
@@ -21,7 +21,7 @@ index 959a2dd33..2606c5387 100644
 +                    self.table_partition_cols[partition_idx]
 +                        .as_ref()
 +                        .clone()
-+                        .with_nullable(true) // blaze: allow nullable parquet scan partition key
++                        .with_nullable(true) // auron: allow nullable parquet scan partition key
                  }
              })
              .collect();

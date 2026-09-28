@@ -1,7 +1,7 @@
 From 0015 Mon Sep 17 00:00:00 2001
-From: blaze <blaze@example.com>
+From: auron <auron@example.com>
 Date: Mon, 27 Jul 2026 02:26:00 +0800
-Subject: [PATCH] blaze: update arrow dependency to vendored v55.2.0-blaze
+Subject: [PATCH] auron: update arrow dependency to vendored v55.2.0-auron
 
 ---
  Cargo.toml | 16 ++++++++++++++++
@@ -17,7 +17,7 @@ index 11cd3c637..b2fbf0df3 100644
  unused_qualifications = "deny"
 +
 +[patch.crates-io]
-+# arrow: vendored from v55.2.0-blaze
++# arrow: vendored from v55.2.0-auron
 +arrow = { path = "../arrow-rs/arrow" }
 +arrow-arith = { path = "../arrow-rs/arrow-arith" }
 +arrow-array = { path = "../arrow-rs/arrow-array" }

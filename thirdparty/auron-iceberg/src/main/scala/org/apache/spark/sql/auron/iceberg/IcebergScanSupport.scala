@@ -22,11 +22,14 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.reflect.MethodUtils
-import org.apache.iceberg.{AddedRowsScanTask, ChangelogOperation, ChangelogScanTask, DataFile, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, ScanTask}
+import org.apache.iceberg.{AddedRowsScanTask, ChangelogOperation, ChangelogScanTask, ContentScanTask, DataFile, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, ScanTask}
 import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
+import org.apache.iceberg.spark.SparkUtil
 import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
+import org.apache.iceberg.util.PartitionUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.{NativeConverters, Shims}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, InSet, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr, StartsWith}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
@@ -36,9 +39,8 @@ import org.apache.spark.sql.types.{BinaryType, DataType, DecimalType, StringType
 
 import org.apache.auron.{protobuf => pb}
 
-// fileSchema is read from the data files. partitionSchema carries supported metadata columns
-// (for example _file and _spec_id) that are materialized as per-file constant values in
-// the native scan.
+// fileSchema is read from the data files. partitionSchema carries identity partition columns
+// and supported metadata columns (for example _file and _spec_id) as per-file constants.
 final case class IcebergNativeScanTask(
     location: String,
     start: Long,
@@ -245,7 +247,7 @@ object IcebergScanSupport extends Logging {
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
     val nativeTasks = fileTasks.map(task => toNativeScanTask(task, partitionSchema))
-    Some(
+    withIdentityPartitions(
       IcebergScanPlan(
         nativeTasks,
         format,
@@ -253,7 +255,8 @@ object IcebergScanSupport extends Logging {
         fileSchema,
         partitionSchema,
         pruningPredicates,
-        fieldIdsByName))
+        fieldIdsByName),
+      fileTasks)
   }
 
   private def planChangelogScan(
@@ -328,7 +331,7 @@ object IcebergScanSupport extends Logging {
       .getTagValue(changelogTaskFilterTag)
       .fold(nativeChangelogTasks)(filterChangelogTasks(nativeChangelogTasks, _, partitionSchema))
     val nativeTasks = filteredTasks.map(task => toNativeScanTask(task, partitionSchema))
-    Some(
+    withIdentityPartitions(
       IcebergScanPlan(
         nativeTasks,
         format,
@@ -336,7 +339,8 @@ object IcebergScanSupport extends Logging {
         fileSchema,
         partitionSchema,
         pruningPredicates,
-        fieldIdsByName))
+        fieldIdsByName),
+      filteredTasks.map(_.changelogTask))
   }
 
   private def inspectFieldIdSupport(
@@ -561,7 +565,7 @@ object IcebergScanSupport extends Logging {
       file: DataFile,
       start: Long,
       length: Long,
-      changelogTask: ChangelogScanTask)
+      changelogTask: ChangelogScanTask with ContentScanTask[DataFile])
 
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
@@ -618,17 +622,12 @@ object IcebergScanSupport extends Logging {
     changelogTaskPredicate(condition, partitionSchema)
       .map(predicate =>
         tasks.filter { task =>
-          task.changelogTask match {
-            case _: AddedRowsScanTask =>
-              val values = metadataPartitionValues(
-                task.file.location(),
-                task.file.specId(),
-                Some(task.changelogTask),
-                partitionSchema)
-              predicate(values)
-            case _ =>
-              true
-          }
+          val values = metadataPartitionValues(
+            task.file.location(),
+            task.file.specId(),
+            Some(task.changelogTask),
+            partitionSchema)
+          predicate(values)
         })
       .getOrElse(tasks)
   }
@@ -682,6 +681,40 @@ object IcebergScanSupport extends Logging {
   private def normalizeChangelogMetadataValue(value: Any): Any = value match {
     case text: org.apache.spark.unsafe.types.UTF8String => text.toString
     case other => other
+  }
+
+  private def withIdentityPartitions(
+      plan: IcebergScanPlan,
+      tasks: Seq[ContentScanTask[DataFile]]): Option[IcebergScanPlan] = {
+    val identityIds = tasks.map(_.spec().identitySourceIds().asScala.map(_.toInt).toSet)
+    val requestedIds = plan.fileSchema.fields.map(field => plan.fieldIdsByName(field.name)).toSet
+    val allIdentityIds = identityIds.flatten.toSet.intersect(requestedIds)
+    if (allIdentityIds.isEmpty) {
+      return Some(plan)
+    }
+    // A single native scan schema cannot mix per-file constants and data columns.
+    // Fall back when partition evolution leaves a requested column non-identity in some tasks.
+    if (identityIds.exists(ids => !allIdentityIds.subsetOf(ids))) {
+      return None
+    }
+    val (identityFields, dataFields) = plan.fileSchema.fields.partition(field =>
+      allIdentityIds.contains(plan.fieldIdsByName(field.name)))
+    val fileSchema = StructType(dataFields)
+    val nativeTasks = plan.scanTasks.zip(tasks).map { case (nativeTask, task) =>
+      val constants = PartitionUtil.constantsMap(task, SparkUtil.internalToSpark(_, _))
+      val values = identityFields.map { field =>
+        // Literal.create expects external Spark values, including dates and decimals.
+        CatalystTypeConverters.convertToScala(
+          constants.get(plan.fieldIdsByName(field.name)),
+          field.dataType)
+      }
+      nativeTask.copy(partitionValues = values.toSeq ++ nativeTask.partitionValues)
+    }
+    Some(
+      plan.copy(
+        scanTasks = nativeTasks,
+        fileSchema = fileSchema,
+        partitionSchema = StructType(identityFields ++ plan.partitionSchema.fields)))
   }
 
   private def toNativeScanTask(
