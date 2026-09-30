@@ -18,12 +18,14 @@ package org.apache.spark.sql.execution.joins.auron.plan
 
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastJoinBase
 import org.apache.spark.sql.execution.joins.HashJoin
 
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.sparkver
 
 case class NativeBroadcastJoinExec(
@@ -47,6 +49,16 @@ case class NativeBroadcastJoinExec(
       broadcastSide,
       isNullAwareAntiJoin)
     with HashJoin {
+
+  // Keyless joins and SMJ fallback cannot guarantee the original probe ordering.
+  override def outputOrdering: Seq[SortOrder] = {
+    if ((leftKeys.isEmpty && rightKeys.isEmpty) || SparkAuronConfiguration.SMJ_FALLBACK_ENABLE
+        .get()) {
+      Nil
+    } else {
+      super.outputOrdering
+    }
+  }
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
   override def buildSide: org.apache.spark.sql.catalyst.optimizer.BuildSide =

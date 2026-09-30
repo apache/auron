@@ -50,7 +50,7 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
 use crate::{
-    broadcast_join_build_hash_map_exec::execute_build_hash_map,
+    broadcast_join_build_hash_map_exec::{execute_build_hash_map, smj_fallback_keys},
     common::{
         column_pruning::ExecuteWithColumnPruning,
         execution_context::{ExecutionContext, WrappedRecordBatchSender},
@@ -458,13 +458,16 @@ async fn execute_join_with_smj_fallback(
         create_record_batch_stream_exec(remoted_stream, exec_ctx.partition_id())?
     };
 
+    let left_keys = smj_fallback_keys(&join_params.left_keys);
+    let right_keys = smj_fallback_keys(&join_params.right_keys);
+
     // create sorted streams, build side is already sorted
     let (left_exec, right_exec) = match broadcast_side {
         JoinSide::Left => (
             built_sorted,
             create_default_ascending_sort_exec(
                 probed_plan,
-                &join_params.right_keys,
+                &right_keys,
                 Some(exec_ctx.execution_plan_metrics().clone()),
                 false, // do not record output metric
             ),
@@ -472,7 +475,7 @@ async fn execute_join_with_smj_fallback(
         JoinSide::Right => (
             create_default_ascending_sort_exec(
                 probed_plan,
-                &join_params.left_keys,
+                &left_keys,
                 Some(exec_ctx.execution_plan_metrics().clone()),
                 false, // do not record output metric
             ),
@@ -486,15 +489,10 @@ async fn execute_join_with_smj_fallback(
         join_params.output_schema,
         left_exec.clone(),
         right_exec.clone(),
-        join_params
-            .left_keys
-            .to_vec()
-            .into_iter()
-            .zip(join_params.right_keys.to_vec())
-            .collect(),
+        left_keys.iter().cloned().zip(right_keys).collect(),
         join_params.join_type,
         join_params.join_filter.clone(),
-        vec![SortOptions::default(); join_params.left_keys.len()],
+        vec![SortOptions::default(); left_keys.len()],
     )?);
     let mut projection = match join_params.join_type {
         Inner | Left | Right | Full => join_params

@@ -783,7 +783,7 @@ object AuronConverters extends Logging {
       require(
         JoinBuildSides.supportsBroadcastJoin(joinType, buildSide),
         s"native broadcast join does not support $joinType with $buildSide")
-      assert(condition.isEmpty, "join condition is not supported")
+      validateNativeJoinCondition(condition)
 
       // verify build side is native
       buildSide match {
@@ -801,7 +801,7 @@ object AuronConverters extends Logging {
         Nil,
         Nil,
         joinType,
-        None,
+        condition,
         buildSide,
         isNullAwareAntiJoin = false)
     } catch {
