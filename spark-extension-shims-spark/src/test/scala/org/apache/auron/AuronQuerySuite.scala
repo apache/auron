@@ -1032,7 +1032,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
-  test("native broadcast hash join rejects non-inner residual condition") {
+  test("native broadcast hash join supports left outer residual condition") {
     withSQLConf("spark.sql.adaptive.enabled" -> "false") {
       withTable("bhj_left", "bhj_right") {
         sql("""
@@ -1055,7 +1055,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |AS t(id, rv)
               |""".stripMargin)
 
-        val df = checkSparkAnswer("""
+        val df = checkSparkAnswerAndOperator("""
               |SELECT /*+ BROADCAST(r) */ l.id
               |FROM bhj_left l
               |LEFT JOIN bhj_right r
@@ -1064,9 +1064,12 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |""".stripMargin)
 
         val plan = stripAQEPlan(df.queryExecution.executedPlan)
-        assert(
-          plan.collectFirst { case _: NativeBroadcastJoinExec => true }.isEmpty,
-          s"expected non-inner residual broadcast hash join to fall back, but got:\n$plan")
+        val nativeBhj = plan
+          .collectFirst { case join: NativeBroadcastJoinExec => join }
+          .getOrElse(fail(s"expected NativeBroadcastJoinExec in executed plan, but got:\n$plan"))
+        assert(nativeBhj.condition.nonEmpty)
+        assert(nativeBhj.leftKeys.nonEmpty)
+        assert(nativeBhj.broadcastSide == JoinBuildRight)
       }
     }
   }
