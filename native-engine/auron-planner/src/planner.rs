@@ -235,16 +235,7 @@ impl PhysicalPlanner {
                 let join_type =
                     protobuf::JoinType::try_from(hash_join.join_type).expect("invalid JoinType");
                 let join_type = JoinType::from(join_type);
-                // Spark residual join conditions are evaluated after join key
-                // matching. Keep the native implementation limited to inner
-                // joins for now so filtering matched pairs cannot change outer
-                // join null-extension semantics.
                 let join_filter = self.parse_join_filter(hash_join.filter.as_ref())?;
-                if join_filter.is_some() && join_type != JoinType::Inner {
-                    return Err(proto_error(
-                        "hash join filter is only supported for inner join",
-                    ));
-                }
 
                 let build_side =
                     protobuf::JoinSide::try_from(hash_join.build_side).expect("invalid BuildSide");

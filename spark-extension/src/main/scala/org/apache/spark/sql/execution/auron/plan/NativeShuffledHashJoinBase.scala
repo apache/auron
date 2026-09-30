@@ -28,7 +28,6 @@ import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.RightOuter
 import org.apache.spark.sql.execution.BinaryExecNode
@@ -97,7 +96,6 @@ abstract class NativeShuffledHashJoinBase(
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
 
   // check whether native converting is supported
-  assert(condition.isEmpty || joinType.isInstanceOf[InnerLike], "join condition is not supported")
   nativeSchema
   nativeJoinOn
   nativeJoinType
