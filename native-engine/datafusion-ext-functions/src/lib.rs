@@ -96,6 +96,7 @@ pub fn create_auron_ext_function(
         "Spark_WeekOfYear" => shared_function!(spark_dates::spark_weekofyear),
         "Spark_Quarter" => shared_function!(spark_dates::spark_quarter),
         "Spark_LastDay" => shared_function!(spark_dates::spark_last_day),
+        "Spark_NextDay" => shared_function!(spark_dates::spark_next_day),
         "Spark_DateDiff" => shared_function!(spark_dates::spark_datediff),
         "Spark_DateAdd" => shared_function!(spark_dates::spark_date_add),
         "Spark_DateSub" => shared_function!(spark_dates::spark_date_sub),
