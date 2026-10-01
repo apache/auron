@@ -31,6 +31,7 @@ datafusion-ext-commons = { workspace = true }
 
 async-trait = { workspace = true }
 bytesize = { workspace = true }
+futures = { workspace = true }
 jni = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }

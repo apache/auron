@@ -16,6 +16,8 @@
 #![feature(get_mut_unchecked)]
 
 pub mod metrics;
+pub mod runtime_mem_manager;
+pub mod runtime_spill_coordinator;
 pub mod spill;
 
 use std::{

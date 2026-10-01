@@ -377,6 +377,7 @@ dependencies = [
  "bytesize",
  "datafusion",
  "datafusion-ext-commons",
+ "futures",
  "jni",
  "log",
  "once_cell",
