@@ -41,13 +41,18 @@ import org.apache.auron.protobuf.ScalarFunction;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.type.SqlReturnTypeInference;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.table.functions.FunctionIdentifier;
+import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
+import org.apache.flink.table.planner.functions.utils.ScalarSqlFunction;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.IntType;
@@ -62,6 +67,8 @@ class RexCallConverterTest {
 
     private static final RelDataTypeFactory TYPE_FACTORY = new JavaTypeFactoryImpl();
     private static final RexBuilder REX_BUILDER = new RexBuilder(TYPE_FACTORY);
+    private static final FlinkTypeFactory FLINK_TYPE_FACTORY =
+            new FlinkTypeFactory(RexCallConverterTest.class.getClassLoader(), RelDataTypeSystem.DEFAULT);
 
     private FlinkNodeConverterFactory factory;
     private RexCallConverter converter;
@@ -718,7 +725,108 @@ class RexCallConverterTest {
         assertFalse(converter.isSupported(call, context));
     }
 
+    // ---- User scalar functions ----
+
+    /**
+     * Flink's own {@code IF} is {@link org.apache.calcite.sql.SqlKind#OTHER_FUNCTION}, the same kind
+     * a user function carries, and must keep falling back rather than being read as one.
+     */
+    @Test
+    void testFlinkIfIsNotRoutedToTheUdfWrapper() {
+        RexNode ifCall = makeCall(intType(), FlinkSqlOperatorTable.IF, makeBoolRef(2), makeIntRef(0), makeIntRef(0));
+
+        assertFalse(converter.isSupported(ifCall, context));
+    }
+
+    /** A {@link ScalarSqlFunction} operator, which the deprecated registration path produces, is detected. */
+    @Test
+    void testDeprecatedScalarSqlFunctionIsDetected() {
+        RexNode call = udfCall(intType(), new PlusOneFunction(), makeIntRef(0));
+
+        assertTrue(converter.isSupported(call, context), "a user scalar function must be supported");
+        assertTrue(converter.convert(call, context).hasUdfWrapperExpr());
+    }
+
+    /** {@code AND} whose right operand holds a user function emits the short-circuiting node. */
+    @Test
+    void testAndWithUdfRightOperandEmitsScAndExpr() {
+        RexNode and = makeCall(
+                booleanType(),
+                SqlStdOperatorTable.AND,
+                makeBoolRef(2),
+                udfCall(booleanType(), new IsPositiveFunction(), makeIntRef(0)));
+
+        PhysicalExprNode result = converter.convert(and, context);
+
+        assertTrue(result.hasScAndExpr(), "a udf on the right of AND must short-circuit");
+        assertTrue(result.getScAndExpr().getLeft().hasColumn());
+        assertTrue(result.getScAndExpr().getRight().hasUdfWrapperExpr());
+    }
+
+    /** {@code OR} uses its own short-circuiting message and fold branch. */
+    @Test
+    void testOrWithUdfRightOperandEmitsScOrExpr() {
+        RexNode or = makeCall(
+                booleanType(),
+                SqlStdOperatorTable.OR,
+                makeBoolRef(2),
+                udfCall(booleanType(), new IsPositiveFunction(), makeIntRef(0)));
+
+        PhysicalExprNode result = converter.convert(or, context);
+
+        assertTrue(result.hasScOrExpr(), "a udf on the right of OR must short-circuit");
+        assertTrue(result.getScOrExpr().getLeft().hasColumn());
+        assertTrue(result.getScOrExpr().getRight().hasUdfWrapperExpr());
+    }
+
+    /**
+     * Only the right operand can be skipped, so a user function on the left leaves the ordinary
+     * binary node in place. An always-on short-circuit node would pass the two tests above.
+     */
+    @Test
+    void testAndWithoutUdfStillEmitsBinaryExpr() {
+        RexNode and = makeCall(
+                booleanType(),
+                SqlStdOperatorTable.AND,
+                udfCall(booleanType(), new IsPositiveFunction(), makeIntRef(0)),
+                makeBoolRef(3));
+
+        PhysicalExprNode result = converter.convert(and, context);
+
+        assertTrue(result.hasBinaryExpr(), "a udf on the left of AND does not short-circuit");
+        assertEquals("And", result.getBinaryExpr().getOp());
+        assertTrue(result.getBinaryExpr().getL().hasUdfWrapperExpr());
+    }
+
+    /** Detection scans the whole right sub-tree: {@code f2 AND (f3 OR udf(f0))} short-circuits at both levels. */
+    @Test
+    void testNestedUdfUnderOrEmitsScAndExprAtTheOuterLevel() {
+        RexNode innerOr = makeCall(
+                booleanType(),
+                SqlStdOperatorTable.OR,
+                makeBoolRef(3),
+                udfCall(booleanType(), new IsPositiveFunction(), makeIntRef(0)));
+        RexNode and = makeCall(booleanType(), SqlStdOperatorTable.AND, makeBoolRef(2), innerOr);
+
+        PhysicalExprNode result = converter.convert(and, context);
+
+        assertTrue(result.hasScAndExpr(), "a udf nested below the right operand must still short-circuit");
+        assertTrue(result.getScAndExpr().getRight().hasScOrExpr());
+    }
+
     // ---- Helpers ----
+
+    /** Builds a call on a {@link ScalarSqlFunction} wrapping the given user function. */
+    private static RexNode udfCall(
+            RelDataType returnType, org.apache.flink.table.functions.ScalarFunction udf, RexNode... operands) {
+        ScalarSqlFunction op = new ScalarSqlFunction(
+                FunctionIdentifier.of("test_udf"),
+                "test_udf",
+                udf,
+                FLINK_TYPE_FACTORY,
+                scala.Option.apply((SqlReturnTypeInference) null));
+        return REX_BUILDER.makeCall(returnType, op, Arrays.asList(operands));
+    }
 
     /** Returns a copy of the shared context whose session time zone is {@code zoneId}. */
     private ConverterContext contextWithZone(String zoneId) {
@@ -804,5 +912,37 @@ class RexCallConverterTest {
     private static RexNode makeCall(
             RelDataType returnType, org.apache.calcite.sql.SqlOperator op, RexNode... operands) {
         return REX_BUILDER.makeCall(returnType, op, Arrays.asList(operands));
+    }
+
+    // ---- UDF fixtures ----
+
+    /** A minimal admissible user function. */
+    public static class PlusOneFunction extends org.apache.flink.table.functions.ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * Increments its argument.
+         *
+         * @param a the argument
+         * @return {@code a + 1}
+         */
+        public int eval(int a) {
+            return a + 1;
+        }
+    }
+
+    /** A boolean-returning user function, so it can sit under {@code AND} and {@code OR}. */
+    public static class IsPositiveFunction extends org.apache.flink.table.functions.ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * Tests whether the argument is positive.
+         *
+         * @param a the argument
+         * @return whether {@code a} is greater than zero
+         */
+        public boolean eval(int a) {
+            return a > 0;
+        }
     }
 }

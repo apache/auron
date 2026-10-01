@@ -46,9 +46,11 @@ import org.apache.auron.protobuf.ProjectionExecNode;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.type.SqlReturnTypeInference;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.Configuration;
@@ -56,8 +58,12 @@ import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.transformations.OneInputTransformation;
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.functions.FunctionIdentifier;
+import org.apache.flink.table.functions.ScalarFunction;
+import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
+import org.apache.flink.table.planner.functions.utils.ScalarSqlFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
@@ -298,6 +304,33 @@ class StreamExecCalcTest {
                 null,
                 inputProperty,
                 RowType.of(new BigIntType()),
+                "calc",
+                new FakeSourceTransformation());
+        wireFakeUpstream(node, TWO_INT_ROW);
+
+        Transformation<RowData> result = invokeTranslate(node);
+
+        assertEquals(0, node.fallbackCount);
+        assertTrue(operatorOf(result) instanceof FlinkAuronCalcOperator);
+    }
+
+    /** Contract: a Calc whose projection holds a user {@link ScalarFunction} converts to a native
+     * operator instead of falling back, which is what the wrapper exists to achieve. */
+    @Test
+    void testCalcConvertsNativelyWhenProjectionHoldsUserScalarFunction() throws Exception {
+        ScalarSqlFunction udf = new ScalarSqlFunction(
+                FunctionIdentifier.of("plus_one"),
+                "plus_one",
+                new PlusOneFunction(),
+                new FlinkTypeFactory(getClass().getClassLoader(), RelDataTypeSystem.DEFAULT),
+                scala.Option.apply((SqlReturnTypeInference) null));
+        RexNode udfCall = REX_BUILDER.makeCall(intType(), udf, Arrays.asList(intRef(0)));
+        CapturingTranslator node = new CapturingTranslator(
+                tableConfig,
+                Arrays.asList(udfCall),
+                null,
+                inputProperty,
+                RowType.of(new IntType()),
                 "calc",
                 new FakeSourceTransformation());
         wireFakeUpstream(node, TWO_INT_ROW);
@@ -755,6 +788,25 @@ class StreamExecCalcTest {
         @Override
         public org.apache.flink.api.common.typeutils.TypeSerializerSnapshot<Object> snapshotConfiguration() {
             throw new UnsupportedOperationException();
+        }
+    }
+
+    // =====================================================================
+    // User scalar function (test helper for the wrapper path)
+    // =====================================================================
+
+    /** A minimal admissible user scalar function. */
+    public static class PlusOneFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * Increments its argument.
+         *
+         * @param a the argument
+         * @return {@code a + 1}
+         */
+        public int eval(int a) {
+            return a + 1;
         }
     }
 }

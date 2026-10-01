@@ -24,13 +24,18 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import org.apache.auron.flink.runtime.operator.AuronPlanTreeRewriter;
 import org.apache.auron.flink.runtime.operator.FlinkAuronDynamicTableSource;
+import org.apache.auron.flink.table.planner.converter.NativePlanFusionBuilder;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.type.SqlReturnTypeInference;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.Configuration;
@@ -39,7 +44,11 @@ import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.connector.source.ScanTableSource;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.functions.FunctionIdentifier;
+import org.apache.flink.table.functions.ScalarFunction;
+import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.delegation.PlannerBase;
+import org.apache.flink.table.planner.functions.utils.ScalarSqlFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
@@ -71,6 +80,8 @@ class AuronOperatorFusionProcessorTest {
 
     private static final RelDataTypeFactory TYPE_FACTORY = new JavaTypeFactoryImpl();
     private static final RexBuilder REX_BUILDER = new RexBuilder(TYPE_FACTORY);
+    private static final FlinkTypeFactory FLINK_TYPE_FACTORY =
+            new FlinkTypeFactory(AuronOperatorFusionProcessorTest.class.getClassLoader(), RelDataTypeSystem.DEFAULT);
     private static final RowType TWO_INT_INPUT =
             RowType.of(new LogicalType[] {new IntType(), new IntType()}, new String[] {"f0", "f1"});
     private static final RowType TWO_INT_OUTPUT =
@@ -248,6 +259,34 @@ class AuronOperatorFusionProcessorTest {
         assertFalse(source.isMergedCalcPlanSet());
     }
 
+    /**
+     * Contract: a Calc whose converted plan carries a UDF wrapper fuses into the source like any
+     * other convertible Calc. The source runtime publishes the task context a wrapper resolves its
+     * user function through, so a wrapper is not a reason to decline.
+     *
+     * <p>The second assertion is the load-bearing precondition: it holds the projection to actually
+     * producing a wrapper node. Without it the case would still pass against a build where UDF
+     * conversion silently stopped emitting wrappers, and the staging assertions below would be
+     * proving nothing about wrappers at all.
+     */
+    @Test
+    void testCalcCarryingUdfWrapperIsStaged() {
+        List<RexNode> projection = Arrays.asList(udfCall(new PlusOneFunction(), intRef(0)), intRef(1));
+
+        Optional<PhysicalPlanNode> plan = NativePlanFusionBuilder.buildNativeCalcPlan(
+                tableConfig, projection, null, TWO_INT_INPUT, TWO_INT_OUTPUT);
+        assertTrue(plan.isPresent(), "the projection must convert, or the case proves nothing about staging");
+        assertFalse(
+                AuronPlanTreeRewriter.collectUdfWrapperPayloads(plan.get()).isEmpty(),
+                "the converted plan must carry a UDF wrapper, or this is not the case under test");
+
+        FakeAuronSource source = new FakeAuronSource(false);
+        boolean staged = stage(source, TWO_INT_INPUT, TWO_INT_OUTPUT, projection, null);
+
+        assertTrue(staged, "a plan carrying a UDF wrapper must fuse; the source runtime serves the wrapper");
+        assertTrue(source.isMergedCalcPlanSet());
+    }
+
     /** Contract: a projection OUTPUT field named like a reserved Kafka metadata column blocks fusion
      * (the native engine resolves by name and would silently bind to the metadata column). */
     @Test
@@ -295,6 +334,36 @@ class AuronOperatorFusionProcessorTest {
 
     private static RexNode intRef(int idx) {
         return REX_BUILDER.makeInputRef(TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER), idx);
+    }
+
+    /**
+     * Builds a call on a user scalar function. {@link ScalarSqlFunction} is the only user-function
+     * operator with a constructor reachable outside a running planner; the converter recognizes it
+     * by operator identity, so the call it produces converts to a UDF wrapper node.
+     */
+    private static RexNode udfCall(ScalarFunction udf, RexNode... operands) {
+        ScalarSqlFunction operator = new ScalarSqlFunction(
+                FunctionIdentifier.of("auron_plus_one"),
+                "auron_plus_one",
+                udf,
+                FLINK_TYPE_FACTORY,
+                scala.Option.apply((SqlReturnTypeInference) null));
+        return REX_BUILDER.makeCall(TYPE_FACTORY.createSqlType(SqlTypeName.INTEGER), operator, Arrays.asList(operands));
+    }
+
+    /** A minimal admissible user scalar function. */
+    public static class PlusOneFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * Increments its argument.
+         *
+         * @param a the argument
+         * @return {@code a + 1}
+         */
+        public int eval(int a) {
+            return a + 1;
+        }
     }
 
     private StreamExecCalc newCalc(List<RexNode> projection, RexNode condition, RowType outputType) {

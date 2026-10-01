@@ -34,6 +34,8 @@ import org.apache.auron.protobuf.PhysicalIsNull;
 import org.apache.auron.protobuf.PhysicalLikeExprNode;
 import org.apache.auron.protobuf.PhysicalNegativeNode;
 import org.apache.auron.protobuf.PhysicalNot;
+import org.apache.auron.protobuf.PhysicalSCAndExprNode;
+import org.apache.auron.protobuf.PhysicalSCOrExprNode;
 import org.apache.auron.protobuf.PhysicalWhenThen;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
@@ -42,6 +44,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlLikeOperator;
 import org.apache.calcite.sql.type.SqlTypeUtil;
+import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
 import org.apache.flink.table.planner.utils.TableConfigUtils;
 
@@ -84,6 +87,13 @@ import org.apache.flink.table.planner.utils.TableConfigUtils;
  * {@link #isNativelySupportedZone}). The zero-argument form reads the wall clock
  * rather than parsing a string, and becomes {@code Flink_UnixTimestampNow}, which
  * takes no argument and needs no time zone.
+ *
+ * <p>A call to a user-defined scalar function is also matched by operator identity, and becomes a
+ * UDF wrapper node evaluated by an upcall into the JVM, so the rest of the Calc keeps running
+ * natively instead of falling back along with the function. {@link FlinkUDFFallbackBuilder} holds
+ * the admission rules; a call it declines falls back as any unsupported call does. An
+ * {@code AND}/{@code OR} level whose right operand carries such a wrapper is emitted as a
+ * short-circuiting node so the function is not evaluated on rows the left side excludes.
  */
 public class RexCallConverter implements FlinkRexNodeConverter {
 
@@ -165,6 +175,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         }
         if (call.getOperator() == FlinkSqlOperatorTable.UNIX_TIMESTAMP) {
             return isUnixTimestampSupported(call, context);
+        }
+        // A user-defined scalar function is matched the same way, by operator identity. The
+        // admission checks run in convert, which may still decline and fall the whole Calc back.
+        if (FlinkUDFFallbackBuilder.userScalarFunctionOf(call).isPresent()) {
+            return true;
         }
         SqlKind kind = call.getKind();
         if (!SUPPORTED_KINDS.contains(kind)) {
@@ -256,6 +271,11 @@ public class RexCallConverter implements FlinkRexNodeConverter {
         }
         if (call.getOperator() == FlinkSqlOperatorTable.UNIX_TIMESTAMP) {
             return buildUnixTimestamp(call, context);
+        }
+        Optional<ScalarFunction> udf = FlinkUDFFallbackBuilder.userScalarFunctionOf(call);
+        if (udf.isPresent()) {
+            return FlinkUDFFallbackBuilder.build(call, udf.get(), context, factory)
+                    .orElseThrow(() -> new UnsupportedNodeException("Unsupported Flink UDF call: " + call));
         }
         SqlKind kind = call.getKind();
         switch (kind) {
@@ -551,19 +571,42 @@ public class RexCallConverter implements FlinkRexNodeConverter {
      * Folds a Calcite n-ary {@code AND}/{@code OR} (operand count &ge; 2) into a
      * left-deep chain of binary nodes: {@code ((o0 op o1) op o2) ...}. Operands
      * are already boolean and are not cast.
+     *
+     * <p>A level whose right operand carries a UDF wrapper anywhere beneath it is emitted as a
+     * short-circuiting node instead. The ordinary binary node skips its right operand only when the
+     * left side is entirely true, entirely false, or true for a small enough minority of rows, and
+     * not at all once the left side contains a null; otherwise it evaluates the right operand over
+     * the whole batch. Flink's own generated code skips it per row, so {@code x IS NOT NULL AND
+     * f(x)} never reaches a null {@code x} there. The short-circuiting node evaluates its right
+     * operand only over the rows the left side selects and combines the two with three-valued
+     * logic, which is why the rule names it rather than rewriting the fold into a {@code CASE}:
+     * that rewrite would turn {@code NULL AND TRUE} from {@code NULL} into {@code FALSE}.
      */
     private PhysicalExprNode buildBinaryFold(RexCall call, String op, ConverterContext context) {
         PhysicalExprNode acc = convertOperand(call.getOperands().get(0), context);
         for (int i = 1; i < call.getOperands().size(); i++) {
             PhysicalExprNode right = convertOperand(call.getOperands().get(i), context);
-            acc = PhysicalExprNode.newBuilder()
-                    .setBinaryExpr(PhysicalBinaryExprNode.newBuilder()
-                            .setL(acc)
-                            .setR(right)
-                            .setOp(op))
-                    .build();
+            acc = FlinkUDFFallbackBuilder.containsUdfWrapper(right)
+                    ? buildShortCircuitFold(acc, right, op)
+                    : PhysicalExprNode.newBuilder()
+                            .setBinaryExpr(PhysicalBinaryExprNode.newBuilder()
+                                    .setL(acc)
+                                    .setR(right)
+                                    .setOp(op))
+                            .build();
         }
         return acc;
+    }
+
+    /** Builds one short-circuiting {@code AND}/{@code OR} level over an already-converted pair. */
+    private static PhysicalExprNode buildShortCircuitFold(PhysicalExprNode left, PhysicalExprNode right, String op) {
+        PhysicalExprNode.Builder node = PhysicalExprNode.newBuilder();
+        if ("And".equals(op)) {
+            node.setScAndExpr(PhysicalSCAndExprNode.newBuilder().setLeft(left).setRight(right));
+        } else {
+            node.setScOrExpr(PhysicalSCOrExprNode.newBuilder().setLeft(left).setRight(right));
+        }
+        return node.build();
     }
 
     private PhysicalExprNode buildNot(RexCall call, ConverterContext context) {

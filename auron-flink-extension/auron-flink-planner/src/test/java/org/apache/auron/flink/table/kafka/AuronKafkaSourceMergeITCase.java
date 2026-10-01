@@ -21,9 +21,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.auron.flink.table.planner.UnsupportedFlinkNodeRecorder;
 import org.apache.flink.table.api.ExplainDetail;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.functions.FunctionContext;
+import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.CollectionUtil;
 import org.junit.jupiter.api.Test;
@@ -82,6 +87,86 @@ public class AuronKafkaSourceMergeITCase extends AuronKafkaSourceTestBase {
                 CollectionUtil.iteratorToList(tableEnvironment.executeSql(sql).collect());
         rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
         assertThat(rows).isEqualTo(Arrays.asList(Row.of(22, "zm2"), Row.of(23, "zm1")));
+    }
+
+    /**
+     * A Calc calling a user scalar function over the no-watermark sole-consumer source {@code T5}
+     * fuses into the source, and the user function evaluates inside the source's native runtime.
+     * The source publishes a task context around the creation of that runtime, which is what a UDF
+     * wrapper resolves its user function through.
+     *
+     * <p>Three assertions, none redundant. A zero fallback count says the Calc did not fall back to
+     * Flink's generated operator, so the native path was the one exercised. The row set says the
+     * native plan actually ran: a native library with no arm for the plan converts cleanly and
+     * yields an empty result with the fallback counter still at zero, and assertions over an empty
+     * list pass vacuously. Zero standalone {@code Calc} operators says the fusion fired rather than
+     * the UDF merely running in a standalone native Calc above the source.
+     *
+     * <p>The query runs before the plan-shape check because a fused wrapper that cannot reach a task
+     * context surfaces as a runtime failure, not as a wrong job graph; running first reports that
+     * failure instead of an assertion on an integer.
+     */
+    @Test
+    public void testCalcCallingUdfFusesIntoSource() {
+        environment.setParallelism(1);
+        tableEnvironment.createTemporarySystemFunction("auron_kafka_plus_one", PlusOneFunction.class);
+        String sql = "SELECT auron_kafka_plus_one(`age`), `name` FROM T5 WHERE `age` > 20";
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        List<Row> rows =
+                CollectionUtil.iteratorToList(tableEnvironment.executeSql(sql).collect());
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .isEqualTo(Arrays.asList(Row.of(22, "zm2"), Row.of(23, "zm1")));
+        assertThat(calcOperatorCount(sql))
+                .as("a fused Calc must collapse into the source, leaving no standalone Calc operator")
+                .isZero();
+    }
+
+    /**
+     * A user function fused into the source is opened and closed exactly once per subtask.
+     *
+     * <p>The source builds its wrapper registry in {@code open()} on the task thread and closes it
+     * when {@code run()} finishes, so the function's lifecycle is bound to the subtask rather than
+     * to a native worker thread that dies with the batch it served. The lower bound is what this
+     * case actually pins: a count of zero means the teardown never reached the function. The upper
+     * bound is asserted but cannot fail through a repeated close, because {@code
+     * FlinkAuronTaskContext.close()} clears its registry and a second sequential call therefore
+     * reaches no wrapper.
+     *
+     * <p>{@code eval} adds an offset that only {@code open} establishes, so a function evaluated
+     * without being opened returns wrong rows rather than passing quietly.
+     */
+    @Test
+    public void testFusedUdfOpensAndClosesOncePerSubtask() throws Exception {
+        environment.setParallelism(1);
+        SourceLifecycleFunction.reset();
+        tableEnvironment.createTemporarySystemFunction("auron_kafka_lifecycle", SourceLifecycleFunction.class);
+        String sql = "SELECT auron_kafka_lifecycle(`age`) FROM T5 WHERE `age` > 20";
+
+        UnsupportedFlinkNodeRecorder.resetForTest();
+        TableResult result = tableEnvironment.executeSql(sql);
+        List<Row> rows = CollectionUtil.iteratorToList(result.collect());
+        result.await();
+
+        assertThat(UnsupportedFlinkNodeRecorder.peekEmitCount())
+                .as("a non-zero fallback count means the Calc did not run natively")
+                .isZero();
+        rows.sort(Comparator.comparingInt(o -> (int) o.getField(0)));
+        assertThat(rows)
+                .as("an empty result set means the plan converted but never executed natively")
+                .isEqualTo(Arrays.asList(Row.of(22), Row.of(23)));
+        assertThat(SourceLifecycleFunction.openCount.get())
+                .as("open must run exactly once for the subtask")
+                .isOne();
+        assertThat(SourceLifecycleFunction.closeCount.get())
+                .as("close must run exactly once when the source finishes")
+                .isOne();
     }
 
     /**
@@ -181,6 +266,61 @@ public class AuronKafkaSourceMergeITCase extends AuronKafkaSourceTestBase {
             } else {
                 environment.getConfig().disableObjectReuse();
             }
+        }
+    }
+
+    /**
+     * Counts its own {@code open} and {@code close}, and reads state that only {@code open}
+     * establishes, so a function that is evaluated without being opened produces wrong rows instead
+     * of a silently passing count.
+     */
+    public static class SourceLifecycleFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        static final AtomicInteger openCount = new AtomicInteger();
+        static final AtomicInteger closeCount = new AtomicInteger();
+
+        private transient int offset;
+
+        static void reset() {
+            openCount.set(0);
+            closeCount.set(0);
+        }
+
+        @Override
+        public void open(FunctionContext context) {
+            offset = 1;
+            openCount.incrementAndGet();
+        }
+
+        @Override
+        public void close() {
+            closeCount.incrementAndGet();
+        }
+
+        /**
+         * Adds the offset {@code open} established.
+         *
+         * @param a the argument
+         * @return {@code a} plus the offset
+         */
+        public Integer eval(Integer a) {
+            return a + offset;
+        }
+    }
+
+    /** A minimal user scalar function, enough to put a UDF wrapper into the converted Calc plan. */
+    public static class PlusOneFunction extends ScalarFunction {
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * Increments its argument.
+         *
+         * @param a the argument
+         * @return {@code a + 1}
+         */
+        public Integer eval(Integer a) {
+            return a + 1;
         }
     }
 }

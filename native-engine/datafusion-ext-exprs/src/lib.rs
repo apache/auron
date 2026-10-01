@@ -27,10 +27,10 @@ pub mod spark_monotonically_increasing_id;
 pub mod spark_partition_id;
 pub mod spark_randn;
 pub mod spark_scalar_subquery_wrapper;
-pub mod spark_udf_wrapper;
 pub mod string_contains;
 pub mod string_ends_with;
 pub mod string_starts_with;
+pub mod udf_wrapper;
 
 #[allow(dead_code)]
 fn down_cast_any_ref(any: &dyn Any) -> &dyn Any {
