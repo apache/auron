@@ -63,6 +63,19 @@ public class FlinkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable collection of additional metrics for input batch statistics.")
             .withDefaultValue(false);
 
+    /**
+     * Periodic native metric publishing for long-running Flink tasks. Same JNI field name as
+     * {@link AuronConfiguration#METRICS_UPDATE_ENABLED} so native lookup on this class does not
+     * fall back to the Spark/shared default of {@code false}.
+     */
+    public static final ConfigOption<Boolean> METRICS_UPDATE_ENABLED = new ConfigOption<>(Boolean.class)
+            .withKey("auron.metrics.update.enabled")
+            .withCategory("Runtime Configuration")
+            .withDescription("Enable periodic native metric publishing to MetricNode while a Flink task is "
+                    + "running. Default is true because Flink tasks are long-lived and do not finalize. "
+                    + "Set flink.auron.metrics.update.enabled=false to restore finalize-only reporting.")
+            .withDefaultValue(true);
+
     private final Configuration flinkConfig;
 
     public FlinkAuronConfiguration() {

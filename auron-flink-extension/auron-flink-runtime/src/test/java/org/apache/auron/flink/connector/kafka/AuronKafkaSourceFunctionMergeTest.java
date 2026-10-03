@@ -18,11 +18,14 @@ package org.apache.auron.flink.connector.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Properties;
+import org.apache.auron.flink.metric.FlinkMetricNode;
 import org.apache.auron.flink.utils.SchemaConverters;
+import org.apache.auron.metric.MetricNode;
 import org.apache.auron.protobuf.FFIReaderExecNode;
 import org.apache.auron.protobuf.FilterExecNode;
 import org.apache.auron.protobuf.KafkaScanExecNode;
@@ -31,6 +34,7 @@ import org.apache.auron.protobuf.PhysicalExprNode;
 import org.apache.auron.protobuf.PhysicalPlanNode;
 import org.apache.auron.protobuf.ProjectionExecNode;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -227,5 +231,55 @@ class AuronKafkaSourceFunctionMergeTest {
         // No staged plan: the source plan passes through untouched, even with a watermark set.
         fn.setWatermarkStrategy(WatermarkStrategy.<RowData>forMonotonousTimestamps());
         assertEquals(source, fn.applyMergedCalcPlan(source));
+    }
+
+    @Test
+    void testMetricTreeForKafkaScanLeafHasNoChildren() {
+        FlinkMetricNode root = FlinkMetricNode.fromPlan(kafkaScan(), new UnregisteredMetricsGroup());
+        assertLeaf(root);
+    }
+
+    @Test
+    void testMetricTreeForFusedProjectKafkaScan() {
+        PhysicalPlanNode fused =
+                AuronKafkaSourceFunction.buildMergedPlan(logicalProjection(ffiReaderPlaceholder()), kafkaScan());
+
+        FlinkMetricNode root = FlinkMetricNode.fromPlan(fused, new UnregisteredMetricsGroup());
+        MetricNode scan = root.getChild(0);
+        assertLeaf(scan);
+        assertThrows(IndexOutOfBoundsException.class, () -> root.getChild(1));
+    }
+
+    @Test
+    void testMetricTreeForFusedProjectFilterKafkaScan() {
+        PhysicalPlanNode filter = PhysicalPlanNode.newBuilder()
+                .setFilter(FilterExecNode.newBuilder()
+                        .setInput(ffiReaderPlaceholder())
+                        .build())
+                .build();
+        PhysicalPlanNode fused = AuronKafkaSourceFunction.buildMergedPlan(logicalProjection(filter), kafkaScan());
+
+        FlinkMetricNode root = FlinkMetricNode.fromPlan(fused, new UnregisteredMetricsGroup());
+        MetricNode filterNode = root.getChild(0);
+        MetricNode scan = filterNode.getChild(0);
+        assertLeaf(scan);
+        assertThrows(IndexOutOfBoundsException.class, () -> root.getChild(1));
+        assertThrows(IndexOutOfBoundsException.class, () -> filterNode.getChild(1));
+    }
+
+    @Test
+    void testMetricTreeForApplyMergedCalcPlanOutput() {
+        AuronKafkaSourceFunction fn = newFunction();
+        RowType projected = RowType.of(new LogicalType[] {new IntType()}, new String[] {"int"});
+        fn.setMergedCalcPlan(logicalProjection(ffiReaderPlaceholder()), projected);
+
+        PhysicalPlanNode fused = fn.applyMergedCalcPlan(kafkaScan());
+        FlinkMetricNode root = FlinkMetricNode.fromPlan(fused, new UnregisteredMetricsGroup());
+        assertLeaf(root.getChild(0));
+    }
+
+    private static void assertLeaf(MetricNode node) {
+        assertNotNull(node);
+        assertThrows(IndexOutOfBoundsException.class, () -> node.getChild(0));
     }
 }

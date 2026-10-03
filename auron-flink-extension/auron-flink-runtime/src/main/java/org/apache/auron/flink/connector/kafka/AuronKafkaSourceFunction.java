@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.auron.flink.arrow.FlinkArrowReader;
 import org.apache.auron.flink.arrow.FlinkArrowUtils;
 import org.apache.auron.flink.configuration.FlinkAuronConfiguration;
+import org.apache.auron.flink.metric.FlinkMetricNode;
 import org.apache.auron.flink.runtime.operator.AuronPlanTreeRewriter;
 import org.apache.auron.flink.runtime.operator.FlinkAuronFunction;
 import org.apache.auron.flink.table.data.AuronColumnarRowData;
@@ -56,7 +57,6 @@ import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
@@ -130,7 +130,6 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
     private volatile boolean isRunning;
     private transient String auronOperatorIdWithSubtaskIndex;
     private transient MetricNode nativeMetric;
-    private transient MetricGroup metricGroup;
     private transient ObjectMapper mapper;
 
     // Kafka Consumer for partition metadata discovery only (does NOT consume data)
@@ -338,22 +337,10 @@ public class AuronKafkaSourceFunction extends RichParallelSourceFunction<RowData
 
     @Override
     public void run(SourceContext<RowData> sourceContext) throws Exception {
-        metricGroup = getRuntimeContext().getMetricGroup();
-        final Map<String, Counter> flinkCounters = new HashMap<>();
-
-        nativeMetric = new MetricNode(new ArrayList<>()) {
-            @Override
-            public void add(String name, long value) {
-                // Integration with Flink metrics
-                Counter counter = flinkCounters.get(name);
-                if (counter == null) {
-                    counter = metricGroup.counter(name);
-                    flinkCounters.put(name, counter);
-                }
-                counter.inc(value);
-                LOG.debug("Metric Auron Source: {} = {}", name, value);
-            }
-        };
+        // Mirror physicalPlanNode (KafkaScan, or fused Project[Filter?[KafkaScan]]) so native
+        // periodic metric walks via MetricNode.getChild(i) do not IndexOutOfBounds.
+        nativeMetric =
+                FlinkMetricNode.fromPlan(physicalPlanNode, getRuntimeContext().getMetricGroup());
         // The native output carries [meta, logical], where logical is the projected output when a
         // merged Calc plan is active and the original output otherwise. The metadata column count
         // and per-field positions both derive from KAFKA_AURON_META_FIELDS so adding or reordering
