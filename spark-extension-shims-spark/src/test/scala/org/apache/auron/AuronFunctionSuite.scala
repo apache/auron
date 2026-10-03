@@ -220,6 +220,27 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("datediff function with non-UTC timestamp inputs") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      withTable("t1") {
+        sql("create table t1(end_ts timestamp, start_ts timestamp) using parquet")
+        // The first pair has the same local date but different UTC dates; the next two
+        // cross local midnight within the same UTC date.
+        sql("""insert into t1 values
+            |  (timestamp'1970-01-01 16:30:00', timestamp'1970-01-01 00:30:00'),
+            |  (timestamp'1970-01-02 00:30:00', timestamp'1970-01-01 23:30:00'),
+            |  (timestamp'1970-01-01 23:30:00', timestamp'1970-01-02 00:30:00'),
+            |  (null, timestamp'1970-01-01 00:30:00'),
+            |  (timestamp'1970-01-01 00:30:00', null)
+            |""".stripMargin)
+
+        val query = "select datediff(end_ts, start_ts) from t1"
+        checkSparkAnswerAndOperator(query)
+        checkAnswer(sql(query), Seq(Row(0), Row(1), Row(-1), Row(null), Row(null)))
+      }
+    }
+  }
+
   test("unix_date and date_from_unix_date functions") {
     if (AuronTestUtils.isSparkV31OrGreater) {
       withTable("t1") {
