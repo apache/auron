@@ -1003,6 +1003,11 @@ object NativeConverters extends Logging {
         buildTimePartExt("Spark_Quarter", child, isPruningExpr, fallback)
       case e: LastDay =>
         buildExtScalarFunction("Spark_LastDay", e.children, e.dataType)
+      case e: NextDay =>
+        buildExtScalarFunction(
+          "Spark_NextDay",
+          e.children :+ Literal(Shims.get.getNextDayFailOnError(e)),
+          e.dataType)
       case e: DateDiff =>
         buildExtScalarFunction("Spark_DateDiff", e.children, e.dataType)
       case e: DateAdd =>
