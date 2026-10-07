@@ -1,0 +1,98 @@
+diff --git a/src/row_group_filter.rs b/src/row_group_filter.rs
+index 6478a8a..f57b775 100644
+--- a/src/row_group_filter.rs
++++ b/src/row_group_filter.rs
+@@ -200,7 +200,7 @@ fn evaluate_comparison_with_stats(
+         }
+ 
+         // Float comparisons
+-        TypeStatistics::Double { min, max, .. } => {
++        TypeStatistics::Double { min, max, sum } => {
+             let v = match value {
+                 PredicateValue::Float32(Some(v)) => *v as f64,
+                 PredicateValue::Float64(Some(v)) => *v,
+@@ -211,7 +211,17 @@ fn evaluate_comparison_with_stats(
+                     .build());
+                 }
+             };
+-            evaluate_float_comparison(*min, *max, op, v)
++            // NaN may be absent from min/max while still present in the row group.
++            // ORC writers include it in the sum; missing or NaN sums are not safe to prune.
++            if v.is_nan()
++                || min.is_nan()
++                || max.is_nan()
++                || sum.as_ref().map_or(true, |sum| sum.is_nan())
++            {
++                true
++            } else {
++                evaluate_float_comparison(*min, *max, op, v)
++            }
+         }
+ 
+         // String comparisons
+@@ -364,9 +374,7 @@ fn evaluate_float_comparison(min: f64, max: f64, op: ComparisonOp, value: f64) -
+         }
+         ComparisonOp::NotEqual => {
+             // col != value: keep if value is not the only value
+-            // If min and max are very close to value, skip
+-            const EPSILON: f64 = 1e-9;
+-            !((min - value).abs() < EPSILON && (max - value).abs() < EPSILON)
++            min != value || max != value
+         }
+         ComparisonOp::LessThan => {
+             // col < value: keep if min < value
+@@ -571,6 +579,54 @@ mod tests {
+         crate::schema::RootDataType::from_proto(&types).unwrap()
+     }
+ 
++    #[test]
++    fn test_float_comparison_keeps_uncertain_nan_statistics() {
++        use crate::predicate::{ComparisonOp, PredicateValue};
++
++        for (sum, keep) in [(Some(f64::NAN), true), (None, true), (Some(0.0), false)] {
++            let stats = ColumnStatistics::try_from(&proto::ColumnStatistics {
++                number_of_values: Some(2),
++                double_statistics: Some(proto::DoubleStatistics {
++                    minimum: Some(0.0),
++                    maximum: Some(0.0),
++                    sum,
++                }),
++                ..Default::default()
++            })
++            .unwrap();
++            let actual = super::evaluate_comparison_with_stats(
++                &stats,
++                ComparisonOp::GreaterThan,
++                &PredicateValue::Float64(Some(100.0)),
++            )
++            .unwrap();
++            assert_eq!(actual, keep);
++        }
++    }
++
++    #[test]
++    fn test_float_not_equal_does_not_skip_nearby_values() {
++        use crate::predicate::{ComparisonOp, PredicateValue};
++
++        let value = 100.0000000001;
++        let stats = ColumnStatistics::try_from(&proto::ColumnStatistics {
++            number_of_values: Some(1),
++            double_statistics: Some(proto::DoubleStatistics {
++                minimum: Some(value),
++                maximum: Some(value),
++                sum: Some(value),
++            }),
++            ..Default::default()
++        })
++        .unwrap();
++        assert!(super::evaluate_comparison_with_stats(
++            &stats,
++            ComparisonOp::NotEqual,
++            &PredicateValue::Float64(Some(100.0)),
++        )
++        .unwrap());
++    }
++
+     #[test]
+     fn test_evaluate_predicate_integer_greater_than() {
+         use crate::predicate::{Predicate, PredicateValue};

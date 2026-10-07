@@ -47,6 +47,20 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("float scan filters preserve NaN and signed zero results") {
+    Seq("parquet", "orc").foreach { format =>
+      withTable("t_float_scan") {
+        sql(s"create table t_float_scan (d double) using $format")
+        sql("""insert into t_float_scan values
+            |  (0.0), (-0.0), (cast('NaN' as double))
+            |""".stripMargin)
+
+        checkSparkAnswerAndOperator("select d from t_float_scan where d > 100.0")
+        checkSparkAnswerAndOperator("select d from t_float_scan where d = 0.0")
+      }
+    }
+  }
+
   test("float min and max follow Spark NaN ordering") {
     withTable("t_float_ordering") {
       sql("create table t_float_ordering (d double, f float) using parquet")
