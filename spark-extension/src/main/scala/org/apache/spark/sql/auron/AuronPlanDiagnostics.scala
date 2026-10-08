@@ -59,6 +59,7 @@ object AuronPlanDiagnostics extends Logging {
       }
       val reason = p.getTagValue(AuronConvertStrategy.neverConvertReasonTag).getOrElse("")
       val status = p match {
+        case _: AuronConverters.ForceNativeExecutionWrapperBase => "Wrapper"
         case _: NativeSupports => "Native"
         case _: AdaptiveSparkPlanExec | _: QueryStageExec | _: ReusedExchangeExec |
             _: ReusedSubqueryExec | _: InputAdapter | _: WholeStageCodegenExec =>

@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.sql.auron.{AuronConvertStrategy, AuronPlanDiagnostics}
+import org.apache.spark.sql.auron.{AuronConvertStrategy, AuronPlanDiagnostics, ForceNativeExecutionWrapper}
 import org.apache.spark.sql.execution.{LocalTableScanExec, UnionExec}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.JsonProtocol
@@ -181,6 +181,23 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
       reused
         .getTagValue(AuronConvertStrategy.neverConvertReasonTag)
         .contains("unsupported wrapper"))
+  }
+
+  test(
+    "Auron execution wrappers are excluded from native counts and preserve child diagnostics") {
+    val leaf = emptyScan()
+    leaf.setTagValue(AuronConvertStrategy.neverConvertReasonTag, "test fallback")
+    val native = org.apache.spark.sql.execution.auron.plan.NativeUnionExec(Seq(leaf), Nil)
+    val wrapper = ForceNativeExecutionWrapper(native)
+    val nodes = AuronPlanDiagnostics.collect(UnionExec(Seq(wrapper, native)))
+    assert(nodes.size == 4)
+    assert(nodes.count(_.status == "Native") == 1)
+    assert(nodes.count(_.status == "Wrapper") == 1)
+    assert(
+      nodes
+        .find(_.name == wrapper.nodeName)
+        .exists(n => n.status == "Wrapper" && n.reason.isEmpty))
+    assert(nodes.count(_.reason == "test fallback") == 1)
   }
 
 }
