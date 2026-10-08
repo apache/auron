@@ -101,4 +101,12 @@ case class AuronColumnarOverrides(sparkSession: SparkSession) extends ColumnarRu
       }
     }
   }
+
+  override def postColumnarTransitions: Rule[SparkPlan] = new Rule[SparkPlan] {
+    override def apply(plan: SparkPlan): SparkPlan = {
+      AuronPlanDiagnostics.publish(sparkSession, plan)
+      plan
+    }
+  }
+
 }
