@@ -32,6 +32,7 @@ use crate::{
     },
 };
 
+pub(crate) mod group_limit_processor;
 pub mod processors;
 pub mod window_context;
 
@@ -45,7 +46,7 @@ pub enum WindowFunction {
     Agg(AggFunction),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowRankType {
     RowNumber,
     Rank,
@@ -109,6 +110,13 @@ impl WindowExpr {
                 )?;
                 Ok(Box::new(AggProcessor::try_new(agg)?))
             }
+        }
+    }
+
+    pub fn rank_type(&self) -> Option<WindowRankType> {
+        match self.func {
+            WindowFunction::RankLike(rank_type) => Some(rank_type),
+            _ => None,
         }
     }
 
