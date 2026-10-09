@@ -55,7 +55,10 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
             |  (0.0), (-0.0), (cast('NaN' as double))
             |""".stripMargin)
 
-        checkSparkAnswerAndOperator("select d from t_float_scan where d > 100.0")
+        // Spark 3.0/3.1 ORC pushdown can drop NaN before evaluating this filter.
+        val greaterThan = sql("select d from t_float_scan where d > 100.0")
+        checkAnswer(greaterThan, Seq(Row(Double.NaN)))
+        assertPlanIsNative(greaterThan)
         checkSparkAnswerAndOperator("select d from t_float_scan where d = 0.0")
       }
     }
