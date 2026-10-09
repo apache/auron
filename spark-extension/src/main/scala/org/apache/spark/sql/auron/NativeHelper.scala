@@ -55,7 +55,7 @@ object NativeHelper extends Logging {
       // executor side
       val executorMemoryMiB = conf.get(config.EXECUTOR_MEMORY)
       val executorMemoryOverheadMiB =
-        NativeMemoryHelper.executorMemoryOverheadMiB(conf, executorMemoryMiB)
+        Shims.get.executorMemoryOverheadMiB(conf, executorMemoryMiB)
       (executorMemoryMiB + executorMemoryOverheadMiB) * 1024L * 1024L
     } else {
       // driver side
@@ -247,25 +247,4 @@ object NativeHelper extends Logging {
       sc,
       Set("stage_id", "output_rows", "elapsed_compute")).toSeq ++ getDefaultNativeFileMetrics(
       sc).toSeq: _*)
-}
-
-private[auron] object NativeMemoryHelper {
-  def executorMemoryOverheadMiB(conf: SparkConf, executorMemoryMiB: Long): Long = {
-    conf.get(config.EXECUTOR_MEMORY_OVERHEAD).getOrElse {
-      // Read by key because Spark 3.0 and 3.1 do not define the generic factor config.
-      val factor = if (conf.contains("spark.executor.memoryOverheadFactor")) {
-        val value = conf.getDouble("spark.executor.memoryOverheadFactor", 0.10)
-        require(value > 0, "spark.executor.memoryOverheadFactor must be > 0")
-        value
-      } else if (conf.get("spark.master", "").matches("k8s://.*")) {
-        // Spark's driver propagates the effective JVM/non-JVM default to executors.
-        val value = conf.getDouble("spark.kubernetes.memoryOverheadFactor", 0.10)
-        require(value >= 0, "Ensure that memory overhead is non-negative")
-        value
-      } else {
-        0.10
-      }
-      math.max((factor * executorMemoryMiB).toLong, 384L)
-    }
-  }
 }

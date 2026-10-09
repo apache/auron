@@ -23,7 +23,7 @@ import scala.annotation.nowarn
 import scala.collection.mutable
 
 import org.apache.commons.lang3.reflect.FieldUtils
-import org.apache.spark.{OneToOneDependency, ShuffleDependency, SparkContext, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{OneToOneDependency, ShuffleDependency, SparkConf, SparkContext, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MapStatus
@@ -119,6 +119,18 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.spark.ui.AuronBuildInfoEvent
 
 class ShimsImpl extends Shims with Logging {
+
+  @sparkver("3.0 / 3.1 / 3.2")
+  override private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double = {
+    // These versions do not define the generic factor config.
+    val value = conf.getDouble("spark.executor.memoryOverheadFactor", 0.10)
+    require(value > 0, "spark.executor.memoryOverheadFactor must be > 0")
+    value
+  }
+
+  @sparkver("3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double =
+    conf.get(org.apache.spark.internal.config.EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
   @sparkver("3.0")
   override def shimVersion: String = "spark-3.0"

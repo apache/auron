@@ -21,8 +21,10 @@ import java.io.File
 import scala.annotation.nowarn
 
 import org.apache.spark.ShuffleDependency
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
@@ -63,6 +65,26 @@ import org.apache.auron.{protobuf => pb}
 abstract class Shims {
 
   def shimVersion: String
+
+  private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double
+
+  private[auron] def executorMemoryOverheadMiB(conf: SparkConf, executorMemoryMiB: Long): Long = {
+    conf.get(config.EXECUTOR_MEMORY_OVERHEAD).getOrElse {
+      val factor = if (conf.contains("spark.executor.memoryOverheadFactor")) {
+        executorMemoryOverheadFactor(conf)
+      } else if (conf.get("spark.master", "").matches("k8s://.*")) {
+        // Spark's driver propagates the effective JVM/non-JVM default to executors.
+        val value = conf.getDouble(
+          "spark.kubernetes.memoryOverheadFactor",
+          executorMemoryOverheadFactor(conf))
+        require(value >= 0, "Ensure that memory overhead is non-negative")
+        value
+      } else {
+        executorMemoryOverheadFactor(conf)
+      }
+      math.max((factor * executorMemoryMiB).toLong, 384L)
+    }
+  }
 
   def initExtension(): Unit = {}
 
