@@ -588,6 +588,115 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  Seq("parquet", "orc").foreach { format =>
+    test(s"iceberg native scan supports _partition on unpartitioned tables: $format") {
+      withTable("local.db.t_partition_metadata") {
+        sql(s"""CREATE TABLE local.db.t_partition_metadata (id INT) USING iceberg
+            |TBLPROPERTIES ('write.format.default' = '$format')""".stripMargin)
+        checkSparkAnswerAndOperator("SELECT id, _partition FROM local.db.t_partition_metadata")
+        sql("INSERT INTO local.db.t_partition_metadata VALUES (1), (2)")
+        val df =
+          checkSparkAnswerAndOperator("SELECT id, _partition FROM local.db.t_partition_metadata")
+        checkAnswer(df, Seq(Row(1, null), Row(2, null)))
+        checkSparkAnswerAndOperator("SELECT _partition FROM local.db.t_partition_metadata")
+      }
+    }
+
+    test(s"iceberg native scan supports _partition values and field projections: $format") {
+      withTable("local.db.t_partition_metadata") {
+        sql(s"""CREATE TABLE local.db.t_partition_metadata
+            |(id INT, p STRING, ts TIMESTAMP, d DATE, amount DECIMAL(8, 2)) USING iceberg
+            |PARTITIONED BY (p, bucket(4, id), days(ts), d, amount)
+            |TBLPROPERTIES ('write.format.default' = '$format')""".stripMargin)
+        sql("""INSERT INTO local.db.t_partition_metadata VALUES
+            |(1, 'east', TIMESTAMP '2026-01-01 12:00:00', DATE '2026-01-01', 12.34),
+            |(2, 'west', TIMESTAMP '2026-01-02 12:00:00', DATE '2026-01-02', 56.78),
+            |(3, NULL, NULL, NULL, NULL)""".stripMargin)
+
+        checkSparkAnswerAndOperator("SELECT _partition FROM local.db.t_partition_metadata")
+        checkSparkAnswerAndOperator("SELECT id, _partition FROM local.db.t_partition_metadata")
+        checkSparkAnswerAndOperator(
+          "SELECT _partition, _file, p, id, _spec_id FROM local.db.t_partition_metadata")
+        checkSparkAnswerAndOperator(
+          "SELECT _partition.p, _partition.id_bucket, _partition.ts_day, " +
+            "_partition.d, _partition.amount FROM local.db.t_partition_metadata")
+        val df = checkSparkAnswerAndOperator(
+          "SELECT id, _partition.p FROM local.db.t_partition_metadata")
+        checkAnswer(df, Seq(Row(1, "east"), Row(2, "west"), Row(3, null)))
+      }
+    }
+
+    test(s"iceberg native scan supports _partition across partition specs: $format") {
+      withTable("local.db.t_partition_metadata") {
+        sql(s"""CREATE TABLE local.db.t_partition_metadata
+            |(id INT, p STRING, ts TIMESTAMP) USING iceberg
+            |PARTITIONED BY (p, bucket(4, id))
+            |TBLPROPERTIES ('format-version' = '2', 'write.format.default' = '$format')
+            |""".stripMargin)
+        sql("""INSERT INTO local.db.t_partition_metadata VALUES
+            |(1, 'east', TIMESTAMP '2026-01-01 12:00:00'), (2, NULL, NULL)""".stripMargin)
+        sql("ALTER TABLE local.db.t_partition_metadata DROP PARTITION FIELD p")
+        sql("ALTER TABLE local.db.t_partition_metadata ADD PARTITION FIELD days(ts)")
+        sql("""INSERT INTO local.db.t_partition_metadata VALUES
+            |(3, 'west', TIMESTAMP '2026-01-03 12:00:00'), (4, NULL, NULL)""".stripMargin)
+
+        val df = checkSparkAnswerAndOperator(
+          "SELECT id, _partition, _spec_id FROM local.db.t_partition_metadata")
+        assert(df.collect().map(_.getInt(2)).distinct.length == 2)
+        checkSparkAnswerAndOperator("SELECT _partition FROM local.db.t_partition_metadata")
+        val fields = checkSparkAnswerAndOperator(
+          "SELECT id, _partition.p, _partition.ts_day FROM local.db.t_partition_metadata")
+        val rows = fields.collect().map(row => row.getInt(0) -> row).toMap
+        assert(rows(1).getString(1) == "east" && rows(1).isNullAt(2))
+        assert(rows(3).isNullAt(1) && !rows(3).isNullAt(2))
+        assert(rows(2).isNullAt(1) && rows(2).isNullAt(2))
+        assert(rows(4).isNullAt(1) && rows(4).isNullAt(2))
+      }
+    }
+  }
+
+  test("iceberg _partition scan falls back for unsupported partition types") {
+    withTable("local.db.t_partition_metadata") {
+      sql("""CREATE TABLE local.db.t_partition_metadata (id INT, p DECIMAL(20, 2))
+          |USING iceberg PARTITIONED BY (p)""".stripMargin)
+      sql("INSERT INTO local.db.t_partition_metadata VALUES (1, 12.34)")
+      val query = "SELECT _partition FROM local.db.t_partition_metadata"
+      var expected: Seq[Row] = Nil
+      withSQLConf("spark.auron.enabled" -> "false") {
+        expected = sql(query).collect().toSeq
+      }
+      withSQLConf("spark.auron.enabled" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        assert(!df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+      }
+    }
+  }
+
+  test("iceberg _partition scan falls back for row metadata and changelog tasks") {
+    withTable("local.db.t_partition_metadata") {
+      sql(
+        "CREATE TABLE local.db.t_partition_metadata (id INT, p STRING) " +
+          "USING iceberg PARTITIONED BY (p)")
+      sql("INSERT INTO local.db.t_partition_metadata VALUES (1, 'east')")
+      Seq(
+        "SELECT id, _partition, _pos FROM local.db.t_partition_metadata",
+        "SELECT id, _partition FROM local.db.t_partition_metadata.changes").foreach { query =>
+        var expected: Seq[Row] = Nil
+        withSQLConf("spark.auron.enabled" -> "false") {
+          expected = sql(query).collect().toSeq
+        }
+        withSQLConf(
+          "spark.auron.enabled" -> "true",
+          "spark.auron.enable.iceberg.scan" -> "true") {
+          val df = sql(query)
+          checkAnswer(df, expected)
+          assert(!df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+        }
+      }
+    }
+  }
+
   test("iceberg native scan supports data columns with _file and _spec_id metadata columns") {
     withTable("local.db.t4_metadata_mixed") {
       sql("create table local.db.t4_metadata_mixed using iceberg as select 1 as id, 'a' as v")

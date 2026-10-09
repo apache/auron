@@ -150,8 +150,7 @@ case class NativeIcebergTableScanExec(
   private def metadataPartitionValues(file: PartitionedFile): Seq[pb.ScalarValue] =
     partitionSchema.fields.zipWithIndex.map { case (field, index) =>
       NativeConverters
-        .convertExpr(
-          Literal.create(file.partitionValues.get(index, field.dataType), field.dataType))
+        .convertExpr(Literal(file.partitionValues.get(index, field.dataType), field.dataType))
         .getLiteral
     }
 
