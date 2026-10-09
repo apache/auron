@@ -128,11 +128,12 @@ class ShimsImpl extends Shims with Logging {
       val factor = if (conf.contains(Shims.EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY)) {
         executorMemoryOverheadFactor(conf)
       } else if (conf.get("spark.master", "").matches("k8s://.*")) {
-        // Spark's driver propagates the effective JVM/non-JVM default to executors.
         val value = conf.getDouble(
           Shims.KUBERNETES_MEMORY_OVERHEAD_FACTOR_KEY,
           executorMemoryOverheadFactor(conf))
-        require(value >= 0, "Ensure that memory overhead is non-negative")
+        require(
+          value >= 0,
+          s"${Shims.KUBERNETES_MEMORY_OVERHEAD_FACTOR_KEY} must be >= 0, but was $value")
         value
       } else {
         executorMemoryOverheadFactor(conf)

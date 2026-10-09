@@ -116,4 +116,16 @@ class NativeMemoryHelperSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("invalid Kubernetes factor identifies the config and value") {
+    Seq("-0.1", "NaN").foreach { factor =>
+      val sparkConf = conf("k8s://https://example:443")
+        .set("spark.kubernetes.memoryOverheadFactor", factor)
+      val error = intercept[IllegalArgumentException] {
+        shims.executorMemoryOverheadMiB(sparkConf, 8192L)
+      }
+      assert(error.getMessage ==
+        s"requirement failed: spark.kubernetes.memoryOverheadFactor must be >= 0, but was $factor")
+    }
+  }
 }
