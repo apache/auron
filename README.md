@@ -107,12 +107,17 @@ individual value that exceeds Arrow's offset limit.
 ## Native conversion diagnostics in the Spark UI
 
 After configuring Auron as described above, enable the Spark UI and Auron tab
-before starting the application:
+in `conf/spark-defaults.conf` before starting the application. This file accepts
+whitespace-separated keys and values:
 
 ```properties
 spark.ui.enabled true
 spark.auron.ui.enabled true
 ```
+
+Alternatively, add `--conf spark.ui.enabled=true` and
+`--conf spark.auron.ui.enabled=true` to your `spark-submit` or `spark-shell`
+command. The `--conf` option requires the `key=value` format.
 
 The Auron UI option defaults to `true`. Open the application's Spark UI and select
 the **Auron** tab. For direct access, the URL is
