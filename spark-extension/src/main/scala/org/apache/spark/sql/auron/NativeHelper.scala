@@ -54,10 +54,8 @@ object NativeHelper extends Logging {
     if (TaskContext.get() != null) {
       // executor side
       val executorMemoryMiB = conf.get(config.EXECUTOR_MEMORY)
-      val executorMemoryOverheadMiB = conf
-        .get(config.EXECUTOR_MEMORY_OVERHEAD)
-        .getOrElse(
-          math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMiB).toLong, MEMORY_OVERHEAD_MIN))
+      val executorMemoryOverheadMiB =
+        Shims.get.executorMemoryOverheadMiB(conf, executorMemoryMiB)
       (executorMemoryMiB + executorMemoryOverheadMiB) * 1024L * 1024L
     } else {
       // driver side
