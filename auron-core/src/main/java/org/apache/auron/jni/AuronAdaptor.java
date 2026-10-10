@@ -90,16 +90,21 @@ public abstract class AuronAdaptor {
     public abstract String getDirectWriteSpillToDiskFile() throws IOException;
 
     /**
-     * Retrieves the context classloader of the current thread.
+     * Retrieves the per-task state of the current thread, which the native engine treats as opaque
+     * and propagates to every worker thread of a runtime it creates.
      *
-     * @return For Spark, return TaskContext of the current thread.
+     * <p>The shape is the engine's own: Spark returns its {@code TaskContext}, Flink returns state
+     * scoped to the subtask. Whatever is returned here is passed back to
+     * {@link #setThreadContext(Object)} on each of those worker threads, so the two must agree.
+     *
+     * @return the engine's per-task state for the current thread
      */
     public abstract Object getThreadContext();
 
     /**
-     * Sets the context for the current thread.
+     * Installs on the current thread a context previously produced by {@link #getThreadContext()}.
      *
-     * @param context For spark is TaskContext.
+     * @param context the engine's per-task state; for Spark, a {@code TaskContext}
      */
     public abstract void setThreadContext(Object context);
 

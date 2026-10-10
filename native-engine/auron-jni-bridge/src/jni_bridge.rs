@@ -30,17 +30,33 @@ thread_local! {
     pub static THREAD_JNIENV: once_cell::unsync::Lazy<JNIEnv<'static>> =
         once_cell::unsync::Lazy::new(|| {
             let jvm = &JavaClasses::get().jvm;
+
+            // A thread the JVM already knows arrived here from Java and owns a context classloader
+            // that belongs to whatever is currently running on it. A thread created on the native
+            // side has none, and needs one to resolve JVM classes at all.
+            //
+            // Only the second kind may be given the classloader cached in JavaClasses. That value
+            // is captured once per JVM, at the first call into native code, so it belongs to
+            // whichever job ran first. Installing it on a thread that came from Java replaces a
+            // live classloader with one that later jobs have already closed, and nothing restores
+            // the original afterwards.
+            // This is the only place that attaches a thread to the JVM, which is what makes the
+            // test below meaningful: a second attach path elsewhere would attach the thread first,
+            // and every later arrival here would then look like it came from Java.
+            let already_attached = jvm.get_env().is_ok();
             let env = jvm
                 .attach_current_thread_permanently()
                 .expect("JVM cannot attach current thread");
 
-            env.call_static_method_unchecked(
-                JavaClasses::get().cJniBridge.class,
-                JavaClasses::get().cJniBridge.method_setContextClassLoader,
-                JavaClasses::get().cJniBridge.method_setContextClassLoader_ret.clone(),
-                &[jni::sys::jvalue::from(jni::objects::JValue::from(JavaClasses::get().classloader))]
-            )
-            .expect("JVM cannot set ContextClassLoader to current thread");
+            if !already_attached {
+                env.call_static_method_unchecked(
+                    JavaClasses::get().cJniBridge.class,
+                    JavaClasses::get().cJniBridge.method_setContextClassLoader,
+                    JavaClasses::get().cJniBridge.method_setContextClassLoader_ret.clone(),
+                    &[jni::sys::jvalue::from(jni::objects::JValue::from(JavaClasses::get().classloader))]
+                )
+                .expect("JVM cannot set ContextClassLoader to current thread");
+            }
 
             env
         });
