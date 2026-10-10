@@ -20,13 +20,14 @@ import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.RightOuter
 import org.apache.spark.sql.execution.BinaryExecNode
@@ -95,7 +96,6 @@ abstract class NativeShuffledHashJoinBase(
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
 
   // check whether native converting is supported
-  assert(condition.isEmpty || joinType.isInstanceOf[InnerLike], "join condition is not supported")
   nativeSchema
   nativeJoinOn
   nativeJoinType
@@ -109,6 +109,7 @@ abstract class NativeShuffledHashJoinBase(
     val nativeJoinType = this.nativeJoinType
     val nativeJoinFilter = this.nativeJoinFilter
     val nativeBuildSide = this.nativeBuildSide
+    val nativeSchema = this.nativeSchema
 
     val (partitions, partitioner) = if (joinType != RightOuter) {
       (leftRDD.partitions, leftRDD.partitioner)
@@ -116,19 +117,24 @@ abstract class NativeShuffledHashJoinBase(
       (rightRDD.partitions, rightRDD.partitioner)
     }
     val dependencies = Seq(new OneToOneDependency(leftRDD), new OneToOneDependency(rightRDD))
+    val nativePartitions = partitions.map { p =>
+      NativePartition[(Partition, Partition)](
+        p.index,
+        (leftRDD.partitions(p.index), rightRDD.partitions(p.index)))
+    }
 
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      partitions,
+      rddPartitions = nativePartitions.toArray,
       partitioner,
       dependencies,
       leftRDD.isShuffleReadFull && rightRDD.isShuffleReadFull,
       (partition, taskContext) => {
-        val leftPartition = leftRDD.partitions(partition.index)
+        val (leftPartition, rightPartition) =
+          partition.asInstanceOf[NativePartition[(Partition, Partition)]].payload
         val leftChild = leftRDD.nativePlan(leftPartition, taskContext)
 
-        val rightPartition = rightRDD.partitions(partition.index)
         val rightChild = rightRDD.nativePlan(rightPartition, taskContext)
 
         val hashJoinExec = pb.HashJoinExecNode

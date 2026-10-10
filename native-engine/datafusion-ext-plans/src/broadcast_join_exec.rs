@@ -50,7 +50,7 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
 use crate::{
-    broadcast_join_build_hash_map_exec::execute_build_hash_map,
+    broadcast_join_build_hash_map_exec::{execute_build_hash_map, smj_fallback_keys},
     common::{
         column_pruning::ExecuteWithColumnPruning,
         execution_context::{ExecutionContext, WrappedRecordBatchSender},
@@ -71,6 +71,8 @@ use crate::{
                 RProbedRightSemiJoiner,
             },
         },
+        filter_read_columns,
+        join_filter::JoinFilter as PreparedJoinFilter,
         join_hash_map::{JoinHashMap, join_data_schema, join_hash_map_schema},
         join_utils::{JoinType, JoinType::*},
     },
@@ -107,9 +109,6 @@ impl BroadcastJoinExec {
         is_null_aware_anti_join: bool,
         join_filter: Option<JoinFilter>,
     ) -> Result<Self> {
-        if join_filter.is_some() && join_type != JoinType::Inner {
-            df_execution_err!("join filter is only supported for inner hash join")?;
-        }
         Ok(Self {
             left,
             right,
@@ -136,6 +135,24 @@ impl BroadcastJoinExec {
 
     pub fn broadcast_side(&self) -> JoinSide {
         self.broadcast_side
+    }
+
+    // Built hash maps append a private table column, absent from join input rows.
+    fn data_schemas(&self) -> (SchemaRef, SchemaRef) {
+        let left = self.left.schema();
+        let right = self.right.schema();
+        (
+            if self.is_built && self.broadcast_side == JoinSide::Left {
+                join_data_schema(&left)
+            } else {
+                left
+            },
+            if self.is_built && self.broadcast_side == JoinSide::Right {
+                join_data_schema(&right)
+            } else {
+                right
+            },
+        )
     }
 
     fn create_join_params(&self, projection: &[usize]) -> Result<JoinParams> {
@@ -185,6 +202,8 @@ impl BroadcastJoinExec {
             sort_options: vec![SortOptions::default(); self.on.len()],
             projection,
             join_filter: self.join_filter.clone(),
+            residual_filter: None,
+            output_time: Time::new(),
             key_data_types,
             is_null_aware_anti_join: self.is_null_aware_anti_join,
         })
@@ -196,13 +215,26 @@ impl BroadcastJoinExec {
         context: Arc<TaskContext>,
         projection: Vec<usize>,
     ) -> Result<SendableRecordBatchStream> {
-        let join_params = self.create_join_params(&projection)?;
+        let mut join_params = self.create_join_params(&projection)?;
         let exec_ctx = ExecutionContext::new(
             context,
             partition,
             join_params.projection.schema.clone(),
             &self.metrics,
         );
+        if let Some(filter) = &self.join_filter {
+            let (left_schema, right_schema) = self.data_schemas();
+            let expr = filter.physical_expr(left_schema.fields().len())?;
+            let (left_read, right_read) = filter_read_columns(&expr, left_schema.fields().len());
+            join_params.residual_filter = Some(Arc::new(PreparedJoinFilter::try_new_remapped(
+                expr,
+                &left_schema,
+                &right_schema,
+                &left_read,
+                &right_read,
+                exec_ctx.register_timer_metric("post_filter_time"),
+            )?));
+        }
         let left = self.left.clone();
         let right = self.right.clone();
         let broadcast_side = self.broadcast_side;
@@ -426,13 +458,16 @@ async fn execute_join_with_smj_fallback(
         create_record_batch_stream_exec(remoted_stream, exec_ctx.partition_id())?
     };
 
+    let left_keys = smj_fallback_keys(&join_params.left_keys);
+    let right_keys = smj_fallback_keys(&join_params.right_keys);
+
     // create sorted streams, build side is already sorted
     let (left_exec, right_exec) = match broadcast_side {
         JoinSide::Left => (
             built_sorted,
             create_default_ascending_sort_exec(
                 probed_plan,
-                &join_params.right_keys,
+                &right_keys,
                 Some(exec_ctx.execution_plan_metrics().clone()),
                 false, // do not record output metric
             ),
@@ -440,7 +475,7 @@ async fn execute_join_with_smj_fallback(
         JoinSide::Right => (
             create_default_ascending_sort_exec(
                 probed_plan,
-                &join_params.left_keys,
+                &left_keys,
                 Some(exec_ctx.execution_plan_metrics().clone()),
                 false, // do not record output metric
             ),
@@ -454,17 +489,33 @@ async fn execute_join_with_smj_fallback(
         join_params.output_schema,
         left_exec.clone(),
         right_exec.clone(),
-        join_params
-            .left_keys
-            .to_vec()
-            .into_iter()
-            .zip(join_params.right_keys.to_vec())
-            .collect(),
+        left_keys.iter().cloned().zip(right_keys).collect(),
         join_params.join_type,
         join_params.join_filter.clone(),
-        vec![SortOptions::default(); join_params.left_keys.len()],
+        vec![SortOptions::default(); left_keys.len()],
     )?);
-    let mut join_output = smj_exec.execute(exec_ctx.partition_id(), exec_ctx.task_ctx())?;
+    let mut projection = match join_params.join_type {
+        Inner | Left | Right | Full => join_params
+            .projection
+            .left
+            .iter()
+            .copied()
+            .chain(
+                join_params
+                    .projection
+                    .right
+                    .iter()
+                    .map(|&i| i + left_exec.schema().fields().len()),
+            )
+            .collect::<Vec<_>>(),
+        RightSemi | RightAnti => join_params.projection.right.clone(),
+        _ => join_params.projection.left.clone(),
+    };
+    if let Some(pos) = join_params.projection.existence_output {
+        projection.insert(pos, left_exec.schema().fields().len());
+    }
+    let mut join_output =
+        smj_exec.execute_projected(exec_ctx.partition_id(), exec_ctx.task_ctx(), &projection)?;
 
     // send all outputs
     while let Some(batch) = join_output.next().await.transpose()? {

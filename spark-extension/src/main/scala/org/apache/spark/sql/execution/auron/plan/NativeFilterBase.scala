@@ -21,8 +21,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.catalyst.expressions.And
@@ -91,15 +93,18 @@ abstract class NativeFilterBase(condition: Expression, override val child: Spark
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
     val nativeFilterExprs = this.nativeFilterExprs
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      rddPartitions = inputRDD.partitions,
+      rddPartitions = nativePartitions.toArray,
       rddPartitioner = inputRDD.partitioner,
       rddDependencies = new OneToOneDependency(inputRDD) :: Nil,
       inputRDD.isShuffleReadFull,
       (partition, taskContext) => {
-        val inputPartition = inputRDD.partitions(partition.index)
+        val inputPartition = NativePartition.unwrap(partition)
         val nativeFilterExec = FilterExecNode
           .newBuilder()
           .setInput(inputRDD.nativePlan(inputPartition, taskContext))

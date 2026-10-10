@@ -30,6 +30,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
 import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
+import org.apache.spark.sql.auron.join.JoinBuildSides
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
@@ -47,8 +48,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
-import org.apache.spark.sql.catalyst.plans.InnerLike
-import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -598,7 +597,7 @@ object AuronConverters extends Logging {
           JoinBuildRight
         }
 
-      validateNativeInnerJoinCondition(joinType, condition)
+      validateNativeJoinCondition(condition)
       return Shims.get.createNativeShuffledHashJoinExec(
         addRenameColumnsExec(convertToNative(left.children(0))),
         addRenameColumnsExec(convertToNative(right.children(0))),
@@ -627,7 +626,7 @@ object AuronConverters extends Logging {
         "joinType" -> joinType,
         "condition" -> condition))
 
-    validateNativeInnerJoinCondition(joinType, condition)
+    validateNativeJoinCondition(condition)
     Shims.get.createNativeSortMergeJoinExec(
       addRenameColumnsExec(convertToNative(left)),
       addRenameColumnsExec(convertToNative(right)),
@@ -651,7 +650,7 @@ object AuronConverters extends Logging {
         "condition" -> condition,
         "buildSide" -> buildSide))
     try {
-      validateNativeInnerJoinCondition(joinType, condition)
+      validateNativeJoinCondition(condition)
       Shims.get.createNativeShuffledHashJoinExec(
         addRenameColumnsExec(convertToNative(left)),
         addRenameColumnsExec(convertToNative(right)),
@@ -699,19 +698,16 @@ object AuronConverters extends Logging {
     }
   }
 
-  private def validateNativeInnerJoinCondition(
-      joinType: JoinType,
-      condition: Option[Expression]): Unit = {
+  private def validateNativeJoinCondition(condition: Option[Expression]): Unit = {
     condition.foreach { expr =>
       assert(
         SparkAuronConfiguration.ENABLE_NATIVE_JOIN_CONDITION.get(),
         "native join condition is disabled")
-      assert(joinType.isInstanceOf[InnerLike], "join condition is not supported")
-      validateNativeInnerJoinConditionExpr(expr)
+      validateNativeJoinConditionExpr(expr)
     }
   }
 
-  private def validateNativeInnerJoinConditionExpr(condition: Expression): Unit = {
+  private def validateNativeJoinConditionExpr(condition: Expression): Unit = {
     Shims.get.shimVersion match {
       case "spark-3.0" | "spark-3.1" =>
         NativeConverters.convertExprWithFallback(
@@ -742,7 +738,7 @@ object AuronConverters extends Logging {
           "joinType" -> joinType,
           "condition" -> condition,
           "buildSide" -> buildSide))
-      validateNativeInnerJoinCondition(joinType, condition)
+      validateNativeJoinCondition(condition)
 
       // verify build side is native
       buildSide match {
@@ -783,7 +779,11 @@ object AuronConverters extends Logging {
         exec,
         Seq("joinType" -> joinType, "condition" -> condition, "buildSide" -> buildSide))
 
-      assert(condition.isEmpty, "join condition is not supported")
+      // Preserving broadcast-side rows requires global match tracking across probe partitions.
+      require(
+        JoinBuildSides.supportsBroadcastJoin(joinType, buildSide),
+        s"native broadcast join does not support $joinType with $buildSide")
+      validateNativeJoinCondition(condition)
 
       // verify build side is native
       buildSide match {
@@ -801,7 +801,7 @@ object AuronConverters extends Logging {
         Nil,
         Nil,
         joinType,
-        None,
+        condition,
         buildSide,
         isNullAwareAntiJoin = false)
     } catch {

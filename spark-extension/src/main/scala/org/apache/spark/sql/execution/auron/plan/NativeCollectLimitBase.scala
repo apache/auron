@@ -19,7 +19,12 @@ package org.apache.spark.sql.execution.auron.plan
 import scala.collection.mutable
 
 import org.apache.spark.OneToOneDependency
-import org.apache.spark.sql.auron.{NativeHelper, NativeRDD, NativeSupports, Shims}
+import org.apache.spark.Partition
+import org.apache.spark.sql.auron.NativeHelper
+import org.apache.spark.sql.auron.NativePartition
+import org.apache.spark.sql.auron.NativeRDD
+import org.apache.spark.sql.auron.NativeSupports
+import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, UnknownPartitioning}
@@ -56,16 +61,19 @@ abstract class NativeCollectLimitBase(limit: Int, offset: Int, override val chil
     // merge all LocalLimit child partitions into a single partition
     val shuffled = Shims.get.createNativeShuffleExchangeExec(SinglePartition, partial)
     val singlePartitionRDD = NativeHelper.executeNative(shuffled)
+    val nativePartitions = singlePartitionRDD.partitions.map { p =>
+      NativePartition[Partition](p.index, p)
+    }
 
     new NativeRDD(
       sparkContext,
       SparkMetricNode(metrics, singlePartitionRDD.metrics :: Nil),
-      singlePartitionRDD.partitions,
+      rddPartitions = nativePartitions.toArray,
       singlePartitionRDD.partitioner,
       new OneToOneDependency(singlePartitionRDD) :: Nil,
       rddShuffleReadFull = false,
       (partition, taskContext) => {
-        val inputPartition = singlePartitionRDD.partitions(partition.index)
+        val inputPartition = NativePartition.unwrap(partition)
         val nativeLimitExec = LimitExecNode
           .newBuilder()
           .setInput(singlePartitionRDD.nativePlan(inputPartition, taskContext))

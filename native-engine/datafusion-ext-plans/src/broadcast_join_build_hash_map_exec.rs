@@ -31,7 +31,7 @@ use auron_jni_bridge::{
 use datafusion::{
     common::Result,
     execution::{SendableRecordBatchStream, TaskContext},
-    physical_expr::{EquivalenceProperties, Partitioning, PhysicalExprRef},
+    physical_expr::{EquivalenceProperties, Partitioning, PhysicalExprRef, expressions::lit},
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
         execution_plan::{Boundedness, EmissionType},
@@ -135,6 +135,16 @@ impl ExecutionPlan for BroadcastJoinBuildHashMapExec {
     }
 }
 
+/// Use a constant key for keyless joins so SMJ fallback forms one Cartesian
+/// group.
+pub(crate) fn smj_fallback_keys(keys: &[PhysicalExprRef]) -> Vec<PhysicalExprRef> {
+    if keys.is_empty() {
+        vec![lit(0i32)]
+    } else {
+        keys.to_vec()
+    }
+}
+
 pub fn execute_build_hash_map(
     mut input: SendableRecordBatchStream,
     keys: Vec<PhysicalExprRef>,
@@ -205,7 +215,7 @@ pub fn execute_build_hash_map(
             let input_exec = create_record_batch_stream_exec(input, exec_ctx.partition_id())?;
             let sort_exec = create_default_ascending_sort_exec(
                 input_exec,
-                &keys,
+                &smj_fallback_keys(&keys),
                 Some(exec_ctx.execution_plan_metrics().clone()),
                 false, // do not record output metric
             );
@@ -233,4 +243,216 @@ pub fn execute_build_hash_map(
                 .add_duration(build_time.duration());
             Ok(())
         }))
+}
+
+#[cfg(test)]
+mod tests {
+    use arrow::array::Int32Array;
+    use arrow_schema::{Field, Schema};
+    use auron_memmgr::MemManager;
+    use datafusion::{
+        common::{JoinSide, ScalarValue},
+        logical_expr::Operator,
+        physical_expr::expressions::{BinaryExpr, Column},
+        physical_plan::{common::collect, joins::utils::build_join_schema, test::TestMemoryExec},
+        prelude::SessionContext,
+    };
+
+    use super::*;
+    use crate::{
+        broadcast_join_exec::BroadcastJoinExec,
+        common::column_pruning::ExecuteWithColumnPruning,
+        joins::{ColumnIndex, JoinFilter, join_utils::JoinType},
+    };
+
+    fn memory(batch: RecordBatch) -> Result<Arc<dyn ExecutionPlan>> {
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch.clone()]],
+            batch.schema(),
+            None,
+        )?))
+    }
+
+    #[tokio::test]
+    async fn nested_loop_sorted_fallback_preserves_condition_and_projection() -> Result<()> {
+        MemManager::init(1000000);
+        let values = [
+            vec![None, Some(1), Some(3), Some(8)],
+            vec![None, Some(2), Some(4)],
+        ];
+        let batches = values
+            .iter()
+            .enumerate()
+            .map(|(side, values)| {
+                RecordBatch::try_new(
+                    Arc::new(Schema::new(vec![Field::new(
+                        if side == 0 { "l" } else { "r" },
+                        DataType::Int32,
+                        true,
+                    )])),
+                    vec![Arc::new(Int32Array::from(values.clone()))],
+                )
+                .expect("valid test batch")
+            })
+            .collect::<Vec<_>>();
+        for (jt, build_left) in [
+            (JoinType::Inner, false),
+            (JoinType::Inner, true),
+            (JoinType::Left, false),
+            (JoinType::Right, true),
+            (JoinType::LeftSemi, false),
+            (JoinType::LeftAnti, false),
+            (JoinType::Existence, false),
+        ] {
+            let schema = if jt == JoinType::Existence {
+                Arc::new(Schema::new(vec![
+                    batches[0].schema().field(0).clone(),
+                    Field::new("exists", DataType::Boolean, false),
+                ]))
+            } else {
+                Arc::new(
+                    build_join_schema(&batches[0].schema(), &batches[1].schema(), &jt.try_into()?)
+                        .0,
+                )
+            };
+            let mut expected = vec![];
+            let mut right_matched = vec![false; values[1].len()];
+            for &l in &values[0] {
+                let mut matched = false;
+                for (ri, &r) in values[1].iter().enumerate() {
+                    if l.zip(r).is_some_and(|(l, r)| l < r) {
+                        matched = true;
+                        right_matched[ri] = true;
+                        if matches!(jt, JoinType::Inner | JoinType::Left | JoinType::Right) {
+                            expected.push(vec![ScalarValue::Int32(l), ScalarValue::Int32(r)]);
+                        }
+                    }
+                }
+                match jt {
+                    JoinType::Left if !matched => {
+                        expected.push(vec![ScalarValue::Int32(l), ScalarValue::Int32(None)])
+                    }
+                    JoinType::LeftSemi if matched => expected.push(vec![ScalarValue::Int32(l)]),
+                    JoinType::LeftAnti if !matched => expected.push(vec![ScalarValue::Int32(l)]),
+                    JoinType::Existence => expected.push(vec![
+                        ScalarValue::Int32(l),
+                        ScalarValue::Boolean(Some(matched)),
+                    ]),
+                    _ => {}
+                }
+            }
+            if jt == JoinType::Right {
+                for (&r, matched) in values[1].iter().zip(right_matched) {
+                    if !matched {
+                        expected.push(vec![ScalarValue::Int32(None), ScalarValue::Int32(r)]);
+                    }
+                }
+            }
+            let ctx = SessionContext::new().task_ctx();
+            let build_batch = batches[usize::from(!build_left)].clone();
+            // A null table column marks the build stream as sorted for SMJ fallback.
+            let sorted = create_default_ascending_sort_exec(
+                memory(build_batch)?,
+                &smj_fallback_keys(&[]),
+                None,
+                false,
+            );
+            let sorted_batches = collect(sorted.execute(0, ctx.clone())?).await?;
+            let mut spill_batches = vec![];
+            for batch in sorted_batches {
+                let schema = join_hash_map_schema(&batch.schema());
+                let cols = [
+                    batch.columns().to_vec(),
+                    vec![new_null_array(&DataType::Binary, batch.num_rows())],
+                ]
+                .concat();
+                spill_batches.push(RecordBatch::try_new(schema, cols)?);
+            }
+            let spill_schema = spill_batches[0].schema();
+            let built = Arc::new(TestMemoryExec::try_new(
+                &[spill_batches],
+                spill_schema,
+                None,
+            )?) as Arc<dyn ExecutionPlan>;
+            let (left, right) = if build_left {
+                (built, memory(batches[1].clone())?)
+            } else {
+                (memory(batches[0].clone())?, built)
+            };
+            let filter = JoinFilter {
+                expression: Arc::new(BinaryExpr::new(
+                    Arc::new(Column::new("l", 0)),
+                    Operator::Lt,
+                    Arc::new(Column::new("r", 1)),
+                )),
+                column_indices: vec![
+                    ColumnIndex {
+                        side: JoinSide::Left,
+                        index: 0,
+                    },
+                    ColumnIndex {
+                        side: JoinSide::Right,
+                        index: 0,
+                    },
+                ],
+                schema: Arc::new(Schema::new(vec![
+                    batches[0].schema().field(0).clone(),
+                    batches[1].schema().field(0).clone(),
+                ])),
+            };
+            let join = BroadcastJoinExec::try_new(
+                schema.clone(),
+                left,
+                right,
+                vec![],
+                jt,
+                if build_left {
+                    JoinSide::Left
+                } else {
+                    JoinSide::Right
+                },
+                true,
+                None,
+                false,
+                Some(filter),
+            )?;
+            for projection in [
+                (0..schema.fields().len()).collect::<Vec<_>>(),
+                vec![schema.fields().len() - 1],
+                vec![],
+            ] {
+                let output = collect(join.execute_projected(0, ctx.clone(), &projection)?).await?;
+                let mut actual = vec![];
+                for batch in output {
+                    for row in 0..batch.num_rows() {
+                        actual.push(
+                            batch
+                                .columns()
+                                .iter()
+                                .map(|col| {
+                                    ScalarValue::try_from_array(col, row).map(|v| v.to_string())
+                                })
+                                .collect::<Result<Vec<_>>>()?,
+                        );
+                    }
+                }
+                let mut wanted = expected
+                    .iter()
+                    .map(|row| {
+                        projection
+                            .iter()
+                            .map(|&i| row[i].to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                actual.sort();
+                wanted.sort();
+                assert_eq!(
+                    actual, wanted,
+                    "join={jt:?} build_left={build_left} projection={projection:?}"
+                );
+            }
+        }
+        Ok(())
+    }
 }

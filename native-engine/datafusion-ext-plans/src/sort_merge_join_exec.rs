@@ -43,6 +43,7 @@ use crate::{
     cur_forward,
     joins::{
         JoinFilter, JoinParams, JoinProjection,
+        join_filter::JoinFilter as PreparedJoinFilter,
         join_utils::{JoinType, JoinType::*},
         smj::{
             existence_join::ExistenceJoiner,
@@ -77,9 +78,6 @@ impl SortMergeJoinExec {
         join_filter: Option<JoinFilter>,
         sort_options: Vec<SortOptions>,
     ) -> Result<Self> {
-        if join_filter.is_some() && join_type != JoinType::Inner {
-            df_execution_err!("join filter is only supported for inner sort-merge join")?;
-        }
         Ok(Self {
             schema,
             left,
@@ -116,12 +114,18 @@ impl SortMergeJoinExec {
             })
             .collect::<Result<_>>()?;
 
-        let projection = JoinProjection::try_new(
+        let filter_expr = self
+            .join_filter
+            .as_ref()
+            .map(|filter| filter.physical_expr(left_schema.fields().len()))
+            .transpose()?;
+        let projection = JoinProjection::try_new_with_filter(
             self.join_type,
             &self.schema,
             &self.left.schema(),
             &self.right.schema(),
             projection,
+            filter_expr.as_ref(),
         )?;
         Ok(JoinParams {
             join_type: self.join_type,
@@ -134,8 +138,10 @@ impl SortMergeJoinExec {
             sort_options: self.sort_options.clone(),
             projection,
             join_filter: self.join_filter.clone(),
+            residual_filter: None,
             batch_size: batch_size(),
             is_null_aware_anti_join: false,
+            output_time: Time::new(),
         })
     }
 
@@ -145,7 +151,7 @@ impl SortMergeJoinExec {
         context: Arc<TaskContext>,
         projection: Vec<usize>,
     ) -> Result<SendableRecordBatchStream> {
-        let join_params = self
+        let mut join_params = self
             .join_params
             .get_or_try_init(|| self.create_join_params(&projection))?
             .clone();
@@ -156,20 +162,18 @@ impl SortMergeJoinExec {
             &self.metrics,
         );
 
+        if let Some(filter) = &self.join_filter {
+            join_params.residual_filter = Some(Arc::new(PreparedJoinFilter::try_new_remapped(
+                filter.physical_expr(join_params.left_schema.fields().len())?,
+                &join_params.left_schema,
+                &join_params.right_schema,
+                &join_params.projection.left_read,
+                &join_params.projection.right_read,
+                exec_ctx.register_timer_metric("post_filter_time"),
+            )?));
+        }
+        join_params.output_time = exec_ctx.register_timer_metric("output_time");
         let poll_time = Time::new();
-        let left_projection;
-        let right_projection;
-        // The residual join condition may reference columns that are not part
-        // of the final projection. Keep full child rows while matching, then
-        // apply the output projection after the filter has selected rows.
-        let (left_output_projection, right_output_projection) = if join_params.join_filter.is_some()
-        {
-            left_projection = (0..join_params.left_schema.fields().len()).collect::<Vec<_>>();
-            right_projection = (0..join_params.right_schema.fields().len()).collect::<Vec<_>>();
-            (&left_projection, &right_projection)
-        } else {
-            (&join_params.projection.left, &join_params.projection.right)
-        };
         let left = exec_ctx.execute_projected_with_key_rows_output(
             &self.left,
             &join_params
@@ -178,7 +182,7 @@ impl SortMergeJoinExec {
                 .zip(&join_params.sort_options)
                 .map(|(k, s)| PhysicalSortExpr::new(k.clone(), s.clone()))
                 .collect::<Vec<_>>(),
-            left_output_projection,
+            &join_params.projection.left_read,
         )?;
         let right = exec_ctx.execute_projected_with_key_rows_output(
             &self.right,
@@ -188,7 +192,7 @@ impl SortMergeJoinExec {
                 .zip(&join_params.sort_options)
                 .map(|(k, s)| PhysicalSortExpr::new(k.clone(), s.clone()))
                 .collect::<Vec<_>>(),
-            right_output_projection,
+            &join_params.projection.right_read,
         )?;
 
         let left = StreamCursor::try_new(left, poll_time.clone(), &join_params.key_data_types)?;

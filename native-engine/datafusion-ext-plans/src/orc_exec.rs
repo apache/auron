@@ -19,7 +19,9 @@ use std::{any::Any, fmt, fmt::Formatter, pin::Pin, sync::Arc};
 
 use arrow::{datatypes::SchemaRef, error::ArrowError};
 use auron_jni_bridge::{
-    conf, conf::BooleanConf, jni_call_static, jni_new_global_ref, jni_new_string,
+    conf,
+    conf::{BooleanConf, IntConf},
+    jni_call_static, jni_new_global_ref, jni_new_string,
 };
 use bytes::Bytes;
 use datafusion::{
@@ -46,7 +48,7 @@ use datafusion::{
     scalar::ScalarValue,
 };
 use datafusion_datasource::PartitionedFile;
-use datafusion_ext_commons::{batch_size, df_execution_err, hadoop_fs::FsProvider};
+use datafusion_ext_commons::{df_execution_err, hadoop_fs::FsProvider};
 use futures::{FutureExt, StreamExt, future::BoxFuture};
 use futures_util::TryStreamExt;
 use once_cell::sync::OnceCell;
@@ -173,7 +175,7 @@ impl ExecutionPlan for OrcExec {
 
         let opener: Arc<dyn FileOpener> = Arc::new(OrcOpener {
             projection,
-            batch_size: batch_size(),
+            batch_size: conf::ORC_BATCH_SIZE.value()? as usize,
             table_schema: self.base_config.file_schema.clone(),
             fs_provider,
             partition_index: partition,

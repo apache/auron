@@ -250,6 +250,8 @@ abstract class Shims {
 
   def getMakeDateFailOnError(expr: Expression): Boolean
 
+  def getNextDayFailOnError(expr: Expression): Boolean
+
   def getAggregateExpressionFilter(expr: Expression): Option[Expression]
 
   def createFileSegment(file: File, offset: Long, length: Long, numRecords: Long): FileSegment

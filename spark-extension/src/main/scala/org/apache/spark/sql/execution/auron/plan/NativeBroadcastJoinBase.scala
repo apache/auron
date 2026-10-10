@@ -23,13 +23,13 @@ import org.apache.spark.OneToOneDependency
 import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.FullOuter
-import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.LeftOuter
@@ -126,7 +126,6 @@ abstract class NativeBroadcastJoinBase(
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
 
   // check whether native converting is supported
-  assert(condition.isEmpty || joinType.isInstanceOf[InnerLike], "join condition is not supported")
   nativeSchema
   nativeJoinType
   nativeJoinOn
@@ -153,10 +152,14 @@ abstract class NativeBroadcastJoinBase(
         Seq(FullOuter, LeftOuter, LeftSemi, LeftAnti).contains(joinType)
     })
 
+    val nativePartitions = probedRDD.partitions.map { p =>
+      NativePartition[Partition](p.index, p)
+    }
+
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      probedRDD.partitions,
+      rddPartitions = nativePartitions.toArray,
       rddPartitioner = probedRDD.partitioner,
       rddDependencies = new OneToOneDependency(probedRDD) :: Nil,
       probedShuffleReadFull,
@@ -164,14 +167,15 @@ abstract class NativeBroadcastJoinBase(
         val partition0 = new Partition() {
           override def index: Int = 0
         }
+        val probedPartition = NativePartition.unwrap(partition)
         val (leftChild, rightChild) = broadcastSide match {
           case JoinBuildLeft =>
             (
               leftRDD.nativePlan(partition0, context),
-              rightRDD.nativePlan(rightRDD.partitions(partition.index), context))
+              rightRDD.nativePlan(probedPartition, context))
           case JoinBuildRight =>
             (
-              leftRDD.nativePlan(leftRDD.partitions(partition.index), context),
+              leftRDD.nativePlan(probedPartition, context),
               rightRDD.nativePlan(partition0, context))
         }
         val cachedBuildHashMapId = s"bhm_stage${context.stageId}_rdd${builtRDD.id}"

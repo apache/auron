@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.auron.plan
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeHelper
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -54,16 +56,20 @@ abstract class NativeRenameColumnsBase(
   override def doExecuteNative(): NativeRDD = {
     val inputRDD = NativeHelper.executeNative(child)
     val nativeMetrics = SparkMetricNode(metrics, inputRDD.metrics :: Nil)
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
 
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      rddPartitions = inputRDD.partitions,
+      rddPartitions = nativePartitions.toArray,
       rddPartitioner = inputRDD.partitioner,
       rddDependencies = new OneToOneDependency(inputRDD) :: Nil,
       inputRDD.isShuffleReadFull,
       (partition, taskContext) => {
-        val inputPlan = inputRDD.nativePlan(inputRDD.partitions(partition.index), taskContext)
+        val inputPartition = NativePartition.unwrap(partition)
+        val inputPlan = inputRDD.nativePlan(inputPartition, taskContext)
         buildRenameColumnsExec(inputPlan, renamedColumnNames)
       },
       friendlyName = "NativeRDD.RenameColumns")
