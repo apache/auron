@@ -595,9 +595,13 @@ class AuronIcebergIntegrationSuite
             |TBLPROPERTIES ('write.format.default' = '$format')""".stripMargin)
         checkSparkAnswerAndOperator("SELECT id, _partition FROM local.db.t_partition_metadata")
         sql("INSERT INTO local.db.t_partition_metadata VALUES (1), (2)")
-        val df =
-          checkSparkAnswerAndOperator("SELECT id, _partition FROM local.db.t_partition_metadata")
-        checkAnswer(df, Seq(Row(1, null), Row(2, null)))
+        withSQLConf("spark.sql.adaptive.enabled" -> "true") {
+          val df =
+            checkSparkAnswerAndOperator(
+              "SELECT id, _partition FROM local.db.t_partition_metadata")
+          // The helper collects once; this second action must also work with AQE.
+          checkAnswer(df, Seq(Row(1, null), Row(2, null)))
+        }
         checkSparkAnswerAndOperator("SELECT _partition FROM local.db.t_partition_metadata")
       }
     }

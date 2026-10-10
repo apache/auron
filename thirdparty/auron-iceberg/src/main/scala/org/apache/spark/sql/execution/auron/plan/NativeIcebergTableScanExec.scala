@@ -55,6 +55,9 @@ case class NativeIcebergTableScanExec(
     with NativeSupports
     with Logging {
 
+  // Spark 4 AQE needs this link when recreating result stages for repeated actions.
+  Shims.get.setLogicalLink(this, basedScan)
+
   override lazy val metrics: Map[String, SQLMetric] =
     NativeHelper.getNativeFileScanMetrics(sparkContext) ++ Seq(
       "numPartitions" -> SQLMetrics.createMetric(sparkContext, "Native.partitions_read"),
