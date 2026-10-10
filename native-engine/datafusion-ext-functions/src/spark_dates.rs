@@ -298,6 +298,73 @@ pub fn spark_last_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     Ok(ColumnarValue::Array(Arc::new(last_day)))
 }
 
+pub fn spark_trunc(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 2 {
+        return Err(DataFusionError::Execution(
+            "trunc requires two arguments".to_string(),
+        ));
+    }
+    let arrays = ColumnarValue::values_to_arrays(args)?;
+    let dates = cast(&arrays[0], &DataType::Date32)?;
+    let formats = cast(&arrays[1], &DataType::Utf8)?;
+    let dates = as_primitive_array::<Date32Type>(&dates);
+    let formats = formats
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .expect("cast to Utf8 must succeed");
+    let result = dates
+        .iter()
+        .zip(formats.iter())
+        .map(|(days, format)| {
+            let (Some(days), Some(format)) = (days, format) else {
+                return Ok(None);
+            };
+            // Gregorian dates repeat every 400 years; keep Chrono within its range.
+            let date = NaiveDate::from_epoch_days(days.rem_euclid(146097))
+                .expect("date within a Gregorian cycle must be valid");
+            let format = format.to_uppercase();
+            let truncated = match format.as_str() {
+                "YEAR" | "YYYY" | "YY" => date.with_ordinal(1),
+                "QUARTER" => date
+                    .with_day(1)
+                    .and_then(|date| date.with_month(date.month0() / 3 * 3 + 1)),
+                "MONTH" | "MM" | "MON" => date.with_day(1),
+                "WEEK" => {
+                    // Match Spark's getNextDateForDayOfWeek(days - 7, MONDAY),
+                    // including wrapping Int arithmetic at Date32 boundaries.
+                    let start = days.wrapping_sub(7);
+                    return Ok(Some(
+                        start
+                            .wrapping_add(1)
+                            .wrapping_add(3_i32.wrapping_sub(start).rem_euclid(7)),
+                    ));
+                }
+                _ => return Ok(None),
+            }
+            .expect("truncating within a Gregorian cycle must produce a valid date");
+            let offset = truncated.to_epoch_days() - date.to_epoch_days();
+            let truncated = if format == "QUARTER" {
+                // Spark checks the quarter's epoch day, independently of ANSI mode.
+                days.checked_add(offset)
+                    .ok_or_else(|| DataFusionError::Execution("trunc date overflow".to_string()))?
+            } else {
+                days.wrapping_add(offset)
+            };
+            Ok(Some(truncated))
+        })
+        .collect::<Result<Date32Array>>()?;
+    if args
+        .iter()
+        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)))
+    {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(Arc::new(result)))
+    }
+}
+
 pub fn spark_next_day(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 3 {
         return Err(DataFusionError::Execution(
@@ -840,6 +907,122 @@ mod tests {
             None,
         ]));
         assert_eq!(&spark_last_day(&args)?.into_array(1)?, &expected_ret);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_trunc() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let august = date(2019, 8, 4);
+        let cases = [
+            (Some(august), Some("YEAR"), Some(date(2019, 1, 1))),
+            (Some(august), Some("yyyy"), Some(date(2019, 1, 1))),
+            (Some(august), Some("yY"), Some(date(2019, 1, 1))),
+            (Some(august), Some("quarter"), Some(date(2019, 7, 1))),
+            (Some(august), Some("MONTH"), Some(date(2019, 8, 1))),
+            (Some(august), Some("mm"), Some(date(2019, 8, 1))),
+            (Some(august), Some("MoN"), Some(date(2019, 8, 1))),
+            (Some(august), Some("week"), Some(date(2019, 7, 29))),
+            (Some(date(2024, 1, 1)), Some("WEEK"), Some(date(2024, 1, 1))),
+            (
+                Some(date(2023, 1, 1)),
+                Some("WEEK"),
+                Some(date(2022, 12, 26)),
+            ),
+            (Some(date(2024, 2, 29)), Some("MM"), Some(date(2024, 2, 1))),
+            (
+                Some(date(2000, 5, 31)),
+                Some("QUARTER"),
+                Some(date(2000, 4, 1)),
+            ),
+            (
+                Some(date(1969, 12, 31)),
+                Some("quarter"),
+                Some(date(1969, 10, 1)),
+            ),
+            (Some(date(-1, 2, 28)), Some("YEAR"), Some(date(-1, 1, 1))),
+            (Some(august), Some("DAY"), None),
+            (Some(august), Some("DD"), None),
+            (Some(august), Some("HOUR"), None),
+            (Some(august), Some("INVALID"), None),
+            (Some(august), Some(" MONTH "), None),
+            (Some(august), Some(""), None),
+            (None, Some("YEAR"), None),
+            (Some(august), None, None),
+        ];
+        let dates: ArrayRef = Arc::new(Date32Array::from_iter(cases.iter().map(|c| c.0)));
+        let formats: ArrayRef = Arc::new(StringArray::from_iter(cases.iter().map(|c| c.1)));
+        let expected: ArrayRef = Arc::new(Date32Array::from_iter(cases.iter().map(|c| c.2)));
+        let function = crate::create_auron_ext_function("Spark_Trunc", 0)?;
+        for (offset, len) in [(0, cases.len()), (1, cases.len() - 2), (0, 0)] {
+            let result = function(&[
+                ColumnarValue::Array(dates.slice(offset, len)),
+                ColumnarValue::Array(formats.slice(offset, len)),
+            ])?;
+            assert_eq!(&result.into_array(len)?, &expected.slice(offset, len));
+        }
+        assert!(spark_trunc(&[]).is_err());
+        for days in [i32::MIN, i32::MIN + 1] {
+            assert!(
+                function(&[
+                    ColumnarValue::Scalar(ScalarValue::Date32(Some(days))),
+                    ColumnarValue::Scalar(ScalarValue::Utf8(Some("quarter".to_string()))),
+                ])
+                .expect_err("quarter truncation below Date32's minimum must fail")
+                .to_string()
+                .contains("overflow")
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_trunc_scalar_arguments() -> Result<()> {
+        let date = |year, month, day| {
+            NaiveDate::from_ymd_opt(year, month, day)
+                .expect("test date must be valid")
+                .to_epoch_days()
+        };
+        let dates: ArrayRef = Arc::new(Date32Array::from(vec![
+            Some(date(2024, 2, 29)),
+            Some(date(1969, 12, 31)),
+            None,
+        ]));
+        let formats: ArrayRef = Arc::new(StringArray::from(vec![Some("MM"), Some("WEEK"), None]));
+        let scalar_date = ColumnarValue::Scalar(ScalarValue::Date32(Some(date(2024, 2, 29))));
+        for (dates, formats, expected) in [
+            (
+                scalar_date.clone(),
+                ColumnarValue::Array(formats.clone()),
+                vec![Some(date(2024, 2, 1)), Some(date(2024, 2, 26)), None],
+            ),
+            (
+                ColumnarValue::Array(dates),
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some("WEEK".to_string()))),
+                vec![Some(date(2024, 2, 26)), Some(date(1969, 12, 29)), None],
+            ),
+        ] {
+            let expected: ArrayRef = Arc::new(Date32Array::from(expected));
+            assert_eq!(&spark_trunc(&[dates, formats])?.into_array(3)?, &expected);
+        }
+        for (days, format, expected) in [
+            (Some(date(2024, 2, 29)), Some("MM"), Some(date(2024, 2, 1))),
+            (None, Some("YEAR"), None),
+            (Some(0), None, None),
+            (Some(0), Some("DAY"), None),
+        ] {
+            let result = spark_trunc(&[
+                ColumnarValue::Scalar(ScalarValue::Date32(days)),
+                ColumnarValue::Scalar(ScalarValue::Utf8(format.map(str::to_string))),
+            ])?;
+            assert!(
+                matches!(result, ColumnarValue::Scalar(ScalarValue::Date32(value)) if value == expected)
+            );
+        }
         Ok(())
     }
 
