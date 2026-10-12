@@ -224,6 +224,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           if (fallbackEnabled == "true") {
             assertPlanIsNative(df)
             val project = collectFirst(plan) { case p: NativeProjectBase => p }.get
+            assert(project.logicalLink.isDefined)
             val expression = project.expressions.collectFirst { case a: Alias => a.child }.get
             val nativeExpr = NativeConverters.convertExpr(expression)
             assert(nativeExpr.hasSparkUdfWrapperExpr)
