@@ -1,144 +1,145 @@
 == Physical Plan ==
-AdaptiveSparkPlan (135)
+AdaptiveSparkPlan (136)
 +- == Final Plan ==
-   TakeOrderedAndProject (87)
-   +- * Filter (86)
-      +- Window (85)
-         +- NativeSort (84)
-            +- InputAdapter (83)
-               +- AQEShuffleRead (82)
-                  +- ShuffleQueryStage (81), Statistics(X)
-                     +- NativeShuffleExchange (80)
-                        +- NativeProject (79)
-                           +- NativeSortMergeJoin FullOuter (78)
-                              :- NativeSort (40)
-                              :  +- InputAdapter (39)
-                              :     +- AQEShuffleRead (38)
-                              :        +- ShuffleQueryStage (37), Statistics(X)
-                              :           +- NativeShuffleExchange (36)
-                              :              +- ConvertToNative (35)
-                              :                 +- * Project (34)
-                              :                    +- Window (33)
-                              :                       +- NativeSort (32)
-                              :                          +- InputAdapter (31)
-                              :                             +- AQEShuffleRead (30)
-                              :                                +- ShuffleQueryStage (29), Statistics(X)
-                              :                                   +- NativeShuffleExchange (28)
-                              :                                      +- NativeProject (27)
-                              :                                         +- NativeHashAggregate (26)
-                              :                                            +- InputAdapter (25)
-                              :                                               +- AQEShuffleRead (24)
-                              :                                                  +- ShuffleQueryStage (23), Statistics(X)
-                              :                                                     +- NativeShuffleExchange (22)
-                              :                                                        +- NativeHashAggregate (21)
-                              :                                                           +- NativeProject (20)
-                              :                                                              +- NativeProject (19)
-                              :                                                                 +- NativeSortMergeJoin Inner (18)
-                              :                                                                    :- NativeSort (8)
-                              :                                                                    :  +- InputAdapter (7)
-                              :                                                                    :     +- AQEShuffleRead (6)
-                              :                                                                    :        +- ShuffleQueryStage (5), Statistics(X)
-                              :                                                                    :           +- NativeShuffleExchange (4)
-                              :                                                                    :              +- NativeFilter (3)
-                              :                                                                    :                 +- InputAdapter (2)
-                              :                                                                    :                    +- NativeParquetScan  (1)
-                              :                                                                    +- NativeSort (17)
-                              :                                                                       +- InputAdapter (16)
-                              :                                                                          +- AQEShuffleRead (15)
-                              :                                                                             +- ShuffleQueryStage (14), Statistics(X)
-                              :                                                                                +- NativeShuffleExchange (13)
-                              :                                                                                   +- NativeProject (12)
-                              :                                                                                      +- NativeFilter (11)
-                              :                                                                                         +- InputAdapter (10)
-                              :                                                                                            +- NativeParquetScan  (9)
-                              +- NativeSort (77)
-                                 +- InputAdapter (76)
-                                    +- AQEShuffleRead (75)
-                                       +- ShuffleQueryStage (74), Statistics(X)
-                                          +- NativeShuffleExchange (73)
-                                             +- ConvertToNative (72)
-                                                +- * Project (71)
-                                                   +- Window (70)
-                                                      +- NativeSort (69)
-                                                         +- InputAdapter (68)
-                                                            +- AQEShuffleRead (67)
-                                                               +- ShuffleQueryStage (66), Statistics(X)
-                                                                  +- NativeShuffleExchange (65)
-                                                                     +- NativeProject (64)
-                                                                        +- NativeHashAggregate (63)
-                                                                           +- InputAdapter (62)
-                                                                              +- AQEShuffleRead (61)
-                                                                                 +- ShuffleQueryStage (60), Statistics(X)
-                                                                                    +- NativeShuffleExchange (59)
-                                                                                       +- NativeHashAggregate (58)
-                                                                                          +- NativeProject (57)
-                                                                                             +- NativeProject (56)
-                                                                                                +- NativeSortMergeJoin Inner (55)
-                                                                                                   :- NativeSort (48)
-                                                                                                   :  +- InputAdapter (47)
-                                                                                                   :     +- AQEShuffleRead (46)
-                                                                                                   :        +- ShuffleQueryStage (45), Statistics(X)
-                                                                                                   :           +- NativeShuffleExchange (44)
-                                                                                                   :              +- NativeFilter (43)
-                                                                                                   :                 +- InputAdapter (42)
-                                                                                                   :                    +- NativeParquetScan  (41)
-                                                                                                   +- NativeSort (54)
-                                                                                                      +- InputAdapter (53)
-                                                                                                         +- InputAdapter (52)
-                                                                                                            +- AQEShuffleRead (51)
-                                                                                                               +- ShuffleQueryStage (50), Statistics(X)
-                                                                                                                  +- ReusedExchange (49)
+   NativeProject (88)
+   +- NativeTakeOrdered (87)
+      +- NativeFilter (86)
+         +- NativeWindow (85)
+            +- NativeSort (84)
+               +- InputAdapter (83)
+                  +- AQEShuffleRead (82)
+                     +- ShuffleQueryStage (81), Statistics(X)
+                        +- NativeShuffleExchange (80)
+                           +- NativeProject (79)
+                              +- NativeSortMergeJoin FullOuter (78)
+                                 :- NativeSort (40)
+                                 :  +- InputAdapter (39)
+                                 :     +- AQEShuffleRead (38)
+                                 :        +- ShuffleQueryStage (37), Statistics(X)
+                                 :           +- NativeShuffleExchange (36)
+                                 :              +- ConvertToNative (35)
+                                 :                 +- * Project (34)
+                                 :                    +- Window (33)
+                                 :                       +- NativeSort (32)
+                                 :                          +- InputAdapter (31)
+                                 :                             +- AQEShuffleRead (30)
+                                 :                                +- ShuffleQueryStage (29), Statistics(X)
+                                 :                                   +- NativeShuffleExchange (28)
+                                 :                                      +- NativeProject (27)
+                                 :                                         +- NativeHashAggregate (26)
+                                 :                                            +- InputAdapter (25)
+                                 :                                               +- AQEShuffleRead (24)
+                                 :                                                  +- ShuffleQueryStage (23), Statistics(X)
+                                 :                                                     +- NativeShuffleExchange (22)
+                                 :                                                        +- NativeHashAggregate (21)
+                                 :                                                           +- NativeProject (20)
+                                 :                                                              +- NativeProject (19)
+                                 :                                                                 +- NativeSortMergeJoin Inner (18)
+                                 :                                                                    :- NativeSort (8)
+                                 :                                                                    :  +- InputAdapter (7)
+                                 :                                                                    :     +- AQEShuffleRead (6)
+                                 :                                                                    :        +- ShuffleQueryStage (5), Statistics(X)
+                                 :                                                                    :           +- NativeShuffleExchange (4)
+                                 :                                                                    :              +- NativeFilter (3)
+                                 :                                                                    :                 +- InputAdapter (2)
+                                 :                                                                    :                    +- NativeParquetScan  (1)
+                                 :                                                                    +- NativeSort (17)
+                                 :                                                                       +- InputAdapter (16)
+                                 :                                                                          +- AQEShuffleRead (15)
+                                 :                                                                             +- ShuffleQueryStage (14), Statistics(X)
+                                 :                                                                                +- NativeShuffleExchange (13)
+                                 :                                                                                   +- NativeProject (12)
+                                 :                                                                                      +- NativeFilter (11)
+                                 :                                                                                         +- InputAdapter (10)
+                                 :                                                                                            +- NativeParquetScan  (9)
+                                 +- NativeSort (77)
+                                    +- InputAdapter (76)
+                                       +- AQEShuffleRead (75)
+                                          +- ShuffleQueryStage (74), Statistics(X)
+                                             +- NativeShuffleExchange (73)
+                                                +- ConvertToNative (72)
+                                                   +- * Project (71)
+                                                      +- Window (70)
+                                                         +- NativeSort (69)
+                                                            +- InputAdapter (68)
+                                                               +- AQEShuffleRead (67)
+                                                                  +- ShuffleQueryStage (66), Statistics(X)
+                                                                     +- NativeShuffleExchange (65)
+                                                                        +- NativeProject (64)
+                                                                           +- NativeHashAggregate (63)
+                                                                              +- InputAdapter (62)
+                                                                                 +- AQEShuffleRead (61)
+                                                                                    +- ShuffleQueryStage (60), Statistics(X)
+                                                                                       +- NativeShuffleExchange (59)
+                                                                                          +- NativeHashAggregate (58)
+                                                                                             +- NativeProject (57)
+                                                                                                +- NativeProject (56)
+                                                                                                   +- NativeSortMergeJoin Inner (55)
+                                                                                                      :- NativeSort (48)
+                                                                                                      :  +- InputAdapter (47)
+                                                                                                      :     +- AQEShuffleRead (46)
+                                                                                                      :        +- ShuffleQueryStage (45), Statistics(X)
+                                                                                                      :           +- NativeShuffleExchange (44)
+                                                                                                      :              +- NativeFilter (43)
+                                                                                                      :                 +- InputAdapter (42)
+                                                                                                      :                    +- NativeParquetScan  (41)
+                                                                                                      +- NativeSort (54)
+                                                                                                         +- InputAdapter (53)
+                                                                                                            +- InputAdapter (52)
+                                                                                                               +- AQEShuffleRead (51)
+                                                                                                                  +- ShuffleQueryStage (50), Statistics(X)
+                                                                                                                     +- ReusedExchange (49)
 +- == Initial Plan ==
-   TakeOrderedAndProject (134)
-   +- Filter (133)
-      +- Window (132)
-         +- Sort (131)
-            +- Exchange (130)
-               +- Project (129)
-                  +- SortMergeJoin FullOuter (128)
-                     :- Sort (107)
-                     :  +- Exchange (106)
-                     :     +- Project (105)
-                     :        +- Window (104)
-                     :           +- Sort (103)
-                     :              +- Exchange (102)
-                     :                 +- HashAggregate (101)
-                     :                    +- Exchange (100)
-                     :                       +- HashAggregate (99)
-                     :                          +- Project (98)
-                     :                             +- SortMergeJoin Inner (97)
-                     :                                :- Sort (91)
-                     :                                :  +- Exchange (90)
-                     :                                :     +- Filter (89)
-                     :                                :        +- Scan parquet (88)
-                     :                                +- Sort (96)
-                     :                                   +- Exchange (95)
-                     :                                      +- Project (94)
-                     :                                         +- Filter (93)
-                     :                                            +- Scan parquet (92)
-                     +- Sort (127)
-                        +- Exchange (126)
-                           +- Project (125)
-                              +- Window (124)
-                                 +- Sort (123)
-                                    +- Exchange (122)
-                                       +- HashAggregate (121)
-                                          +- Exchange (120)
-                                             +- HashAggregate (119)
-                                                +- Project (118)
-                                                   +- SortMergeJoin Inner (117)
-                                                      :- Sort (111)
-                                                      :  +- Exchange (110)
-                                                      :     +- Filter (109)
-                                                      :        +- Scan parquet (108)
-                                                      +- Sort (116)
-                                                         +- Exchange (115)
-                                                            +- Project (114)
-                                                               +- Filter (113)
-                                                                  +- Scan parquet (112)
+   TakeOrderedAndProject (135)
+   +- Filter (134)
+      +- Window (133)
+         +- Sort (132)
+            +- Exchange (131)
+               +- Project (130)
+                  +- SortMergeJoin FullOuter (129)
+                     :- Sort (108)
+                     :  +- Exchange (107)
+                     :     +- Project (106)
+                     :        +- Window (105)
+                     :           +- Sort (104)
+                     :              +- Exchange (103)
+                     :                 +- HashAggregate (102)
+                     :                    +- Exchange (101)
+                     :                       +- HashAggregate (100)
+                     :                          +- Project (99)
+                     :                             +- SortMergeJoin Inner (98)
+                     :                                :- Sort (92)
+                     :                                :  +- Exchange (91)
+                     :                                :     +- Filter (90)
+                     :                                :        +- Scan parquet (89)
+                     :                                +- Sort (97)
+                     :                                   +- Exchange (96)
+                     :                                      +- Project (95)
+                     :                                         +- Filter (94)
+                     :                                            +- Scan parquet (93)
+                     +- Sort (128)
+                        +- Exchange (127)
+                           +- Project (126)
+                              +- Window (125)
+                                 +- Sort (124)
+                                    +- Exchange (123)
+                                       +- HashAggregate (122)
+                                          +- Exchange (121)
+                                             +- HashAggregate (120)
+                                                +- Project (119)
+                                                   +- SortMergeJoin Inner (118)
+                                                      :- Sort (112)
+                                                      :  +- Exchange (111)
+                                                      :     +- Filter (110)
+                                                      :        +- Scan parquet (109)
+                                                      +- Sort (117)
+                                                         +- Exchange (116)
+                                                            +- Project (115)
+                                                               +- Filter (114)
+                                                                  +- Scan parquet (113)
 
 
-(88) Scan parquet
+(89) Scan parquet
 Output [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_sales_price#3]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
@@ -172,7 +173,7 @@ Input [3]: [#1#1, #2#2, #3#3]
 Input [3]: [#1#1, #2#2, #3#3]
 Arguments: [ws_sold_date_sk#1 ASC NULLS FIRST], false
 
-(92) Scan parquet
+(93) Scan parquet
 Output [3]: [d_date_sk#4, d_date#5, d_month_seq#6]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
@@ -306,7 +307,7 @@ Input [3]: [item_sk#11, d_date#5, cume_sales#13]
 Input [3]: [item_sk#11, d_date#5, cume_sales#13]
 Arguments: [item_sk#11 ASC NULLS FIRST, d_date#5 ASC NULLS FIRST], false
 
-(108) Scan parquet
+(109) Scan parquet
 Output [3]: [ss_sold_date_sk#14, ss_item_sk#15, ss_sales_price#16]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
@@ -487,237 +488,240 @@ Input [4]: [item_sk#25, d_date#26, web_sales#27, store_sales#28]
 Input [4]: [item_sk#25, d_date#26, web_sales#27, store_sales#28]
 Arguments: [item_sk#25 ASC NULLS FIRST, d_date#26 ASC NULLS FIRST], false
 
-(85) Window
+(85) NativeWindow
 Input [4]: [item_sk#25, d_date#26, web_sales#27, store_sales#28]
 Arguments: [max(web_sales#27) windowspecdefinition(item_sk#25, d_date#26 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS web_cumulative#29, max(store_sales#28) windowspecdefinition(item_sk#25, d_date#26 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS store_cumulative#30], [item_sk#25], [d_date#26 ASC NULLS FIRST]
 
-(86) Filter [codegen id : X]
+(86) NativeFilter
 Input [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
 Condition : ((isnotnull(web_cumulative#29) AND isnotnull(store_cumulative#30)) AND (web_cumulative#29 > store_cumulative#30))
 
-(87) TakeOrderedAndProject
+(87) NativeTakeOrdered
 Input [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
-Arguments: X, [item_sk#25 ASC NULLS FIRST, d_date#26 ASC NULLS FIRST], [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
+Arguments: X, X, [item_sk#25 ASC NULLS FIRST, d_date#26 ASC NULLS FIRST]
 
-(88) Scan parquet
+(88) NativeProject
+Output [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
+Input [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
+
+(89) Scan parquet
 Output [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_sales_price#3]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_sales_price:decimal(7,2)>
 
-(89) Filter
+(90) Filter
 Input [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_sales_price#3]
 Condition : (isnotnull(ws_item_sk#2) AND isnotnull(ws_sold_date_sk#1))
 
-(90) Exchange
+(91) Exchange
 Input [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_sales_price#3]
 Arguments: hashpartitioning(ws_sold_date_sk#1, 100), ENSURE_REQUIREMENTS, [plan_id=11]
 
-(91) Sort
+(92) Sort
 Input [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_sales_price#3]
 Arguments: [ws_sold_date_sk#1 ASC NULLS FIRST], false, 0
 
-(92) Scan parquet
+(93) Scan parquet
 Output [3]: [d_date_sk#4, d_date#5, d_month_seq#6]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_month_seq:int>
 
-(93) Filter
+(94) Filter
 Input [3]: [d_date_sk#4, d_date#5, d_month_seq#6]
 Condition : (((isnotnull(d_month_seq#6) AND (d_month_seq#6 >= 1200)) AND (d_month_seq#6 <= 1211)) AND isnotnull(d_date_sk#4))
 
-(94) Project
+(95) Project
 Output [2]: [d_date_sk#4, d_date#5]
 Input [3]: [d_date_sk#4, d_date#5, d_month_seq#6]
 
-(95) Exchange
+(96) Exchange
 Input [2]: [d_date_sk#4, d_date#5]
 Arguments: hashpartitioning(d_date_sk#4, 100), ENSURE_REQUIREMENTS, [plan_id=12]
 
-(96) Sort
+(97) Sort
 Input [2]: [d_date_sk#4, d_date#5]
 Arguments: [d_date_sk#4 ASC NULLS FIRST], false, 0
 
-(97) SortMergeJoin
+(98) SortMergeJoin
 Left keys [1]: [ws_sold_date_sk#1]
 Right keys [1]: [d_date_sk#4]
 Join type: Inner
 Join condition: None
 
-(98) Project
+(99) Project
 Output [3]: [ws_item_sk#2, ws_sales_price#3, d_date#5]
 Input [5]: [ws_sold_date_sk#1, ws_item_sk#2, ws_sales_price#3, d_date_sk#4, d_date#5]
 
-(99) HashAggregate
+(100) HashAggregate
 Input [3]: [ws_item_sk#2, ws_sales_price#3, d_date#5]
 Keys [2]: [ws_item_sk#2, d_date#5]
 Functions [1]: [partial_sum(UnscaledValue(ws_sales_price#3))]
 Aggregate Attributes [1]: [sum#8]
 Results [3]: [ws_item_sk#2, d_date#5, sum#31]
 
-(100) Exchange
+(101) Exchange
 Input [3]: [ws_item_sk#2, d_date#5, sum#31]
 Arguments: hashpartitioning(ws_item_sk#2, d_date#5, 100), ENSURE_REQUIREMENTS, [plan_id=13]
 
-(101) HashAggregate
+(102) HashAggregate
 Input [3]: [ws_item_sk#2, d_date#5, sum#31]
 Keys [2]: [ws_item_sk#2, d_date#5]
 Functions [1]: [sum(UnscaledValue(ws_sales_price#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_sales_price#3))#10]
 Results [4]: [ws_item_sk#2 AS item_sk#11, d_date#5, MakeDecimal(sum(UnscaledValue(ws_sales_price#3))#10,17,2) AS _w0#12, ws_item_sk#2]
 
-(102) Exchange
+(103) Exchange
 Input [4]: [item_sk#11, d_date#5, _w0#12, ws_item_sk#2]
 Arguments: hashpartitioning(ws_item_sk#2, 100), ENSURE_REQUIREMENTS, [plan_id=14]
 
-(103) Sort
+(104) Sort
 Input [4]: [item_sk#11, d_date#5, _w0#12, ws_item_sk#2]
 Arguments: [ws_item_sk#2 ASC NULLS FIRST, d_date#5 ASC NULLS FIRST], false, 0
 
-(104) Window
+(105) Window
 Input [4]: [item_sk#11, d_date#5, _w0#12, ws_item_sk#2]
 Arguments: [sum(_w0#12) windowspecdefinition(ws_item_sk#2, d_date#5 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS cume_sales#13], [ws_item_sk#2], [d_date#5 ASC NULLS FIRST]
 
-(105) Project
+(106) Project
 Output [3]: [item_sk#11, d_date#5, cume_sales#13]
 Input [5]: [item_sk#11, d_date#5, _w0#12, ws_item_sk#2, cume_sales#13]
 
-(106) Exchange
+(107) Exchange
 Input [3]: [item_sk#11, d_date#5, cume_sales#13]
 Arguments: hashpartitioning(item_sk#11, d_date#5, 100), ENSURE_REQUIREMENTS, [plan_id=15]
 
-(107) Sort
+(108) Sort
 Input [3]: [item_sk#11, d_date#5, cume_sales#13]
 Arguments: [item_sk#11 ASC NULLS FIRST, d_date#5 ASC NULLS FIRST], false, 0
 
-(108) Scan parquet
+(109) Scan parquet
 Output [3]: [ss_sold_date_sk#14, ss_item_sk#15, ss_sales_price#16]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_sales_price:decimal(7,2)>
 
-(109) Filter
+(110) Filter
 Input [3]: [ss_sold_date_sk#14, ss_item_sk#15, ss_sales_price#16]
 Condition : (isnotnull(ss_item_sk#15) AND isnotnull(ss_sold_date_sk#14))
 
-(110) Exchange
+(111) Exchange
 Input [3]: [ss_sold_date_sk#14, ss_item_sk#15, ss_sales_price#16]
 Arguments: hashpartitioning(ss_sold_date_sk#14, 100), ENSURE_REQUIREMENTS, [plan_id=16]
 
-(111) Sort
+(112) Sort
 Input [3]: [ss_sold_date_sk#14, ss_item_sk#15, ss_sales_price#16]
 Arguments: [ss_sold_date_sk#14 ASC NULLS FIRST], false, 0
 
-(112) Scan parquet
+(113) Scan parquet
 Output [3]: [d_date_sk#17, d_date#18, d_month_seq#32]
 Batched: true
 Location: InMemoryFileIndex [file:/<warehouse_dir>]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_month_seq:int>
 
-(113) Filter
+(114) Filter
 Input [3]: [d_date_sk#17, d_date#18, d_month_seq#32]
 Condition : (((isnotnull(d_month_seq#32) AND (d_month_seq#32 >= 1200)) AND (d_month_seq#32 <= 1211)) AND isnotnull(d_date_sk#17))
 
-(114) Project
+(115) Project
 Output [2]: [d_date_sk#17, d_date#18]
 Input [3]: [d_date_sk#17, d_date#18, d_month_seq#32]
 
-(115) Exchange
+(116) Exchange
 Input [2]: [d_date_sk#17, d_date#18]
 Arguments: hashpartitioning(d_date_sk#17, 100), ENSURE_REQUIREMENTS, [plan_id=17]
 
-(116) Sort
+(117) Sort
 Input [2]: [d_date_sk#17, d_date#18]
 Arguments: [d_date_sk#17 ASC NULLS FIRST], false, 0
 
-(117) SortMergeJoin
+(118) SortMergeJoin
 Left keys [1]: [ss_sold_date_sk#14]
 Right keys [1]: [d_date_sk#17]
 Join type: Inner
 Join condition: None
 
-(118) Project
+(119) Project
 Output [3]: [ss_item_sk#15, ss_sales_price#16, d_date#18]
 Input [5]: [ss_sold_date_sk#14, ss_item_sk#15, ss_sales_price#16, d_date_sk#17, d_date#18]
 
-(119) HashAggregate
+(120) HashAggregate
 Input [3]: [ss_item_sk#15, ss_sales_price#16, d_date#18]
 Keys [2]: [ss_item_sk#15, d_date#18]
 Functions [1]: [partial_sum(UnscaledValue(ss_sales_price#16))]
 Aggregate Attributes [1]: [sum#20]
 Results [3]: [ss_item_sk#15, d_date#18, sum#33]
 
-(120) Exchange
+(121) Exchange
 Input [3]: [ss_item_sk#15, d_date#18, sum#33]
 Arguments: hashpartitioning(ss_item_sk#15, d_date#18, 100), ENSURE_REQUIREMENTS, [plan_id=18]
 
-(121) HashAggregate
+(122) HashAggregate
 Input [3]: [ss_item_sk#15, d_date#18, sum#33]
 Keys [2]: [ss_item_sk#15, d_date#18]
 Functions [1]: [sum(UnscaledValue(ss_sales_price#16))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#16))#21]
 Results [4]: [ss_item_sk#15 AS item_sk#22, d_date#18, MakeDecimal(sum(UnscaledValue(ss_sales_price#16))#21,17,2) AS _w0#23, ss_item_sk#15]
 
-(122) Exchange
+(123) Exchange
 Input [4]: [item_sk#22, d_date#18, _w0#23, ss_item_sk#15]
 Arguments: hashpartitioning(ss_item_sk#15, 100), ENSURE_REQUIREMENTS, [plan_id=19]
 
-(123) Sort
+(124) Sort
 Input [4]: [item_sk#22, d_date#18, _w0#23, ss_item_sk#15]
 Arguments: [ss_item_sk#15 ASC NULLS FIRST, d_date#18 ASC NULLS FIRST], false, 0
 
-(124) Window
+(125) Window
 Input [4]: [item_sk#22, d_date#18, _w0#23, ss_item_sk#15]
 Arguments: [sum(_w0#23) windowspecdefinition(ss_item_sk#15, d_date#18 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS cume_sales#24], [ss_item_sk#15], [d_date#18 ASC NULLS FIRST]
 
-(125) Project
+(126) Project
 Output [3]: [item_sk#22, d_date#18, cume_sales#24]
 Input [5]: [item_sk#22, d_date#18, _w0#23, ss_item_sk#15, cume_sales#24]
 
-(126) Exchange
+(127) Exchange
 Input [3]: [item_sk#22, d_date#18, cume_sales#24]
 Arguments: hashpartitioning(item_sk#22, d_date#18, 100), ENSURE_REQUIREMENTS, [plan_id=20]
 
-(127) Sort
+(128) Sort
 Input [3]: [item_sk#22, d_date#18, cume_sales#24]
 Arguments: [item_sk#22 ASC NULLS FIRST, d_date#18 ASC NULLS FIRST], false, 0
 
-(128) SortMergeJoin
+(129) SortMergeJoin
 Left keys [2]: [item_sk#11, d_date#5]
 Right keys [2]: [item_sk#22, d_date#18]
 Join type: FullOuter
 Join condition: None
 
-(129) Project
+(130) Project
 Output [4]: [CASE WHEN isnotnull(item_sk#11) THEN item_sk#11 ELSE item_sk#22 END AS item_sk#25, CASE WHEN isnotnull(d_date#5) THEN d_date#5 ELSE d_date#18 END AS d_date#26, cume_sales#13 AS web_sales#27, cume_sales#24 AS store_sales#28]
 Input [6]: [item_sk#11, d_date#5, cume_sales#13, item_sk#22, d_date#18, cume_sales#24]
 
-(130) Exchange
+(131) Exchange
 Input [4]: [item_sk#25, d_date#26, web_sales#27, store_sales#28]
 Arguments: hashpartitioning(item_sk#25, 100), ENSURE_REQUIREMENTS, [plan_id=21]
 
-(131) Sort
+(132) Sort
 Input [4]: [item_sk#25, d_date#26, web_sales#27, store_sales#28]
 Arguments: [item_sk#25 ASC NULLS FIRST, d_date#26 ASC NULLS FIRST], false, 0
 
-(132) Window
+(133) Window
 Input [4]: [item_sk#25, d_date#26, web_sales#27, store_sales#28]
 Arguments: [max(web_sales#27) windowspecdefinition(item_sk#25, d_date#26 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS web_cumulative#29, max(store_sales#28) windowspecdefinition(item_sk#25, d_date#26 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS store_cumulative#30], [item_sk#25], [d_date#26 ASC NULLS FIRST]
 
-(133) Filter
+(134) Filter
 Input [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
 Condition : ((isnotnull(web_cumulative#29) AND isnotnull(store_cumulative#30)) AND (web_cumulative#29 > store_cumulative#30))
 
-(134) TakeOrderedAndProject
+(135) TakeOrderedAndProject
 Input [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
 Arguments: X, [item_sk#25 ASC NULLS FIRST, d_date#26 ASC NULLS FIRST], [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
 
-(135) AdaptiveSparkPlan
+(136) AdaptiveSparkPlan
 Output [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
 Arguments: isFinalPlan=true
-
