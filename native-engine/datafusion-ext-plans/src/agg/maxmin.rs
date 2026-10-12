@@ -116,7 +116,9 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
                          if partial_arg.is_valid(partial_arg_idx) {
                              let partial_value = partial_arg.value(partial_arg_idx);
                              accs.update_value(acc_idx, partial_value, |v| {
-                                 if v.partial_cmp(&partial_value) == Some(P::ORD) {
+                                 // Arrow's comparison orders NaN above ordinary values.
+                                 if v.partial_cmp(&partial_value)
+                                     .unwrap_or_else(|| v.compare(partial_value)) == P::ORD {
                                      v
                                  } else {
                                      partial_value
@@ -213,7 +215,8 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
                     ((acc_idx, merging_acc_idx) in (acc_idx, merging_acc_idx)) => {
                         if let Some(merging_value) = merging_accs.value(merging_acc_idx) {
                             accs.update_value(acc_idx, merging_value, |v| {
-                                if v.partial_cmp(&merging_value) == Some(P::ORD) {
+                                if v.partial_cmp(&merging_value)
+                                    .unwrap_or_else(|| v.compare(merging_value)) == P::ORD {
                                     v
                                 } else {
                                     merging_value
@@ -313,4 +316,87 @@ impl AggMaxMinParams for AggMaxParams {
 impl AggMaxMinParams for AggMinParams {
     const NAME: &'static str = "min";
     const ORD: Ordering = Ordering::Less;
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::{common::ScalarValue, physical_expr::expressions::Column};
+
+    use super::*;
+
+    fn check_min_max_results(
+        input: ArrayRef,
+        expected_min: ScalarValue,
+        expected_max: ScalarValue,
+    ) -> Result<()> {
+        let data_type = input.data_type().clone();
+        let child: PhysicalExprRef = Arc::new(Column::new("v", 0));
+        let min: Arc<dyn Agg> = Arc::new(AggMin::try_new(child.clone(), data_type.clone())?);
+        let max: Arc<dyn Agg> = Arc::new(AggMax::try_new(child, data_type)?);
+        for (agg, expected) in [(min, expected_min), (max, expected_max)] {
+            for merge in [false, true] {
+                let mut acc = agg.create_acc_column(1);
+                for index in 0..input.len() {
+                    let mut partial = agg.create_acc_column(1);
+                    agg.partial_update(
+                        if merge { &mut partial } else { &mut acc },
+                        IdxSelection::Single(0),
+                        &[input.clone()],
+                        IdxSelection::Single(index),
+                    )?;
+                    if merge {
+                        agg.partial_merge(
+                            &mut acc,
+                            IdxSelection::Single(0),
+                            &mut partial,
+                            IdxSelection::Single(0),
+                        )?;
+                    }
+                }
+                let result = agg.final_merge(&mut acc, IdxSelection::Single(0))?;
+                let actual = ScalarValue::try_from_array(result.as_ref(), 0)?;
+                match (&actual, &expected) {
+                    (ScalarValue::Float32(Some(a)), ScalarValue::Float32(Some(e)))
+                        if e.is_nan() =>
+                    {
+                        assert!(a.is_nan());
+                    }
+                    (ScalarValue::Float64(Some(a)), ScalarValue::Float64(Some(e)))
+                        if e.is_nan() =>
+                    {
+                        assert!(a.is_nan());
+                    }
+                    _ => assert_eq!(actual, expected),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn float_min_max_nan_update_and_merge() -> Result<()> {
+        let nan = f64::NAN;
+        let inf = f64::INFINITY;
+        for data_type in [DataType::Float32, DataType::Float64] {
+            for (values, min, max) in [
+                (vec![Some(nan), None, Some(1.0)], Some(1.0), Some(nan)),
+                (vec![Some(1.0), None, Some(nan)], Some(1.0), Some(nan)),
+                (vec![Some(-nan), Some(1.0)], Some(1.0), Some(nan)),
+                (vec![Some(nan), Some(-nan)], Some(nan), Some(nan)),
+                (vec![None, None], None, None),
+                (vec![Some(inf), Some(-inf)], Some(-inf), Some(inf)),
+                (vec![Some(0.0), Some(-0.0)], Some(-0.0), Some(-0.0)),
+            ] {
+                let input = arrow::compute::cast(&Float64Array::from(values), &data_type)?;
+                let expected =
+                    arrow::compute::cast(&Float64Array::from(vec![min, max]), &data_type)?;
+                check_min_max_results(
+                    input,
+                    ScalarValue::try_from_array(expected.as_ref(), 0)?,
+                    ScalarValue::try_from_array(expected.as_ref(), 1)?,
+                )?;
+            }
+        }
+        Ok(())
+    }
 }
