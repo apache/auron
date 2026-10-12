@@ -725,3 +725,4 @@ Arguments: X, [item_sk#25 ASC NULLS FIRST, d_date#26 ASC NULLS FIRST], [item_sk#
 (136) AdaptiveSparkPlan
 Output [6]: [item_sk#25, d_date#26, web_sales#27, store_sales#28, web_cumulative#29, store_cumulative#30]
 Arguments: isFinalPlan=true
+
