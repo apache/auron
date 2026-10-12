@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.functions.{col, split}
 import org.apache.spark.sql.internal.SQLConf
 
-import org.apache.auron.util.AuronTestUtils
+import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
@@ -224,7 +224,10 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           if (fallbackEnabled == "true") {
             assertPlanIsNative(df)
             val project = collectFirst(plan) { case p: NativeProjectBase => p }.get
-            assert(project.logicalLink.isDefined)
+            // Spark 4 AQE requires logical links when recreating result stages.
+            if (SparkVersionUtil.isSparkV40OrGreater) {
+              assert(project.logicalLink.isDefined)
+            }
             val expression = project.expressions.collectFirst { case a: Alias => a.child }.get
             val nativeExpr = NativeConverters.convertExpr(expression)
             assert(nativeExpr.hasSparkUdfWrapperExpr)
