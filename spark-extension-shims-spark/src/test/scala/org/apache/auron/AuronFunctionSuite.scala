@@ -60,6 +60,10 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         checkAnswer(greaterThan, Seq(Row(Double.NaN)))
         assertPlanIsNative(greaterThan)
         checkSparkAnswerAndOperator("select d from t_float_scan where d = 0.0")
+
+        val notIn = sql("select count(*) from t_float_scan where d not in (100.0, 200.0)")
+        checkAnswer(notIn, Seq(Row(3L)))
+        assertPlanIsNative(notIn)
       }
     }
   }
