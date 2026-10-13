@@ -1420,15 +1420,23 @@ object NativeConverters extends Logging {
       right: Expression,
       op: String,
       isPruningExpr: Boolean,
-      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode =
+      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    // Pruning needs a direct column/literal comparison; row filters still normalize floats.
+    val normalizeFloatComparison = !isPruningExpr &&
+      (left.dataType == FloatType || left.dataType == DoubleType) &&
+      (op == "Eq" || op == "NotEq" || op == "Lt" || op == "LtEq" || op == "Gt" ||
+        op == "GtEq" || op == "IsNotDistinctFrom")
+    val lhs = if (normalizeFloatComparison) NormalizeNaNAndZero(left) else left
+    val rhs = if (normalizeFloatComparison) NormalizeNaNAndZero(right) else right
     buildExprNode {
       _.setBinaryExpr(
         pb.PhysicalBinaryExprNode
           .newBuilder()
-          .setL(convertExprWithFallback(left, isPruningExpr, fallback))
-          .setR(convertExprWithFallback(right, isPruningExpr, fallback))
+          .setL(convertExprWithFallback(lhs, isPruningExpr, fallback))
+          .setR(convertExprWithFallback(rhs, isPruningExpr, fallback))
           .setOp(op))
     }
+  }
 
   def buildScalarFunctionNode(
       fn: pb.ScalarFunction,
