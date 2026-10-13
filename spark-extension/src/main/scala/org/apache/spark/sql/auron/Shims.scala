@@ -21,6 +21,7 @@ import java.io.File
 import scala.annotation.nowarn
 
 import org.apache.spark.ShuffleDependency
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
@@ -63,6 +64,10 @@ import org.apache.auron.{protobuf => pb}
 abstract class Shims {
 
   def shimVersion: String
+
+  private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double
+
+  private[auron] def executorMemoryOverheadMiB(conf: SparkConf, executorMemoryMiB: Long): Long
 
   def initExtension(): Unit = {}
 
@@ -312,6 +317,10 @@ abstract class Shims {
 }
 
 object Shims {
+  private[auron] val EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY = "spark.executor.memoryOverheadFactor"
+  private[auron] val KUBERNETES_MEMORY_OVERHEAD_FACTOR_KEY =
+    "spark.kubernetes.memoryOverheadFactor"
+
   lazy val get: Shims = {
     classOf[Shims].getClassLoader
       .loadClass("org.apache.spark.sql.auron.ShimsImpl")

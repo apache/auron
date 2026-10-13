@@ -23,8 +23,9 @@ import scala.annotation.nowarn
 import scala.collection.mutable
 
 import org.apache.commons.lang3.reflect.FieldUtils
-import org.apache.spark.{OneToOneDependency, ShuffleDependency, SparkContext, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{OneToOneDependency, ShuffleDependency, SparkConf, SparkContext, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
@@ -119,6 +120,38 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.spark.ui.AuronBuildInfoEvent
 
 class ShimsImpl extends Shims with Logging {
+
+  override private[auron] def executorMemoryOverheadMiB(
+      conf: SparkConf,
+      executorMemoryMiB: Long): Long = {
+    conf.get(config.EXECUTOR_MEMORY_OVERHEAD).getOrElse {
+      val factor = if (conf.contains(Shims.EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY)) {
+        executorMemoryOverheadFactor(conf)
+      } else if (conf.get("spark.master", "").matches("k8s://.*")) {
+        val value = conf.getDouble(
+          Shims.KUBERNETES_MEMORY_OVERHEAD_FACTOR_KEY,
+          executorMemoryOverheadFactor(conf))
+        require(
+          value >= 0,
+          s"${Shims.KUBERNETES_MEMORY_OVERHEAD_FACTOR_KEY} must be >= 0, but was $value")
+        value
+      } else {
+        executorMemoryOverheadFactor(conf)
+      }
+      math.max((factor * executorMemoryMiB).toLong, 384L)
+    }
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2")
+  override private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double = {
+    val value = conf.getDouble(Shims.EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY, 0.10)
+    require(value > 0, s"${Shims.EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY} must be > 0")
+    value
+  }
+
+  @sparkver("3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double =
+    conf.get(org.apache.spark.internal.config.EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
   @sparkver("3.0")
   override def shimVersion: String = "spark-3.0"
