@@ -41,12 +41,16 @@ impl RowNumberProcessor {
             cur_row_number: 0,
         }
     }
-}
 
-impl WindowFunctionProcessor for RowNumberProcessor {
-    fn process_batch(&mut self, context: &WindowContext, batch: &RecordBatch) -> Result<ArrayRef> {
+    /// Visit each row's rank without materializing a ranking array.
+    /// Normal windows and partial group limits share the same ranking state.
+    pub(crate) fn process_batch_with(
+        &mut self,
+        context: &WindowContext,
+        batch: &RecordBatch,
+        mut emit: impl FnMut(usize, i32),
+    ) -> Result<()> {
         let partition_rows = context.get_partition_rows(batch)?;
-        let mut builder = Int32Builder::with_capacity(batch.num_rows());
 
         for row_idx in 0..batch.num_rows() {
             let same_partition = !context.has_partition() || {
@@ -64,8 +68,16 @@ impl WindowFunctionProcessor for RowNumberProcessor {
             }
 
             self.cur_row_number += 1;
-            builder.append_value(self.cur_row_number);
+            emit(row_idx, self.cur_row_number);
         }
+        Ok(())
+    }
+}
+
+impl WindowFunctionProcessor for RowNumberProcessor {
+    fn process_batch(&mut self, context: &WindowContext, batch: &RecordBatch) -> Result<ArrayRef> {
+        let mut builder = Int32Builder::with_capacity(batch.num_rows());
+        self.process_batch_with(context, batch, |_, rank| builder.append_value(rank))?;
         Ok(Arc::new(builder.finish()))
     }
 }
