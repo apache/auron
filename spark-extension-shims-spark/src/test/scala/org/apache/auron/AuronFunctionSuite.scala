@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions.{col, split}
 import org.apache.spark.sql.internal.SQLConf
 
-import org.apache.auron.util.AuronTestUtils
+import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
@@ -195,17 +195,36 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |from t1
           |""".stripMargin
       checkSparkAnswerAndOperator(query)
+      val signedZerosOverlap = SparkVersionUtil.SPARK_RUNTIME_VERSION >= "4.2"
       checkAnswer(
         sql(query),
         Seq(
           Row(true, true),
-          Row(false, false),
-          Row(false, false),
+          Row(signedZerosOverlap, signedZerosOverlap),
+          Row(signedZerosOverlap, signedZerosOverlap),
           Row(true, true),
           Row(false, false),
           Row(null, null),
           Row(false, false),
           Row(true, true)))
+      checkSparkAnswerAndOperator("""select
+          |  arrays_overlap(a1, array(cast('-0.0' as double))),
+          |  arrays_overlap(array(cast('-0.0' as double)), a2)
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("arrays_overlap function with a user-defined transform falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as
+          |select array(1.0d) as a1, array(2.0d) as a2
+          |""".stripMargin)
+      val df = checkSparkAnswer("select arrays_overlap(transform(a1, x -> x + 1.0d), a2) from t1")
+      checkAnswer(df, Seq(Row(true)))
+      assert(
+        collectFirst(df.queryExecution.executedPlan) { case _: ProjectExec => true }
+          .contains(true))
     }
   }
 
