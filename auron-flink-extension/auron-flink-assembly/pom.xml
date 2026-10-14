@@ -118,6 +118,7 @@
               <excludes>
                 <exclude>org/apache/flink/table/planner/plan/nodes/exec/stream/StreamExecCalc.class</exclude>
                 <exclude>org/apache/flink/table/planner/delegation/DefaultPlannerFactory.class</exclude>
+                <exclude>org/apache/flink/table/planner/plan/nodes/exec/batch/BatchExecCalc.class</exclude>
               </excludes>
             </filter>
           </filters>
