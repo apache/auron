@@ -47,7 +47,7 @@ class AuronDataFrameSuite extends DataFrameSuite with SparkQueryTestsBase {
       assert(getExecutedPlan(df).exists {
         case shuffle: NativeShuffleExchangeExec =>
           shuffle.outputPartitioning == RoundRobinPartitioning(2) &&
-            shuffle.child.output.isEmpty
+          shuffle.child.output.isEmpty
         case _ => false
       })
       checkAnswer(df, Seq(Row(4L)))
