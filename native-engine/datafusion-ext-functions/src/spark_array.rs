@@ -15,7 +15,7 @@
 
 //! Array expressions
 
-use std::sync::Arc;
+use std::{cmp::Ordering, sync::Arc};
 
 use arrow::{
     array::{
@@ -33,6 +33,7 @@ use datafusion_ext_commons::{
     arrow::eq_comparator::{DynEqComparator, make_eq_comparator},
     df_execution_err, downcast_any,
     scalar_value::compacted_scalar_value_from_array,
+    spark_float::spark_float_cmp,
 };
 
 pub fn array_contains(args: &[ColumnarValue]) -> Result<ColumnarValue> {
@@ -59,13 +60,12 @@ pub fn array_contains(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         return df_execution_err!("array_contains requires matching element and value types");
     }
 
-    // Spark treats all NaNs as equal and -0.0 as equal to 0.0.
     macro_rules! float_eq {
         ($array_type:ty) => {{
             let left = downcast_any!(elements, $array_type)?.values().clone();
             let right = downcast_any!(values, $array_type)?.values().clone();
             Box::new(move |i: usize, j: usize| {
-                left[i] == right[j] || (left[i].is_nan() && right[j].is_nan())
+                spark_float_cmp(left[i], right[j]) == Ordering::Equal
             })
         }};
     }
