@@ -1497,10 +1497,7 @@ impl SortedKeysWriter {
                 self.cur_key
                     .reserve(key.len().saturating_sub(self.cur_key.len()));
                 self.cur_key.set_len(key.len());
-                let write_buf = self
-                    .cur_key
-                    .get_unchecked_mut(prefix_len..key.len())
-                    .as_mut();
+                let write_buf = self.cur_key.get_unchecked_mut(prefix_len..key.len());
                 write_buf.copy_from_slice(key.get_unchecked(prefix_len..));
                 write_buf
             };
@@ -1531,9 +1528,7 @@ impl SortedKeysReader {
                 self.cur_key
                     .reserve(new_key_len.saturating_sub(self.cur_key.len()));
                 self.cur_key.set_len(new_key_len);
-                self.cur_key
-                    .get_unchecked_mut(prefix_len..new_key_len)
-                    .as_mut()
+                self.cur_key.get_unchecked_mut(prefix_len..new_key_len)
             };
             r.read_exact(read_buf)?;
         } else {
@@ -1813,9 +1808,9 @@ mod fuzztest {
     /// lineitem.l_orderkey distribution.
     fn build_repeated_i64_batch(num_rows: usize, repeat: usize, seed: u64) -> RecordBatch {
         use rand::{Rng, SeedableRng};
-        let unique_keys = (num_rows + repeat - 1) / repeat;
+        let unique_keys = num_rows.div_ceil(repeat);
         let mut values: Vec<i64> = (0..unique_keys)
-            .flat_map(|v| std::iter::repeat(v as i64).take(repeat))
+            .flat_map(|v| std::iter::repeat_n(v as i64, repeat))
             .take(num_rows)
             .collect();
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);

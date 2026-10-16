@@ -93,15 +93,6 @@ redundant_closure = "allow"
 redundant_locals = "allow"
 redundant_pattern_matching = "allow"
 
-# Code Style/Redundancy (Part 2)
-unnecessary_cast = "allow"
-unnecessary_to_owned = "allow"
-useless_asref = "allow"
-clone_on_copy = "allow"
-unit_arg = "allow"
-manual_repeat_n = "allow"
-manual_div_ceil = "allow"
-
 # Naming/Structure/Remaining
 upper_case_acronyms = "allow"
 module_inception = "allow"

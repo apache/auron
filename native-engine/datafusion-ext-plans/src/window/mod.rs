@@ -102,7 +102,7 @@ impl WindowExpr {
             WindowFunction::CumeDist => Ok(Box::new(CumeDistProcessor::new())),
             WindowFunction::Agg(agg_func) => {
                 let agg = create_agg(
-                    agg_func.clone(),
+                    agg_func,
                     &self.children,
                     &context.input_schema,
                     self.return_type.clone(),
