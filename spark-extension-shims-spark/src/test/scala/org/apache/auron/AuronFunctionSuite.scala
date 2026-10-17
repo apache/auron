@@ -202,6 +202,68 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("trunc function") {
+    withTable("t1") {
+      sql("create table t1(dt date, fmt string) using parquet")
+      sql("""insert into t1 values
+          |  (date'2019-08-04', 'week'),
+          |  (date'2024-01-01', 'yY'),
+          |  (date'2023-01-01', 'WEEK'),
+          |  (date'2024-02-29', 'mm'),
+          |  (date'2000-05-31', 'QUARTER'),
+          |  (date'1969-12-31', 'MoN'),
+          |  (date'2024-02-29', 'DAY'),
+          |  (date'2024-02-29', 'HOUR'),
+          |  (date'2024-02-29', 'INVALID'),
+          |  (date'2024-02-29', ' MONTH '),
+          |  (date'2024-02-29', ''),
+          |  (null, 'YEAR'),
+          |  (date'2024-02-29', null)
+          |""".stripMargin)
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator(
+            "select trunc(dt, fmt), trunc(date'2024-02-29', fmt) from t1")
+          for (fmt <- Seq("YEAR", "YYYY", "yy", "QUARTER", "MONTH", "MM", "mon", "WEEK")) {
+            checkSparkAnswerAndOperator(s"select trunc(dt, '$fmt') from t1")
+          }
+        }
+      }
+    }
+  }
+
+  test("trunc function at Date32 boundaries") {
+    withTable("t1") {
+      sql("create table t1(days int) using parquet")
+      sql("insert into t1 values (-2147483648), (-2147483647), (2147483647), (0), (-1), (null)")
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator("""select
+              |  trunc(date_add(date'1970-01-01', days), 'YEAR'),
+              |  trunc(date_add(date'1970-01-01', days), 'MONTH'),
+              |  trunc(date_add(date'1970-01-01', days), 'WEEK')
+              |from t1""".stripMargin)
+          checkSparkAnswerAndOperator("""select
+              |  trunc(date_add(date'1970-01-01', days), 'QUARTER')
+              |from t1 where days >= 0""".stripMargin)
+          for (enabled <- Seq("false", "true")) {
+            withSQLConf("spark.auron.enable" -> enabled) {
+              val df = sql("""select
+                  |  trunc(date_add(date'1970-01-01', days), 'QUARTER')
+                  |from t1 where days < -2147483646""".stripMargin)
+              val error = intercept[Exception](df.collect())
+              if (enabled == "true") {
+                assertPlanIsNative(df)
+              }
+              assert(
+                allCauseMessages(error).toLowerCase(java.util.Locale.ROOT).contains("overflow"))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("next_day function") {
     withTable("t1") {
       sql("create table t1(start_date date, weekday string) using parquet")
