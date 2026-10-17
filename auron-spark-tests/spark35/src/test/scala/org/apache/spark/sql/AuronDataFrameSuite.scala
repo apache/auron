@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression}
+import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution.auron.plan.{NativeAggExec, NativeShuffleExchangeExec}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
@@ -28,6 +29,30 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestData.TestData2
 
 class AuronDataFrameSuite extends DataFrameSuite with SparkQueryTestsBase {
+
+  testAuron("AURON-2579: count over round-robin repartition with zero-column input") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql("""
+          |SELECT count(*) AS row_count
+          |FROM (
+          |  SELECT /*+ REPARTITION(2) */ *
+          |  FROM (
+          |    SELECT explode(array(
+          |      CAST(0 AS BIGINT), CAST(1 AS BIGINT),
+          |      CAST(2 AS BIGINT), CAST(3 AS BIGINT))) AS id
+          |  ) seed
+          |) inputs
+          |""".stripMargin)
+
+      assert(getExecutedPlan(df).exists {
+        case shuffle: NativeShuffleExchangeExec =>
+          shuffle.outputPartitioning == RoundRobinPartitioning(2) &&
+          shuffle.child.output.isEmpty
+        case _ => false
+      })
+      checkAnswer(df, Seq(Row(4L)))
+    }
+  }
 
   testAuron("repartitionByRange") {
     val partitionNum = 10
