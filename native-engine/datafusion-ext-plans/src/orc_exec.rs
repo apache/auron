@@ -309,7 +309,7 @@ struct OrcFileReaderRef {
 
 impl AsyncChunkReader for OrcFileReaderRef {
     fn len(&mut self) -> BoxFuture<'_, std::io::Result<u64>> {
-        async move { Ok(self.inner.get_meta().size as u64) }.boxed()
+        async move { Ok(self.inner.get_meta().size) }.boxed()
     }
 
     fn get_bytes(
