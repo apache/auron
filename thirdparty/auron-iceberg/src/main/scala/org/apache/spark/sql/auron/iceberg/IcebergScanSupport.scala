@@ -26,6 +26,7 @@ import org.apache.iceberg.{AddedRowsScanTask, ChangelogOperation, ChangelogScanT
 import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
 import org.apache.iceberg.spark.SparkUtil
 import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
+import org.apache.iceberg.types.Types
 import org.apache.iceberg.util.PartitionUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.{NativeConverters, Shims}
@@ -246,7 +247,9 @@ object IcebergScanSupport extends Logging {
     }
 
     val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
-    val nativeTasks = fileTasks.map(task => toNativeScanTask(task, partitionSchema))
+    val partitionType = AuronIcebergSourceUtil.expectedPartitionType(scan.asInstanceOf[AnyRef])
+    val nativeTasks = fileTasks.map(task =>
+      toNativeScanTask(task, partitionSchema, fieldIdsByName, partitionType.orNull))
     withIdentityPartitions(
       IcebergScanPlan(
         nativeTasks,
@@ -436,6 +439,7 @@ object IcebergScanSupport extends Logging {
       isChangelogScan: Boolean): Boolean =
     field.name == MetadataColumns.FILE_PATH.name() ||
       field.name == MetadataColumns.SPEC_ID.name() ||
+      (!isChangelogScan && field.name == MetadataColumns.PARTITION_COLUMN_NAME) ||
       (isChangelogScan && ChangelogMetadataColumnNames.contains(field.name))
 
   private def deletesEmpty(deletes: java.util.List[_]): Boolean =
@@ -719,14 +723,23 @@ object IcebergScanSupport extends Logging {
 
   private def toNativeScanTask(
       task: FileScanTask,
-      partitionSchema: StructType): IcebergNativeScanTask = {
+      partitionSchema: StructType,
+      fieldIdsByName: Map[String, Int],
+      partitionType: Types.StructType): IcebergNativeScanTask = {
     val file = task.file()
+    lazy val constants =
+      PartitionUtil.constantsMap(task, partitionType, SparkUtil.internalToSpark(_, _))
+    val values = partitionSchema.fields.map { field =>
+      CatalystTypeConverters.convertToScala(
+        constants.get(fieldIdsByName(field.name)),
+        field.dataType)
+    }
     IcebergNativeScanTask(
       file.location(),
       task.start(),
       task.length(),
       file.fileSizeInBytes(),
-      metadataPartitionValues(file.location(), file.specId(), None, partitionSchema))
+      values.toSeq)
   }
 
   private def toNativeScanTask(
