@@ -112,6 +112,10 @@ impl WindowExpr {
         }
     }
 
+    pub fn is_rank_like(&self) -> bool {
+        matches!(self.func, WindowFunction::RankLike(_))
+    }
+
     pub fn requires_full_partition(&self) -> bool {
         matches!(
             self.func,
