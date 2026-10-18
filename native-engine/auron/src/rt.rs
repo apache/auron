@@ -105,8 +105,8 @@ impl NativeExecutionRuntime {
         );
 
         let num_worker_threads = {
-            let worker_threads_per_cpu = TOKIO_WORKER_THREADS_PER_CPU.value().unwrap_or(0);
-            let task_cpus = TASK_CPUS.value().unwrap_or(0);
+            let worker_threads_per_cpu = TOKIO_WORKER_THREADS_PER_CPU.value().unwrap_or(1);
+            let task_cpus = TASK_CPUS.value().unwrap_or(1);
             worker_threads_per_cpu * task_cpus
         };
 
