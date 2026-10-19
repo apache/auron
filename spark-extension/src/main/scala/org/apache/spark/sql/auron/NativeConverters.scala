@@ -355,16 +355,19 @@ object NativeConverters extends Logging {
       numInconvertibleChildren match {
         case 0 => convertExprWithFallback(sparkExpr, isPruningExpr = false, fallbackToError)
         case 1 =>
-          val childrenConverted = sparkExpr.mapChildren { child =>
-            try {
-              val converted =
-                convertExprWithFallback(child, isPruningExpr = false, fallbackToError)
-              Shims.get.createNativeExprWrapper(converted, child.dataType, child.nullable)
-            } catch {
-              case _: NotImplementedError =>
-                val fallbacked = convertExpr(child)
-                Shims.get.createNativeExprWrapper(fallbacked, child.dataType, child.nullable)
-            }
+          val childrenConverted = sparkExpr.mapChildren {
+            // Preserve literal parameters when wrapping child expressions.
+            case literal: Literal => literal
+            case child =>
+              try {
+                val converted =
+                  convertExprWithFallback(child, isPruningExpr = false, fallbackToError)
+                Shims.get.createNativeExprWrapper(converted, child.dataType, child.nullable)
+              } catch {
+                case _: NotImplementedError =>
+                  val fallbacked = convertExpr(child)
+                  Shims.get.createNativeExprWrapper(fallbacked, child.dataType, child.nullable)
+              }
           }
           convertExprWithFallback(childrenConverted, isPruningExpr = false, fallbackToError)
         case _ =>
