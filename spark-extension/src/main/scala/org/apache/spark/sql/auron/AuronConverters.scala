@@ -397,7 +397,7 @@ object AuronConverters extends Logging {
   def tryConvert[T <: SparkPlan](exec: T, convert: T => SparkPlan): SparkPlan = {
     try {
       exec.setTagValue(convertibleTag, true)
-      Shims.get.setLogicalLink(convert(exec), exec)
+      convert(exec)
 
     } catch {
       case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
