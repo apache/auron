@@ -23,6 +23,99 @@ import org.apache.auron.util.AuronTestUtils
 
 class AuronWindowSuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQLTestHelper {
 
+  test("min/max/count cumulative ROWS windows") {
+    withSQLConf("spark.auron.enable.window" -> "true", "spark.auron.batchSize" -> "2") {
+      withTable("window_aggregates") {
+        sql("create table window_aggregates(id int, k int, v int) using parquet")
+        sql(
+          "insert into window_aggregates values " +
+            "(1,1,null),(2,1,20),(3,1,10),(4,2,null),(5,2,null),(6,3,7),(7,null,13)")
+        for {
+          partition <- Seq("partition by k", "")
+          value <- Seq("v", "cast(v as double)", "cast(v as decimal(12,2))", "cast(v as string)")
+        } {
+          val frame = s"$partition order by id rows between unbounded preceding and current row"
+          checkSparkAnswer(
+            s"select id,min($value) over ($frame),max($value) over ($frame)," +
+              s"count($value) over ($frame),count(*) over ($frame),count(1) over ($frame) " +
+              "from window_aggregates")
+        }
+      }
+    }
+  }
+
+  for (dataType <- Seq("float", "double")) {
+    test(s"min/max/count cumulative ROWS $dataType NaN ordering") {
+      withSQLConf("spark.auron.enable.window" -> "true", "spark.auron.batchSize" -> "2") {
+        withTable("window_floats") {
+          sql(s"create table window_floats(id int, k int, v $dataType) using parquet")
+          sql("""insert into window_floats values
+              |(1,1,cast('NaN' as double)),(2,1,null),(3,1,1),
+              |(4,2,1),(5,2,null),(6,2,cast('NaN' as double)),
+              |(7,3,cast('-Infinity' as double)),(8,3,cast('Infinity' as double))
+              |""".stripMargin)
+          val frame =
+            "partition by k order by id rows between unbounded preceding and current row"
+          checkSparkAnswer(
+            s"select id,min(v) over ($frame),max(v) over ($frame),count(v) over ($frame) " +
+              "from window_floats")
+          checkSparkAnswer("select k,min(v),max(v),count(v) from window_floats group by k")
+        }
+      }
+    }
+  }
+
+  test("min/max/count cumulative ROWS additional data types") {
+    withSQLConf("spark.auron.enable.window" -> "true", "spark.auron.batchSize" -> "2") {
+      withTable("window_types") {
+        sql("""create table window_types(id int, k int, dec decimal(38,18),
+            |b boolean, d date, bytes binary) using parquet
+            |""".stripMargin)
+        sql("""insert into window_types values
+            |(1,1,null,null,null,null),
+            |(2,1,99999999999999999999.123456789012345678,
+            |true,date '2020-02-01',X'FF'),
+            |(3,1,99999999999999999999.123456789012345679,
+            |false,date '1969-12-31',X'00'),
+            |(4,1,-99999999999999999999.123456789012345678,null,null,null),
+            |(5,2,null,null,null,null)
+            |""".stripMargin)
+        val frame = "partition by k order by id rows between unbounded preceding and current row"
+        for (value <- Seq("dec", "b", "d", "bytes")) {
+          checkSparkAnswer(
+            s"select id,min($value) over ($frame),max($value) over ($frame)," +
+              s"count($value) over ($frame) from window_types")
+        }
+      }
+    }
+  }
+
+  test("aggregate windows with other frames and functions") {
+    withSQLConf("spark.auron.enable.window" -> "true") {
+      withTable("window_fallbacks") {
+        sql("create table window_fallbacks(id int, k int, v int) using parquet")
+        sql("insert into window_fallbacks values (1,1,null),(2,1,4),(3,null,5),(4,2,null)")
+        for {
+          function <- Seq("min(v)", "max(v)", "count(v)")
+          frame <- Seq(
+            "range between unbounded preceding and current row",
+            "rows between 1 preceding and current row",
+            "rows between unbounded preceding and unbounded following")
+        } {
+          checkSparkAnswer(s"select id,$function over (order by id $frame) from window_fallbacks")
+        }
+        val frame = "order by id rows between unbounded preceding and current row"
+        for (columns <- Seq(
+            s"count(null) over ($frame)",
+            s"count(v,k) over ($frame)",
+            s"min(v) over ($frame),sum(v) over ($frame)",
+            s"min(v) over ($frame),avg(v) over ($frame)")) {
+          checkSparkAnswer(s"select id,$columns from window_fallbacks")
+        }
+      }
+    }
+  }
+
   test("lead window function") {
     withSQLConf("spark.auron.enable.window" -> "true") {
       withTable("t1") {
