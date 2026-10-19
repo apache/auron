@@ -1,13 +1,13 @@
 == Physical Plan ==
 AdaptiveSparkPlan (572)
 +- == Final Plan ==
-   CartesianProduct Inner (308)
-   :- CartesianProduct Inner (272)
-   :  :- CartesianProduct Inner (236)
-   :  :  :- CartesianProduct Inner (200)
-   :  :  :  :- CartesianProduct Inner (164)
-   :  :  :  :  :- CartesianProduct Inner (128)
-   :  :  :  :  :  :- CartesianProduct Inner (92)
+   NativeCartesianProduct (308)
+   :- NativeCartesianProduct (272)
+   :  :- NativeCartesianProduct (236)
+   :  :  :- NativeCartesianProduct (200)
+   :  :  :  :- NativeCartesianProduct (164)
+   :  :  :  :  :- NativeCartesianProduct (128)
+   :  :  :  :  :  :- NativeCartesianProduct (92)
    :  :  :  :  :  :  :- NativeProject (56)
    :  :  :  :  :  :  :  +- NativeHashAggregate (55)
    :  :  :  :  :  :  :     +- ShuffleQueryStage (54), Statistics(X)
@@ -964,9 +964,9 @@ Results [1]: [count(1)#23]
 Output [1]: [count(1)#23 AS h9_to_9_30#24]
 Input [1]: [count(1)#23]
 
-(92) CartesianProduct
-Join type: Inner
-Join condition: None
+(92) NativeCartesianProduct
+Left output [1]: [h8_30_to_9#15]
+Right output [1]: [h9_to_9_30#24]
 
 (93) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#25, ss_store_sk#26]
@@ -1115,9 +1115,9 @@ Results [1]: [count(1)#32]
 Output [1]: [count(1)#32 AS h9_30_to_10#33]
 Input [1]: [count(1)#32]
 
-(128) CartesianProduct
-Join type: Inner
-Join condition: None
+(128) NativeCartesianProduct
+Left output [2]: [h8_30_to_9#15, h9_to_9_30#24]
+Right output [1]: [h9_30_to_10#33]
 
 (129) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#34, ss_store_sk#35]
@@ -1266,9 +1266,9 @@ Results [1]: [count(1)#41]
 Output [1]: [count(1)#41 AS h10_to_10_30#42]
 Input [1]: [count(1)#41]
 
-(164) CartesianProduct
-Join type: Inner
-Join condition: None
+(164) NativeCartesianProduct
+Left output [3]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33]
+Right output [1]: [h10_to_10_30#42]
 
 (165) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#43, ss_store_sk#44]
@@ -1417,9 +1417,9 @@ Results [1]: [count(1)#50]
 Output [1]: [count(1)#50 AS h10_30_to_11#51]
 Input [1]: [count(1)#50]
 
-(200) CartesianProduct
-Join type: Inner
-Join condition: None
+(200) NativeCartesianProduct
+Left output [4]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42]
+Right output [1]: [h10_30_to_11#51]
 
 (201) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#52, ss_store_sk#53]
@@ -1568,9 +1568,9 @@ Results [1]: [count(1)#59]
 Output [1]: [count(1)#59 AS h11_to_11_30#60]
 Input [1]: [count(1)#59]
 
-(236) CartesianProduct
-Join type: Inner
-Join condition: None
+(236) NativeCartesianProduct
+Left output [5]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51]
+Right output [1]: [h11_to_11_30#60]
 
 (237) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#61, ss_store_sk#62]
@@ -1719,9 +1719,9 @@ Results [1]: [count(1)#68]
 Output [1]: [count(1)#68 AS h11_30_to_12#69]
 Input [1]: [count(1)#68]
 
-(272) CartesianProduct
-Join type: Inner
-Join condition: None
+(272) NativeCartesianProduct
+Left output [6]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51, h11_to_11_30#60]
+Right output [1]: [h11_30_to_12#69]
 
 (273) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#70, ss_store_sk#71]
@@ -1870,9 +1870,9 @@ Results [1]: [count(1)#77]
 Output [1]: [count(1)#77 AS h12_to_12_30#78]
 Input [1]: [count(1)#77]
 
-(308) CartesianProduct
-Join type: Inner
-Join condition: None
+(308) NativeCartesianProduct
+Left output [7]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51, h11_to_11_30#60, h11_30_to_12#69]
+Right output [1]: [h12_to_12_30#78]
 
 (309) Scan parquet
 Output [3]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3]

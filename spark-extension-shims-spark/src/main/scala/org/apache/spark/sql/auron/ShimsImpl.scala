@@ -272,6 +272,12 @@ class ShimsImpl extends Shims with Logging {
       condition,
       isSkewJoin)
 
+  override def createNativeCartesianProductExec(
+      left: SparkPlan,
+      right: SparkPlan,
+      condition: Option[Expression]): NativeCartesianProductBase =
+    NativeCartesianProductExec(left, right, condition)
+
   override def createNativeShuffledHashJoinExec(
       left: SparkPlan,
       right: SparkPlan,

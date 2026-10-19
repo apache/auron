@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
+import org.apache.spark.sql.execution.joins.CartesianProductExec
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.execution.window.WindowExec
@@ -147,6 +148,8 @@ object AuronConvertStrategy extends Logging {
       case e: BroadcastHashJoinExec if e.children.forall(isNative) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
       case e: BroadcastNestedLoopJoinExec if e.children.forall(isNative) =>
+        e.setTagValue(convertStrategyTag, AlwaysConvert)
+      case e: CartesianProductExec if e.children.exists(isNative) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
       case e: LocalLimitExec if isNative(e.child) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)

@@ -421,6 +421,12 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable BroadcastNestedLoopJoinExec operation conversion to native Auron implementations.")
             .withDefaultValue(true);
 
+    public static final ConfigOption<Boolean> ENABLE_CARTESIAN_PRODUCT = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.cartesianProduct")
+            .withCategory("Operator Supports")
+            .withDescription("Enable CartesianProductExec operation conversion to native Auron implementations.")
+            .withDefaultValue(true);
+
     public static final ConfigOption<Boolean> ENABLE_LOCAL_LIMIT = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.local.limit")
             .withCategory("Operator Supports")
