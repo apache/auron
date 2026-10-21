@@ -356,7 +356,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |select
           |  array_remove(ints, i), array_remove(longs, l),
           |  array_remove(strs, s), array_remove(bools, b),
-          |  array_remove(ints, 3), array_remove(strs, 'a')
+          |  array_remove(ints, 3), array_remove(strs, 'a'),
+          |  array_remove(longs, 2L), array_remove(bools, true)
           |from t1
           |""".stripMargin)
     }
@@ -377,7 +378,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       checkSparkAnswerAndOperator("""
           |select
           |  array_remove(dbls, d), array_remove(flts, f),
-          |  array_remove(dbls, 0.0D), array_remove(dbls, double('NaN'))
+          |  array_remove(dbls, 0.0D), array_remove(dbls, double('NaN')),
+          |  array_remove(flts, float('NaN')), array_remove(flts, float('0.0'))
           |from t1
           |""".stripMargin)
     }
@@ -402,8 +404,14 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |  (array(date'2024-01-03'), null, array(timestamp'2024-01-03 00:00:00'), null,
           |   array(3.30BD), null)
           |""".stripMargin)
-      checkSparkAnswerAndOperator(
-        "select array_remove(dates, dt), array_remove(tss, ts), array_remove(decs, dc) from t1")
+      checkSparkAnswerAndOperator("""
+          |select
+          |  array_remove(dates, dt), array_remove(tss, ts), array_remove(decs, dc),
+          |  array_remove(dates, date'2024-01-02'),
+          |  array_remove(tss, timestamp'2024-01-01 00:00:00'),
+          |  array_remove(decs, cast(1.10BD as decimal(10, 2)))
+          |from t1
+          |""".stripMargin)
     }
   }
 

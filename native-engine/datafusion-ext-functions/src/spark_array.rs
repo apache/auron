@@ -906,12 +906,15 @@ mod test {
             .collect()
     }
 
-    fn f32_rows(result: &ArrayRef) -> Result<Vec<Vec<Option<f32>>>> {
+    fn f32_rows(result: &ArrayRef) -> Result<Vec<Option<Vec<Option<f32>>>>> {
         let lists = downcast_any!(result, ListArray)?;
         (0..lists.len())
             .map(|i| {
+                if lists.is_null(i) {
+                    return Ok(None);
+                }
                 let row = lists.value(i);
-                Ok(downcast_any!(row, Float32Array)?.iter().collect())
+                Ok(Some(downcast_any!(row, Float32Array)?.iter().collect()))
             })
             .collect()
     }
@@ -1052,12 +1055,18 @@ mod test {
         let result = array_remove(&[ColumnarValue::Array(input), ColumnarValue::Array(elements)])?
             .into_array(2)?;
         let rows = f32_rows(&result)?;
-        assert_eq!(rows[0].len(), 2);
-        assert!(rows[0][0].is_some_and(f32::is_nan));
-        assert_eq!(rows[0][1], Some(2.0));
-        assert_eq!(rows[1], vec![Some(-0.0), Some(2.0)]);
+        let first = rows[0].clone().unwrap_or_default();
+        assert_eq!(first.len(), 2);
+        assert!(first[0].is_some_and(f32::is_nan));
+        assert_eq!(first[1], Some(2.0));
+        assert_eq!(rows[1], Some(vec![Some(-0.0), Some(2.0)]));
         // the surviving -0.0 must keep its sign (elements are copied, not normalized)
-        assert!(rows[1][0].is_some_and(f32::is_sign_negative));
+        assert!(
+            rows[1]
+                .as_ref()
+                .and_then(|row| row.first().copied().flatten())
+                .is_some_and(f32::is_sign_negative)
+        );
         Ok(())
     }
 
