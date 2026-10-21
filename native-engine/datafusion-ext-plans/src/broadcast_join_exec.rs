@@ -437,6 +437,9 @@ async fn execute_join_with_smj_fallback(
     exec_ctx: Arc<ExecutionContext>,
     sender: Arc<WrappedRecordBatchSender>,
 ) -> Result<()> {
+    let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
+    let _timer = elapsed_compute.timer();
+
     // remove the table data column from the built stream
     let built_schema = built.schema();
     let built_sorted: Arc<dyn ExecutionPlan> = {
@@ -460,6 +463,8 @@ async fn execute_join_with_smj_fallback(
 
     let left_keys = smj_fallback_keys(&join_params.left_keys);
     let right_keys = smj_fallback_keys(&join_params.right_keys);
+    // Keep sort timing separate from the join's output-wait deductions.
+    let sort_metrics = ExecutionPlanMetricsSet::new();
 
     // create sorted streams, build side is already sorted
     let (left_exec, right_exec) = match broadcast_side {
@@ -468,7 +473,7 @@ async fn execute_join_with_smj_fallback(
             create_default_ascending_sort_exec(
                 probed_plan,
                 &right_keys,
-                Some(exec_ctx.execution_plan_metrics().clone()),
+                Some(sort_metrics.clone()),
                 false, // do not record output metric
             ),
         ),
@@ -476,7 +481,7 @@ async fn execute_join_with_smj_fallback(
             create_default_ascending_sort_exec(
                 probed_plan,
                 &left_keys,
-                Some(exec_ctx.execution_plan_metrics().clone()),
+                Some(sort_metrics.clone()),
                 false, // do not record output metric
             ),
             built_sorted,
@@ -518,34 +523,33 @@ async fn execute_join_with_smj_fallback(
         smj_exec.execute_projected(exec_ctx.partition_id(), exec_ctx.task_ctx(), &projection)?;
 
     // send all outputs
-    while let Some(batch) = join_output.next().await.transpose()? {
+    while let Some(batch) = elapsed_compute
+        .exclude_timer_async(join_output.next())
+        .await
+        .transpose()?
+    {
         sender.send(batch).await;
     }
 
     // elapsed_compute = sort time + merge time
     let smj_time = exec_ctx.register_timer_metric("fallback_sort_merge_join_time");
+    let sort_metrics = sort_metrics.clone_inner();
     smj_time.add_duration(Duration::from_nanos(
-        left_exec
-            .metrics()
-            .and_then(|m| m.elapsed_compute())
-            .unwrap_or(0) as u64,
+        sort_metrics.elapsed_compute().unwrap_or(0) as u64,
     ));
-    smj_time.add_duration(Duration::from_nanos(
-        right_exec
-            .metrics()
-            .and_then(|m| m.elapsed_compute())
-            .unwrap_or(0) as u64,
-    ));
-    smj_time.add_duration(Duration::from_nanos(
+    let merge_time = Duration::from_nanos(
         smj_exec
             .metrics()
             .and_then(|m| m.elapsed_compute())
             .unwrap_or(0) as u64,
-    ));
-    exec_ctx
-        .baseline_metrics()
-        .elapsed_compute()
-        .add_duration(smj_time.duration());
+    );
+    smj_time.add_duration(merge_time);
+    elapsed_compute.add_duration(merge_time);
+    // Publish all sort metrics, including elapsed_compute, without counting it
+    // twice.
+    for metric in sort_metrics.iter() {
+        exec_ctx.execution_plan_metrics().register(metric.clone());
+    }
     Ok(())
 }
 
