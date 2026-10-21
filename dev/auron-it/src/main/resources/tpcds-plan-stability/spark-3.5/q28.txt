@@ -323,6 +323,8 @@ Input [3]: [avg(UnscaledValue(ss_list_price#16))#19, count(ss_list_price#16)#20,
 (33) NativeCartesianProduct
 Left output [3]: [B1_LP#11, B1_CNT#12, B1_CNTD#13]
 Right output [3]: [B2_LP#22, B2_CNT#23, B2_CNTD#24]
+Join type: Inner
+Join condition: None
 
 (121) Scan parquet
 Output [4]: [ss_quantity#25, ss_wholesale_cost#26, ss_list_price#27, ss_coupon_amt#28]
@@ -405,6 +407,8 @@ Input [3]: [avg(UnscaledValue(ss_list_price#27))#30, count(ss_list_price#27)#31,
 (50) NativeCartesianProduct
 Left output [6]: [B1_LP#11, B1_CNT#12, B1_CNTD#13, B2_LP#22, B2_CNT#23, B2_CNTD#24]
 Right output [3]: [B3_LP#33, B3_CNT#34, B3_CNTD#35]
+Join type: Inner
+Join condition: None
 
 (131) Scan parquet
 Output [4]: [ss_quantity#36, ss_wholesale_cost#37, ss_list_price#38, ss_coupon_amt#39]
@@ -487,6 +491,8 @@ Input [3]: [avg(UnscaledValue(ss_list_price#38))#41, count(ss_list_price#38)#42,
 (67) NativeCartesianProduct
 Left output [9]: [B1_LP#11, B1_CNT#12, B1_CNTD#13, B2_LP#22, B2_CNT#23, B2_CNTD#24, B3_LP#33, B3_CNT#34, B3_CNTD#35]
 Right output [3]: [B4_LP#44, B4_CNT#45, B4_CNTD#46]
+Join type: Inner
+Join condition: None
 
 (141) Scan parquet
 Output [4]: [ss_quantity#47, ss_wholesale_cost#48, ss_list_price#49, ss_coupon_amt#50]
@@ -569,6 +575,8 @@ Input [3]: [avg(UnscaledValue(ss_list_price#49))#52, count(ss_list_price#49)#53,
 (84) NativeCartesianProduct
 Left output [12]: [B1_LP#11, B1_CNT#12, B1_CNTD#13, B2_LP#22, B2_CNT#23, B2_CNTD#24, B3_LP#33, B3_CNT#34, B3_CNTD#35, B4_LP#44, B4_CNT#45, B4_CNTD#46]
 Right output [3]: [B5_LP#55, B5_CNT#56, B5_CNTD#57]
+Join type: Inner
+Join condition: None
 
 (151) Scan parquet
 Output [4]: [ss_quantity#58, ss_wholesale_cost#59, ss_list_price#60, ss_coupon_amt#61]
@@ -651,6 +659,8 @@ Input [3]: [avg(UnscaledValue(ss_list_price#60))#63, count(ss_list_price#60)#64,
 (101) NativeCartesianProduct
 Left output [15]: [B1_LP#11, B1_CNT#12, B1_CNTD#13, B2_LP#22, B2_CNT#23, B2_CNTD#24, B3_LP#33, B3_CNT#34, B3_CNTD#35, B4_LP#44, B4_CNT#45, B4_CNTD#46, B5_LP#55, B5_CNT#56, B5_CNTD#57]
 Right output [3]: [B6_LP#66, B6_CNT#67, B6_CNTD#68]
+Join type: Inner
+Join condition: None
 
 (102) Scan parquet
 Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]

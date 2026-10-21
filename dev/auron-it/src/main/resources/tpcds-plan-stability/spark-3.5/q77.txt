@@ -864,6 +864,8 @@ Input [2]: [sum(UnscaledValue(cr_return_amount#49))#56, sum(UnscaledValue(cr_net
 (122) NativeCartesianProduct
 Left output [3]: [cs_call_center_sk#36, sales#46, profit#47]
 Right output [2]: [returns#58, profit_loss#59]
+Join type: Inner
+Join condition: None
 
 (123) NativeProject
 Output [5]: [sales#46, returns#58, (profit#47 - profit_loss#59) AS profit#60, catalog channel AS channel#61, cs_call_center_sk#36 AS id#62]

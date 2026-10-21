@@ -967,6 +967,8 @@ Input [1]: [count(1)#23]
 (92) NativeCartesianProduct
 Left output [1]: [h8_30_to_9#15]
 Right output [1]: [h9_to_9_30#24]
+Join type: Inner
+Join condition: None
 
 (93) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#25, ss_store_sk#26]
@@ -1118,6 +1120,8 @@ Input [1]: [count(1)#32]
 (128) NativeCartesianProduct
 Left output [2]: [h8_30_to_9#15, h9_to_9_30#24]
 Right output [1]: [h9_30_to_10#33]
+Join type: Inner
+Join condition: None
 
 (129) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#34, ss_store_sk#35]
@@ -1269,6 +1273,8 @@ Input [1]: [count(1)#41]
 (164) NativeCartesianProduct
 Left output [3]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33]
 Right output [1]: [h10_to_10_30#42]
+Join type: Inner
+Join condition: None
 
 (165) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#43, ss_store_sk#44]
@@ -1420,6 +1426,8 @@ Input [1]: [count(1)#50]
 (200) NativeCartesianProduct
 Left output [4]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42]
 Right output [1]: [h10_30_to_11#51]
+Join type: Inner
+Join condition: None
 
 (201) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#52, ss_store_sk#53]
@@ -1571,6 +1579,8 @@ Input [1]: [count(1)#59]
 (236) NativeCartesianProduct
 Left output [5]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51]
 Right output [1]: [h11_to_11_30#60]
+Join type: Inner
+Join condition: None
 
 (237) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#61, ss_store_sk#62]
@@ -1722,6 +1732,8 @@ Input [1]: [count(1)#68]
 (272) NativeCartesianProduct
 Left output [6]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51, h11_to_11_30#60]
 Right output [1]: [h11_30_to_12#69]
+Join type: Inner
+Join condition: None
 
 (273) ReusedExchange [Reuses operator id: 20]
 Output [2]: [ss_sold_time_sk#70, ss_store_sk#71]
@@ -1873,6 +1885,8 @@ Input [1]: [count(1)#77]
 (308) NativeCartesianProduct
 Left output [7]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51, h11_to_11_30#60, h11_30_to_12#69]
 Right output [1]: [h12_to_12_30#78]
+Join type: Inner
+Join condition: None
 
 (309) Scan parquet
 Output [3]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3]

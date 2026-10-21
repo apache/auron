@@ -1039,6 +1039,8 @@ Input [1]: [sum(UnscaledValue(ss_ext_sales_price#31))#40]
 (179) NativeCartesianProduct
 Left output [1]: [promotions#26]
 Right output [1]: [total#41]
+Join type: Inner
+Join condition: None
 
 (180) NativeProject
 Output [3]: [promotions#26, total#41, ((cast(promotions#26 as decimal(15,4)) / cast(total#41 as decimal(15,4))) * 100) AS ((CAST(promotions AS DECIMAL(15,4)) / CAST(total AS DECIMAL(15,4))) * 100)#42]

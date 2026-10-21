@@ -26,7 +26,9 @@ import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.execution.BinaryExecNode
+import org.apache.spark.sql.execution.ExplainUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 
@@ -41,6 +43,17 @@ abstract class NativeCartesianProductBase(
     with NativeSupports {
 
   override def output: Seq[Attribute] = left.output ++ right.output
+
+  override def verboseStringWithOperatorId(): String = {
+    val joinCondition = condition.map(_.toString).getOrElse("None")
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Left output", left.output)}
+       |${ExplainUtils.generateFieldString("Right output", right.output)}
+       |${ExplainUtils.generateFieldString("Join type", Inner.toString)}
+       |${ExplainUtils.generateFieldString("Join condition", joinCondition)}
+       |""".stripMargin
+  }
 
   override lazy val metrics: Map[String, SQLMetric] = NativeHelper.getDefaultNativeMetrics(
     sparkContext,
