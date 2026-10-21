@@ -163,7 +163,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test select multiple spark ext functions with the same signature") {
-    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+    withSQLConf(
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t1") {
         sql("create table t1 using parquet as select '2024-12-18' as event_time")
         checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
