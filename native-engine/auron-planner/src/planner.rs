@@ -873,7 +873,7 @@ impl PhysicalPlanner {
                         kafka_scan.kafka_topic.clone(),
                         kafka_scan.kafka_properties_json.clone(),
                         schema,
-                        kafka_scan.batch_size as i32,
+                        kafka_scan.batch_size,
                         kafka_scan.startup_mode,
                         kafka_scan.auron_operator_id.clone(),
                         kafka_scan.data_format,

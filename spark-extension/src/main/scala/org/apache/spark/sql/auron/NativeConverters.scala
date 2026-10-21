@@ -929,6 +929,8 @@ object NativeConverters extends Logging {
         buildScalarFunction(pb.ScalarFunction.Replace, e.children, e.dataType)
       case e: TruncTimestamp =>
         buildScalarFunction(pb.ScalarFunction.DateTrunc, e.children, e.dataType)
+      case e: TruncDate =>
+        buildExtScalarFunction("Spark_Trunc", e.children, e.dataType)
 
       case e: OctetLength =>
         buildScalarFunction(pb.ScalarFunction.OctetLength, e.children, e.dataType)

@@ -23,3 +23,14 @@ import org.apache.spark.scheduler.SparkListenerEvent
 sealed trait AuronEvent extends SparkListenerEvent {}
 
 case class AuronBuildInfoEvent(info: mutable.LinkedHashMap[String, String]) extends AuronEvent {}
+
+/** A conversion snapshot; AQE can publish several snapshots for one SQL execution. */
+case class AuronPlanDiagnosticEvent(
+    executionId: Long,
+    timestamp: Long,
+    physicalPlan: String,
+    nodes: Seq[AuronPlanDiagnosticNode],
+    configurations: Map[String, String])
+    extends AuronEvent
+
+case class AuronPlanDiagnosticNode(id: Int, name: String, status: String, reason: String)

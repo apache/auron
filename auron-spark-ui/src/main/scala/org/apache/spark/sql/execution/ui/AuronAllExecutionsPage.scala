@@ -29,12 +29,26 @@ private[ui] class AuronAllExecutionsPage(parent: AuronSQLTab) extends WebUIPage(
 
   @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
   override def render(request: javax.servlet.http.HttpServletRequest): Seq[Node] = {
-    UIUtils.headerSparkPage(request, "Auron", buildInfoSummary(sqlStore.buildInfo()), parent)
+    UIUtils.headerSparkPage(
+      request,
+      "Auron",
+      buildInfoSummary(sqlStore.buildInfo()) ++ new AuronDiagnosticsView(sqlStore).render(
+        request.getParameter("id"),
+        request.getParameter("page"),
+        UIUtils.prependBaseUri(request, parent.basePath)),
+      parent)
   }
 
   @sparkver("4.0 / 4.1 / 4.2")
   override def render(request: jakarta.servlet.http.HttpServletRequest): Seq[Node] = {
-    UIUtils.headerSparkPage(request, "Auron", buildInfoSummary(sqlStore.buildInfo()), parent)
+    UIUtils.headerSparkPage(
+      request,
+      "Auron",
+      buildInfoSummary(sqlStore.buildInfo()) ++ new AuronDiagnosticsView(sqlStore).render(
+        request.getParameter("id"),
+        request.getParameter("page"),
+        UIUtils.prependBaseUri(request, parent.basePath)),
+      parent)
   }
 
   private def propertyHeader = Seq("Name", "Value")
