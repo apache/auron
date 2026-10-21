@@ -34,3 +34,23 @@ the footer's page encoding statistics; column encodings are
 These files exercise Auron's legacy dictionary extraction path. Modern Rust
 writer output does not enter that path; the test generates plain and modern
 dictionary files as controls.
+
+The scale and row-group fixtures use the same writer with these schemas:
+
+```
+message schema { optional int32 d (DECIMAL(9,0)); }
+message schema { optional int64 d (DECIMAL(18,18)); }
+```
+
+`decimal-int32-scale0-dictionary.parquet` and
+`decimal-int64-scale18-dictionary.parquet` each contain 600 rows in six row
+groups, including 100 nulls. Let `limit = 10^precision - 1`. The first 300 rows
+repeat `[-limit, -100, 0, 100, limit, null]`; the last 300 repeat
+`[-limit, -150, 0, 150, limit, null]`. They were written with row-group size 1
+and page size 1024; parquet-mr checks the row-group size every 100 rows.
+All row groups use the legacy dictionary encoding.
+
+The tests check zero scale, scale equal to precision, both precision limits,
+nulls, and selective pruning across row groups. The unscaled value `1` lies
+within every group's min/max range but is absent from every dictionary, so
+discarding all groups for that value verifies dictionary pruning.
