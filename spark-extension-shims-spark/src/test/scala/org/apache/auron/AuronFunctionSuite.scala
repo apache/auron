@@ -18,9 +18,9 @@ package org.apache.auron
 
 import java.text.SimpleDateFormat
 
-import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.{AuronQueryTest, DataFrame, Row}
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayRemove}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.functions.{col, split}
@@ -314,6 +314,144 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |""".stripMargin)
 
       checkSparkAnswerAndOperator("select flatten(ints), flatten(structs) from t1")
+    }
+  }
+
+  private def arrayRemoveExprs(df: DataFrame): Seq[ArrayRemove] =
+    df.queryExecution.optimizedPlan
+      .flatMap(_.expressions)
+      .flatMap(_.collect { case e: ArrayRemove => e })
+
+  private def assertArrayRemoveNotConverted(df: DataFrame): Unit = {
+    val exprs = arrayRemoveExprs(df)
+    assert(exprs.nonEmpty, "expected an array_remove expression in the plan")
+    exprs.foreach { e =>
+      intercept[NotImplementedError](NativeConverters.convertExpr(e))
+    }
+  }
+
+  test("array_remove function with integral, string and boolean arrays") {
+    withTable("t1") {
+      sql("""
+          |create table t1(
+          |  ints array<int>, i int,
+          |  longs array<bigint>, l bigint,
+          |  strs array<string>, s string,
+          |  bools array<boolean>, b boolean
+          |) using parquet
+          |""".stripMargin)
+      sql("""
+          |insert into t1 values
+          |  (array(1, 2, 3, null, 3), 3, array(1L, 2L, 1L), 1L,
+          |   array('a', 'b', null, 'a'), 'a', array(true, false, null), true),
+          |  (array(3, 3), 3, array(2L), 2L, array('a', 'a'), 'a', array(false, false), false),
+          |  (cast(array() as array<int>), 1, cast(array() as array<bigint>), 1L,
+          |   cast(array() as array<string>), 'x', cast(array() as array<boolean>), true),
+          |  (null, 1, null, 1L, null, 'a', null, true),
+          |  (array(1, null), null, array(1L, null), null, array('a', null), null,
+          |   array(true, null), null),
+          |  (array(4, 5), 6, array(3L), 4L, array('b'), 'c', array(true), false)
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""
+          |select
+          |  array_remove(ints, i), array_remove(longs, l),
+          |  array_remove(strs, s), array_remove(bools, b),
+          |  array_remove(ints, 3), array_remove(strs, 'a')
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_remove function with floating-point arrays") {
+    withTable("t1") {
+      sql(
+        "create table t1(dbls array<double>, d double, flts array<float>, f float) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(double('NaN'), 1.0D, double('NaN'), null), double('NaN'),
+          |   array(float('NaN'), float('1.0')), float('NaN')),
+          |  (array(-0.0D, 0.0D, 1.0D), 0.0D,
+          |   array(float('-0.0'), float('0.0'), float('1.0')), float('-0.0')),
+          |  (array(1.0D, 2.0D), double('NaN'), array(float('2.0')), float('0.0'))
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""
+          |select
+          |  array_remove(dbls, d), array_remove(flts, f),
+          |  array_remove(dbls, 0.0D), array_remove(dbls, double('NaN'))
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_remove function with date, timestamp and decimal arrays") {
+    withTable("t1") {
+      sql("""
+          |create table t1(
+          |  dates array<date>, dt date,
+          |  tss array<timestamp>, ts timestamp,
+          |  decs array<decimal(10, 2)>, dc decimal(10, 2)
+          |) using parquet
+          |""".stripMargin)
+      sql("""
+          |insert into t1 values
+          |  (array(date'2024-01-01', date'2024-01-02', null), date'2024-01-01',
+          |   array(timestamp'2024-01-01 00:00:00', timestamp'2024-01-02 12:30:00'),
+          |   timestamp'2024-01-02 12:30:00',
+          |   array(1.10BD, 2.20BD, 1.10BD), 1.10BD),
+          |  (null, date'2024-01-01', null, timestamp'2024-01-01 00:00:00', null, 1.10BD),
+          |  (array(date'2024-01-03'), null, array(timestamp'2024-01-03 00:00:00'), null,
+          |   array(3.30BD), null)
+          |""".stripMargin)
+      checkSparkAnswerAndOperator(
+        "select array_remove(dates, dt), array_remove(tss, ts), array_remove(decs, dc) from t1")
+    }
+  }
+
+  test("array_remove function with literal array and type widening") {
+    withTable("t1") {
+      sql("create table t1(ints array<int>, i int, l bigint) using parquet")
+      sql("""
+          |insert into t1 values
+          |  (array(1, 2, 3), 3, 2L),
+          |  (array(1, null), null, null),
+          |  (null, 7, 1L)
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("select array_remove(array(1, 2, 3, null, 3), i) from t1")
+      checkSparkAnswerAndOperator("select array_remove(ints, l) from t1")
+    }
+  }
+
+  test("array_remove function with nested element types falls back to Spark") {
+    withTable("t1") {
+      sql("""
+          |create table t1 using parquet as
+          |select
+          |  array(array(1), array(2), null) as nested,
+          |  array(named_struct('x', 1), named_struct('x', 2)) as structs
+          |""".stripMargin)
+      Seq(
+        "select array_remove(nested, array(1)) from t1",
+        "select array_remove(structs, named_struct('x', 1)) from t1").foreach { query =>
+        val df = checkSparkAnswerAndOperator(() => sql(query), requireNative = false)
+        assertArrayRemoveNotConverted(df)
+      }
+    }
+  }
+
+  test("array_remove function with collated strings falls back to Spark") {
+    if (SparkVersionUtil.isSparkV40OrGreater) {
+      withTable("t1") {
+        sql("""
+            |create table t1(strs array<string collate UTF8_LCASE>, s string collate UTF8_LCASE)
+            |using parquet
+            |""".stripMargin)
+        sql("insert into t1 values (array('A', 'a', 'b'), 'a')")
+        val df = checkSparkAnswerAndOperator(
+          () => sql("select array_remove(strs, s) from t1"),
+          requireNative = false)
+        checkAnswer(df, Seq(Row(Seq("b"))))
+        assertArrayRemoveNotConverted(df)
+      }
     }
   }
 

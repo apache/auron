@@ -1189,6 +1189,10 @@ object NativeConverters extends Logging {
           if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
         buildExtScalarFunction("Spark_ArrayContains", e.children, e.dataType)
       case e: Flatten => buildExtScalarFunction("Spark_ArrayFlatten", e.children, e.dataType)
+      // nested and unsupported element types keep the Spark fallback
+      case e: ArrayRemove
+          if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
+        buildExtScalarFunction("Spark_ArrayRemove", e.children, e.dataType)
       case e: MapFromEntries =>
         buildExtScalarFunction(
           "Spark_MapFromEntries",
