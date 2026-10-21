@@ -300,19 +300,142 @@ pub fn array_flatten(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     )?)))
 }
 
+/// Removes every element equal to `element` from each list, following Spark's
+/// `array_remove`: a null list or null element yields null, null list entries
+/// are kept, and floats treat NaN as equal to NaN and -0.0 as equal to 0.0.
+pub fn array_remove(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 2 {
+        return df_execution_err!(
+            "array_remove requires exactly 2 arguments, got {}",
+            args.len()
+        );
+    }
+    let list_is_scalar = matches!(args[0], ColumnarValue::Scalar(_));
+    let value_is_scalar = matches!(args[1], ColumnarValue::Scalar(_));
+    // Scalars stay a single row so scalar list values are never copied per input
+    // row.
+    let lists = columnar_value_to_list_array(&args[0])?;
+    let values = args[1].to_array(1)?;
+    let num_rows = match (list_is_scalar, value_is_scalar) {
+        (true, _) => values.len(),
+        (false, true) => lists.len(),
+        (false, false) if lists.len() == values.len() => lists.len(),
+        (false, false) => {
+            return df_execution_err!(
+                "array_remove requires matching array lengths, got {} and {}",
+                lists.len(),
+                values.len()
+            );
+        }
+    };
+    let DataType::List(field) = lists.data_type() else {
+        return df_execution_err!(
+            "array_remove only supports list, got {:?}",
+            lists.data_type()
+        );
+    };
+    let field = Arc::clone(field);
+
+    let elements = lists.values();
+    let element_nulls = elements.logical_nulls();
+    let value_nulls = values.logical_nulls();
+
+    macro_rules! float_eq {
+        ($array_type:ty) => {{
+            let left = downcast_any!(elements, $array_type)?.values().clone();
+            let right = downcast_any!(values, $array_type)?.values().clone();
+            Box::new(move |i: usize, j: usize| {
+                spark_float_cmp(left[i], right[j]) == Ordering::Equal
+            }) as DynEqComparator
+        }};
+    }
+    let equals: DynEqComparator = match (elements.data_type(), values.data_type()) {
+        // all-null inputs never reach the comparator
+        (DataType::Null, _) | (_, DataType::Null) => Box::new(|_, _| false),
+        (left, right) if left != right => {
+            return df_execution_err!(
+                "array_remove requires matching element and value types, got {left:?} and {right:?}"
+            );
+        }
+        (DataType::Float32, _) => float_eq!(Float32Array),
+        (DataType::Float64, _) => float_eq!(Float64Array),
+        _ => make_eq_comparator(elements.as_ref(), values.as_ref(), true)?,
+    };
+
+    let next_offset = |len: usize| -> Result<i32> {
+        i32::try_from(len)
+            .or_else(|_| df_execution_err!("array_remove result exceeds the maximum list size"))
+    };
+    let elements_data = elements.to_data();
+    let mut kept = MutableArrayData::new(vec![&elements_data], false, elements.len());
+    let mut offsets = Vec::with_capacity(num_rows + 1);
+    offsets.push(0i32);
+    let mut valids = Vec::with_capacity(num_rows);
+    let list_offsets = lists.value_offsets();
+
+    for row in 0..num_rows {
+        let list_row = if list_is_scalar { 0 } else { row };
+        let value_row = if value_is_scalar { 0 } else { row };
+        let value_is_null = value_nulls
+            .as_ref()
+            .is_some_and(|nulls| nulls.is_null(value_row));
+        if lists.is_null(list_row) || value_is_null {
+            valids.push(false);
+            offsets.push(next_offset(kept.len())?);
+            continue;
+        }
+
+        let start = list_offsets[list_row] as usize;
+        let end = list_offsets[list_row + 1] as usize;
+        // copy maximal runs of kept elements with one extend per run
+        let mut run_start = start;
+        for index in start..end {
+            let element_is_null = element_nulls
+                .as_ref()
+                .is_some_and(|nulls| nulls.is_null(index));
+            if !element_is_null && equals(index, value_row) {
+                if run_start < index {
+                    kept.extend(0, run_start, index);
+                }
+                run_start = index + 1;
+            }
+        }
+        if run_start < end {
+            kept.extend(0, run_start, end);
+        }
+        valids.push(true);
+        offsets.push(next_offset(kept.len())?);
+    }
+
+    let result: ArrayRef = Arc::new(ListArray::try_new(
+        field,
+        OffsetBuffer::new(ScalarBuffer::from(offsets)),
+        make_array(kept.freeze()),
+        Some(NullBuffer::from(valids)),
+    )?);
+    if list_is_scalar && value_is_scalar {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(result))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::{error::Error, sync::Arc};
 
     use arrow::{
         array::{
-            ArrayRef, BooleanArray, Float32Array, Float64Array, Int32Array, ListArray, NullArray,
-            StringArray,
+            ArrayRef, BooleanArray, Float32Array, Float64Array, Int32Array, ListArray, ListBuilder,
+            NullArray, StringArray, StringBuilder,
         },
         buffer::{NullBuffer, OffsetBuffer, ScalarBuffer},
         datatypes::{Field, Float32Type, Float64Type, Int32Type},
     };
     use datafusion::common::ScalarValue;
+    use datafusion_ext_commons::downcast_any;
 
     use super::*;
 
@@ -763,6 +886,276 @@ mod test {
             Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(expected));
 
         assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    fn int_lists(rows: Vec<Option<Vec<Option<i32>>>>) -> ArrayRef {
+        Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(rows))
+    }
+
+    fn f64_rows(result: &ArrayRef) -> Result<Vec<Option<Vec<Option<f64>>>>> {
+        let lists = downcast_any!(result, ListArray)?;
+        (0..lists.len())
+            .map(|i| {
+                if lists.is_null(i) {
+                    return Ok(None);
+                }
+                let row = lists.value(i);
+                Ok(Some(downcast_any!(row, Float64Array)?.iter().collect()))
+            })
+            .collect()
+    }
+
+    fn f32_rows(result: &ArrayRef) -> Result<Vec<Vec<Option<f32>>>> {
+        let lists = downcast_any!(result, ListArray)?;
+        (0..lists.len())
+            .map(|i| {
+                let row = lists.value(i);
+                Ok(downcast_any!(row, Float32Array)?.iter().collect())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_array_remove_int_scalar_element() -> Result<()> {
+        let input = int_lists(vec![
+            Some(vec![Some(1), Some(2), Some(3), None, Some(3)]),
+            Some(vec![Some(3), Some(3)]),
+            Some(vec![]),
+            None,
+            Some(vec![Some(4), Some(5)]),
+        ]);
+        let result = array_remove(&[
+            ColumnarValue::Array(input),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(3))),
+        ])?
+        .into_array(5)?;
+        let expected = int_lists(vec![
+            Some(vec![Some(1), Some(2), None]),
+            Some(vec![]),
+            Some(vec![]),
+            None,
+            Some(vec![Some(4), Some(5)]),
+        ]);
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_array_elements() -> Result<()> {
+        let input = int_lists(vec![
+            Some(vec![Some(1), Some(2), Some(1)]),
+            Some(vec![Some(1), Some(2), Some(1)]),
+            Some(vec![Some(1), None]),
+            Some(vec![Some(1)]),
+        ]);
+        let elements: ArrayRef = Arc::new(Int32Array::from(vec![Some(1), Some(2), None, Some(5)]));
+        let result = array_remove(&[ColumnarValue::Array(input), ColumnarValue::Array(elements)])?
+            .into_array(4)?;
+        let expected = int_lists(vec![
+            Some(vec![Some(2)]),
+            Some(vec![Some(1), Some(1)]),
+            None,
+            Some(vec![Some(1)]),
+        ]);
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_scalar_list_array_elements() -> Result<()> {
+        let list = ScalarValue::List(ScalarValue::new_list(
+            &[
+                ScalarValue::from(1),
+                ScalarValue::from(2),
+                ScalarValue::from(3),
+            ],
+            &DataType::Int32,
+            true,
+        ));
+        let elements: ArrayRef = Arc::new(Int32Array::from(vec![Some(1), None, Some(4)]));
+        let result = array_remove(&[ColumnarValue::Scalar(list), ColumnarValue::Array(elements)])?
+            .into_array(3)?;
+        let expected = int_lists(vec![
+            Some(vec![Some(2), Some(3)]),
+            None,
+            Some(vec![Some(1), Some(2), Some(3)]),
+        ]);
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_scalars() -> Result<()> {
+        let list = ScalarValue::List(ScalarValue::new_list(
+            &[
+                ScalarValue::from(1),
+                ScalarValue::from(2),
+                ScalarValue::from(1),
+            ],
+            &DataType::Int32,
+            true,
+        ));
+
+        let result = array_remove(&[
+            ColumnarValue::Scalar(list.clone()),
+            ColumnarValue::Scalar(ScalarValue::from(1)),
+        ])?;
+        let ColumnarValue::Scalar(result) = result else {
+            return df_execution_err!("expected a scalar result");
+        };
+        let expected = ScalarValue::List(ScalarValue::new_list(
+            &[ScalarValue::from(2)],
+            &DataType::Int32,
+            true,
+        ));
+        assert_eq!(result, expected);
+
+        let result = array_remove(&[
+            ColumnarValue::Scalar(list),
+            ColumnarValue::Scalar(ScalarValue::Int32(None)),
+        ])?;
+        let ColumnarValue::Scalar(result) = result else {
+            return df_execution_err!("expected a scalar result");
+        };
+        assert!(result.is_null());
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_float64_nan_and_signed_zero() -> Result<()> {
+        let other_nan = f64::from_bits(0x7ff8_0000_0000_0001);
+        let input: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Float64Type, _, _>(vec![
+            Some(vec![Some(f64::NAN), Some(1.0), Some(other_nan), None]),
+            Some(vec![Some(-0.0), Some(0.0), Some(1.0)]),
+            Some(vec![Some(f64::NAN), Some(-0.0)]),
+        ]));
+        let elements: ArrayRef = Arc::new(Float64Array::from(vec![other_nan, 0.0, -0.0]));
+        let result = array_remove(&[ColumnarValue::Array(input), ColumnarValue::Array(elements)])?
+            .into_array(3)?;
+        let rows = f64_rows(&result)?;
+        assert_eq!(rows[0], Some(vec![Some(1.0), None]));
+        assert_eq!(rows[1], Some(vec![Some(1.0)]));
+        let last = rows[2].clone().unwrap_or_default();
+        assert_eq!(last.len(), 1);
+        assert!(last[0].is_some_and(f64::is_nan));
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_float32_nan_and_signed_zero() -> Result<()> {
+        let input: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Float32Type, _, _>(vec![
+            Some(vec![Some(f32::NAN), Some(-0.0), Some(2.0)]),
+            Some(vec![Some(f32::NAN), Some(-0.0), Some(2.0)]),
+        ]));
+        let elements: ArrayRef = Arc::new(Float32Array::from(vec![0.0, f32::NAN]));
+        let result = array_remove(&[ColumnarValue::Array(input), ColumnarValue::Array(elements)])?
+            .into_array(2)?;
+        let rows = f32_rows(&result)?;
+        assert_eq!(rows[0].len(), 2);
+        assert!(rows[0][0].is_some_and(f32::is_nan));
+        assert_eq!(rows[0][1], Some(2.0));
+        assert_eq!(rows[1], vec![Some(-0.0), Some(2.0)]);
+        // the surviving -0.0 must keep its sign (elements are copied, not normalized)
+        assert!(rows[1][0].is_some_and(f32::is_sign_negative));
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_strings() -> Result<()> {
+        let mut builder = ListBuilder::new(StringBuilder::new());
+        builder.values().append_value("a");
+        builder.values().append_value("b");
+        builder.values().append_null();
+        builder.values().append_value("a");
+        builder.append(true);
+        builder.values().append_value("c");
+        builder.append(true);
+        let input: ArrayRef = Arc::new(builder.finish());
+
+        let result = array_remove(&[
+            ColumnarValue::Array(input),
+            ColumnarValue::Scalar(ScalarValue::from("a")),
+        ])?
+        .into_array(2)?;
+
+        let mut builder = ListBuilder::new(StringBuilder::new());
+        builder.values().append_value("b");
+        builder.values().append_null();
+        builder.append(true);
+        builder.values().append_value("c");
+        builder.append(true);
+        let expected: ArrayRef = Arc::new(builder.finish());
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_sliced_input() -> Result<()> {
+        let input = ListArray::from_iter_primitive::<Int32Type, _, _>(vec![
+            Some(vec![Some(9)]),
+            Some(vec![Some(1), Some(2), Some(1)]),
+            Some(vec![Some(2), Some(1)]),
+            Some(vec![Some(9)]),
+        ]);
+        let input: ArrayRef = Arc::new(input.slice(1, 2));
+        let result = array_remove(&[
+            ColumnarValue::Array(input),
+            ColumnarValue::Scalar(ScalarValue::from(1)),
+        ])?
+        .into_array(2)?;
+        let expected = int_lists(vec![Some(vec![Some(2)]), Some(vec![Some(2)])]);
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_preserves_list_field() -> Result<()> {
+        let field = Arc::new(Field::new("element", DataType::Int32, false));
+        let input: ArrayRef = Arc::new(ListArray::try_new(
+            field,
+            OffsetBuffer::new(ScalarBuffer::from(vec![0, 3])),
+            Arc::new(Int32Array::from(vec![1, 2, 1])),
+            None,
+        )?);
+        let result = array_remove(&[
+            ColumnarValue::Array(Arc::clone(&input)),
+            ColumnarValue::Scalar(ScalarValue::from(1)),
+        ])?
+        .into_array(1)?;
+        assert_eq!(result.data_type(), input.data_type());
+        let lists = downcast_any!(result, ListArray)?;
+        let row = lists.value(0);
+        assert_eq!(downcast_any!(row, Int32Array)?.values().to_vec(), vec![2]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_remove_invalid_arguments() -> Result<()> {
+        let list = int_lists(vec![Some(vec![Some(1)]), Some(vec![Some(2)])]);
+        // wrong argument count
+        assert!(array_remove(&[ColumnarValue::Array(Arc::clone(&list))]).is_err());
+        // first argument is not a list
+        assert!(
+            array_remove(&[
+                ColumnarValue::Scalar(ScalarValue::from(1)),
+                ColumnarValue::Scalar(ScalarValue::from(1)),
+            ])
+            .is_err()
+        );
+        // element type differs from the list element type
+        assert!(
+            array_remove(&[
+                ColumnarValue::Array(Arc::clone(&list)),
+                ColumnarValue::Scalar(ScalarValue::from("a")),
+            ])
+            .is_err()
+        );
+        // mismatched lengths
+        let elements: ArrayRef = Arc::new(Int32Array::from(vec![1, 2, 3]));
+        assert!(
+            array_remove(&[ColumnarValue::Array(list), ColumnarValue::Array(elements)]).is_err()
+        );
         Ok(())
     }
 }
