@@ -1,13 +1,13 @@
 == Physical Plan ==
 AdaptiveSparkPlan (572)
 +- == Final Plan ==
-   CartesianProduct Inner (308)
-   :- CartesianProduct Inner (272)
-   :  :- CartesianProduct Inner (236)
-   :  :  :- CartesianProduct Inner (200)
-   :  :  :  :- CartesianProduct Inner (164)
-   :  :  :  :  :- CartesianProduct Inner (128)
-   :  :  :  :  :  :- CartesianProduct Inner (92)
+   NativeCartesianProduct (308)
+   :- NativeCartesianProduct (272)
+   :  :- NativeCartesianProduct (236)
+   :  :  :- NativeCartesianProduct (200)
+   :  :  :  :- NativeCartesianProduct (164)
+   :  :  :  :  :- NativeCartesianProduct (128)
+   :  :  :  :  :  :- NativeCartesianProduct (92)
    :  :  :  :  :  :  :- NativeProject (56)
    :  :  :  :  :  :  :  +- NativeHashAggregate (55)
    :  :  :  :  :  :  :     +- ShuffleQueryStage (54), Statistics(X)
@@ -964,7 +964,9 @@ Results [1]: [count(1)#23]
 Output [1]: [count(1)#23 AS h9_to_9_30#24]
 Input [1]: [count(1)#23]
 
-(92) CartesianProduct
+(92) NativeCartesianProduct
+Left output [1]: [h8_30_to_9#15]
+Right output [1]: [h9_to_9_30#24]
 Join type: Inner
 Join condition: None
 
@@ -1115,7 +1117,9 @@ Results [1]: [count(1)#32]
 Output [1]: [count(1)#32 AS h9_30_to_10#33]
 Input [1]: [count(1)#32]
 
-(128) CartesianProduct
+(128) NativeCartesianProduct
+Left output [2]: [h8_30_to_9#15, h9_to_9_30#24]
+Right output [1]: [h9_30_to_10#33]
 Join type: Inner
 Join condition: None
 
@@ -1266,7 +1270,9 @@ Results [1]: [count(1)#41]
 Output [1]: [count(1)#41 AS h10_to_10_30#42]
 Input [1]: [count(1)#41]
 
-(164) CartesianProduct
+(164) NativeCartesianProduct
+Left output [3]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33]
+Right output [1]: [h10_to_10_30#42]
 Join type: Inner
 Join condition: None
 
@@ -1417,7 +1423,9 @@ Results [1]: [count(1)#50]
 Output [1]: [count(1)#50 AS h10_30_to_11#51]
 Input [1]: [count(1)#50]
 
-(200) CartesianProduct
+(200) NativeCartesianProduct
+Left output [4]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42]
+Right output [1]: [h10_30_to_11#51]
 Join type: Inner
 Join condition: None
 
@@ -1568,7 +1576,9 @@ Results [1]: [count(1)#59]
 Output [1]: [count(1)#59 AS h11_to_11_30#60]
 Input [1]: [count(1)#59]
 
-(236) CartesianProduct
+(236) NativeCartesianProduct
+Left output [5]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51]
+Right output [1]: [h11_to_11_30#60]
 Join type: Inner
 Join condition: None
 
@@ -1719,7 +1729,9 @@ Results [1]: [count(1)#68]
 Output [1]: [count(1)#68 AS h11_30_to_12#69]
 Input [1]: [count(1)#68]
 
-(272) CartesianProduct
+(272) NativeCartesianProduct
+Left output [6]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51, h11_to_11_30#60]
+Right output [1]: [h11_30_to_12#69]
 Join type: Inner
 Join condition: None
 
@@ -1870,7 +1882,9 @@ Results [1]: [count(1)#77]
 Output [1]: [count(1)#77 AS h12_to_12_30#78]
 Input [1]: [count(1)#77]
 
-(308) CartesianProduct
+(308) NativeCartesianProduct
+Left output [7]: [h8_30_to_9#15, h9_to_9_30#24, h9_30_to_10#33, h10_to_10_30#42, h10_30_to_11#51, h11_to_11_30#60, h11_30_to_12#69]
+Right output [1]: [h12_to_12_30#78]
 Join type: Inner
 Join condition: None
 
