@@ -110,6 +110,23 @@ class FlinkNodeConverterFactoryTest {
         assertFalse(result.isPresent());
     }
 
+    /**
+     * A converter whose support check throws is contained the same way a failing conversion is: the
+     * caller sees an empty result and falls back, rather than the exception escaping the factory.
+     */
+    @Test
+    void testIsSupportedExceptionIsContainedAsEmpty() {
+        factory.registerRexConverter(new StubRexNodeConverter(true, null) {
+            @Override
+            public boolean isSupported(RexNode node, ConverterContext context) {
+                throw new RuntimeException("support check error");
+            }
+        });
+
+        Optional<PhysicalExprNode> result = factory.convertRexNode(testLiteral, context);
+        assertFalse(result.isPresent());
+    }
+
     @Test
     void testDuplicateRexConverterRejected() {
         factory.registerRexConverter(new StubRexNodeConverter(true, null));

@@ -92,8 +92,8 @@ message PhysicalExprNode {
     PhysicalSCAndExprNode sc_and_expr = 3000;
     PhysicalSCOrExprNode sc_or_expr = 3001;
 
-    // spark udf wrapper
-    PhysicalSparkUDFWrapperExprNode spark_udf_wrapper_expr = 10000;
+    // udf wrapper
+    PhysicalUDFWrapperExprNode udf_wrapper_expr = 10000;
 
     // spark scalar subquery wrapper
     PhysicalSparkScalarSubqueryWrapperExprNode spark_scalar_subquery_wrapper_expr = 10001;
@@ -334,7 +334,7 @@ message PhysicalSCOrExprNode {
   PhysicalExprNode right = 2;
 }
 
-message PhysicalSparkUDFWrapperExprNode {
+message PhysicalUDFWrapperExprNode {
   bytes serialized = 1;
   ArrowType return_type = 2;
   bool return_nullable = 3;

@@ -33,7 +33,7 @@ use datafusion::{
 };
 use once_cell::sync::OnceCell;
 
-use crate::spark_udf_wrapper::SparkUDFWrapperExpr;
+use crate::udf_wrapper::UDFWrapperExpr;
 
 pub struct SparkScalarSubqueryWrapperExpr {
     pub serialized: Vec<u8>,
@@ -107,7 +107,7 @@ impl PhysicalExpr for SparkScalarSubqueryWrapperExpr {
 
     fn evaluate(&self, _: &RecordBatch) -> Result<ColumnarValue> {
         let result = self.cached_value.get_or_try_init(|| {
-            let expr = SparkUDFWrapperExpr::try_new(
+            let expr = UDFWrapperExpr::try_new(
                 self.serialized.clone(),
                 self.return_type.clone(),
                 self.return_nullable,
