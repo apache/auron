@@ -89,7 +89,10 @@ abstract class NativeOrcScanBase(basedFileScan: FileSourceScanExec)
             .setOrcScan(nativeOrcScanExecBuilder.build())
             .build()
         },
-        friendlyName = "NativeRDD.OrcScan")
+        friendlyName = "NativeRDD.OrcScan") {
+        override protected def getPreferredLocations(split: Partition): Seq[String] =
+          split.asInstanceOf[FilePartition].preferredLocations().toSeq
+      }
     } else {
       new EmptyNativeRDD(sparkContext)
     }

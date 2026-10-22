@@ -1180,6 +1180,9 @@ object NativeConverters extends Logging {
           }) =>
         buildExtScalarFunction("Spark_ArrayDistinct", e.children, e.dataType)
       case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
+      case e: ArrayContains
+          if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
+        buildExtScalarFunction("Spark_ArrayContains", e.children, e.dataType)
       case e: Flatten => buildExtScalarFunction("Spark_ArrayFlatten", e.children, e.dataType)
       case e: MapFromEntries =>
         buildExtScalarFunction(

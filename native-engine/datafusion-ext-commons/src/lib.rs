@@ -33,6 +33,7 @@ pub mod io;
 pub mod scalar_value;
 pub mod spark_bit_array;
 pub mod spark_bloom_filter;
+pub mod spark_float;
 pub mod spark_hash;
 pub mod uda;
 
