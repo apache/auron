@@ -20,6 +20,20 @@ import org.apache.spark.sql.AuronQueryTest
 
 class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
+  test("preserve literal parameters during expression fallback") {
+    withSQLConf(
+      "spark.auron.decimal.arithOp.enabled" -> "false",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      withTable("literal_fallback") {
+        sql("CREATE TABLE literal_fallback(a DECIMAL(17,2), b DECIMAL(17,2)) USING parquet")
+        sql("""INSERT INTO literal_fallback VALUES
+              |(123.45, 7.00), (-123.45, 7.00), (1.00, 8.00), (NULL, 7.00), (1.00, NULL)
+              |""".stripMargin)
+        checkSparkAnswerAndOperator("SELECT round(a / b, 2) FROM literal_fallback")
+      }
+    }
+  }
+
   test("EqualNullSafe") {
     withTable("t1") {
       sql("CREATE TABLE t1(id INT, flag BOOLEAN) USING parquet")

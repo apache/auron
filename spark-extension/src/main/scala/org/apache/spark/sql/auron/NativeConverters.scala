@@ -359,7 +359,12 @@ object NativeConverters extends Logging {
             try {
               val converted =
                 convertExprWithFallback(child, isPruningExpr = false, fallbackToError)
-              Shims.get.createNativeExprWrapper(converted, child.dataType, child.nullable)
+              child match {
+                // Preserve literal parameters only after successful conversion.
+                case literal: Literal => literal
+                case _ =>
+                  Shims.get.createNativeExprWrapper(converted, child.dataType, child.nullable)
+              }
             } catch {
               case _: NotImplementedError =>
                 val fallbacked = convertExpr(child)
