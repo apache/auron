@@ -1173,6 +1173,10 @@ object NativeConverters extends Logging {
       case e: ArrayContains
           if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
         buildExtScalarFunction("Spark_ArrayContains", e.children, e.dataType)
+      case e: ArraysOverlap
+          if e.left.dataType.asInstanceOf[ArrayType].elementType.isInstanceOf[AtomicType] &&
+            isTypeSupported(e.left.dataType) =>
+        buildExtScalarFunction("Spark_ArraysOverlap", e.children, e.dataType)
       case e: Flatten => buildExtScalarFunction("Spark_ArrayFlatten", e.children, e.dataType)
       case e: MapFromEntries =>
         buildExtScalarFunction(

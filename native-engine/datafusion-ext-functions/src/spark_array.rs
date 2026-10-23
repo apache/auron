@@ -15,7 +15,7 @@
 
 //! Array expressions
 
-use std::{cmp::Ordering, sync::Arc};
+use std::{cmp::Ordering, collections::HashSet, sync::Arc};
 
 use arrow::{
     array::{
@@ -23,7 +23,9 @@ use arrow::{
         make_array,
     },
     buffer::{NullBuffer, OffsetBuffer, ScalarBuffer},
-    datatypes::{DataType, Field},
+    compute::kernels::arity::unary,
+    datatypes::{DataType, Field, Float32Type, Float64Type},
+    row::{RowConverter, SortField},
 };
 use datafusion::{
     common::{Result, ScalarValue},
@@ -94,6 +96,98 @@ pub fn array_contains(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         result
     })));
     if list_is_scalar && value_is_scalar {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(result))
+    }
+}
+
+pub fn arrays_overlap(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 2 {
+        return df_execution_err!("arrays_overlap requires exactly 2 arguments");
+    }
+    let left_is_scalar = matches!(args[0], ColumnarValue::Scalar(_));
+    let right_is_scalar = matches!(args[1], ColumnarValue::Scalar(_));
+    let lists = [
+        columnar_value_to_list_array(&args[0])?,
+        columnar_value_to_list_array(&args[1])?,
+    ];
+    let num_rows = match (left_is_scalar, right_is_scalar) {
+        (true, _) => lists[1].len(),
+        (_, true) => lists[0].len(),
+        _ if lists[0].len() == lists[1].len() => lists[0].len(),
+        _ => return df_execution_err!("arrays_overlap requires matching array lengths"),
+    };
+    let element_type = lists[0].value_type();
+    if element_type != lists[1].value_type() {
+        return df_execution_err!("arrays_overlap requires matching element types");
+    }
+    let converter = RowConverter::new(vec![SortField::new(element_type.clone())])?;
+    let element_rows = lists
+        .iter()
+        .map(|list| {
+            // Spark's boxed floats equate NaNs but distinguish signed zeros.
+            let values: ArrayRef = match element_type {
+                DataType::Float32 => Arc::new(unary::<_, _, Float32Type>(
+                    downcast_any!(list.values(), Float32Array)?,
+                    |v| {
+                        if v.is_nan() { f32::NAN } else { v }
+                    },
+                )),
+                DataType::Float64 => Arc::new(unary::<_, _, Float64Type>(
+                    downcast_any!(list.values(), Float64Array)?,
+                    |v| {
+                        if v.is_nan() { f64::NAN } else { v }
+                    },
+                )),
+                _ => list.values().clone(),
+            };
+            Ok(converter.convert_columns(&[values])?)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut seen = HashSet::new();
+    let result: ArrayRef = Arc::new(BooleanArray::from_iter((0..num_rows).map(|row| {
+        let rows = [
+            if left_is_scalar { 0 } else { row },
+            if right_is_scalar { 0 } else { row },
+        ];
+        if lists[0].is_null(rows[0]) || lists[1].is_null(rows[1]) {
+            return None;
+        }
+        let ranges = [0, 1].map(|i| {
+            lists[i].value_offsets()[rows[i]] as usize
+                ..lists[i].value_offsets()[rows[i] + 1] as usize
+        });
+        if ranges.iter().any(|range| range.is_empty()) {
+            return Some(false);
+        }
+        let (smaller, bigger) = if ranges[0].len() <= ranges[1].len() {
+            (0, 1)
+        } else {
+            (1, 0)
+        };
+        seen.clear();
+        let mut has_null = false;
+        for index in ranges[smaller].clone() {
+            if lists[smaller].values().is_null(index) {
+                has_null = true;
+            } else {
+                seen.insert(element_rows[smaller].row(index));
+            }
+        }
+        for index in ranges[bigger].clone() {
+            if lists[bigger].values().is_null(index) {
+                has_null = true;
+            } else if seen.contains(&element_rows[bigger].row(index)) {
+                return Some(true);
+            }
+        }
+        if has_null { None } else { Some(false) }
+    })));
+    if left_is_scalar && right_is_scalar {
         Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
             &result, 0,
         )?))
@@ -459,6 +553,204 @@ mod test {
             ])
             .is_err()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_arrays_overlap_nulls_and_slices() -> Result<()> {
+        let cases = vec![
+            (
+                Some(vec![Some(1), Some(2)]),
+                Some(vec![Some(2), Some(3)]),
+                Some(true),
+            ),
+            (Some(vec![Some(1)]), Some(vec![Some(2)]), Some(false)),
+            (
+                Some(vec![None, Some(2)]),
+                Some(vec![Some(2), None]),
+                Some(true),
+            ),
+            (
+                Some(vec![Some(2), None]),
+                Some(vec![None, Some(2)]),
+                Some(true),
+            ),
+            (Some(vec![None, Some(1)]), Some(vec![Some(2)]), None),
+            (Some(vec![Some(1)]), Some(vec![None, Some(2)]), None),
+            (Some(vec![None]), Some(vec![None]), None),
+            (Some(vec![]), Some(vec![None]), Some(false)),
+            (Some(vec![None]), Some(vec![]), Some(false)),
+            (Some(vec![]), Some(vec![]), Some(false)),
+            (None, Some(vec![Some(1)]), None),
+            (Some(vec![Some(1)]), None, None),
+            (None, None, None),
+            (
+                Some(vec![Some(1), Some(1), Some(2)]),
+                Some(vec![Some(2), Some(2)]),
+                Some(true),
+            ),
+        ];
+        let left: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(
+            cases.iter().map(|(left, ..)| left.clone()),
+        ));
+        let right: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(
+            cases.iter().map(|(_, right, _)| right.clone()),
+        ));
+        let expected: ArrayRef = Arc::new(BooleanArray::from_iter(
+            cases.iter().map(|(_, _, expected)| *expected),
+        ));
+        for (left, right) in [(left.clone(), right.clone()), (right, left)] {
+            let result = arrays_overlap(&[
+                ColumnarValue::Array(left.clone()),
+                ColumnarValue::Array(right.clone()),
+            ])?
+            .into_array(cases.len())?;
+            assert_eq!(&result, &expected);
+            let result = arrays_overlap(&[
+                ColumnarValue::Array(left.slice(2, 10)),
+                ColumnarValue::Array(right.slice(2, 10)),
+            ])?
+            .into_array(10)?;
+            assert_eq!(&result, &expected.slice(2, 10));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_arrays_overlap_scalars_and_empty_batches() -> Result<()> {
+        let lists: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
+            Some(vec![Some(1)]),
+            Some(vec![Some(2), None]),
+            Some(vec![]),
+            None,
+        ]));
+        let scalar = ColumnarValue::Scalar(ScalarValue::List(ScalarValue::new_list(
+            &[ScalarValue::Int32(Some(2))],
+            &DataType::Int32,
+            true,
+        )));
+        let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
+            Some(false),
+            Some(true),
+            Some(false),
+            None,
+        ]));
+        for args in [
+            [ColumnarValue::Array(lists.clone()), scalar.clone()],
+            [scalar.clone(), ColumnarValue::Array(lists.clone())],
+        ] {
+            assert_eq!(&arrays_overlap(&args)?.into_array(4)?, &expected);
+        }
+        assert!(matches!(
+            arrays_overlap(&[scalar.clone(), scalar.clone()])?,
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(true)))
+        ));
+        let null = ColumnarValue::Scalar(ScalarValue::List(Arc::new(ListArray::new_null(
+            Arc::new(Field::new_list_field(DataType::Int32, true)),
+            1,
+        ))));
+        assert!(matches!(
+            arrays_overlap(&[scalar.clone(), null])?,
+            ColumnarValue::Scalar(ScalarValue::Boolean(None))
+        ));
+        let strings = ColumnarValue::Scalar(ScalarValue::List(ScalarValue::new_list(
+            &[ScalarValue::Utf8(None), ScalarValue::from("spark")],
+            &DataType::Utf8,
+            true,
+        )));
+        assert!(matches!(
+            arrays_overlap(&[strings.clone(), strings])?,
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(true)))
+        ));
+        for args in [
+            [scalar.clone(), ColumnarValue::Array(lists.slice(0, 0))],
+            [ColumnarValue::Array(lists.slice(0, 0)), scalar],
+        ] {
+            assert!(arrays_overlap(&args)?.into_array(0)?.is_empty());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_arrays_overlap_floats() -> Result<()> {
+        macro_rules! check {
+            ($type:ty, $nan:expr, $other_nan:expr, $infinity:expr) => {{
+                let left: ArrayRef = Arc::new(ListArray::from_iter_primitive::<$type, _, _>([
+                    Some(vec![Some($nan)]),
+                    Some(vec![Some(-0.0)]),
+                    Some(vec![Some(0.0)]),
+                    Some(vec![Some($infinity)]),
+                    Some(vec![Some(-$infinity)]),
+                    Some(vec![Some($nan), None]),
+                    Some(vec![Some($nan)]),
+                    Some(vec![None, Some($nan)]),
+                ]));
+                let right: ArrayRef = Arc::new(ListArray::from_iter_primitive::<$type, _, _>([
+                    Some(vec![Some($other_nan)]),
+                    Some(vec![Some(0.0)]),
+                    Some(vec![Some(-0.0)]),
+                    Some(vec![Some($infinity)]),
+                    Some(vec![Some($infinity)]),
+                    Some(vec![Some(1.0)]),
+                    Some(vec![Some(1.0)]),
+                    Some(vec![Some($other_nan)]),
+                ]));
+                let expected: ArrayRef = Arc::new(BooleanArray::from(vec![
+                    Some(true),
+                    Some(false),
+                    Some(false),
+                    Some(true),
+                    Some(false),
+                    None,
+                    Some(false),
+                    Some(true),
+                ]));
+                let result =
+                    arrays_overlap(&[ColumnarValue::Array(left), ColumnarValue::Array(right)])?
+                        .into_array(8)?;
+                assert_eq!(&result, &expected);
+            }};
+        }
+        check!(
+            Float32Type,
+            f32::NAN,
+            f32::from_bits(0xff80_0001),
+            f32::INFINITY
+        );
+        check!(
+            Float64Type,
+            f64::NAN,
+            f64::from_bits(0xfff0_0000_0000_0001),
+            f64::INFINITY
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_arrays_overlap_invalid_arguments() -> Result<()> {
+        assert!(arrays_overlap(&[]).is_err());
+        let ints = ColumnarValue::Scalar(ScalarValue::List(ScalarValue::new_list(
+            &[ScalarValue::Int32(Some(1))],
+            &DataType::Int32,
+            true,
+        )));
+        let strings = ColumnarValue::Scalar(ScalarValue::List(ScalarValue::new_list(
+            &[ScalarValue::from("1")],
+            &DataType::Utf8,
+            true,
+        )));
+        assert!(arrays_overlap(&[ints.clone()]).is_err());
+        assert!(arrays_overlap(&[ints.clone(), strings]).is_err());
+        assert!(
+            arrays_overlap(&[
+                ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
+                ints.clone()
+            ])
+            .is_err()
+        );
+        let one = ints.to_array(1)?;
+        let two = ints.to_array(2)?;
+        assert!(arrays_overlap(&[ColumnarValue::Array(one), ColumnarValue::Array(two)]).is_err());
         Ok(())
     }
 

@@ -697,6 +697,20 @@ class ShimsImpl extends Shims with Logging {
                 .setArrowType(NativeConverters.convertDataType(e.dataType)))
             .build())
 
+      case e if isFloatingPointArrayNormalization(e) =>
+        Some(
+          pb.PhysicalExprNode
+            .newBuilder()
+            .setScalarFunction(
+              pb.PhysicalScalarFunctionNode
+                .newBuilder()
+                .setFun(pb.ScalarFunction.AuronExtFunctions)
+                .setName("Spark_NormalizeNanAndZero")
+                .addArgs(NativeConverters
+                  .convertExprWithFallback(e.children.head, isPruningExpr, fallback))
+                .setReturnType(NativeConverters.convertDataType(e.dataType)))
+            .build())
+
       case e: TaggingExpression =>
         Some(NativeConverters.convertExprWithFallback(e.child, isPruningExpr, fallback))
       case e =>
@@ -709,6 +723,29 @@ class ShimsImpl extends Shims with Logging {
           case None =>
         }
         None
+    }
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  @nowarn("cat=unused")
+  private def isFloatingPointArrayNormalization(e: Expression): Boolean = false
+
+  @sparkver("4.2")
+  private def isFloatingPointArrayNormalization(e: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable}
+    import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
+    import org.apache.spark.sql.types.{DoubleType, FloatType}
+
+    e match {
+      case ArrayTransform(
+            _,
+            LambdaFunction(
+              KnownFloatingPointNormalized(NormalizeNaNAndZero(variable: NamedLambdaVariable)),
+              Seq(argument: NamedLambdaVariable),
+              _)) =>
+        variable.exprId == argument.exprId &&
+        (variable.dataType == FloatType || variable.dataType == DoubleType)
+      case _ => false
     }
   }
 

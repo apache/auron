@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.functions.{col, split}
 import org.apache.spark.sql.internal.SQLConf
 
-import org.apache.auron.util.AuronTestUtils
+import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
@@ -232,6 +232,154 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           }
         }
       }
+    }
+  }
+
+  test("arrays_overlap function") {
+    withTable("t1") {
+      sql("create table t1(id int, a1 array<int>, a2 array<int>) using parquet")
+      sql("""insert into t1 values
+          |  (0, array(1, 2), array(2, 3)),
+          |  (1, array(1, 2), array(3, 4)),
+          |  (2, array(null, 2), array(2, null)),
+          |  (3, array(2, null), array(null, 2)),
+          |  (4, array(null, 1), array(2)),
+          |  (5, array(1), array(null, 2)),
+          |  (6, array(null), array(null)),
+          |  (7, array(), array(null)),
+          |  (8, array(null), array()),
+          |  (9, array(), array()),
+          |  (10, null, array(1)),
+          |  (11, array(1), null),
+          |  (12, null, null),
+          |  (13, array(1, 1, 2), array(2, 2))
+          |""".stripMargin)
+
+      for (ansiEnabled <- Seq("true", "false")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+          val query = "select id, arrays_overlap(a1, a2) from t1"
+          checkSparkAnswerAndOperator(query)
+          checkAnswer(
+            sql(query),
+            Seq(
+              Row(0, true),
+              Row(1, false),
+              Row(2, true),
+              Row(3, true),
+              Row(4, null),
+              Row(5, null),
+              Row(6, null),
+              Row(7, false),
+              Row(8, false),
+              Row(9, false),
+              Row(10, null),
+              Row(11, null),
+              Row(12, null),
+              Row(13, true)))
+          checkSparkAnswerAndOperator("""select
+              |  arrays_overlap(a2, a1),
+              |  arrays_overlap(a1, array(2)),
+              |  arrays_overlap(array(2), a2)
+              |from t1
+              |""".stripMargin)
+          checkSparkAnswerAndOperator("select id from t1 where arrays_overlap(a1, a2)")
+        }
+      }
+    }
+  }
+
+  test("arrays_overlap function with atomic element types") {
+    withTable("t1") {
+      sql("""create table t1(
+          |  strings array<string>, bools array<boolean>, dates array<date>,
+          |  timestamps array<timestamp>, decimals array<decimal(10, 2)>,
+          |  ints array<int>, longs array<bigint>) using parquet
+          |""".stripMargin)
+      sql("""insert into t1 values
+          |  (array('a', null, 'b'), array(true, null), array(date'2024-02-29'),
+          |   array(timestamp'2024-02-29 12:34:56'), array(1.23, null, 4.56),
+          |   array(1, 2), array(2, 3)),
+          |  (array('a'), array(false), array(date'2024-03-01'),
+          |   array(timestamp'2024-02-29 12:34:57'), array(1.23),
+          |   array(1, 2), array(3, 4))
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""select
+          |  arrays_overlap(strings, array('b')),
+          |  arrays_overlap(bools, array(true)),
+          |  arrays_overlap(dates, array(date'2024-02-29')),
+          |  arrays_overlap(timestamps, array(timestamp'2024-02-29 12:34:56')),
+          |  arrays_overlap(decimals, array(cast(4.56 as decimal(10, 2)))),
+          |  arrays_overlap(ints, longs)
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("arrays_overlap function with floating point elements") {
+    withTable("t1") {
+      sql("create table t1(a1 array<double>, a2 array<double>) using parquet")
+      sql("""insert into t1 values
+          |  (array(cast('NaN' as double)), array(cast('NaN' as double))),
+          |  (array(cast('-0.0' as double)), array(cast('0.0' as double))),
+          |  (array(cast('0.0' as double)), array(cast('-0.0' as double))),
+          |  (array(cast('Infinity' as double)), array(cast('Infinity' as double))),
+          |  (array(cast('-Infinity' as double)), array(cast('Infinity' as double))),
+          |  (array(cast('NaN' as double), null), array(1.0)),
+          |  (array(cast('NaN' as double)), array(1.0)),
+          |  (array(null, cast('NaN' as double)), array(cast('NaN' as double)))
+          |""".stripMargin)
+      val query = """select
+          |  arrays_overlap(a1, a2),
+          |  arrays_overlap(cast(a1 as array<float>), cast(a2 as array<float>))
+          |from t1
+          |""".stripMargin
+      checkSparkAnswerAndOperator(query)
+      val signedZerosOverlap = SparkVersionUtil.SPARK_RUNTIME_VERSION >= "4.2"
+      checkAnswer(
+        sql(query),
+        Seq(
+          Row(true, true),
+          Row(signedZerosOverlap, signedZerosOverlap),
+          Row(signedZerosOverlap, signedZerosOverlap),
+          Row(true, true),
+          Row(false, false),
+          Row(null, null),
+          Row(false, false),
+          Row(true, true)))
+      checkSparkAnswerAndOperator("""select
+          |  arrays_overlap(a1, array(cast('-0.0' as double))),
+          |  arrays_overlap(array(cast('-0.0' as double)), a2)
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("arrays_overlap function with a user-defined transform falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as
+          |select array(1.0d) as a1, array(2.0d) as a2
+          |""".stripMargin)
+      val df = checkSparkAnswer("select arrays_overlap(transform(a1, x -> x + 1.0d), a2) from t1")
+      checkAnswer(df, Seq(Row(true)))
+      assert(
+        collectFirst(df.queryExecution.executedPlan) { case _: ProjectExec => true }
+          .contains(true))
+    }
+  }
+
+  test("arrays_overlap function with complex elements falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array(named_struct('a', cast(null as int))) as a1,
+          |  array(named_struct('a', cast(null as int))) as a2
+          |union all select
+          |  array(named_struct('a', cast(null as int))), array(named_struct('a', 0))
+          |""".stripMargin)
+      val df = checkSparkAnswer("select arrays_overlap(a1, a2) from t1")
+      checkAnswer(df, Seq(Row(true), Row(false)))
+      assert(
+        collectFirst(df.queryExecution.executedPlan) { case _: ProjectExec => true }
+          .contains(true))
     }
   }
 
