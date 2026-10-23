@@ -180,7 +180,7 @@ impl SortMergeJoinExec {
                 .left_keys
                 .iter()
                 .zip(&join_params.sort_options)
-                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), s.clone()))
+                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), *s))
                 .collect::<Vec<_>>(),
             &join_params.projection.left_read,
         )?;
@@ -190,7 +190,7 @@ impl SortMergeJoinExec {
                 .right_keys
                 .iter()
                 .zip(&join_params.sort_options)
-                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), s.clone()))
+                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), *s))
                 .collect::<Vec<_>>(),
             &join_params.projection.right_read,
         )?;
@@ -330,8 +330,14 @@ async fn execute_join(
     let concurrent_poll_time = Time::new();
     let concurrent_poll_timer = concurrent_poll_time.timer();
     tokio::try_join!(
-        async { Ok::<_, DataFusionError>(cur_forward!(left)) },
-        async { Ok::<_, DataFusionError>(cur_forward!(right)) },
+        async {
+            cur_forward!(left);
+            Ok::<_, DataFusionError>(())
+        },
+        async {
+            cur_forward!(right);
+            Ok::<_, DataFusionError>(())
+        },
     )?;
     drop(concurrent_poll_timer);
     poll_time.sub_duration(poll_time.duration());

@@ -72,6 +72,7 @@ pub fn create_auron_ext_function(
             shared_function!(spark_get_json_object::spark_get_parsed_json_object)
         }
         "Spark_ParseJson" => shared_function!(spark_get_json_object::spark_parse_json),
+        "Spark_ArrayContains" => shared_function!(spark_array::array_contains),
         "Spark_ArraysOverlap" => shared_function!(spark_array::arrays_overlap),
         "Spark_ArrayReverse" => shared_function!(spark_array::array_reverse),
         "Spark_ArrayFlatten" => shared_function!(spark_array::array_flatten),
@@ -97,6 +98,7 @@ pub fn create_auron_ext_function(
         "Spark_WeekOfYear" => shared_function!(spark_dates::spark_weekofyear),
         "Spark_Quarter" => shared_function!(spark_dates::spark_quarter),
         "Spark_LastDay" => shared_function!(spark_dates::spark_last_day),
+        "Spark_Trunc" => shared_function!(spark_dates::spark_trunc),
         "Spark_NextDay" => shared_function!(spark_dates::spark_next_day),
         "Spark_DateDiff" => shared_function!(spark_dates::spark_datediff),
         "Spark_DateAdd" => shared_function!(spark_dates::spark_date_add),

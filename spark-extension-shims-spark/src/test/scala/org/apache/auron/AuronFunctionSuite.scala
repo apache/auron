@@ -19,7 +19,10 @@ package org.apache.auron
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.auron.NativeConverters
+import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.execution.ProjectExec
+import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.functions.{col, split}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -93,6 +96,142 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |select hash(arr) from t1
           |""".stripMargin
       checkSparkAnswerAndOperator(functions)
+    }
+  }
+
+  test("array_contains function") {
+    withTable("t1") {
+      sql("create table t1(id int, arr array<int>, value int) using parquet")
+      sql("""insert into t1 values
+          |  (0, array(1, 2), 2),
+          |  (1, array(1, 2), 3),
+          |  (2, array(null, 2), 2),
+          |  (3, array(2, null), 2),
+          |  (4, array(1, null), 3),
+          |  (5, array(), 1),
+          |  (6, null, 1),
+          |  (7, array(1), null),
+          |  (8, array(null), 1),
+          |  (9, array(), null),
+          |  (10, null, null)
+          |""".stripMargin)
+
+      for (ansiEnabled <- Seq("true", "false")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+          val query = "select id, array_contains(arr, value) from t1"
+          checkSparkAnswerAndOperator(query)
+          checkAnswer(
+            sql(query),
+            Seq(
+              Row(0, true),
+              Row(1, false),
+              Row(2, true),
+              Row(3, true),
+              Row(4, null),
+              Row(5, false),
+              Row(6, null),
+              Row(7, null),
+              Row(8, null),
+              Row(9, null),
+              Row(10, null)))
+          checkSparkAnswerAndOperator("""select
+              |  array_contains(arr, 2),
+              |  array_contains(array(1, 2), value)
+              |from t1
+              |""".stripMargin)
+          checkSparkAnswerAndOperator("select id from t1 where array_contains(arr, value)")
+        }
+      }
+    }
+  }
+
+  test("array_contains function with atomic element types") {
+    withTable("t1") {
+      sql("""create table t1(
+          |  strings array<string>, s string,
+          |  bools array<boolean>, b boolean,
+          |  dates array<date>, d date,
+          |  timestamps array<timestamp>, ts timestamp,
+          |  decimals array<decimal(10, 2)>, n decimal(10, 2),
+          |  ints array<int>, l bigint) using parquet
+          |""".stripMargin)
+      sql("""insert into t1 values
+          |  (array('a', null, 'b'), 'b', array(true, null), true,
+          |   array(date'2024-02-29'), date'2024-02-29',
+          |   array(timestamp'2024-02-29 12:34:56'), timestamp'2024-02-29 12:34:56',
+          |   array(1.23, null, 4.56), 4.56, array(1, 2), 2),
+          |  (array('a'), 'A', array(false), true,
+          |   array(date'2024-02-29'), date'2024-03-01',
+          |   array(timestamp'2024-02-29 12:34:56'), timestamp'2024-02-29 12:34:57',
+          |   array(1.23), 4.56, array(1, 2), 3)
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""select
+          |  array_contains(strings, s), array_contains(bools, b),
+          |  array_contains(dates, d), array_contains(timestamps, ts),
+          |  array_contains(decimals, n), array_contains(ints, l)
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_contains function with floating point elements") {
+    withTable("t1") {
+      sql("create table t1(arr array<double>, value double) using parquet")
+      sql("""insert into t1 values
+          |  (array(cast('NaN' as double)), cast('NaN' as double)),
+          |  (array(cast('-0.0' as double)), cast('0.0' as double)),
+          |  (array(cast('0.0' as double)), cast('-0.0' as double)),
+          |  (array(cast('Infinity' as double)), cast('Infinity' as double)),
+          |  (array(cast('-Infinity' as double)), cast('Infinity' as double)),
+          |  (array(cast('NaN' as double), null), 1.0),
+          |  (array(cast('NaN' as double)), 1.0),
+          |  (array(null, cast('NaN' as double)), cast('NaN' as double))
+          |""".stripMargin)
+      val query = """select
+          |  array_contains(arr, value),
+          |  array_contains(cast(arr as array<float>), cast(value as float))
+          |from t1
+          |""".stripMargin
+      checkSparkAnswerAndOperator(query)
+      checkAnswer(
+        sql(query),
+        Seq(
+          Row(true, true),
+          Row(true, true),
+          Row(true, true),
+          Row(true, true),
+          Row(false, false),
+          Row(null, null),
+          Row(false, false),
+          Row(true, true)))
+    }
+  }
+
+  test("array_contains function with complex elements falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array(named_struct('a', cast(null as int))) as arr,
+          |  named_struct('a', cast(null as int)) as value
+          |union all select
+          |  array(named_struct('a', cast(null as int))), named_struct('a', 0)
+          |""".stripMargin)
+      val query = "select array_contains(arr, value) from t1"
+      for (fallbackEnabled <- Seq("false", "true")) {
+        withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> fallbackEnabled) {
+          val df = sql(query)
+          checkAnswer(df, Seq(Row(true), Row(false)))
+          val plan = df.queryExecution.executedPlan
+          if (fallbackEnabled == "true") {
+            assertPlanIsNative(df)
+            val project = collectFirst(plan) { case p: NativeProjectBase => p }.get
+            val expression = project.expressions.collectFirst { case a: Alias => a.child }.get
+            val nativeExpr = NativeConverters.convertExpr(expression)
+            assert(nativeExpr.hasSparkUdfWrapperExpr)
+          } else {
+            assert(collectFirst(plan) { case _: ProjectExec => true }.contains(true))
+          }
+        }
+      }
     }
   }
 
@@ -348,6 +487,68 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |""".stripMargin)
 
       checkSparkAnswerAndOperator("select last_day(c1) from t1")
+    }
+  }
+
+  test("trunc function") {
+    withTable("t1") {
+      sql("create table t1(dt date, fmt string) using parquet")
+      sql("""insert into t1 values
+          |  (date'2019-08-04', 'week'),
+          |  (date'2024-01-01', 'yY'),
+          |  (date'2023-01-01', 'WEEK'),
+          |  (date'2024-02-29', 'mm'),
+          |  (date'2000-05-31', 'QUARTER'),
+          |  (date'1969-12-31', 'MoN'),
+          |  (date'2024-02-29', 'DAY'),
+          |  (date'2024-02-29', 'HOUR'),
+          |  (date'2024-02-29', 'INVALID'),
+          |  (date'2024-02-29', ' MONTH '),
+          |  (date'2024-02-29', ''),
+          |  (null, 'YEAR'),
+          |  (date'2024-02-29', null)
+          |""".stripMargin)
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator(
+            "select trunc(dt, fmt), trunc(date'2024-02-29', fmt) from t1")
+          for (fmt <- Seq("YEAR", "YYYY", "yy", "QUARTER", "MONTH", "MM", "mon", "WEEK")) {
+            checkSparkAnswerAndOperator(s"select trunc(dt, '$fmt') from t1")
+          }
+        }
+      }
+    }
+  }
+
+  test("trunc function at Date32 boundaries") {
+    withTable("t1") {
+      sql("create table t1(days int) using parquet")
+      sql("insert into t1 values (-2147483648), (-2147483647), (2147483647), (0), (-1), (null)")
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator("""select
+              |  trunc(date_add(date'1970-01-01', days), 'YEAR'),
+              |  trunc(date_add(date'1970-01-01', days), 'MONTH'),
+              |  trunc(date_add(date'1970-01-01', days), 'WEEK')
+              |from t1""".stripMargin)
+          checkSparkAnswerAndOperator("""select
+              |  trunc(date_add(date'1970-01-01', days), 'QUARTER')
+              |from t1 where days >= 0""".stripMargin)
+          for (enabled <- Seq("false", "true")) {
+            withSQLConf("spark.auron.enable" -> enabled) {
+              val df = sql("""select
+                  |  trunc(date_add(date'1970-01-01', days), 'QUARTER')
+                  |from t1 where days < -2147483646""".stripMargin)
+              val error = intercept[Exception](df.collect())
+              if (enabled == "true") {
+                assertPlanIsNative(df)
+              }
+              assert(
+                allCauseMessages(error).toLowerCase(java.util.Locale.ROOT).contains("overflow"))
+            }
+          }
+        }
+      }
     }
   }
 
