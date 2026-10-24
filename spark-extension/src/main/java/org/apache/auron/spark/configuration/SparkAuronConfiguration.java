@@ -113,7 +113,7 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription(
                     "Enable automatic trimming of whitespace from string inputs before casting to numeric or boolean types. "
                             + "This helps prevent casting errors due to leading/trailing whitespace.")
-            .withDefaultValue(true);
+            .withDefaultValue(false);
 
     public static final ConfigOption<Boolean> IGNORE_CORRUPTED_FILES = new ConfigOption<>(Boolean.class)
             .withKey("auron.files.ignoreCorruptFiles")
