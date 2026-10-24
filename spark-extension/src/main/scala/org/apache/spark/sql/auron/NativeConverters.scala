@@ -928,7 +928,8 @@ object NativeConverters extends Logging {
       case e: StringReplace =>
         buildScalarFunction(pb.ScalarFunction.Replace, e.children, e.dataType)
       case e: TruncTimestamp =>
-        buildScalarFunction(pb.ScalarFunction.DateTrunc, e.children, e.dataType)
+        // Native timestamps do not carry Spark's session timezone.
+        buildSparkUdfWrapperExpr(e, fallback)
       case e: TruncDate =>
         buildExtScalarFunction("Spark_Trunc", e.children, e.dataType)
 

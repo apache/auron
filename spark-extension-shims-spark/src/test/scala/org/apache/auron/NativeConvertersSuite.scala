@@ -18,8 +18,8 @@ package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Literal, TruncTimestamp}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType, StructType, TimestampType}
 
 import org.apache.auron.protobuf.ScalarFunction
 
@@ -27,6 +27,32 @@ class NativeConvertersSuite
     extends AuronQueryTest
     with BaseAuronSQLSuite
     with AuronSQLTestHelper {
+
+  test("timestamp truncation preserves Spark timezone semantics") {
+    val mondayInShanghai = java.time.Instant.parse("2026-09-13T16:00:00Z").toEpochMilli * 1000
+    val timestamp = Literal.create(mondayInShanghai, TimestampType)
+    val expr = TruncTimestamp(Literal("week"), timestamp, Some("Asia/Shanghai"))
+
+    assert(expr.eval() == mondayInShanghai)
+    val nativeExpr = NativeConverters.convertExpr(expr)
+    assert(nativeExpr.hasSparkUdfWrapperExpr)
+    val (restored, _) = NativeConverters.deserializeExpression[TruncTimestamp, StructType](
+      nativeExpr.getSparkUdfWrapperExpr.getSerialized.toByteArray)
+    assert(restored.timeZoneId == Some("Asia/Shanghai"))
+    assert(restored.eval() == mondayInShanghai)
+  }
+
+  test("timestamp truncation keeps Spark aliases and invalid format handling") {
+    val timestamp = Literal.create(0L, TimestampType)
+    Seq("yyyy", "mon", "invalid").foreach { format =>
+      val expr = TruncTimestamp(Literal(format), timestamp, Some("UTC"))
+      val nativeExpr = NativeConverters.convertExpr(expr)
+      assert(nativeExpr.hasSparkUdfWrapperExpr)
+      val (restored, _) = NativeConverters.deserializeExpression[TruncTimestamp, StructType](
+        nativeExpr.getSparkUdfWrapperExpr.getSerialized.toByteArray)
+      assert(restored.eval() == expr.eval())
+    }
+  }
 
   private def assertTrimmedCast(rawValue: String, targetType: DataType): Unit = {
     val expr = Cast(Literal.create(rawValue, StringType), targetType)
