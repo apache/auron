@@ -1659,18 +1659,29 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("date_trunc function") {
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      withTable("t1") {
-        sql("create table t1(c1 timestamp) using parquet")
-        sql("""insert into t1 values
-            |  (timestamp'2024-03-15 14:30:45'),
-            |  (timestamp'2024-12-31 23:59:59'),
-            |  (null)
-            |""".stripMargin)
-        checkSparkAnswerAndOperator("select date_trunc('year', c1) from t1")
-        checkSparkAnswerAndOperator("select date_trunc('month', c1) from t1")
-        checkSparkAnswerAndOperator("select date_trunc('day', c1) from t1")
-        checkSparkAnswerAndOperator("select date_trunc('hour', c1) from t1")
+    Seq("UTC", "Asia/Shanghai", "America/Los_Angeles").foreach { timezone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timezone) {
+        withTable("t1") {
+          sql("create table t1(c1 timestamp) using parquet")
+          sql("""insert into t1 values
+              |  (timestamp'2024-03-15 14:30:45'),
+              |  (timestamp'2024-12-31 23:59:59'),
+              |  (timestamp'2026-09-13 00:00:00'),
+              |  (timestamp'2026-09-14 00:00:00'),
+              |  (timestamp'2026-09-15 00:00:00'),
+              |  (timestamp'2026-09-20 00:00:00'),
+              |  (timestamp'2026-09-21 00:00:00'),
+              |  (null)
+              |""".stripMargin)
+          checkSparkAnswerAndOperator("select date_trunc('year', c1) from t1")
+          checkSparkAnswerAndOperator("select date_trunc('month', c1) from t1")
+          checkSparkAnswerAndOperator("select date_trunc('day', c1) from t1")
+          checkSparkAnswerAndOperator("select date_trunc('hour', c1) from t1")
+          checkSparkAnswerAndOperator("select date_trunc('week', c1) from t1")
+          checkSparkAnswerAndOperator("select date_trunc('yyyy', c1) from t1")
+          checkSparkAnswerAndOperator("select date_trunc('mon', c1) from t1")
+          checkSparkAnswerAndOperator("select date_trunc('invalid', c1) from t1")
+        }
       }
     }
   }
