@@ -122,21 +122,7 @@ pub fn array_contains(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if elements.data_type() != values.data_type() {
         return df_execution_err!("array_contains requires matching element and value types");
     }
-
-    macro_rules! float_eq {
-        ($array_type:ty) => {{
-            let left = downcast_any!(elements, $array_type)?.values().clone();
-            let right = downcast_any!(values, $array_type)?.values().clone();
-            Box::new(move |i: usize, j: usize| {
-                spark_float_cmp(left[i], right[j]) == Ordering::Equal
-            })
-        }};
-    }
-    let equals: DynEqComparator = match elements.data_type() {
-        DataType::Float32 => float_eq!(Float32Array),
-        DataType::Float64 => float_eq!(Float64Array),
-        _ => make_eq_comparator(elements.as_ref(), values.as_ref(), true)?,
-    };
+    let equals = spark_eq_comparator(elements, values)?;
 
     let result: ArrayRef = Arc::new(BooleanArray::from_iter((0..num_rows).map(|row| {
         let list_row = if list_is_scalar { 0 } else { row };
@@ -248,6 +234,27 @@ fn columnar_value_to_list_array(arg: &ColumnarValue) -> Result<ListArray> {
     }
 }
 
+/// Compares `left[i]` with `right[j]` using Spark's equality: floats treat NaN
+/// as equal to NaN and -0.0 as equal to 0.0, other types use
+/// `make_eq_comparator`. Both arrays must have the same type, and callers must
+/// skip null positions themselves.
+fn spark_eq_comparator(left: &ArrayRef, right: &ArrayRef) -> Result<DynEqComparator> {
+    macro_rules! float_eq {
+        ($array_type:ty) => {{
+            let left = downcast_any!(left, $array_type)?.values().clone();
+            let right = downcast_any!(right, $array_type)?.values().clone();
+            Box::new(move |i: usize, j: usize| {
+                spark_float_cmp(left[i], right[j]) == Ordering::Equal
+            }) as DynEqComparator
+        }};
+    }
+    Ok(match left.data_type() {
+        DataType::Float32 => float_eq!(Float32Array),
+        DataType::Float64 => float_eq!(Float64Array),
+        _ => make_eq_comparator(left.as_ref(), right.as_ref(), true)?,
+    })
+}
+
 /// Flatten an array of arrays into a single array.
 pub fn array_flatten(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 1 {
@@ -340,15 +347,6 @@ pub fn array_remove(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let element_nulls = elements.logical_nulls();
     let value_nulls = values.logical_nulls();
 
-    macro_rules! float_eq {
-        ($array_type:ty) => {{
-            let left = downcast_any!(elements, $array_type)?.values().clone();
-            let right = downcast_any!(values, $array_type)?.values().clone();
-            Box::new(move |i: usize, j: usize| {
-                spark_float_cmp(left[i], right[j]) == Ordering::Equal
-            }) as DynEqComparator
-        }};
-    }
     let equals: DynEqComparator = match (elements.data_type(), values.data_type()) {
         // all-null inputs never reach the comparator
         (DataType::Null, _) | (_, DataType::Null) => Box::new(|_, _| false),
@@ -357,9 +355,7 @@ pub fn array_remove(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                 "array_remove requires matching element and value types, got {left:?} and {right:?}"
             );
         }
-        (DataType::Float32, _) => float_eq!(Float32Array),
-        (DataType::Float64, _) => float_eq!(Float64Array),
-        _ => make_eq_comparator(elements.as_ref(), values.as_ref(), true)?,
+        _ => spark_eq_comparator(elements, &values)?,
     };
 
     let next_offset = |len: usize| -> Result<i32> {
