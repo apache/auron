@@ -1098,12 +1098,8 @@ object NativeConverters extends Logging {
         buildExtScalarFunction("Spark_StringConcatWs", e.children, e.dataType)
 
       case e: Coalesce =>
-        // datafusion requires coalesce to be simplified into case-when
         val children = e.children.map(Cast(_, e.dataType))
-        val caseWhen = children.init.foldRight[Expression](children.last) { (cond, elseExpr) =>
-          CaseWhen(Seq((IsNotNull(cond), cond)), Some(elseExpr))
-        }
-        convertExprWithFallback(caseWhen, isPruningExpr, fallback)
+        buildScalarFunction(pb.ScalarFunction.Coalesce, children, e.dataType)
 
       case _ @StringLPad(str, len, pad) =>
         buildScalarFunction(
