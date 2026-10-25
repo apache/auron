@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.functions.{col, split}
 import org.apache.spark.sql.internal.SQLConf
 
-import org.apache.auron.util.AuronTestUtils
+import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
@@ -273,6 +273,118 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       sql("create table t1(c1 int) using parquet")
       sql("insert into t1 values(5)")
       checkSparkAnswerAndOperator("select factorial(c1) from t1")
+    }
+  }
+
+  test("array_distinct function") {
+    withTable("t1") {
+      sql("create table t1(id int, arr array<int>) using parquet")
+      sql("""insert into t1 values
+          |  (0, array(3, 1, 3, 2, 1)),
+          |  (1, array(1, null, 1, null, 2)),
+          |  (2, array()),
+          |  (3, null),
+          |  (4, array(null, null)),
+          |  (5, array(2, 2, 1))
+          |""".stripMargin)
+      val query = "select id, array_distinct(arr) from t1"
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator(query)
+          checkAnswer(
+            sql(query),
+            Seq(
+              Row(0, Seq(3, 1, 2)),
+              Row(1, Seq[Integer](1, null, 2)),
+              Row(2, Seq.empty[Int]),
+              Row(3, null),
+              Row(4, Seq(null)),
+              Row(5, Seq(2, 1))))
+        }
+      }
+    }
+  }
+
+  test("array_distinct function with atomic element types") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array('b', 'a', 'b', null, null) as strings,
+          |  array(true, false, true, null) as bools,
+          |  array(cast(2 as tinyint), cast(1 as tinyint), cast(2 as tinyint)) as bytes,
+          |  array(cast(2 as smallint), cast(1 as smallint), cast(2 as smallint)) as shorts,
+          |  array(2L, 1L, 2L, null) as longs,
+          |  array(date'2024-02-29', date'1970-01-01', date'2024-02-29', null) as dates,
+          |  array(timestamp'2024-02-29 12:34:56', timestamp'1970-01-01 00:00:00',
+          |    timestamp'2024-02-29 12:34:56', null) as timestamps,
+          |  array(cast(2.5 as decimal(10, 2)), cast(1 as decimal(10, 2)),
+          |    cast(2.5 as decimal(10, 2)), null) as decimals,
+          |  array(cast('b' as binary), cast('a' as binary), cast('b' as binary), null) as binaries
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""select
+          |  array_distinct(strings), array_distinct(bools), array_distinct(bytes),
+          |  array_distinct(shorts), array_distinct(longs), array_distinct(dates),
+          |  array_distinct(timestamps), array_distinct(decimals), array_distinct(binaries)
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_distinct function with floating point elements") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t1") {
+        sql("create table t1(id int, arr array<double>) using parquet")
+        sql("""insert into t1 values
+            |  (0, array(-0.0D, 0.0D, -0.0D, double('NaN'), double('NaN'), null)),
+            |  (1, array(0.0D, -0.0D, 0.0D, 2.0D, 2.0D)),
+            |  (2, array(double('Infinity'), double('-Infinity'), double('Infinity'))),
+            |  (3, array()),
+            |  (4, null)
+            |""".stripMargin)
+        val query = """select id, array_distinct(arr),
+            |  array_distinct(cast(arr as array<float>)) from t1
+            |""".stripMargin
+        checkSparkAnswerAndOperator(query)
+        val first = sql(query).collect().find(_.getInt(0) == 0).get
+        val expectedZero = if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "4.2") 0.0 else -0.0
+        assert(
+          java.lang.Double.doubleToRawLongBits(first.getSeq[Double](1).head) ==
+            java.lang.Double.doubleToRawLongBits(expectedZero))
+        assert(
+          java.lang.Float.floatToRawIntBits(first.getSeq[Float](2).head) ==
+            java.lang.Float.floatToRawIntBits(expectedZero.toFloat))
+      }
+    }
+  }
+
+  test("array_distinct function with unsupported elements falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array(array(1, null), array(1, null), array(2)) as nested,
+          |  array(named_struct('v', 1), named_struct('v', 1), named_struct('v', 2)) as structs,
+          |  array(double('NaN'), double('NaN'), -0.0D, 0.0D) as doubles,
+          |  array(1, 2) as ints
+          |""".stripMargin)
+      val expressions =
+        Seq("array_distinct(nested)", "array_distinct(structs)", "transform(ints, x -> x + 1)")
+      withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+        for (expression <- expressions) {
+          val query = s"select $expression from t1"
+          val expr = sql(query).queryExecution.analyzed.expressions.collectFirst {
+            case Alias(child, _) => child
+          }.get
+          assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+          checkSparkAnswerAndOperator(query)
+        }
+      }
+      if (!AuronTestUtils.isSparkV31OrGreater) {
+        // Spark 3.0's interpreted and code-generated paths differ for signed zero.
+        withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "false") {
+          val df = checkSparkAnswer("select array_distinct(doubles) from t1")
+          assert(stripAQEPlan(df.queryExecution.executedPlan).collectFirst {
+            case project: ProjectExec => project
+          }.nonEmpty)
+        }
+      }
     }
   }
 
