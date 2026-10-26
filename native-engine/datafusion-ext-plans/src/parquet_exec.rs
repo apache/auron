@@ -18,7 +18,14 @@
 //! Execution plan for reading Parquet files
 
 #![allow(deprecated)] // Deprecated method: fetch_parquet_metadata
-use std::{any::Any, fmt, fmt::Formatter, ops::Range, pin::Pin, sync::Arc};
+use std::{
+    any::Any,
+    collections::BTreeMap,
+    fmt::{Debug, Formatter},
+    ops::Range,
+    pin::Pin,
+    sync::Arc,
+};
 
 use arrow::datatypes::SchemaRef;
 use arrow_schema::{DataType, TimeUnit};
@@ -51,9 +58,9 @@ use datafusion::{
         metrics::{ExecutionPlanMetricsSet, MetricsSet},
     },
 };
+use datafusion_datasource::{PartitionedFile, file_groups::FileGroup};
 use datafusion_datasource_parquet::opener::ParquetOpener;
 use datafusion_ext_commons::{batch_size, hadoop_fs::FsProvider};
-use fmt::Debug;
 use futures::{FutureExt, StreamExt, future::BoxFuture};
 use itertools::Itertools;
 use object_store::ObjectMeta;
@@ -102,14 +109,58 @@ impl ParquetExec {
 }
 
 impl DisplayAs for ParquetExec {
-    fn fmt_as(&self, _t: DisplayFormatType, f: &mut Formatter) -> fmt::Result {
+    fn fmt_as(&self, _t: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
+        struct FmtPartitionedFile<'a>(&'a PartitionedFile);
+        struct FmtFileGroup<'a>(&'a FileGroup);
+        struct FmtPredicate<'a>(&'a Option<PhysicalExprRef>);
+
+        impl Debug for FmtPartitionedFile<'_> {
+            fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+                let file = self.0;
+                let mut d = f.debug_struct("PartitionedFile");
+                d.field("path", &file.path().as_ref());
+                d.field("size", &file.object_meta.size);
+                d.field("partition_values", &file.partition_values);
+                if let Some(range) = &file.range {
+                    d.field("range", &(range.start..range.end));
+                }
+                d.finish()
+            }
+        }
+
+        impl Debug for FmtFileGroup<'_> {
+            fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+                let files = self.0.iter().map(FmtPartitionedFile).collect_vec();
+                f.debug_struct("FileGroup").field("files", &files).finish()
+            }
+        }
+
+        impl Debug for FmtPredicate<'_> {
+            fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+                if let Some(expr) = self.0 {
+                    write!(f, "{expr}")
+                } else {
+                    write!(f, "None")
+                }
+            }
+        }
+
         let limit = self.base_config.limit;
-        let file_group = &self.base_config.file_groups;
-        let pred = &self.predicate;
-        write!(
-            f,
-            "ParquetExec: limit={limit:?}, file_group={file_group:?}, predicate={pred:?}"
-        )
+        let file_groups: BTreeMap<usize, _> = self
+            .base_config
+            .file_groups
+            .iter()
+            .enumerate()
+            .filter(|(_, file_group)| !file_group.is_empty())
+            .map(|(idx, file_group)| (idx, FmtFileGroup(file_group)))
+            .collect();
+        let pred = FmtPredicate(&self.predicate);
+
+        f.debug_struct("ParquetExec")
+            .field("limit", &limit)
+            .field("file_groups", &file_groups)
+            .field("predicate", &pred)
+            .finish()
     }
 }
 
@@ -240,7 +291,7 @@ impl FsReaderFactory {
 }
 
 impl Debug for FsReaderFactory {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "FsReaderFactory")
     }
 }
