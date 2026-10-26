@@ -361,6 +361,77 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn keyed_sorted_fallback_propagates_sort_and_spill_metrics() -> Result<()> {
+        MemManager::init(1_000_000);
+        let schema = Arc::new(Schema::new(vec![Field::new("v", DataType::Int32, false)]));
+        // Exceed the 16 MiB automatic spill check threshold while sorting.
+        let probe = RecordBatch::try_new(
+            schema.clone(),
+            vec![Arc::new(Int32Array::from_iter_values((0..1 << 21).rev()))],
+        )?;
+        let build_values = Int32Array::from(vec![0, 2, 4]);
+        let built = RecordBatch::try_new(
+            join_hash_map_schema(&schema),
+            vec![
+                Arc::new(build_values.clone()),
+                new_null_array(&DataType::Binary, 3), // sorted fallback marker
+            ],
+        )?;
+        for build_left in [false, true] {
+            let (left, right, side) = if build_left {
+                (
+                    memory(built.clone())?,
+                    memory(probe.clone())?,
+                    JoinSide::Left,
+                )
+            } else {
+                (
+                    memory(probe.clone())?,
+                    memory(built.clone())?,
+                    JoinSide::Right,
+                )
+            };
+            let join = BroadcastJoinExec::try_new(
+                Arc::new(build_join_schema(&schema, &schema, &JoinType::Inner.try_into()?).0),
+                left,
+                right,
+                vec![(Arc::new(Column::new("v", 0)), Arc::new(Column::new("v", 0)))],
+                JoinType::Inner,
+                side,
+                true,
+                None,
+                false,
+                None,
+            )?;
+            let output = collect(join.execute(0, SessionContext::new().task_ctx())?).await?;
+            let output = arrow::compute::concat_batches(&join.schema(), &output)?;
+            for column in output.columns() {
+                assert_eq!(
+                    column.as_any().downcast_ref::<Int32Array>(),
+                    Some(&build_values)
+                );
+            }
+            let metrics = join.metrics().expect("join metrics");
+            let metric_value = |name: &str| metrics.sum_by_name(name).expect(name).as_usize();
+            // The probe sort's compute metric is appended after the join baseline.
+            let compute = metrics
+                .iter()
+                .filter(|m| m.value().name() == "elapsed_compute")
+                .map(|m| m.value().as_usize())
+                .collect::<Vec<_>>();
+            assert_eq!(compute.len(), 2, "{metrics}");
+            assert!(
+                compute[1] > 0 && metric_value("fallback_sort_merge_join_time") > compute[1],
+                "{metrics}"
+            );
+            for name in ["disk_spill_size", "disk_spill_iotime"] {
+                assert!(metric_value(name) > 0, "{metrics}");
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn nested_loop_sorted_fallback_preserves_condition_and_projection() -> Result<()> {
         MemManager::init(1000000);
         let values = [
