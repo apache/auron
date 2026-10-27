@@ -20,6 +20,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.AuronConvertStrategy
 import org.apache.spark.sql.auron.paimon.PaimonWriteSupport
 import org.apache.spark.sql.execution.CommandResultExec
+import org.apache.spark.sql.execution.auron.plan.NativePaimonWriteExec
 import org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec
 
 /**
@@ -218,5 +219,57 @@ class AuronPaimonWriteSuite extends org.apache.spark.sql.QueryTest with BaseAuro
       assert(!nodes.exists(_.contains("NativePaimonWrite")), s"unexpected native: $nodes")
       checkAnswer(sql(s"select * from $table"), Row(1))
     }
+  }
+
+  /**
+   * `INSERT ... SELECT` from a source Auron cannot read natively into a wider table, padding the
+   * missing columns with constants. Returns the names of all nodes below the native write.
+   */
+  private def writeWidePadded(narrowConvert: Boolean): (Seq[String], Seq[Row]) = {
+    val src = "paimon_wide_src"
+    val table = s"paimon.db.w_wide_${narrowConvert}"
+    // withTempPath / withTable return Unit, so results are passed out through these vars
+    var plan: Seq[String] = Nil
+    var rows: Seq[Row] = Nil
+    withTempPath { dir =>
+      spark
+        .range(0, 2000)
+        .selectExpr("cast(id as string) as a", "cast(id % 7 as string) as b")
+        .write
+        .csv(dir.getCanonicalPath)
+      withTable(table) {
+        sql(
+          s"create temporary view $src (a string, b string) using csv " +
+            s"options (path '${dir.getCanonicalPath}')")
+        sql(s"""create table $table (a string, c1 string, b string, c2 string, c3 int, k string)
+               |using paimon partitioned by (k)""".stripMargin)
+        withSQLConf(
+          nativeWriteConfs :+ ("spark.auron.paimon.write.narrowConvert" -> narrowConvert.toString): _*) {
+          val executed = sql(s"""insert overwrite $table partition (k)
+                                |select a, cast(null as string), b, 'x', cast(null as int), b
+                                |from $src""".stripMargin).queryExecution.executedPlan match {
+            case c: CommandResultExec => c.commandPhysicalPlan
+            case p => p
+          }
+          val write = executed.collectFirst { case w: NativePaimonWriteExec => w }
+          assert(write.isDefined, s"not native: ${executed.treeString}")
+          plan = write.get.convertedInputForTesting.collect { case p => p.nodeName }
+        }
+        rows = sql(s"select * from $table").collect().toSeq
+        sql(s"drop view $src")
+      }
+    }
+    (plan, rows)
+  }
+
+  test("native write converts only the read columns of a padding projection") {
+    val (narrowPlan, narrowRows) = writeWidePadded(narrowConvert = true)
+    val (widePlan, wideRows) = writeWidePadded(narrowConvert = false)
+    // the projection runs natively above a conversion of the two source columns
+    assert(narrowPlan.exists(_.contains("NativeProject")), s"no native project: $narrowPlan")
+    assert(!widePlan.exists(_.contains("NativeProject")), s"unexpected native project: $widePlan")
+    assert(narrowRows.size == 2000)
+    assert(narrowRows.sortBy(_.toString) == wideRows.sortBy(_.toString))
+    assert(narrowRows.forall(r => r.isNullAt(1) && r.getString(3) == "x" && r.isNullAt(4)))
   }
 }

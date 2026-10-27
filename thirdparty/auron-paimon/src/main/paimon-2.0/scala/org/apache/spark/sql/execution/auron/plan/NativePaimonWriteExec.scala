@@ -26,12 +26,13 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.paimon.spark.write.InnerTableWriteTaskResult
 import org.apache.paimon.table.FileStoreTable
 import org.apache.spark.{OneToOneDependency, TaskContext}
-import org.apache.spark.sql.auron.{NativeConverters, NativeHelper, NativePartition, NativeRDD, Shims}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.auron.{AuronConverters, NativeConverters, NativeHelper, NativePartition, NativeRDD, Shims}
 import org.apache.spark.sql.auron.paimon.PaimonSinkWriter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.write.{Write, WriterCommitMessage}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, InputAdapter, ProjectExec, SparkPlan, UnaryExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -41,6 +42,7 @@ import org.apache.spark.util.SerializableConfiguration
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.metric.SparkMetricNode
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 /**
  * Replaces a Paimon DataSourceV2 append/overwrite node. Data files are written by the native
@@ -104,7 +106,7 @@ case class NativePaimonWriteExec(
     Nil
   }
 
-  private def nativeInput: SparkPlan = {
+  private lazy val nativeInput: SparkPlan = {
     val finalPlan = child match {
       case a: AdaptiveSparkPlanExec => a.finalPhysicalPlan
       case p => p
@@ -112,9 +114,12 @@ case class NativePaimonWriteExec(
     if (NativeHelper.isNative(finalPlan)) {
       finalPlan
     } else {
-      Shims.get.createConvertToNativeExec(finalPlan)
+      NativePaimonWriteExec.convertToNativeNarrow(finalPlan)
     }
   }
+
+  /** The native plan that feeds the sink, available after execution. Visible for tests. */
+  def convertedInputForTesting: SparkPlan = nativeInput
 
   private def buildSinkRDD(inputRDD: NativeRDD): NativeRDD = {
     val sparkSession = session
@@ -182,6 +187,60 @@ case class NativePaimonWriteExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): NativePaimonWriteExec =
     copy(child = newChild)
+}
+
+object NativePaimonWriteExec extends Logging {
+
+  /**
+   * Converts a non-native write input to native. A JVM row-to-Arrow conversion costs roughly in
+   * proportion to the number of columns it carries, so when the input is a projection that only
+   * renames, casts or fills in constants (typical for `INSERT ... SELECT` into a wide table),
+   * convert the narrower projection child and run the projection natively instead. Falls back to
+   * converting the whole input when the projection cannot be executed natively.
+   */
+  def convertToNativeNarrow(plan: SparkPlan): SparkPlan = plan match {
+    // a whole-stage-codegen'ed projection over a non-codegen input: the projection is
+    // replaced by a native one, so the codegen wrapper is not needed any more
+    case WholeStageCodegenExec(project @ ProjectExec(_, CodegenInput(input)))
+        if isNarrowing(project) =>
+      narrow(plan, project.withNewChildren(input :: Nil).asInstanceOf[ProjectExec])
+    case project: ProjectExec if isNarrowing(project) =>
+      narrow(plan, project)
+    case p if NativeHelper.isNative(p) => p
+    case p => Shims.get.createConvertToNativeExec(p)
+  }
+
+  private def isNarrowing(project: ProjectExec): Boolean =
+    SparkAuronConfiguration.ENABLE_PAIMON_WRITE_NARROW_CONVERT.get() &&
+      project.child.output.size < project.output.size
+
+  /**
+   * The input of a codegen stage: `InputAdapter(p)`, or `ColumnarToRow(InputAdapter(p))` for a
+   * columnar `p` (ConvertToNative reads columnar input directly).
+   */
+  private object CodegenInput {
+    def unapply(plan: SparkPlan): Option[SparkPlan] = plan match {
+      case InputAdapter(input) => Some(input)
+      case ColumnarToRowExec(InputAdapter(input)) => Some(input)
+      case _ => None
+    }
+  }
+
+  private def narrow(original: SparkPlan, project: ProjectExec): SparkPlan = {
+    try {
+      val narrowed = Shims.get.createNativeProjectExec(
+        project.projectList,
+        AuronConverters.addRenameColumnsExec(convertToNativeNarrow(project.child)))
+      logInfo(
+        s"Native paimon write converts ${project.child.output.size} input columns " +
+          s"instead of ${project.output.size} projected columns")
+      narrowed
+    } catch {
+      case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
+        logWarning(s"Converting the whole write input to native: ${e.getMessage}")
+        Shims.get.createConvertToNativeExec(original)
+    }
+  }
 }
 
 /** Maps Paimon table options to the parquet writer properties understood by the native sink. */
