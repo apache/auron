@@ -362,12 +362,13 @@ pub fn array_remove(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         i32::try_from(len)
             .or_else(|_| df_execution_err!("array_remove result exceeds the maximum list size"))
     };
+    let list_offsets = lists.value_offsets();
+    let visible_len = (list_offsets[lists.len()] - list_offsets[0]) as usize;
     let elements_data = elements.to_data();
-    let mut kept = MutableArrayData::new(vec![&elements_data], false, elements.len());
+    let mut kept = MutableArrayData::new(vec![&elements_data], false, visible_len);
     let mut offsets = Vec::with_capacity(num_rows + 1);
     offsets.push(0i32);
     let mut valids = Vec::with_capacity(num_rows);
-    let list_offsets = lists.value_offsets();
 
     for row in 0..num_rows {
         let list_row = if list_is_scalar { 0 } else { row };
