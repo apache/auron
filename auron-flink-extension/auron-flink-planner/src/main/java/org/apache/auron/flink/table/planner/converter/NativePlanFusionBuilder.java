@@ -77,6 +77,10 @@ public final class NativePlanFusionBuilder {
             RowType inputRowType,
             RowType outputRowType) {
         try {
+            // The planning thread's context classloader has to be able to see any user-defined
+            // function this Calc calls: it is what a UDF call's generated invoker is compiled
+            // against, and a loader that cannot see the function declines that call silently
+            // rather than failing it.
             final ConverterContext ctx = new ConverterContext(
                     tableConfig,
                     AuronAdaptor.getInstance().getAuronConfiguration(),
