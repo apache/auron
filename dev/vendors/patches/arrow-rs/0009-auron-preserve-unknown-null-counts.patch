@@ -1,0 +1,100 @@
+diff --git a/parquet/src/arrow/arrow_reader/statistics.rs b/parquet/src/arrow/arrow_reader/statistics.rs
+index cffa60e..f9408c0 100644
+--- a/parquet/src/arrow/arrow_reader/statistics.rs
++++ b/parquet/src/arrow/arrow_reader/statistics.rs
+@@ -1320,7 +1320,7 @@ impl<'a> StatisticsConverter<'a> {
+         Ok(Self {
+             parquet_column_index: parquet_index,
+             arrow_field,
+-            missing_null_counts_as_zero: true,
++            missing_null_counts_as_zero: false,
+             physical_type: parquet_index.map(|idx| parquet_schema.column(idx).physical_type()),
+         })
+     }
+diff --git a/parquet/src/file/statistics.rs b/parquet/src/file/statistics.rs
+index c2c2abf..b6ad766 100644
+--- a/parquet/src/file/statistics.rs
++++ b/parquet/src/file/statistics.rs
+@@ -126,21 +126,8 @@ pub fn from_thrift(
+ ) -> Result<Option<Statistics>> {
+     Ok(match thrift_stats {
+         Some(stats) => {
+-            // Number of nulls recorded, when it is not available, we just mark it as 0.
+-            // TODO this should be `None` if there is no information about NULLS.
+-            // see https://github.com/apache/arrow-rs/pull/6216/files
+-            let null_count = stats.null_count.unwrap_or(0)
+-                .max(0); // auron - fix 'Statistics null count is negative (-1)' error
+-
+-            if null_count < 0 {
+-                return Err(ParquetError::General(format!(
+-                    "Statistics null count is negative {}",
+-                    null_count
+-                )));
+-            }
+-
+-            // Generic null count.
+-            let null_count = Some(null_count as u64);
++            // Preserve missing or invalid null counts as unknown.
++            let null_count = stats.null_count.and_then(|value| u64::try_from(value).ok());
+             // Generic distinct count (count of distinct values occurring)
+             let distinct_count = stats.distinct_count.map(|value| value as u64);
+             // Whether or not statistics use deprecated min/max fields.
+@@ -803,7 +790,6 @@ mod tests {
+     }
+ 
+     #[test]
+-    #[should_panic(expected = "General(\"Statistics null count is negative -10\")")]
+     fn test_statistics_negative_null_count() {
+         let thrift_stats = TStatistics {
+             max: None,
+@@ -816,7 +802,10 @@ mod tests {
+             is_min_value_exact: None,
+         };
+ 
+-        from_thrift(Type::INT32, Some(thrift_stats)).unwrap();
++        let statistics = from_thrift(Type::INT32, Some(thrift_stats))
++            .unwrap()
++            .unwrap();
++        assert_eq!(statistics.null_count_opt(), None);
+     }
+ 
+     #[test]
+@@ -1124,11 +1113,10 @@ mod tests {
+             null_count: Some(-42),
+             ..Default::default()
+         };
+-        let err = from_thrift(Type::BOOLEAN, Some(tstatistics)).unwrap_err();
+-        assert_eq!(
+-            err.to_string(),
+-            "Parquet error: Statistics null count is negative -42"
+-        );
++        let statistics = from_thrift(Type::BOOLEAN, Some(tstatistics))
++            .unwrap()
++            .unwrap();
++        assert_eq!(statistics.null_count_opt(), None);
+     }
+ 
+     /// Writes statistics to thrift and reads them back and ensures:
+@@ -1147,21 +1135,7 @@ mod tests {
+         let round_tripped = from_thrift(Type::BOOLEAN, Some(thrift_stats))
+             .unwrap()
+             .unwrap();
+-        // TODO: remove branch when we no longer support assuming null_count==None in the thrift
+-        // means null_count = Some(0)
+-        if null_count.is_none() {
+-            assert_ne!(round_tripped, statistics);
+-            assert!(round_tripped.null_count_opt().is_some());
+-            assert_eq!(round_tripped.null_count_opt(), Some(0));
+-            assert_eq!(round_tripped.min_bytes_opt(), statistics.min_bytes_opt());
+-            assert_eq!(round_tripped.max_bytes_opt(), statistics.max_bytes_opt());
+-            assert_eq!(
+-                round_tripped.distinct_count_opt(),
+-                statistics.distinct_count_opt()
+-            );
+-        } else {
+-            assert_eq!(round_tripped, statistics);
+-        }
++        assert_eq!(round_tripped, statistics);
+     }
+ 
+     fn make_bool_stats(distinct_count: Option<u64>, null_count: Option<u64>) -> Statistics {
