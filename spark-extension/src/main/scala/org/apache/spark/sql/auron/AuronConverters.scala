@@ -135,6 +135,10 @@ object AuronConverters extends Logging {
     extConvertProviders.exists(_.isSupported(exec))
   }
 
+  def extConvertEnabledAndSupported(exec: SparkPlan): Boolean = {
+    extConvertProviders.exists(p => p.isEnabled(exec) && p.isSupported(exec))
+  }
+
   def enableExchange: Boolean = {
     enableShuffleExechange && supportedShuffleManager
   }

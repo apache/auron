@@ -328,7 +328,7 @@ fn rfind_part_values(batch: &RecordBatch, part_values: &[ScalarValue]) -> Result
     Ok(0)
 }
 
-fn parse_writer_props(prop_kvs: &[(String, String)]) -> WriterProperties {
+pub(crate) fn parse_writer_props(prop_kvs: &[(String, String)]) -> WriterProperties {
     let mut builder = WriterProperties::builder();
 
     macro_rules! setprop {
