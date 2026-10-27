@@ -149,6 +149,9 @@ do
   run_maven_format -P"${sparkver}" -Pceleborn,"${celebornver}" -Puniffle,uniffle-0.10 -Ppaimon,paimon-1.2 -Pflink-1.18 -Piceberg-1.10.1 -Phudi-0.15
 
 done
+# Paimon version specific sources (thirdparty/auron-paimon/src/*/paimon-2.0) are only part of the
+# paimon-2.0 profile
+run_maven_format -P"${sparkver}" -Ppaimon,paimon-2.0 -pl thirdparty/auron-paimon -am
 
 sparkvers=(spark-3.0 spark-3.1 spark-3.2 spark-3.3 spark-3.4 spark-4.0 spark-4.1)
 for sparkver in "${sparkvers[@]}"
