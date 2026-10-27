@@ -213,9 +213,7 @@ mod test {
     #[test]
     fn test_roundtrip_various_lens_i32() {
         for len in [0, 1, 7, 16, 17, 100, 12345] {
-            let input: Vec<i32> = (0..len as i32)
-                .map(|i| i.wrapping_mul(-1640531527))
-                .collect();
+            let input: Vec<i32> = (0i32..len).map(|i| i.wrapping_mul(-1640531527)).collect();
             test_roundtrip(input);
         }
     }
