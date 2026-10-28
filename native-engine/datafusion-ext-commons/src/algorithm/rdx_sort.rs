@@ -75,7 +75,7 @@ pub fn radix_sort_by_key<T>(array: &mut [T], counts: &mut [usize], key: impl Fn(
 
 #[cfg(test)]
 mod test {
-    use rand::Rng;
+    use rand::RngExt;
 
     use super::*;
 

@@ -1884,7 +1884,7 @@ mod fuzztest {
     /// repeated `repeat` times, shuffled, to simulate TPC-H
     /// lineitem.l_orderkey distribution.
     fn build_repeated_i64_batch(num_rows: usize, repeat: usize, seed: u64) -> RecordBatch {
-        use rand::{Rng, SeedableRng};
+        use rand::{RngExt, SeedableRng};
         let unique_keys = num_rows.div_ceil(repeat);
         let mut values: Vec<i64> = (0..unique_keys)
             .flat_map(|v| std::iter::repeat_n(v as i64, repeat))
@@ -2033,7 +2033,7 @@ mod fuzztest {
         with_payload: bool,
         seed: u64,
     ) -> Vec<RecordBatch> {
-        use rand::{Rng, SeedableRng, seq::SliceRandom};
+        use rand::{RngExt, SeedableRng, seq::SliceRandom};
         let total = num_batches * rows_per_batch;
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         let keys: Vec<Option<i64>> = if with_payload {
@@ -2211,7 +2211,7 @@ mod fuzztest {
         T::Native: rand::distr::uniform::SampleUniform,
         PrimitiveArray<T>: From<Vec<Option<T::Native>>>,
     {
-        use rand::{Rng, SeedableRng, seq::SliceRandom};
+        use rand::{RngExt, SeedableRng, seq::SliceRandom};
         MemManager::init(1000000000);
         let total = 51000;
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
@@ -2284,7 +2284,7 @@ mod fuzztest {
     /// included) and every payload must be aligned with its key.
     #[tokio::test]
     async fn fuzztest_primitive_fast_path_topn_nullable_key_with_payload() -> Result<()> {
-        use rand::{Rng, SeedableRng};
+        use rand::{RngExt, SeedableRng};
         const NULL_PAYLOAD: u32 = u32::MAX;
         let payload_of = |key: i64| (key as u32).wrapping_mul(31).wrapping_add(7);
 
