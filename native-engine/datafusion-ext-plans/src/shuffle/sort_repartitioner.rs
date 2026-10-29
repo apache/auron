@@ -144,7 +144,7 @@ impl ShuffleRepartitioner for SortShuffleRepartitioner {
                 ByteSize(mem_used as u64),
                 mem_used_percent,
             );
-            self.force_spill().await?;
+            self.spill().await?;
         }
         Ok(())
     }

@@ -755,7 +755,7 @@ impl ExternalSorter {
                 self.name(),
                 ByteSize(self.mem_used() as u64),
             );
-            self.force_spill().await?;
+            self.spill().await?;
         }
         self.set_spillable(false);
 
