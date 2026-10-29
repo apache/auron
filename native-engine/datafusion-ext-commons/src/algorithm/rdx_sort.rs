@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::unchecked;
+use crate::{assume, unchecked};
 
 /// Perform radix sort on a single array
 ///
@@ -63,10 +63,9 @@ pub fn radix_sort_by_key<T>(array: &mut [T], counts: &mut [usize], key: impl Fn(
             for item_idx in cur..end {
                 let target_part_idx = key(&array[item_idx]);
                 let target_part = &mut parts[target_part_idx];
-                unsafe {
-                    // safety: skip bound check
-                    array.swap_unchecked(item_idx, target_part.cur);
-                }
+                assume!(item_idx < array.len());
+                assume!(target_part.cur < array.len());
+                array.swap(item_idx, target_part.cur);
                 target_part.cur += 1;
             }
         }

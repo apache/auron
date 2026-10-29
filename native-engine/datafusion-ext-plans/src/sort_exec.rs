@@ -237,10 +237,10 @@ impl SortExec {
             projection,
             &self.exprs,
         )?);
-        let mut sorter = Arc::new(ExternalSorter {
+        let sorter = Arc::new_cyclic(|weak| ExternalSorter {
             exec_ctx,
-            mem_consumer_info: None,
-            weak: Weak::new(),
+            mem_consumer_info: OnceCell::new(),
+            weak: weak.clone(),
             prune_sort_keys_from_batch: prune_sort_keys_from_batch.clone(),
             skip: self.offset,
             limit: self.limit.unwrap_or(usize::MAX),
@@ -251,13 +251,6 @@ impl SortExec {
             mem_total_size: Default::default(),
         });
         MemManager::register_consumer(sorter.clone(), true);
-
-        unsafe {
-            // safety: set weak reference to sorter
-            let weak = Arc::downgrade(&sorter);
-            let sorter_mut = Arc::get_mut_unchecked(&mut sorter);
-            sorter_mut.weak = weak;
-        }
         Ok(sorter)
     }
 
@@ -355,7 +348,7 @@ struct LevelSpill {
 
 struct ExternalSorter {
     exec_ctx: Arc<ExecutionContext>,
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     weak: Weak<Self>,
     prune_sort_keys_from_batch: Arc<PruneSortKeysFromBatch>,
     skip: usize,
@@ -387,14 +380,14 @@ impl MemConsumer for ExternalSorter {
         "ExternalSorter"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {

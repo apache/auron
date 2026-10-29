@@ -31,6 +31,7 @@ use datafusion::{
 };
 use datafusion_ext_commons::{arrow::array_size::BatchSize, df_execution_err};
 use futures::lock::Mutex;
+use once_cell::sync::OnceCell;
 
 use crate::{
     common::{
@@ -43,7 +44,7 @@ use crate::{
 
 pub struct SortShuffleRepartitioner {
     exec_ctx: Arc<ExecutionContext>,
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     output_data_file: String,
     output_index_file: String,
     data: Mutex<BufferedData>,
@@ -64,7 +65,7 @@ impl SortShuffleRepartitioner {
         let num_output_partitions = partitioning.partition_count();
         Self {
             exec_ctx,
-            mem_consumer_info: None,
+            mem_consumer_info: OnceCell::new(),
             output_data_file,
             output_index_file,
             data: Mutex::new(BufferedData::new(
@@ -85,14 +86,14 @@ impl MemConsumer for SortShuffleRepartitioner {
         "SortShuffleRepartitioner"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {

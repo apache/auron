@@ -16,5 +16,5 @@
 # under the License.
 
 [toolchain]
-channel = "nightly-2025-05-09"
+channel = "stable"
 components = ["rust-src", "cargo", "rustfmt", "clippy"]

@@ -25,7 +25,7 @@ use crate::joins::{
 pub mod full_join;
 pub mod semi_join;
 
-#[derive(std::marker::ConstParamTy, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ProbeSide {
     L,
     R,

@@ -49,14 +49,14 @@ use crate::{
     },
 };
 
-#[derive(std::marker::ConstParamTy, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SemiMode {
     Semi,
     Anti,
     Existence,
 }
 
-#[derive(std::marker::ConstParamTy, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct JoinerParams {
     probe_side: ProbeSide,
     probe_is_join_side: bool,
@@ -73,16 +73,16 @@ impl JoinerParams {
     }
 }
 
-const LEFT_PROBED_LEFT_SEMI: JoinerParams = JoinerParams::new(L, true, Semi);
-const LEFT_PROBED_LEFT_ANTI: JoinerParams = JoinerParams::new(L, true, Anti);
-const LEFT_PROBED_RIGHT_SEMI: JoinerParams = JoinerParams::new(L, false, Semi);
-const LEFT_PROBED_RIGHT_ANTI: JoinerParams = JoinerParams::new(L, false, Anti);
-const LEFT_PROBED_EXISTENCE: JoinerParams = JoinerParams::new(L, true, Existence);
-const RIGHT_PROBED_LEFT_SEMI: JoinerParams = JoinerParams::new(R, false, Semi);
-const RIGHT_PROBED_LEFT_ANTI: JoinerParams = JoinerParams::new(R, false, Anti);
-const RIGHT_PROBED_RIGHT_SEMI: JoinerParams = JoinerParams::new(R, true, Semi);
-const RIGHT_PROBED_RIGHT_ANTI: JoinerParams = JoinerParams::new(R, true, Anti);
-const RIGHT_PROBED_EXISTENCE: JoinerParams = JoinerParams::new(R, false, Existence);
+const LEFT_PROBED_LEFT_SEMI: i32 = 1;
+const LEFT_PROBED_LEFT_ANTI: i32 = 2;
+const LEFT_PROBED_RIGHT_SEMI: i32 = 3;
+const LEFT_PROBED_RIGHT_ANTI: i32 = 4;
+const LEFT_PROBED_EXISTENCE: i32 = 5;
+const RIGHT_PROBED_LEFT_SEMI: i32 = 6;
+const RIGHT_PROBED_LEFT_ANTI: i32 = 7;
+const RIGHT_PROBED_RIGHT_SEMI: i32 = 8;
+const RIGHT_PROBED_RIGHT_ANTI: i32 = 9;
+const RIGHT_PROBED_EXISTENCE: i32 = 0;
 
 pub type LProbedLeftSemiJoiner = SemiJoiner<LEFT_PROBED_LEFT_SEMI>;
 pub type LProbedLeftAntiJoiner = SemiJoiner<LEFT_PROBED_LEFT_ANTI>;
@@ -95,7 +95,23 @@ pub type RProbedRightSemiJoiner = SemiJoiner<RIGHT_PROBED_RIGHT_SEMI>;
 pub type RProbedRightAntiJoiner = SemiJoiner<RIGHT_PROBED_RIGHT_ANTI>;
 pub type RProbedExistenceJoiner = SemiJoiner<RIGHT_PROBED_EXISTENCE>;
 
-pub struct SemiJoiner<const P: JoinerParams> {
+const fn get_joiner(p: i32) -> JoinerParams {
+    match p {
+        LEFT_PROBED_LEFT_SEMI => JoinerParams::new(L, true, Semi),
+        LEFT_PROBED_LEFT_ANTI => JoinerParams::new(L, true, Anti),
+        LEFT_PROBED_RIGHT_SEMI => JoinerParams::new(L, false, Semi),
+        LEFT_PROBED_RIGHT_ANTI => JoinerParams::new(L, false, Anti),
+        LEFT_PROBED_EXISTENCE => JoinerParams::new(L, true, Existence),
+        RIGHT_PROBED_LEFT_SEMI => JoinerParams::new(R, false, Semi),
+        RIGHT_PROBED_LEFT_ANTI => JoinerParams::new(R, false, Anti),
+        RIGHT_PROBED_RIGHT_SEMI => JoinerParams::new(R, true, Semi),
+        RIGHT_PROBED_RIGHT_ANTI => JoinerParams::new(R, true, Anti),
+        RIGHT_PROBED_EXISTENCE => JoinerParams::new(R, false, Existence),
+        _ => unreachable!(),
+    }
+}
+
+pub struct SemiJoiner<const P: i32> {
     join_params: JoinParams,
     output_sender: Arc<WrappedRecordBatchSender>,
     map_joined: BitVec,
@@ -103,7 +119,7 @@ pub struct SemiJoiner<const P: JoinerParams> {
     output_rows: AtomicUsize,
 }
 
-impl<const P: JoinerParams> SemiJoiner<P> {
+impl<const P: i32> SemiJoiner<P> {
     pub fn new(
         join_params: JoinParams,
         map: Arc<JoinHashMap>,
@@ -120,7 +136,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
     }
 
     fn create_probed_key_columns(&self, probed_batch: &RecordBatch) -> Result<Vec<ArrayRef>> {
-        let probed_key_exprs = match P.probe_side {
+        let probed_key_exprs = match get_joiner(P).probe_side {
             L => &self.join_params.left_keys,
             R => &self.join_params.right_keys,
         };
@@ -153,14 +169,14 @@ impl<const P: JoinerParams> SemiJoiner<P> {
         };
         let cols = filter_cols(
             filter,
-            P.probe_side,
+            get_joiner(P).probe_side,
             probed_batch,
             self.map.data_batch(),
             probe_indices,
             build_indices,
         )?;
         for i in filter.apply_rows(cols, probe_indices.len())? {
-            if P.probe_is_join_side {
+            if get_joiner(P).probe_is_join_side {
                 probed_joined.set(probe_indices[i as usize] as usize, true);
             } else {
                 map_joined.set(build_indices[i as usize] as usize, true);
@@ -184,7 +200,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
 }
 
 #[async_trait]
-impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
+impl<const P: i32> Joiner for SemiJoiner<P> {
     async fn join(
         mut self: Pin<&mut Self>,
         probed_batch: RecordBatch,
@@ -244,8 +260,8 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                 .as_ref()
                 .map(|nb| nb.is_valid(row_idx))
                 .unwrap_or(true);
-            if P.mode == Anti
-                && P.probe_is_join_side
+            if get_joiner(P).mode == Anti
+                && get_joiner(P).probe_is_join_side
                 && (!key_is_valid || build_has_null_keys) // Filter if probe row is NULL or build side has any NULL
                 && self.join_params.is_null_aware_anti_join
             {
@@ -266,7 +282,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                         &[]
                     };
                     for &map_idx in candidates {
-                        if P.probe_is_join_side && probed_joined[row_idx] {
+                        if get_joiner(P).probe_is_join_side && probed_joined[row_idx] {
                             break;
                         }
                         if likely!(eq.eq(row_idx, map_idx as usize)) {
@@ -290,7 +306,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                     map_value if map_value.is_single() => {
                         let map_idx = map_value.get_single();
                         if likely!(eq.eq(row_idx, map_idx as usize)) {
-                            if P.probe_is_join_side {
+                            if get_joiner(P).probe_is_join_side {
                                 probed_joined.set(row_idx, true);
                             } else {
                                 map_joined.set(map_idx as usize, true);
@@ -304,7 +320,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                             .filter(|&map_idx| likely!(eq.eq(row_idx, *map_idx as usize)));
 
                         if let Some(&map_idx) = eqs.next() {
-                            if P.probe_is_join_side {
+                            if get_joiner(P).probe_is_join_side {
                                 probed_joined.set(row_idx, true);
                             } else if !map_joined[map_idx as usize] {
                                 map_joined.set(map_idx as usize, true);
@@ -330,11 +346,11 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
             map_joined,
         )?;
 
-        if P.probe_is_join_side {
+        if get_joiner(P).probe_is_join_side {
             probed_side_compare_time
                 .exclude_timer_async(async {
                     let _build_output_timer = build_output_time.timer();
-                    let pprojected = match P.probe_side {
+                    let pprojected = match get_joiner(P).probe_side {
                         L => self
                             .join_params
                             .projection
@@ -344,12 +360,12 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                             .projection
                             .project_right(probed_batch.columns()),
                     };
-                    let (pcols, num_rows) = match P.mode {
+                    let (pcols, num_rows) = match get_joiner(P).mode {
                         Semi | Anti => {
                             let probed_indices = probed_joined
                                 .into_iter()
                                 .enumerate()
-                                .filter(|(_, joined)| (P.mode == Semi) ^ !joined)
+                                .filter(|(_, joined)| (get_joiner(P).mode == Semi) ^ !joined)
                                 .map(|(idx, _)| idx as u32)
                                 .collect::<Vec<_>>();
                             let num_rows = probed_indices.len();
@@ -377,9 +393,9 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
     }
 
     async fn finish(mut self: Pin<&mut Self>, build_output_time: &Time) -> Result<()> {
-        if !P.probe_is_join_side {
+        if !get_joiner(P).probe_is_join_side {
             let _build_output_timer = build_output_time.timer();
-            let mprojected = match P.probe_side {
+            let mprojected = match get_joiner(P).probe_side {
                 L => self
                     .join_params
                     .projection
@@ -390,12 +406,12 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                     .project_left(self.map.data_batch().columns()),
             };
             let map_joined = std::mem::take(&mut self.map_joined);
-            let (pcols, num_rows) = match P.mode {
+            let (pcols, num_rows) = match get_joiner(P).mode {
                 Semi | Anti => {
                     let map_indices = map_joined
                         .into_iter()
                         .enumerate()
-                        .filter(|(_, joined)| (P.mode == Semi) ^ !joined)
+                        .filter(|(_, joined)| (get_joiner(P).mode == Semi) ^ !joined)
                         .map(|(idx, _)| idx as u32)
                         .collect::<Vec<_>>();
                     let num_rows = map_indices.len();
@@ -421,7 +437,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
     }
 
     fn can_early_stop(&self) -> bool {
-        if !P.probe_is_join_side && self.map_joined.all() {
+        if !get_joiner(P).probe_is_join_side && self.map_joined.all() {
             // semi join: map is join side and all items are joined
             return true;
         }

@@ -66,7 +66,7 @@ const _OWNED_KEY_SIZE_CHECKER: [(); 32] = [(); size_of::<OwnedKey>()];
 const SPILL_OFFHEAP_MEM_COST: usize = 200000;
 
 pub struct AggTable {
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     in_mem: Mutex<InMemTable>,
     spills: Mutex<Vec<Box<dyn Spill>>>,
     agg_ctx: Arc<AggContext>,
@@ -80,7 +80,7 @@ impl AggTable {
         let merging_time = exec_ctx.register_timer_metric("merging_time");
         let output_time = exec_ctx.register_timer_metric("output_time");
         Ok(Self {
-            mem_consumer_info: None,
+            mem_consumer_info: OnceCell::new(),
             in_mem: Mutex::new(InMemTable::try_new(
                 0,
                 agg_ctx.clone(),
@@ -310,14 +310,14 @@ impl MemConsumer for AggTable {
         "AggTable"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {

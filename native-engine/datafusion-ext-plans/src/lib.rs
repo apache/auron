@@ -13,14 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(incomplete_features)]
-#![allow(internal_features)]
-#![feature(adt_const_params)]
-#![feature(core_intrinsics)]
-#![feature(get_mut_unchecked)]
-#![feature(portable_simd)]
-#![feature(ptr_as_ref_unchecked)]
-
 extern crate arrow;
 extern crate arrow_schema;
 extern crate bytes;
