@@ -53,6 +53,7 @@ message PhysicalPlanNode {
     OrcScanExecNode orc_scan = 25;
     KafkaScanExecNode kafka_scan = 26;
     OrcSinkExecNode orc_sink = 27;
+    PaimonSinkExecNode paimon_sink = 28;
   }
 }
 
@@ -638,6 +639,27 @@ message ParquetSinkExecNode {
 message ParquetProp {
   string key = 1;
   string value = 2;
+}
+
+// Writes the input into Paimon append-only (bucket-unaware) parquet data files.
+// The input columns are the table columns in table schema order and are all written
+// (Paimon data files contain partition columns). `partition_col_indices` are only used
+// to route rows to one open file per partition, so the input does not need to be sorted.
+// Output paths are requested from the JVM side (NativePaimonSinkUtils) so that file
+// naming, statistics and commit stay owned by Paimon.
+message PaimonSinkExecNode {
+  PhysicalPlanNode input = 1;
+  string fs_resource_id = 2;
+  repeated int32 partition_col_indices = 3;
+  // arrow schema of the data files, carrying Paimon field ids as parquet field ids
+  Schema data_schema = 4;
+  // a new file is started once the current file reaches this size
+  int64 target_file_size = 5;
+  // max number of files kept open at the same time (one per partition)
+  int32 max_open_files = 6;
+  // flush the largest open row group once all open row groups exceed this size
+  int64 memory_budget = 7;
+  repeated ParquetProp prop = 8;
 }
 
 message OrcSinkExecNode {

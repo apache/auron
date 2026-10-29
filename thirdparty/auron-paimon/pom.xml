@@ -42,7 +42,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.paimon</groupId>
-      <artifactId>paimon-spark-${shortSparkVersion}</artifactId>
+      <artifactId>${paimonSparkArtifact}</artifactId>
       <version>${paimonVersion}</version>
       <scope>provided</scope>
     </dependency>
@@ -83,4 +83,52 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <!-- also check the Paimon version specific sources -->
+      <plugin>
+        <groupId>org.scalastyle</groupId>
+        <artifactId>scalastyle-maven-plugin</artifactId>
+        <configuration>
+          <sourceDirectories>
+            <dir>${basedir}/src/main/scala</dir>
+            <dir>${basedir}/src/main/${paimonSourceDir}/scala</dir>
+          </sourceDirectories>
+        </configuration>
+      </plugin>
+      <!-- Paimon version specific sources, see the paimon-* profiles of the parent pom -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>${build-helper-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>add-paimon-version-sources</id>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <phase>generate-sources</phase>
+            <configuration>
+              <sources>
+                <source>src/main/${paimonSourceDir}/scala</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>add-paimon-version-test-sources</id>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <phase>generate-test-sources</phase>
+            <configuration>
+              <sources>
+                <source>src/test/${paimonSourceDir}/scala</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

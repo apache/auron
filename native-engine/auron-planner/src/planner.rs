@@ -81,6 +81,7 @@ use datafusion_ext_plans::{
     limit_exec::LimitExec,
     orc_exec::OrcExec,
     orc_sink_exec::OrcSinkExec,
+    paimon_sink_exec::PaimonSinkExec,
     parquet_exec::ParquetExec,
     parquet_sink_exec::ParquetSinkExec,
     project_exec::ProjectExec,
@@ -841,6 +842,27 @@ impl PhysicalPlanner {
                     orc_sink.fs_resource_id.clone(),
                     orc_sink.num_dyn_parts as usize,
                     Arc::new(convert_required!(orc_sink.schema)?),
+                    props,
+                )))
+            }
+            PhysicalPlanType::PaimonSink(paimon_sink) => {
+                let props: Vec<(String, String)> = paimon_sink
+                    .prop
+                    .iter()
+                    .map(|prop| (prop.key.clone(), prop.value.clone()))
+                    .collect();
+                Ok(Arc::new(PaimonSinkExec::new(
+                    convert_box_required!(self, paimon_sink.input)?,
+                    paimon_sink.fs_resource_id.clone(),
+                    paimon_sink
+                        .partition_col_indices
+                        .iter()
+                        .map(|&i| i as usize)
+                        .collect(),
+                    Arc::new(convert_required!(paimon_sink.data_schema)?),
+                    paimon_sink.target_file_size.max(1) as usize,
+                    paimon_sink.max_open_files.max(1) as usize,
+                    paimon_sink.memory_budget.max(1) as usize,
                     props,
                 )))
             }

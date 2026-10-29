@@ -450,6 +450,7 @@ pub struct JavaClasses<'a> {
     pub cAuronOnHeapSpillManager: AuronOnHeapSpillManager<'a>,
     pub cAuronNativeOrcSinkUtils: AuronNativeOrcSinkUtils<'a>,
     pub cAuronNativeParquetSinkUtils: AuronNativeParquetSinkUtils<'a>,
+    pub cAuronNativePaimonSinkUtils: AuronNativePaimonSinkUtils<'a>,
     pub cAuronBlockObject: AuronBlockObject<'a>,
     pub cAuronJsonFallbackWrapper: AuronJsonFallbackWrapper<'a>,
 
@@ -507,6 +508,7 @@ impl JavaClasses<'static> {
                 c_auron_on_heap_spill_manager,
                 c_auron_native_orc_sink_utils,
                 c_auron_native_parquet_sink_utils,
+                c_auron_native_paimon_sink_utils,
                 c_auron_block_object,
                 c_auron_json_fallback_wrapper,
             ) = match engine_name.as_str() {
@@ -521,6 +523,7 @@ impl JavaClasses<'static> {
                     AuronOnHeapSpillManager::new(env)?,
                     AuronNativeOrcSinkUtils::new(env)?,
                     AuronNativeParquetSinkUtils::new(env)?,
+                    AuronNativePaimonSinkUtils::new(env)?,
                     AuronBlockObject::new(env)?,
                     AuronJsonFallbackWrapper::new(env)?,
                 ),
@@ -535,6 +538,7 @@ impl JavaClasses<'static> {
                     AuronOnHeapSpillManager::default(),
                     AuronNativeOrcSinkUtils::default(),
                     AuronNativeParquetSinkUtils::default(),
+                    AuronNativePaimonSinkUtils::default(),
                     AuronBlockObject::default(),
                     AuronJsonFallbackWrapper::default(),
                 ),
@@ -574,6 +578,7 @@ impl JavaClasses<'static> {
                 cAuronOnHeapSpillManager: c_auron_on_heap_spill_manager,
                 cAuronNativeOrcSinkUtils: c_auron_native_orc_sink_utils,
                 cAuronNativeParquetSinkUtils: c_auron_native_parquet_sink_utils,
+                cAuronNativePaimonSinkUtils: c_auron_native_paimon_sink_utils,
                 cAuronBlockObject: c_auron_block_object,
                 cAuronJsonFallbackWrapper: c_auron_json_fallback_wrapper,
 
@@ -1608,6 +1613,42 @@ impl<'a> AuronNativeParquetSinkUtils<'a> {
                 "(Ljava/lang/String;JJ)V",
             )?,
             method_completeOutput_ret: ReturnType::Primitive(Primitive::Void),
+        })
+    }
+
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
+}
+
+#[allow(non_snake_case)]
+pub struct AuronNativePaimonSinkUtils<'a> {
+    pub class: JClass<'a>,
+    pub method_getTaskOutputPath: JStaticMethodID,
+    pub method_getTaskOutputPath_ret: ReturnType,
+    pub method_completeFile: JStaticMethodID,
+    pub method_completeFile_ret: ReturnType,
+}
+impl<'a> AuronNativePaimonSinkUtils<'a> {
+    pub const SIG_TYPE: &'static str =
+        "org/apache/spark/sql/execution/auron/plan/NativePaimonSinkUtils";
+
+    pub fn new(env: &JNIEnv<'a>) -> JniResult<AuronNativePaimonSinkUtils<'a>> {
+        let class = get_global_jclass(env, Self::SIG_TYPE)?;
+        Ok(AuronNativePaimonSinkUtils {
+            class,
+            method_getTaskOutputPath: env.get_static_method_id(
+                class,
+                "getTaskOutputPath",
+                "()Ljava/lang/String;",
+            )?,
+            method_getTaskOutputPath_ret: ReturnType::Object,
+            method_completeFile: env.get_static_method_id(
+                class,
+                "completeFile",
+                "(Ljava/lang/String;JJ)V",
+            )?,
+            method_completeFile_ret: ReturnType::Primitive(Primitive::Void),
         })
     }
 

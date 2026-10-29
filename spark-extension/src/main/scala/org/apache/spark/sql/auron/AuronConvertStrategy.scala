@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
@@ -177,6 +178,12 @@ object AuronConvertStrategy extends Logging {
           if isNative(e.child) ||
             (e.child.isInstanceOf[AdaptiveSparkPlanExec] && isNative(
               Shims.get.getAdaptiveInputPlan(e.child.asInstanceOf[AdaptiveSparkPlanExec]))) =>
+        e.setTagValue(convertStrategyTag, AlwaysConvert)
+
+      // DataSourceV2 writes handled by an extension (e.g. native Paimon write). Under AQE the
+      // child is an AdaptiveSparkPlanExec whose stages are converted later, so the write node
+      // converts its (final) input to native by itself and does not depend on the child here.
+      case e: V2TableWriteExec if AuronConverters.extConvertEnabledAndSupported(e) =>
         e.setTagValue(convertStrategyTag, AlwaysConvert)
 
       case e if e.getTagValue(convertToNonNativeTag).contains(true) =>
