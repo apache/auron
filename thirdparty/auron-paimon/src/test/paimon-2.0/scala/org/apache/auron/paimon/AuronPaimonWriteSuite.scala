@@ -18,7 +18,6 @@ package org.apache.auron.paimon
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.AuronConvertStrategy
-import org.apache.spark.sql.auron.paimon.PaimonWriteSupport
 import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec
 
@@ -55,11 +54,8 @@ class AuronPaimonWriteSuite extends org.apache.spark.sql.QueryTest with BaseAuro
       }
       executed.collect {
         case p: V2ExistingTableWriteExec =>
-          // not converted: keep the fallback reason so a failing assertion is self-explaining
-          val reason = p
-            .getTagValue(AuronConvertStrategy.neverConvertReasonTag)
-            .orElse(PaimonWriteSupport.unsupportedReason(p))
-            .getOrElse("unknown")
+          // not converted: report the reason Auron recorded for the fallback
+          val reason = p.getTagValue(AuronConvertStrategy.neverConvertReasonTag).getOrElse("")
           s"${p.nodeName}[$reason]"
         case p if p.nodeName.contains("NativePaimonWrite") => p.nodeName
       }
@@ -177,7 +173,9 @@ class AuronPaimonWriteSuite extends org.apache.spark.sql.QueryTest with BaseAuro
       """create table %t (id int, v string) using paimon
         |tblproperties ('primary-key' = 'id', 'bucket' = '2')""".stripMargin,
       Seq("insert into %t values (1, 'a'), (2, 'b')"))(nodes =>
-      assert(!nodes.exists(_.contains("NativePaimonWrite")), s"unexpected native: $nodes"))
+      assert(
+        nodes.nonEmpty && nodes.forall(_.contains("primary-key tables are not supported")),
+        s"expected fallback with reason: $nodes"))
   }
 
   test("tables with column default values fall back to the paimon writer") {
@@ -196,8 +194,8 @@ class AuronPaimonWriteSuite extends org.apache.spark.sql.QueryTest with BaseAuro
             s"insert into $table values (2, null, 'x'), (3, 'c', 'x')"))
       }
       assert(
-        nodes.nonEmpty && !nodes.exists(_.startsWith("NativePaimonWrite")),
-        s"expected fallback: $nodes")
+        nodes.nonEmpty && nodes.forall(_.contains("column v has a default value")),
+        s"expected fallback with reason: $nodes")
       checkAnswer(
         sql(s"select id, v from $table order by id"),
         Seq(Row(1, "dflt"), Row(2, "dflt"), Row(3, "c")))

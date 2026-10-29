@@ -58,18 +58,6 @@ object PaimonWriteSupport extends Logging {
     case _ => false
   }
 
-  /** Returns the reason why the write is not supported, or None if it is supported. */
-  def unsupportedReason(exec: V2ExistingTableWriteExec): Option[String] = {
-    try {
-      plan(exec) match {
-        case Left(reason) => Some(reason)
-        case Right(_) => None
-      }
-    } catch {
-      case NonFatal(e) => Some(s"failed to inspect paimon write: ${e.getMessage}")
-    }
-  }
-
   def plan(exec: V2ExistingTableWriteExec): Either[String, PaimonWritePlan] = {
     val write = exec.write
     if (!isPaimonV2Write(write)) {
