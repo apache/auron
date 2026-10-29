@@ -49,7 +49,8 @@ class AuronShuffledHashJoinOrderingSuite extends SparkFunSuite {
         joinType,
         Some(GreaterThan(leftKey, rightKey)),
         buildSide,
-        isSkewJoin = false)
+        isSkewJoin = false,
+        requiredReservedOrder = true)
       .outputOrdering
   }
 

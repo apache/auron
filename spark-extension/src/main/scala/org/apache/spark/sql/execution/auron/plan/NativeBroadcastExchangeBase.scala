@@ -98,7 +98,6 @@ abstract class NativeBroadcastExchangeBase(
           "probed_side_search_time",
           "probed_side_compare_time",
           "build_output_time",
-          "fallback_sort_merge_join_time",
           "mem_spill_count",
           "mem_spill_size",
           "mem_spill_iotime",

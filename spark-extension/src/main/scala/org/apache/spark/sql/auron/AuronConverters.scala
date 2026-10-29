@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
+import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag, requiredReservedOrderTag}
 import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.join.JoinBuildSides
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
@@ -199,6 +199,9 @@ object AuronConverters extends Logging {
         .getTagValue(childOrderingRequiredTag)
         .foreach(newExec.setTagValue(childOrderingRequiredTag, _))
       exec.getTagValue(joinSmallerSideTag).foreach(newExec.setTagValue(joinSmallerSideTag, _))
+      exec
+        .getTagValue(requiredReservedOrderTag)
+        .foreach(newExec.setTagValue(requiredReservedOrderTag, _))
 
       if (!isNeverConvert(newExec)) {
         newExec = convertSparkPlan(newExec)
@@ -606,7 +609,10 @@ object AuronConverters extends Logging {
         joinType,
         condition,
         buildSide,
-        isSkewJoin)
+        isSkewJoin,
+        // this branch only converts when !requireOrdering, so no downstream operator
+        // depends on this join's output order.
+        requiredReservedOrder = false)
     }
 
     val (leftKeys, rightKeys, joinType, condition, left, right, isSkewJoin) =
@@ -641,6 +647,7 @@ object AuronConverters extends Logging {
     val buildSide = Shims.get.getJoinBuildSide(exec)
     val (leftKeys, rightKeys, joinType, condition, left, right) =
       (exec.leftKeys, exec.rightKeys, exec.joinType, exec.condition, exec.left, exec.right)
+    val requiredReservedOrder = exec.getTagValue(requiredReservedOrderTag).contains(true)
     logDebugPlanConversion(
       exec,
       Seq(
@@ -648,7 +655,8 @@ object AuronConverters extends Logging {
         "rightKeys" -> rightKeys,
         "joinType" -> joinType,
         "condition" -> condition,
-        "buildSide" -> buildSide))
+        "buildSide" -> buildSide,
+        "requiredReservedOrder" -> requiredReservedOrder))
     try {
       validateNativeJoinCondition(condition)
       Shims.get.createNativeShuffledHashJoinExec(
@@ -659,7 +667,8 @@ object AuronConverters extends Logging {
         joinType,
         condition,
         buildSide,
-        Shims.get.getIsSkewJoinFromSHJ(exec))
+        Shims.get.getIsSkewJoinFromSHJ(exec),
+        requiredReservedOrder)
     } catch {
       case _ if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN) =>
         logWarning(
@@ -730,6 +739,7 @@ object AuronConverters extends Logging {
           exec.left,
           exec.right,
           Shims.get.isNullAwareAntiJoin(exec))
+      val requiredReservedOrder = exec.getTagValue(requiredReservedOrderTag).contains(true)
       logDebugPlanConversion(
         exec,
         Seq(
@@ -737,7 +747,8 @@ object AuronConverters extends Logging {
           "rightKeys" -> rightKeys,
           "joinType" -> joinType,
           "condition" -> condition,
-          "buildSide" -> buildSide))
+          "buildSide" -> buildSide,
+          "requiredReservedOrder" -> requiredReservedOrder))
       validateNativeJoinCondition(condition)
 
       // verify build side is native
@@ -757,7 +768,8 @@ object AuronConverters extends Logging {
         joinType,
         condition,
         buildSide,
-        naaj)
+        naaj,
+        requiredReservedOrder)
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
@@ -775,9 +787,14 @@ object AuronConverters extends Logging {
     try {
       val (joinType, condition, left, right) =
         (exec.joinType, exec.condition, exec.left, exec.right)
+      val requiredReservedOrder = exec.getTagValue(requiredReservedOrderTag).contains(true)
       logDebugPlanConversion(
         exec,
-        Seq("joinType" -> joinType, "condition" -> condition, "buildSide" -> buildSide))
+        Seq(
+          "joinType" -> joinType,
+          "condition" -> condition,
+          "buildSide" -> buildSide,
+          "requiredReservedOrder" -> requiredReservedOrder))
 
       // Preserving broadcast-side rows requires global match tracking across probe partitions.
       require(
@@ -803,7 +820,8 @@ object AuronConverters extends Logging {
         joinType,
         condition,
         buildSide,
-        isNullAwareAntiJoin = false)
+        isNullAwareAntiJoin = false,
+        requiredReservedOrder)
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
         val underlyingBroadcast = buildSide match {

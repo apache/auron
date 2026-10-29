@@ -109,7 +109,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
         map: Arc<JoinHashMap>,
         output_sender: Arc<WrappedRecordBatchSender>,
     ) -> Self {
-        let map_joined = bitvec![0; map.data_batch().num_rows()];
+        let map_joined = bitvec![0; map.num_rows()];
         Self {
             join_params,
             output_sender,
@@ -155,7 +155,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
             filter,
             P.probe_side,
             probed_batch,
-            self.map.data_batch(),
+            &self.map,
             probe_indices,
             build_indices,
         )?;
@@ -233,7 +233,7 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
         let (mut probe_indices, mut build_indices): (Vec<u32>, Vec<u32>) = (vec![], vec![]);
 
         // Whether the build side contains any NULL join keys
-        let build_has_null_keys = if map.data_batch().num_rows() == 0 {
+        let build_has_null_keys = if map.num_rows() == 0 {
             false
         } else {
             map.key_columns().iter().any(|col| col.null_count() > 0)
@@ -379,17 +379,11 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
     async fn finish(mut self: Pin<&mut Self>, build_output_time: &Time) -> Result<()> {
         if !P.probe_is_join_side {
             let _build_output_timer = build_output_time.timer();
-            let mprojected = match P.probe_side {
-                L => self
-                    .join_params
-                    .projection
-                    .project_right(self.map.data_batch().columns()),
-                R => self
-                    .join_params
-                    .projection
-                    .project_left(self.map.data_batch().columns()),
-            };
             let map_joined = std::mem::take(&mut self.map_joined);
+            let bcol_indices = match P.probe_side {
+                L => &self.join_params.projection.right,
+                R => &self.join_params.projection.left,
+            };
             let (pcols, num_rows) = match P.mode {
                 Semi | Anti => {
                     let map_indices = map_joined
@@ -399,14 +393,18 @@ impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
                         .map(|(idx, _)| idx as u32)
                         .collect::<Vec<_>>();
                     let num_rows = map_indices.len();
-                    (take_cols(&mprojected, map_indices)?, num_rows)
+                    (
+                        self.map.gather_columns(bcol_indices, map_indices)?,
+                        num_rows,
+                    )
                 }
                 Existence => {
                     let num_rows = map_joined.len();
                     let exists_col = Arc::new(BooleanArray::from(
                         map_joined.into_iter().collect::<Vec<_>>(),
                     ));
-                    let mut cols = mprojected;
+                    let all_indices: Vec<u32> = (0..num_rows as u32).collect();
+                    let mut cols = self.map.gather_columns(bcol_indices, all_indices)?;
                     if let Some(pos) = self.join_params.projection.existence_output {
                         cols.insert(pos, exists_col);
                     }

@@ -101,7 +101,7 @@ impl<const P: JoinerParams> FullJoiner<P> {
         map: Arc<JoinHashMap>,
         output_sender: Arc<WrappedRecordBatchSender>,
     ) -> Self {
-        let map_joined = bitvec![0; map.data_batch().num_rows()];
+        let map_joined = bitvec![0; map.num_rows()];
         Self {
             join_params,
             output_sender,
@@ -167,7 +167,7 @@ impl<const P: JoinerParams> FullJoiner<P> {
                     filter,
                     P.probe_side,
                     probed_batch,
-                    self.map.data_batch(),
+                    &self.map,
                     &probe_indices,
                     &build_indices,
                 )?;
@@ -225,15 +225,9 @@ impl<const P: JoinerParams> FullJoiner<P> {
                 .projection
                 .project_right(probed_batch.columns()),
         };
-        let mprojected = match P.probe_side {
-            L => self
-                .join_params
-                .projection
-                .project_right(self.map.data_batch().columns()),
-            R => self
-                .join_params
-                .projection
-                .project_left(self.map.data_batch().columns()),
+        let bcol_indices = match P.probe_side {
+            L => self.join_params.projection.right.clone(),
+            R => self.join_params.projection.left.clone(),
         };
 
         // fast path for the case where every probed records have 1-to-1 joined
@@ -253,7 +247,7 @@ impl<const P: JoinerParams> FullJoiner<P> {
                 self.map_joined.set(idx as usize, true);
             }
         }
-        let bcols = take_cols(&mprojected, build_indices)?;
+        let bcols = self.map.gather_columns(&bcol_indices, build_indices)?;
 
         build_output_time
             .exclude_timer_async(self.flush(pcols, bcols, num_rows))
@@ -396,15 +390,9 @@ impl<const P: JoinerParams> Joiner for FullJoiner<P> {
                 L => &self.join_params.left_schema,
                 R => &self.join_params.right_schema,
             };
-            let mprojected = match P.probe_side {
-                L => self
-                    .join_params
-                    .projection
-                    .project_right(self.map.data_batch().columns()),
-                R => self
-                    .join_params
-                    .projection
-                    .project_left(self.map.data_batch().columns()),
+            let bcol_indices = match P.probe_side {
+                L => &self.join_params.projection.right,
+                R => &self.join_params.projection.left,
             };
 
             let num_rows = map_unjoined_indices.len();
@@ -416,7 +404,9 @@ impl<const P: JoinerParams> Joiner for FullJoiner<P> {
                 .iter()
                 .map(|&i| new_null_array(pschema.field(i).data_type(), num_rows))
                 .collect::<Vec<_>>();
-            let bcols = take_cols(&mprojected, map_unjoined_indices)?;
+            let bcols = self
+                .map
+                .gather_columns(bcol_indices, map_unjoined_indices)?;
             build_output_time
                 .exclude_timer_async(self.as_mut().flush(pcols, bcols, num_rows))
                 .await?;
