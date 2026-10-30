@@ -23,6 +23,7 @@ import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
 import org.apache.spark.ui.SparkUI
 
 class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin with Logging {
+  import AuronSQLHistoryServerPlugin.AuronEnabled
 
   override def createListeners(
       conf: SparkConf,
@@ -41,9 +42,10 @@ class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin with Logging {
       }
 
     val auronEnabled = properties
-      .get("spark.auron.enabled")
-      .orElse(properties.get("spark.auron.enable"))
-      .forall(java.lang.Boolean.parseBoolean)
+      .get(AuronEnabled.key)
+      .orElse(properties.get(AuronEnabled.alternative))
+      .map(java.lang.Boolean.parseBoolean)
+      .getOrElse(AuronEnabled.defaultValue)
     if (auronEnabled) {
       val sqlStatusStore = new AuronSQLAppStatusStore(ui.store.store)
       new AuronSQLTab(sqlStatusStore, ui)
@@ -51,4 +53,14 @@ class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin with Logging {
   }
 
   override def displayOrder: Int = 0
+}
+
+object AuronSQLHistoryServerPlugin {
+  // Keep this UI-local definition in sync with SparkAuronConfiguration.AURON_ENABLED.
+  // spark-extension depends on this module, so the UI cannot import that definition.
+  private object AuronEnabled {
+    val key = "spark.auron.enabled"
+    val alternative = "spark.auron.enable"
+    val defaultValue = true
+  }
 }
