@@ -36,12 +36,6 @@ class AuronSQLAppStatusStore(store: KVStore) extends Logging {
 
   def executionsCount(): Long = store.count(classOf[AuronExecutionUIData])
 
-  def hasPlanDiagnostics(): Boolean = {
-    val iter = store.view(classOf[AuronExecutionUIData]).closeableIterator()
-    try iter.asScala.exists(_.snapshots.nonEmpty)
-    finally iter.close()
-  }
-
   def executions(offset: Int, limit: Int): Seq[AuronExecutionUIData] = {
     val iter = store
       .view(classOf[AuronExecutionUIData])

@@ -25,11 +25,16 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.kvstore.InMemoryStore
 import org.scalatest.funsuite.AnyFunSuite
 
-import org.apache.auron.spark.ui.{AuronBuildInfoEvent, AuronPlanDiagnosticEvent}
+import org.apache.auron.spark.ui.{AuronBuildInfoEvent, AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
 
 class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
-  private val extension = "org.apache.spark.sql.auron.AuronSparkSessionExtension"
   private val buildInfo = AuronBuildInfoEvent(mutable.LinkedHashMap("version" -> "test"))
+  private val snapshot = AuronPlanDiagnosticEvent(
+    1,
+    100,
+    "plan",
+    Seq(AuronPlanDiagnosticNode(1, "LocalTableScan", "Spark (no reason recorded)", "")),
+    Map.empty)
 
   private def withHistoryUI(
       properties: Map[String, String],
@@ -37,7 +42,6 @@ class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
       environmentAvailable: Boolean = true)(check: SparkUI => Unit): Unit = {
     // These are SHS settings, not the application's settings.
     val conf = new SparkConf(false)
-      .set("spark.sql.extensions", extension)
       .set("spark.auron.enabled", "false")
     val kv = new ElementTrackingStore(new InMemoryStore, conf)
     try {
@@ -64,68 +68,44 @@ class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
 
   private def hasAuronTab(ui: SparkUI): Boolean = ui.getTabs.exists(_.isInstanceOf[AuronSQLTab])
 
-  test("applications without Auron do not get a tab even when they have SQL executions") {
-    Seq(Map.empty[String, String], Map("spark.auron.enabled" -> "true")).foreach { properties =>
-      withHistoryUI(properties, Seq(SparkListenerSQLExecutionEnd(1, 100))) { ui =>
-        assert(!hasAuronTab(ui))
-      }
-    }
-  }
-
-  test("configured Auron applications keep the tab even when build information is missing") {
-    withHistoryUI(Map("spark.sql.extensions" -> s"other.Extension, $extension ")) { ui =>
+  test("missing enabled property uses Auron's default of true") {
+    withHistoryUI(Map.empty) { ui =>
       assert(hasAuronTab(ui))
     }
   }
 
-  test("disabled Auron or UI settings hide the tab despite build information and SQL records") {
-    Seq(
-      "spark.auron.enabled",
-      "spark.auron.enable",
-      "spark.auron.ui.enabled",
-      "spark.auron.ui.enable").foreach { key =>
+  test(
+    "enabled property alone shows the tab even without native conversions or build information") {
+    Seq(Seq.empty[SparkListenerEvent], Seq(snapshot)).foreach { events =>
       withHistoryUI(
-        Map("spark.sql.extensions" -> extension, key -> "false"),
-        Seq(buildInfo, SparkListenerSQLExecutionEnd(1, 100))) { ui =>
+        Map("spark.auron.enabled" -> "true", "spark.auron.ui.enabled" -> "false"),
+        events) { ui =>
+        assert(hasAuronTab(ui))
+      }
+    }
+  }
+
+  test("disabled property hides the tab even when Auron data was recorded") {
+    Seq("spark.auron.enabled", "spark.auron.enable").foreach { key =>
+      withHistoryUI(Map(key -> "false"), Seq(buildInfo, snapshot)) { ui =>
         assert(!hasAuronTab(ui), key)
       }
     }
   }
 
-  test("primary enabled settings take precedence over legacy aliases") {
-    Seq("spark.auron", "spark.auron.ui").foreach { prefix =>
-      Seq(true, false).foreach { enabled =>
-        withHistoryUI(
-          Map(
-            "spark.sql.extensions" -> extension,
-            s"$prefix.enabled" -> enabled.toString,
-            s"$prefix.enable" -> (!enabled).toString)) { ui =>
-          assert(hasAuronTab(ui) == enabled)
-        }
+  test("primary enabled property takes precedence over the legacy alias") {
+    Seq(true, false).foreach { enabled =>
+      withHistoryUI(
+        Map(
+          "spark.auron.enabled" -> enabled.toString,
+          "spark.auron.enable" -> (!enabled).toString)) { ui =>
+        assert(hasAuronTab(ui) == enabled)
       }
     }
   }
 
-  test("recorded diagnostics preserve the tab when Auron was enabled for individual queries") {
-    val snapshot = AuronPlanDiagnosticEvent(2, 100, "plan", Seq.empty, Map.empty)
-    withHistoryUI(
-      Map("spark.auron.enabled" -> "false"),
-      Seq(SparkListenerSQLExecutionEnd(1, 100), snapshot)) { ui =>
-      assert(hasAuronTab(ui))
-    }
-  }
-
-  test("build information supports extensions registered without spark.sql.extensions") {
-    withHistoryUI(Map.empty, Seq(buildInfo)) { ui =>
-      assert(hasAuronTab(ui))
-    }
-  }
-
-  test("missing environment information uses recorded Auron data") {
+  test("missing environment information uses Auron's default enabled state") {
     withHistoryUI(Map.empty, environmentAvailable = false) { ui =>
-      assert(!hasAuronTab(ui))
-    }
-    withHistoryUI(Map.empty, Seq(buildInfo), environmentAvailable = false) { ui =>
       assert(hasAuronTab(ui))
     }
   }
