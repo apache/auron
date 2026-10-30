@@ -58,7 +58,7 @@ class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin with Logging {
 object AuronSQLHistoryServerPlugin {
   // Keep this UI-local definition in sync with SparkAuronConfiguration.AURON_ENABLED.
   // spark-extension depends on this module, so the UI cannot import that definition.
-  private object AuronEnabled {
+  private[ui] object AuronEnabled {
     val key = "spark.auron.enabled"
     val alternative = "spark.auron.enable"
     val defaultValue = true

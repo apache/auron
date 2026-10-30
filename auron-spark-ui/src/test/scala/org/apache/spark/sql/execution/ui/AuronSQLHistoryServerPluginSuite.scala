@@ -28,6 +28,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.apache.auron.spark.ui.{AuronBuildInfoEvent, AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
 
 class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
+  import AuronSQLHistoryServerPlugin.AuronEnabled
+
   private val buildInfo = AuronBuildInfoEvent(mutable.LinkedHashMap("version" -> "test"))
   private val snapshot = AuronPlanDiagnosticEvent(
     1,
@@ -42,7 +44,7 @@ class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
       environmentAvailable: Boolean = true)(check: SparkUI => Unit): Unit = {
     // These are SHS settings, not the application's settings.
     val conf = new SparkConf(false)
-      .set("spark.auron.enabled", "false")
+      .set(AuronEnabled.key, "false")
     val kv = new ElementTrackingStore(new InMemoryStore, conf)
     try {
       if (environmentAvailable) {
@@ -68,23 +70,23 @@ class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
 
   private def hasAuronTab(ui: SparkUI): Boolean = ui.getTabs.exists(_.isInstanceOf[AuronSQLTab])
 
-  test("missing enabled property uses Auron's default of true") {
+  test("missing enabled property uses Auron's default") {
     withHistoryUI(Map.empty) { ui =>
-      assert(hasAuronTab(ui))
+      assert(hasAuronTab(ui) == AuronEnabled.defaultValue)
     }
   }
 
   test(
     "enabled property alone shows the tab even without native conversions or build information") {
     Seq(Seq.empty[SparkListenerEvent], Seq(snapshot)).foreach { events =>
-      withHistoryUI(Map("spark.auron.enabled" -> "true"), events) { ui =>
+      withHistoryUI(Map(AuronEnabled.key -> "true"), events) { ui =>
         assert(hasAuronTab(ui))
       }
     }
   }
 
   test("disabled property hides the tab even when Auron data was recorded") {
-    Seq("spark.auron.enabled", "spark.auron.enable").foreach { key =>
+    Seq(AuronEnabled.key, AuronEnabled.alternative).foreach { key =>
       withHistoryUI(Map(key -> "false"), Seq(buildInfo, snapshot)) { ui =>
         assert(!hasAuronTab(ui), key)
       }
@@ -95,8 +97,8 @@ class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
     Seq(true, false).foreach { enabled =>
       withHistoryUI(
         Map(
-          "spark.auron.enabled" -> enabled.toString,
-          "spark.auron.enable" -> (!enabled).toString)) { ui =>
+          AuronEnabled.key -> enabled.toString,
+          AuronEnabled.alternative -> (!enabled).toString)) { ui =>
         assert(hasAuronTab(ui) == enabled)
       }
     }
@@ -104,7 +106,7 @@ class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
 
   test("missing environment information uses Auron's default enabled state") {
     withHistoryUI(Map.empty, environmentAvailable = false) { ui =>
-      assert(hasAuronTab(ui))
+      assert(hasAuronTab(ui) == AuronEnabled.defaultValue)
     }
   }
 }
