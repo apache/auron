@@ -77,9 +77,7 @@ class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
   test(
     "enabled property alone shows the tab even without native conversions or build information") {
     Seq(Seq.empty[SparkListenerEvent], Seq(snapshot)).foreach { events =>
-      withHistoryUI(
-        Map("spark.auron.enabled" -> "true", "spark.auron.ui.enabled" -> "false"),
-        events) { ui =>
+      withHistoryUI(Map("spark.auron.enabled" -> "true"), events) { ui =>
         assert(hasAuronTab(ui))
       }
     }
