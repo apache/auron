@@ -17,11 +17,12 @@
 package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
 import org.apache.spark.ui.SparkUI
 
-class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin {
+class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin with Logging {
 
   override def createListeners(
       conf: SparkConf,
@@ -31,7 +32,30 @@ class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin {
 
   override def setupUI(ui: SparkUI): Unit = {
     val sqlStatusStore = new AuronSQLAppStatusStore(ui.store.store)
-    new AuronSQLTab(sqlStatusStore, ui)
+    val properties =
+      try ui.store.environmentInfo().sparkProperties.toMap
+      catch {
+        case _: NoSuchElementException =>
+          logWarning(
+            "Application environment information is unavailable; using recorded Auron data")
+          Map.empty[String, String]
+      }
+
+    def enabled(key: String, altKey: String): Boolean =
+      !properties.get(key).orElse(properties.get(altKey)).exists(_.equalsIgnoreCase("false"))
+
+    val configured = properties
+      .get("spark.sql.extensions")
+      .exists(
+        _.split(",").exists(_.trim == "org.apache.spark.sql.auron.AuronSparkSessionExtension")) ||
+      sqlStatusStore.buildInfo().isDefined
+    val auronEnabled = enabled("spark.auron.enabled", "spark.auron.enable")
+    val uiEnabled = enabled("spark.auron.ui.enabled", "spark.auron.ui.enable")
+
+    // Session-level settings can enable Auron even when the application default is disabled.
+    if ((configured && auronEnabled && uiEnabled) || sqlStatusStore.hasPlanDiagnostics()) {
+      new AuronSQLTab(sqlStatusStore, ui)
+    }
   }
 
   override def displayOrder: Int = 0
