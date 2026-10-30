@@ -20,7 +20,7 @@ use auron_jni_bridge::{
 };
 use auron_memmgr::MemManager;
 use datafusion::{
-    common::Result,
+    common::{Result, config::MapKeyDedupPolicy},
     error::DataFusionError,
     execution::{
         SessionStateBuilder,
@@ -82,6 +82,8 @@ pub extern "system" fn Java_org_apache_auron_jni_JniBridge_callNative(
                 MemManager::init((max_memory as f64 * memory_fraction) as usize);
 
                 let mut session_config = SessionConfig::new().with_batch_size(batch_size);
+                session_config.options_mut().spark.map_key_dedup_policy =
+                    MapKeyDedupPolicy::LastWin;
                 session_config
                     .options_mut()
                     .execution
