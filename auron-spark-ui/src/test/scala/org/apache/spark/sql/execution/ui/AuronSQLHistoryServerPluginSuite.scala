@@ -18,16 +18,15 @@ package org.apache.spark.sql.execution.ui
 
 import scala.collection.mutable
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.{SparkListenerEnvironmentUpdate, SparkListenerEvent}
 import org.apache.spark.status.{AppStatusListener, AppStatusStore, ElementTrackingStore}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.kvstore.InMemoryStore
-import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.auron.spark.ui.{AuronBuildInfoEvent, AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
 
-class AuronSQLHistoryServerPluginSuite extends AnyFunSuite {
+class AuronSQLHistoryServerPluginSuite extends SparkFunSuite {
   import AuronSQLHistoryServerPlugin.AuronEnabled
 
   private val buildInfo = AuronBuildInfoEvent(mutable.LinkedHashMap("version" -> "test"))
