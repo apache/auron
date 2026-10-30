@@ -27,6 +27,10 @@ use crate::runtime_spill_coordinator::RuntimeSpillCoordinator;
 
 /// Domain-specific memory accounting and spill policy.
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait MemDomain: Send + Sync + Sized + 'static {
     fn name() -> &'static str;
 

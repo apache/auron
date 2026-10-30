@@ -268,6 +268,7 @@ mod tests {
     /// `rehash` calls along the way) and checks that:
     /// - the same key always maps to the same record index across batches
     /// - distinct keys always map to distinct record indices
+    ///
     /// This exercises the fearless_simd based probing/rehashing logic
     /// (in particular the `& mask` replacement for the old `% new_mods`
     /// SIMD modulo).

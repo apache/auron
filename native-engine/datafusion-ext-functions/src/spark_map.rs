@@ -326,7 +326,7 @@ fn java_str_to_map_split(
     auron_jni_bridge::jni_bridge::THREAD_JNIENV.with(|env| {
         let flattened: jobjectArray = flattened.as_obj().into_raw() as jobjectArray;
         let len = jni_map_error_with_env!(env, env.get_array_length(flattened as jarray))? as usize;
-        if len % 2 != 0 {
+        if !len.is_multiple_of(2) {
             return df_execution_err!(
                 "str_to_map internal error: Java split returned an odd number of fields",
             );
@@ -518,13 +518,13 @@ pub fn str_to_map(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let keys = if all_keys.is_empty() {
         new_empty_array(key_field.data_type())
     } else {
-        ScalarValue::iter_to_array(all_keys.into_iter())?
+        ScalarValue::iter_to_array(all_keys)?
     };
 
     let values = if all_values.is_empty() {
         new_empty_array(value_field.data_type())
     } else {
-        ScalarValue::iter_to_array(all_values.into_iter())?
+        ScalarValue::iter_to_array(all_values)?
     };
 
     let entries = StructArray::from(vec![(key_field, keys), (value_field, values)]);
@@ -659,13 +659,13 @@ pub fn map_from_entries(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let keys = if all_keys.is_empty() {
         new_empty_array(key_field.data_type())
     } else {
-        ScalarValue::iter_to_array(all_keys.into_iter())?
+        ScalarValue::iter_to_array(all_keys)?
     };
 
     let values = if all_values.is_empty() {
         new_empty_array(value_field.data_type())
     } else {
-        ScalarValue::iter_to_array(all_values.into_iter())?
+        ScalarValue::iter_to_array(all_values)?
     };
 
     let entries = StructArray::from(vec![(key_field, keys), (value_field, values)]);
@@ -776,13 +776,13 @@ pub fn map_concat(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let keys = if all_keys.is_empty() {
         new_empty_array(key_field.data_type())
     } else {
-        ScalarValue::iter_to_array(all_keys.into_iter())?
+        ScalarValue::iter_to_array(all_keys)?
     };
 
     let values = if all_values.is_empty() {
         new_empty_array(value_field.data_type())
     } else {
-        ScalarValue::iter_to_array(all_values.into_iter())?
+        ScalarValue::iter_to_array(all_values)?
     };
 
     let entries = StructArray::from(vec![(key_field, keys), (value_field, values)]);
@@ -893,13 +893,13 @@ pub fn map_from_arrays(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let keys = if all_keys.is_empty() {
         new_empty_array(key_field.data_type())
     } else {
-        ScalarValue::iter_to_array(all_keys.into_iter())?
+        ScalarValue::iter_to_array(all_keys)?
     };
 
     let values = if all_values.is_empty() {
         new_empty_array(value_field.data_type())
     } else {
-        ScalarValue::iter_to_array(all_values.into_iter())?
+        ScalarValue::iter_to_array(all_values)?
     };
 
     let entries = StructArray::from(vec![(key_field, keys), (value_field, values)]);

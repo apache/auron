@@ -152,6 +152,10 @@ impl RuntimeMemManager<Mem> {
 }
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait MemConsumer: Send + Sync {
     fn name(&self) -> &str;
     fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>);

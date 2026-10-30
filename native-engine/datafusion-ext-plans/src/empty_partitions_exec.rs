@@ -54,7 +54,7 @@ impl DisplayAs for EmptyPartitionsExec {
         write!(
             f,
             "EmptyPartitionsExec: partitions={}, schema={:?}",
-            &self.num_partitions, &self.schema,
+            self.num_partitions, self.schema,
         )
     }
 }

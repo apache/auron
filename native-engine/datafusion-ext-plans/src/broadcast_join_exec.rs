@@ -685,6 +685,10 @@ async fn collect_join_hash_map_without_caching(
 }
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait Joiner {
     async fn join(
         self: Pin<&mut Self>,

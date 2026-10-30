@@ -768,7 +768,12 @@ mod tests {
                 Ok(AggExpr {
                     field_name: format!("{function:?}"),
                     mode: AggMode::Partial,
-                    agg: create_agg(function, &[value.clone()], &schema, DataType::Float64)?,
+                    agg: create_agg(
+                        function,
+                        std::slice::from_ref(&value),
+                        &schema,
+                        DataType::Float64,
+                    )?,
                     filter: Some(filter.clone()),
                 })
             })

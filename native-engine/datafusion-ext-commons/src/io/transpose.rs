@@ -101,7 +101,9 @@ fn transpose_impl<S: Simd, T: Lanes>(simd: S, input: &[T], output: &mut [u8]) {
     let fwd_idx = u8x64::simd_from(simd, T::FWD_INDEX);
 
     for (block_idx, chunk) in bytes[..simd_rows * T::W]
-        .chunks_exact(BLOCK_BYTES)
+        .as_chunks::<BLOCK_BYTES>()
+        .0
+        .iter()
         .enumerate()
     {
         let v = u8x64::from_slice(simd, chunk);

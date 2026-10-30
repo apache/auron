@@ -26,6 +26,16 @@ workspace = true
 
 [features]
 default = ["tokio/rt-multi-thread"]
+# The libtest benchmarks require a nightly Rust toolchain.
+nightly-bench = []
+
+[[bench]]
+name = "agg_idx_cache"
+required-features = ["nightly-bench"]
+
+[[bench]]
+name = "explode"
+required-features = ["nightly-bench"]
 
 [dependencies]
 arrow = { workspace = true }

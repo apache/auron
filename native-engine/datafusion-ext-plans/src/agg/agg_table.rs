@@ -126,10 +126,10 @@ impl AggTable {
         self.update_mem_used(mem_used).await?;
 
         // update udaf memory tracker, spill if update failed
-        if let Some(udaf_mem_tracker) = self.agg_ctx.get_udaf_mem_tracker() {
-            if !udaf_mem_tracker.update_used()? {
-                self.force_spill().await?;
-            }
+        if let Some(udaf_mem_tracker) = self.agg_ctx.get_udaf_mem_tracker()
+            && !udaf_mem_tracker.update_used()?
+        {
+            self.force_spill().await?;
         }
         Ok(())
     }
@@ -329,10 +329,10 @@ impl MemConsumer for AggTable {
 
         // use pre-merging if cardinality is low
         let mut next_is_hashing = false;
-        if let InMemData::Hashing(hashing_data) = &in_mem.data {
-            if hashing_data.cardinality_ratio() < 0.5 {
-                next_is_hashing = true;
-            }
+        if let InMemData::Hashing(hashing_data) = &in_mem.data
+            && hashing_data.cardinality_ratio() < 0.5
+        {
+            next_is_hashing = true;
         }
         let cur_in_mem = in_mem.renew(next_is_hashing)?;
 
@@ -449,15 +449,14 @@ impl InMemTable {
         if self.id == 0 // only works on first table
             && !self.agg_ctx.is_expand_agg
             && self.agg_ctx.supports_partial_skipping
+            && let InMemData::Hashing(hashing_data) = &self.data
         {
-            if let InMemData::Hashing(hashing_data) = &self.data {
-                let cardinality_ratio = hashing_data.cardinality_ratio();
-                if cardinality_ratio > self.agg_ctx.partial_skipping_ratio {
-                    log::warn!(
-                        "AggTable cardinality ratio = {cardinality_ratio}, will trigger partial skipping",
-                    );
-                    return true;
-                }
+            let cardinality_ratio = hashing_data.cardinality_ratio();
+            if cardinality_ratio > self.agg_ctx.partial_skipping_ratio {
+                log::warn!(
+                    "AggTable cardinality ratio = {cardinality_ratio}, will trigger partial skipping",
+                );
+                return true;
             }
         }
         false

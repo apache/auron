@@ -211,13 +211,13 @@ fn transform_to_cached_exprs(exprs: &[PhysicalExprRef]) -> Result<(Vec<PhysicalE
             // short circuiting expression - only first child can be cached
             // first `when` expr can also be cached
             collect_dups(&expr.children()[0], current_count, expr_counts, dups);
-            if let Ok(case_expr) = downcast_any!(expr, CaseExpr) {
-                if case_expr.expr().is_some() {
-                    let children = case_expr.children();
-                    if children.len() >= 2 {
-                        // cache first `when` expr
-                        collect_dups(&expr.children()[1], current_count, expr_counts, dups);
-                    }
+            if let Ok(case_expr) = downcast_any!(expr, CaseExpr)
+                && case_expr.expr().is_some()
+            {
+                let children = case_expr.children();
+                if children.len() >= 2 {
+                    // cache first `when` expr
+                    collect_dups(&expr.children()[1], current_count, expr_counts, dups);
                 }
             }
         } else {
@@ -272,11 +272,12 @@ fn transform_to_cached_exprs(exprs: &[PhysicalExprRef]) -> Result<(Vec<PhysicalE
                 .collect::<Vec<_>>();
             children[0] = transform(children[0].clone(), cached_expr_ids, cache)?;
 
-            if let Some(case_expr) = expr.as_any().downcast_ref::<CaseExpr>() {
-                if children.len() >= 2 && case_expr.expr().is_some() {
-                    // cache first `when` expr
-                    children[1] = transform(children[1].clone(), cached_expr_ids, cache)?;
-                }
+            if let Some(case_expr) = expr.as_any().downcast_ref::<CaseExpr>()
+                && children.len() >= 2
+                && case_expr.expr().is_some()
+            {
+                // cache first `when` expr
+                children[1] = transform(children[1].clone(), cached_expr_ids, cache)?;
             }
             expr.clone().with_new_children(children)?
         } else {
