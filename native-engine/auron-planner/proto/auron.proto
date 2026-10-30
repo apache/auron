@@ -484,6 +484,9 @@ message HashJoinExecNode {
   JoinType join_type = 5;
   JoinSide build_side = 6;
   JoinFilter filter = 7;
+  // when true, the output must preserve the probe side's original row
+  // ordering even if a hybrid (bucketed hash) join fallback is triggered.
+  bool required_reserved_order = 8;
 }
 
 message BroadcastJoinBuildHashMapExecNode {
@@ -501,6 +504,9 @@ message BroadcastJoinExecNode {
   string cached_build_hash_map_id = 7;
   bool is_null_aware_anti_join = 8;
   JoinFilter filter = 9;
+  // when true, the output must preserve the probe side's original row
+  // ordering even if a hybrid (bucketed hash) join fallback is triggered.
+  bool required_reserved_order = 10;
 }
 
 message RenameColumnsExecNode {

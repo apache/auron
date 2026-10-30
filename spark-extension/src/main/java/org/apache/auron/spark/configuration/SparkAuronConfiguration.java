@@ -249,29 +249,42 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDefaultValue(0L)
             .checkValue(v -> v != null && v >= 0L, "must be >= 0");
 
-    public static final ConfigOption<Boolean> SMJ_FALLBACK_ENABLE = new ConfigOption<>(Boolean.class)
-            .withKey("auron.smjfallback.enable")
+    public static final ConfigOption<Boolean> HYBRID_JOIN_ENABLE = new ConfigOption<>(Boolean.class)
+            .withKey("auron.hybrid.join.enable")
             .withCategory("Operator Supports")
             .withDescription(
-                    "Enable fallback from hash join to sort-merge join when the hash table becomes too large to fit in memory. "
-                            + "This prevents out-of-memory errors by switching to a more memory-efficient join strategy when necessary.")
-            .withDefaultValue(false);
+                    "Enable falling back from a single in-memory hash join to hybrid (bucketed hash) join when the hash "
+                            + "table becomes too large to fit in memory. Both build and probe side rows are partitioned by "
+                            + "hash(key) % 4096 and processed group by group, bounding memory usage while still reusing the "
+                            + "vectorized hash join implementation for each group. This prevents out-of-memory errors without "
+                            + "paying the cost of a full sort-merge join.")
+            .withDefaultValue(true);
 
-    public static final ConfigOption<Integer> SMJ_FALLBACK_ROWS_THRESHOLD = new ConfigOption<>(Integer.class)
-            .withKey("auron.smjfallback.rows.threshold")
+    public static final ConfigOption<Integer> HYBRID_JOIN_ROWS_THRESHOLD = new ConfigOption<>(Integer.class)
+            .withKey("auron.hybrid.join.rows.threshold")
             .withCategory("Operator Supports")
             .withDescription(
-                    "Row count threshold that triggers fallback from hash join to sort-merge join. When the number of rows "
-                            + "in the hash table exceeds this threshold, the system will switch to sort-merge join to avoid memory issues.")
-            .withDefaultValue(10000000);
+                    "Row count threshold that triggers falling back from a single in-memory hash join to hybrid "
+                            + "(bucketed hash) join. When the number of rows in the hash table exceeds this threshold, the "
+                            + "system switches to hybrid join to avoid memory issues.")
+            .withDefaultValue(100000000);
 
-    public static final ConfigOption<Integer> SMJ_FALLBACK_MEM_SIZE_THRESHOLD = new ConfigOption<>(Integer.class)
-            .withKey("auron.smjfallback.mem.threshold")
+    public static final ConfigOption<Integer> HYBRID_JOIN_MEM_SIZE_THRESHOLD = new ConfigOption<>(Integer.class)
+            .withKey("auron.hybrid.join.mem.threshold")
             .withCategory("Operator Supports")
-            .withDescription("Memory size threshold in bytes that triggers fallback from hash join to sort-merge join. "
-                    + "When the hash table memory usage exceeds this threshold (128MB by default), the system switches "
-                    + "to sort-merge join to prevent memory overflow.")
+            .withDescription("Memory size threshold in bytes that triggers falling back from a single in-memory hash "
+                    + "join to hybrid (bucketed hash) join. When the hash table memory usage exceeds this threshold "
+                    + "(128MB by default), the system switches to hybrid join to prevent memory overflow.")
             .withDefaultValue(134217728);
+
+    public static final ConfigOption<Integer> HYBRID_JOIN_GROUP_MEM_SIZE_THRESHOLD = new ConfigOption<>(Integer.class)
+            .withKey("auron.hybrid.join.group.mem.threshold")
+            .withCategory("Operator Supports")
+            .withDescription("Target memory size (bytes) of each bucket group when a hash join build "
+                    + "side is too large and falls back to hybrid (bucketed hash) join: both build and "
+                    + "probe side rows are partitioned by hash(key) % 4096 and processed group by group "
+                    + "to bound memory usage. Default 16MB.")
+            .withDefaultValue(16 * 1024 * 1024);
 
     public static final ConfigOption<Double> ON_HEAP_SPILL_MEM_FRACTION = new ConfigOption<>(Double.class)
             .withKey("auron.onHeapSpill.memoryFraction")

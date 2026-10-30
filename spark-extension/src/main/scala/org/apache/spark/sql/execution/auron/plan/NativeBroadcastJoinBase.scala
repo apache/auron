@@ -56,7 +56,8 @@ abstract class NativeBroadcastJoinBase(
     joinType: JoinType,
     condition: Option[Expression],
     broadcastSide: JoinBuildSide,
-    isNullAwareAntiJoin: Boolean)
+    isNullAwareAntiJoin: Boolean,
+    requiredReservedOrder: Boolean)
     extends BinaryExecNode
     with NativeSupports {
 
@@ -72,7 +73,8 @@ abstract class NativeBroadcastJoinBase(
           "probed_side_search_time",
           "probed_side_compare_time",
           "build_output_time",
-          "fallback_sort_merge_join_time",
+          "hybrid_join_time",
+          "reserve_order_sort_time",
           "input_batch_count",
           "input_batch_mem_size",
           "input_row_count"))
@@ -189,6 +191,7 @@ abstract class NativeBroadcastJoinBase(
           .setBroadcastSide(nativeBroadcastSide)
           .setCachedBuildHashMapId(cachedBuildHashMapId)
           .setIsNullAwareAntiJoin(isNullAwareAntiJoin)
+          .setRequiredReservedOrder(requiredReservedOrder)
           .addAllOn(nativeJoinOn.asJava)
         nativeJoinFilter.foreach(broadcastJoinExec.setFilter)
 

@@ -129,10 +129,11 @@ class AuronBroadcastNestedLoopJoinSuite extends AuronJoinConditionTestBase {
   }
 
   for ((joinType, buildAlias) <- Seq(("inner", "l"), ("left outer", "r"))) {
-    test(s"BNLJ $joinType building $buildAlias preserves residuals in forced SMJ fallback") {
+    test(
+      s"BNLJ $joinType building $buildAlias preserves residuals in forced hybrid join fallback") {
       withSparkConf(
-        "spark.auron.smjfallback.enable" -> "true",
-        "spark.auron.smjfallback.rows.threshold" -> "0") {
+        "spark.auron.hybrid.join.enable" -> "true",
+        "spark.auron.hybrid.join.rows.threshold" -> "0") {
         withSQLConf(
           "spark.sql.adaptive.enabled" -> "false",
           "spark.sql.shuffle.partitions" -> "2") {
@@ -145,7 +146,7 @@ class AuronBroadcastNestedLoopJoinSuite extends AuronJoinConditionTestBase {
             val join = collectFirst(plan) { case native: NativeBroadcastJoinExec => native }
             assert(join.isDefined, plan.toString)
             assert(join.get.leftKeys.isEmpty && join.get.rightKeys.isEmpty)
-            assert(join.get.metrics("fallback_sort_merge_join_time").value > 0)
+            assert(join.get.metrics("hybrid_join_time").value > 0)
             assert(join.get.outputOrdering.isEmpty)
           }
         }
@@ -153,7 +154,7 @@ class AuronBroadcastNestedLoopJoinSuite extends AuronJoinConditionTestBase {
     }
   }
 
-  test("broadcast hash join ordering accounts for enabled SMJ fallback") {
+  test("broadcast hash join ordering accounts for enabled hybrid join fallback") {
     withSQLConf("spark.sql.adaptive.enabled" -> "false") {
       withTempView("ordering_left", "ordering_right") {
         Seq((1, 0), (1, 1))
@@ -179,7 +180,7 @@ class AuronBroadcastNestedLoopJoinSuite extends AuronJoinConditionTestBase {
           join.get.left)
         val orderedJoin = join.get.copy(left = orderedProbe)
         val conf = SparkEnv.get.conf
-        val key = "spark.auron.smjfallback.enable"
+        val key = "spark.auron.hybrid.join.enable"
         val previous = conf.getOption(key)
         try {
           conf.set(key, "false")
