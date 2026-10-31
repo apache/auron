@@ -167,7 +167,10 @@ pub fn array_except(args: &[ColumnarValue]) -> Result<ColumnarValue> {
                 output.extend(0, run_start, end);
             }
         }
-        offsets.push(output.len() as i32);
+        let Ok(offset) = i32::try_from(output.len()) else {
+            return df_execution_err!("array_except result exceeds i32 offsets");
+        };
+        offsets.push(offset);
     }
     let result: ArrayRef = Arc::new(ListArray::try_new(
         Arc::clone(field),
@@ -790,6 +793,13 @@ mod test {
         )?);
         assert!(array_except(&[]).is_err());
         assert!(array_except(&[ColumnarValue::Array(Arc::clone(&ints))]).is_err());
+        assert!(
+            array_except(&[
+                ColumnarValue::Scalar(ScalarValue::from(1)),
+                ColumnarValue::Scalar(ScalarValue::from(1)),
+            ])
+            .is_err()
+        );
         assert!(
             array_except(&[
                 ColumnarValue::Array(Arc::clone(&ints)),
