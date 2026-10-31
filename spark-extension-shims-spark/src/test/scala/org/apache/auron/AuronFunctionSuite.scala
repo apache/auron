@@ -445,6 +445,134 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("array_except function") {
+    withTable("t1") {
+      sql("create table t1(id int, a array<int>, b array<int>) using parquet")
+      sql("""insert into t1 values
+          |  (0, array(1, 2, 3, 2, 4), array(2, 5)),
+          |  (1, array(1, null, 3, null), array(3)),
+          |  (2, array(1, null), array(null)),
+          |  (3, array(), array(1)),
+          |  (4, array(1, 1), array()),
+          |  (5, null, array(1)),
+          |  (6, array(1), null)
+          |""".stripMargin)
+      val query = "select id, array_except(a, b) from t1"
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkSparkAnswerAndOperator(query)
+          checkAnswer(
+            sql(query),
+            Seq(
+              Row(0, Seq(1, 3, 4)),
+              Row(1, Seq[Integer](1, null)),
+              Row(2, Seq(1)),
+              Row(3, Seq.empty[Int]),
+              Row(4, Seq(1)),
+              Row(5, null),
+              Row(6, null)))
+        }
+      }
+      checkSparkAnswerAndOperator("""select
+          |  array_except(a, array(1, null)),
+          |  array_except(array(1, 2, 3, null, 3), b)
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_except function with atomic element types") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array('b', 'a', 'b', null, 'c') as strings, array('c', null) as strings2,
+          |  array(true, false, true, null) as bools, array(false) as bools2,
+          |  array(cast(2 as tinyint), cast(1 as tinyint), cast(2 as tinyint)) as bytes,
+          |  array(cast(1 as tinyint)) as bytes2,
+          |  array(cast(2 as smallint), cast(1 as smallint), cast(2 as smallint)) as shorts,
+          |  array(cast(1 as smallint)) as shorts2,
+          |  array(2L, 1L, 2L, null) as longs, array(1L) as longs2,
+          |  array(date'2024-02-29', date'1970-01-01', date'2024-02-29', null) as dates,
+          |  array(date'1970-01-01') as dates2,
+          |  array(timestamp'2024-02-29 12:34:56', timestamp'1970-01-01 00:00:00',
+          |    timestamp'2024-02-29 12:34:56', null) as timestamps,
+          |  array(timestamp'1970-01-01 00:00:00') as timestamps2,
+          |  array(cast(2.5 as decimal(10, 2)), cast(1 as decimal(10, 2)),
+          |    cast(2.5 as decimal(10, 2)), null) as decimals,
+          |  array(cast(1 as decimal(10, 2))) as decimals2,
+          |  array(cast('b' as binary), cast('a' as binary), cast('b' as binary), null) as binaries,
+          |  array(cast('a' as binary)) as binaries2
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""select
+          |  array_except(strings, strings2), array_except(bools, bools2),
+          |  array_except(bytes, bytes2), array_except(shorts, shorts2),
+          |  array_except(longs, longs2), array_except(dates, dates2),
+          |  array_except(timestamps, timestamps2), array_except(decimals, decimals2),
+          |  array_except(binaries, binaries2), array_except(longs, array(1))
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_except function with floating point elements") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t1") {
+        sql("create table t1(id int, a array<double>, b array<double>) using parquet")
+        sql("""insert into t1 values
+            |  (0, array(-0.0D, 1.0D), array(0.0D)),
+            |  (1, array(double('NaN'), double('NaN'), 2.0D, 2.0D), array(3.0D)),
+            |  (2, array(double('NaN'), 0.0D, -0.0D, null), array(double('NaN'), null)),
+            |  (3, array(), array()),
+            |  (4, null, array(1.0D))
+            |""".stripMargin)
+        val query = """select id, array_except(a, b),
+            |  array_except(cast(a as array<float>), cast(b as array<float>)) from t1
+            |""".stripMargin
+        checkSparkAnswerAndOperator(query)
+        val first = sql(query).collect().find(_.getInt(0) == 0).get
+        val expected =
+          if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "4.2") Seq(1.0) else Seq(-0.0, 1.0)
+        assert(
+          first.getSeq[Double](1).map(java.lang.Double.doubleToRawLongBits) ==
+            expected.map(java.lang.Double.doubleToRawLongBits))
+        assert(
+          first.getSeq[Float](2).map(java.lang.Float.floatToRawIntBits) ==
+            expected.map(v => java.lang.Float.floatToRawIntBits(v.toFloat)))
+      }
+    }
+  }
+
+  test("array_except function with unsupported elements falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array(array(1, null), array(1, null), array(2)) as nested,
+          |  array(named_struct('v', 1), named_struct('v', 2)) as structs,
+          |  array(double('NaN'), -0.0D, 0.0D) as doubles
+          |""".stripMargin)
+      val expressions = Seq(
+        "array_except(nested, array(array(2)))",
+        "array_except(structs, array(named_struct('v', 2)))")
+      withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+        for (expression <- expressions) {
+          val query = s"select $expression from t1"
+          val expr = sql(query).queryExecution.analyzed.expressions.collectFirst {
+            case Alias(child, _) => child
+          }.get
+          assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+          checkSparkAnswerAndOperator(query)
+        }
+      }
+      if (!AuronTestUtils.isSparkV31OrGreater) {
+        // Spark 3.0's interpreted and code-generated paths differ for NaN.
+        withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "false") {
+          val df = checkSparkAnswer("select array_except(doubles, array(0.0D)) from t1")
+          assert(stripAQEPlan(df.queryExecution.executedPlan).collectFirst {
+            case project: ProjectExec => project
+          }.nonEmpty)
+        }
+      }
+    }
+  }
+
   test("hex function") {
     withTable("t1") {
       sql("create table t1(c1 int, c2 string) using parquet")
