@@ -17,11 +17,13 @@
 package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
 import org.apache.spark.ui.SparkUI
 
-class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin {
+class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin with Logging {
+  import AuronSQLHistoryServerPlugin.AuronEnabled
 
   override def createListeners(
       conf: SparkConf,
@@ -30,9 +32,35 @@ class AuronSQLHistoryServerPlugin extends AppHistoryServerPlugin {
   }
 
   override def setupUI(ui: SparkUI): Unit = {
-    val sqlStatusStore = new AuronSQLAppStatusStore(ui.store.store)
-    new AuronSQLTab(sqlStatusStore, ui)
+    val properties =
+      try ui.store.environmentInfo().sparkProperties.toMap
+      catch {
+        case _: NoSuchElementException =>
+          logWarning(
+            "Application environment information is unavailable; using Auron's default enabled state")
+          Map.empty[String, String]
+      }
+
+    val auronEnabled = properties
+      .get(AuronEnabled.key)
+      .orElse(properties.get(AuronEnabled.alternative))
+      .map(java.lang.Boolean.parseBoolean)
+      .getOrElse(AuronEnabled.defaultValue)
+    if (auronEnabled) {
+      val sqlStatusStore = new AuronSQLAppStatusStore(ui.store.store)
+      new AuronSQLTab(sqlStatusStore, ui)
+    }
   }
 
   override def displayOrder: Int = 0
+}
+
+object AuronSQLHistoryServerPlugin {
+  // Keep this UI-local definition in sync with SparkAuronConfiguration.AURON_ENABLED.
+  // spark-extension depends on this module, so the UI cannot import that definition.
+  private[ui] object AuronEnabled {
+    val key = "spark.auron.enabled"
+    val alternative = "spark.auron.enable"
+    val defaultValue = true
+  }
 }
