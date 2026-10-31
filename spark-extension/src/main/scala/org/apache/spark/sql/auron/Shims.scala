@@ -108,6 +108,11 @@ abstract class Shims {
       condition: Option[Expression],
       isSkewJoin: Boolean): NativeSortMergeJoinBase
 
+  def createNativeCartesianProductExec(
+      left: SparkPlan,
+      right: SparkPlan,
+      condition: Option[Expression]): NativeCartesianProductBase
+
   def createNativeShuffledHashJoinExec(
       left: SparkPlan,
       right: SparkPlan,
