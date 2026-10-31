@@ -154,7 +154,7 @@ impl<T: KeyForRadixQueue> Drop for RadixTournamentTreePeekMut<'_, T> {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use rand::Rng;
+    use rand::RngExt;
 
     use crate::algorithm::rdx_queue::{KeyForRadixQueue, RadixQueue};
 
