@@ -115,6 +115,16 @@ object NativeConverters extends Logging {
     }
   }
 
+  private def isSupportedSetArrayType(dataType: DataType): Boolean = dataType match {
+    // Spark 3.0 has different NaN deduplication behavior.
+    case ArrayType(FloatType | DoubleType, _) =>
+      SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
+    case ArrayType(elementType: AtomicType, _) =>
+      isTypeSupported(elementType) || elementType == BinaryType
+    case ArrayType(NullType, _) => true
+    case _ => false
+  }
+
   def existTimestampType(dataType: DataType): Boolean = {
     dataType match {
       case TimestampType =>
@@ -1174,16 +1184,10 @@ object NativeConverters extends Logging {
           if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
         buildExtScalarFunction("Spark_NormalizeNanAndZero", e.children, e.dataType)
 
-      case e: ArrayDistinct if (e.dataType match {
-            // Spark 3.0 has different NaN deduplication behavior.
-            case ArrayType(FloatType | DoubleType, _) =>
-              SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
-            case ArrayType(elementType: AtomicType, _) =>
-              isTypeSupported(elementType) || elementType == BinaryType
-            case ArrayType(NullType, _) => true
-            case _ => false
-          }) =>
+      case e: ArrayDistinct if isSupportedSetArrayType(e.dataType) =>
         buildExtScalarFunction("Spark_ArrayDistinct", e.children, e.dataType)
+      case e: ArrayExcept if isSupportedSetArrayType(e.dataType) =>
+        buildExtScalarFunction("Spark_ArrayExcept", e.children, e.dataType)
       case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
       case e: ArrayContains
           if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>

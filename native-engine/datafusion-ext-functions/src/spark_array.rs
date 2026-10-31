@@ -37,6 +37,24 @@ use datafusion_ext_commons::{
     spark_float::spark_float_cmp,
 };
 
+// Spark canonicalizes NaNs but keeps signed zeros distinct before Spark 4.2's
+// normalization.
+fn canonicalize_nans(values: &ArrayRef) -> Result<ArrayRef> {
+    Ok(match values.data_type() {
+        DataType::Float32 => Arc::new(Float32Array::from_iter(
+            downcast_any!(values, Float32Array)?
+                .iter()
+                .map(|v| v.map(|v| if v.is_nan() { f32::NAN } else { v })),
+        )),
+        DataType::Float64 => Arc::new(Float64Array::from_iter(
+            downcast_any!(values, Float64Array)?
+                .iter()
+                .map(|v| v.map(|v| if v.is_nan() { f64::NAN } else { v })),
+        )),
+        _ => Arc::clone(values),
+    })
+}
+
 pub fn array_distinct(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 1 {
         return df_execution_err!("array_distinct requires exactly 1 argument");
@@ -46,21 +64,7 @@ pub fn array_distinct(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         return df_execution_err!("array_distinct does not support nested element types");
     }
 
-    // Spark canonicalizes NaNs but keeps signed zeros distinct before Spark 4.2's
-    // normalization.
-    let values: ArrayRef = match array.value_type() {
-        DataType::Float32 => Arc::new(Float32Array::from_iter(
-            downcast_any!(array.values(), Float32Array)?
-                .iter()
-                .map(|v| v.map(|v| if v.is_nan() { f32::NAN } else { v })),
-        )),
-        DataType::Float64 => Arc::new(Float64Array::from_iter(
-            downcast_any!(array.values(), Float64Array)?
-                .iter()
-                .map(|v| v.map(|v| if v.is_nan() { f64::NAN } else { v })),
-        )),
-        _ => Arc::clone(array.values()),
-    };
+    let values = canonicalize_nans(array.values())?;
     let converter = RowConverter::new(vec![SortField::new(values.data_type().clone())])?;
     let rows = converter.convert_columns(&[Arc::clone(&values)])?;
     let data = values.to_data();
@@ -97,6 +101,100 @@ pub fn array_distinct(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     } else {
         Ok(ColumnarValue::Array(result))
     }
+}
+
+pub fn array_except(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 2 {
+        return df_execution_err!("array_except requires exactly 2 arguments");
+    }
+    let left_is_scalar = matches!(args[0], ColumnarValue::Scalar(_));
+    let right_is_scalar = matches!(args[1], ColumnarValue::Scalar(_));
+    // Scalar lists stay one row to avoid copying their elements per input row.
+    let left = columnar_value_to_list_array(&args[0])?;
+    let right = columnar_value_to_list_array(&args[1])?;
+    let num_rows = match (left_is_scalar, right_is_scalar) {
+        (true, _) => right.len(),
+        (_, true) => left.len(),
+        _ if left.len() == right.len() => left.len(),
+        _ => return df_execution_err!("array_except requires matching array lengths"),
+    };
+    if left.value_type() != right.value_type() {
+        return df_execution_err!("array_except requires matching element types");
+    }
+    if left.value_type().is_nested() {
+        return df_execution_err!("array_except does not support nested element types");
+    }
+    let DataType::List(field) = left.data_type() else {
+        return df_execution_err!("array_except requires a list");
+    };
+
+    let (left_base, left_values) = visible_values(&left)?;
+    let (right_base, right_values) = visible_values(&right)?;
+    let converter = RowConverter::new(vec![SortField::new(left_values.data_type().clone())])?;
+    let left_rows = converter.convert_columns(&[Arc::clone(&left_values)])?;
+    let right_rows = converter.convert_columns(&[right_values])?;
+    let data = left_values.to_data();
+    let mut output = MutableArrayData::new(vec![&data], false, left_values.len());
+    let mut offsets = Vec::with_capacity(num_rows + 1);
+    let mut valids = Vec::with_capacity(num_rows);
+    // Seeded with the right elements, so each left element needs one lookup.
+    let mut seen = HashSet::new();
+    offsets.push(0i32);
+    for row in 0..num_rows {
+        let l = if left_is_scalar { 0 } else { row };
+        let r = if right_is_scalar { 0 } else { row };
+        let valid = left.is_valid(l) && right.is_valid(r);
+        valids.push(valid);
+        if valid {
+            seen.clear();
+            let right_start = right.value_offsets()[r] as usize - right_base;
+            let right_end = right.value_offsets()[r + 1] as usize - right_base;
+            for index in right_start..right_end {
+                seen.insert(right_rows.row(index));
+            }
+            let start = left.value_offsets()[l] as usize - left_base;
+            let end = left.value_offsets()[l + 1] as usize - left_base;
+            let mut run_start = start;
+            for index in start..end {
+                if !seen.insert(left_rows.row(index)) {
+                    if run_start < index {
+                        output.extend(0, run_start, index);
+                    }
+                    run_start = index + 1;
+                }
+            }
+            if run_start < end {
+                output.extend(0, run_start, end);
+            }
+        }
+        let Ok(offset) = i32::try_from(output.len()) else {
+            return df_execution_err!("array_except result exceeds i32 offsets");
+        };
+        offsets.push(offset);
+    }
+    let result: ArrayRef = Arc::new(ListArray::try_new(
+        Arc::clone(field),
+        OffsetBuffer::new(offsets.into()),
+        make_array(output.freeze()),
+        Some(NullBuffer::from(valids)),
+    )?);
+    if left_is_scalar && right_is_scalar {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(result))
+    }
+}
+
+// Returns the first visible element index and the canonicalized visible
+// elements.
+fn visible_values(list: &ListArray) -> Result<(usize, ArrayRef)> {
+    let offsets = list.value_offsets();
+    let start = offsets[0] as usize;
+    let end = offsets[offsets.len() - 1] as usize;
+    let values = canonicalize_nans(&list.values().slice(start, end - start))?;
+    Ok((start, values))
 }
 
 pub fn array_contains(args: &[ColumnarValue]) -> Result<ColumnarValue> {
@@ -471,6 +569,252 @@ mod test {
             ])
             .is_err()
         );
+    }
+
+    fn int_lists(rows: Vec<Option<Vec<Option<i32>>>>) -> ArrayRef {
+        Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(rows))
+    }
+
+    #[test]
+    fn test_array_except_int() -> Result<()> {
+        let left = int_lists(vec![
+            Some(vec![Some(1), Some(2), Some(3), Some(2), Some(4)]),
+            Some(vec![Some(1), None, Some(3), None]),
+            Some(vec![Some(1), None]),
+            Some(vec![]),
+            Some(vec![Some(1), Some(1)]),
+            None,
+            Some(vec![Some(1)]),
+        ]);
+        let right = int_lists(vec![
+            Some(vec![Some(2), Some(5)]),
+            Some(vec![Some(3)]),
+            Some(vec![None]),
+            Some(vec![Some(1)]),
+            Some(vec![]),
+            Some(vec![Some(1)]),
+            None,
+        ]);
+        let result = array_except(&[ColumnarValue::Array(left), ColumnarValue::Array(right)])?
+            .into_array(7)?;
+        let expected = int_lists(vec![
+            Some(vec![Some(1), Some(3), Some(4)]),
+            Some(vec![Some(1), None]),
+            Some(vec![Some(1)]),
+            Some(vec![]),
+            Some(vec![Some(1)]),
+            None,
+            None,
+        ]);
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_except_scalar_arguments() -> Result<()> {
+        let column = int_lists(vec![
+            Some(vec![Some(1), Some(2), Some(1)]),
+            Some(vec![Some(3), None, None]),
+            None,
+        ]);
+        let scalar_source = int_lists(vec![
+            Some(vec![Some(1), None]),
+            Some(vec![Some(1), Some(2), None, Some(2)]),
+        ]);
+        let small = ScalarValue::try_from_array(&scalar_source, 0)?;
+        let big = ScalarValue::try_from_array(&scalar_source, 1)?;
+
+        let result = array_except(&[
+            ColumnarValue::Array(Arc::clone(&column)),
+            ColumnarValue::Scalar(small.clone()),
+        ])?
+        .into_array(3)?;
+        let expected = int_lists(vec![Some(vec![Some(2)]), Some(vec![Some(3)]), None]);
+        assert_eq!(&result, &expected);
+
+        let result = array_except(&[
+            ColumnarValue::Scalar(big.clone()),
+            ColumnarValue::Array(column),
+        ])?
+        .into_array(3)?;
+        let expected = int_lists(vec![Some(vec![None]), Some(vec![Some(1), Some(2)]), None]);
+        assert_eq!(&result, &expected);
+
+        let result = array_except(&[ColumnarValue::Scalar(big), ColumnarValue::Scalar(small)])?;
+        assert!(matches!(result, ColumnarValue::Scalar(_)));
+        assert_eq!(
+            &result.into_array(1)?,
+            &int_lists(vec![Some(vec![Some(2)])])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_except_sliced_values_and_field() -> Result<()> {
+        // Offsets do not start at 0, so hidden values precede the visible ones.
+        let field = Arc::new(Field::new("element", DataType::Int32, true).with_metadata(
+            std::collections::HashMap::from([("key".into(), "value".into())]),
+        ));
+        let left: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::clone(&field),
+            OffsetBuffer::new(vec![1, 4, 6].into()),
+            Arc::new(Int32Array::from(vec![99, 1, 2, 1, 3, 3, 99])),
+            None,
+        )?);
+        let right: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(DataType::Int32, true)),
+            OffsetBuffer::new(vec![2, 3, 4].into()),
+            Arc::new(Int32Array::from(vec![1, 3, 2, 3, 1])),
+            None,
+        )?);
+        let result = array_except(&[ColumnarValue::Array(left), ColumnarValue::Array(right)])?
+            .into_array(2)?;
+        let expected: ArrayRef = Arc::new(ListArray::try_new(
+            field,
+            OffsetBuffer::new(vec![0, 1, 1].into()),
+            Arc::new(Int32Array::from(vec![1])),
+            None,
+        )?);
+        assert_eq!(&result, &expected);
+
+        // Sliced ListArray (non-zero array offset) on both sides.
+        let left = int_lists(vec![
+            Some(vec![Some(9)]),
+            Some(vec![Some(1), Some(2), Some(3)]),
+            Some(vec![Some(4), Some(4)]),
+        ])
+        .slice(1, 2);
+        let right = int_lists(vec![
+            Some(vec![Some(1), Some(3), Some(4)]),
+            Some(vec![Some(2)]),
+            Some(vec![]),
+        ])
+        .slice(1, 2);
+        let result = array_except(&[ColumnarValue::Array(left), ColumnarValue::Array(right)])?
+            .into_array(2)?;
+        let expected = int_lists(vec![Some(vec![Some(1), Some(3)]), Some(vec![Some(4)])]);
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_except_strings() -> Result<()> {
+        let field = Arc::new(Field::new_list_field(DataType::Utf8, true));
+        let left: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::clone(&field),
+            OffsetBuffer::new(vec![0, 4].into()),
+            Arc::new(StringArray::from(vec![
+                Some("a"),
+                Some("b"),
+                None,
+                Some("a"),
+            ])),
+            None,
+        )?);
+        let right: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::clone(&field),
+            OffsetBuffer::new(vec![0, 1].into()),
+            Arc::new(StringArray::from(vec![Some("b")])),
+            None,
+        )?);
+        let result = array_except(&[ColumnarValue::Array(left), ColumnarValue::Array(right)])?
+            .into_array(1)?;
+        let expected: ArrayRef = Arc::new(ListArray::try_new(
+            field,
+            OffsetBuffer::new(vec![0, 2].into()),
+            Arc::new(StringArray::from(vec![Some("a"), None])),
+            None,
+        )?);
+        assert_eq!(&result, &expected);
+        Ok(())
+    }
+
+    macro_rules! test_array_except_float {
+        ($name:ident, $arrow_type:ty, $array_type:ty, $float_type:ty, $nan_bits:expr) => {
+            #[test]
+            fn $name() -> Result<()> {
+                let non_canonical_nan = <$float_type>::from_bits($nan_bits);
+                let left: ArrayRef =
+                    Arc::new(ListArray::from_iter_primitive::<$arrow_type, _, _>(vec![
+                        Some(vec![
+                            Some(-0.0),
+                            Some(0.0),
+                            Some(non_canonical_nan),
+                            Some(<$float_type>::NAN),
+                            Some(-<$float_type>::NAN),
+                            Some(1.0),
+                            Some(1.0),
+                        ]),
+                        Some(vec![Some(non_canonical_nan), Some(2.0)]),
+                    ]));
+                let right: ArrayRef =
+                    Arc::new(ListArray::from_iter_primitive::<$arrow_type, _, _>(vec![
+                        Some(vec![Some(0.0)]),
+                        Some(vec![Some(<$float_type>::NAN)]),
+                    ]));
+                let result =
+                    array_except(&[ColumnarValue::Array(left), ColumnarValue::Array(right)])?
+                        .into_array(2)?;
+                let list = downcast_any!(&result, ListArray)?;
+                let values = downcast_any!(list.values(), $array_type)?;
+                assert_eq!(list.value_offsets(), &[0, 3, 4]);
+                assert_eq!(values.value(0).to_bits(), (-0.0 as $float_type).to_bits());
+                assert_eq!(values.value(1).to_bits(), <$float_type>::NAN.to_bits());
+                assert_eq!(values.value(2), 1.0);
+                assert_eq!(values.value(3), 2.0);
+                Ok(())
+            }
+        };
+    }
+
+    test_array_except_float!(
+        test_array_except_f32,
+        Float32Type,
+        Float32Array,
+        f32,
+        0x7fc0_0001
+    );
+    test_array_except_float!(
+        test_array_except_f64,
+        Float64Type,
+        Float64Array,
+        f64,
+        0x7ff8_0000_0000_0001
+    );
+
+    #[test]
+    fn test_array_except_invalid_arguments() -> Result<()> {
+        let ints = int_lists(vec![Some(vec![Some(1)]), Some(vec![])]);
+        let strings: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(DataType::Utf8, true)),
+            OffsetBuffer::new(vec![0, 1, 1].into()),
+            Arc::new(StringArray::from(vec!["a"])),
+            None,
+        )?);
+        assert!(array_except(&[]).is_err());
+        assert!(array_except(&[ColumnarValue::Array(Arc::clone(&ints))]).is_err());
+        assert!(
+            array_except(&[
+                ColumnarValue::Scalar(ScalarValue::from(1)),
+                ColumnarValue::Scalar(ScalarValue::from(1)),
+            ])
+            .is_err()
+        );
+        assert!(
+            array_except(&[
+                ColumnarValue::Array(Arc::clone(&ints)),
+                ColumnarValue::Array(strings),
+            ])
+            .is_err()
+        );
+        assert!(
+            array_except(&[
+                ColumnarValue::Array(Arc::clone(&ints)),
+                ColumnarValue::Array(ints.slice(0, 1)),
+            ])
+            .is_err()
+        );
+        Ok(())
     }
 
     #[test]
