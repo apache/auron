@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        paimon: [ "1.2" ]
+        paimon: [ "1.2", "2.0" ]
         javaver: [ "8" ]
         scalaver: [ "2.12" ]
         module: [ "thirdparty/auron-paimon" ]

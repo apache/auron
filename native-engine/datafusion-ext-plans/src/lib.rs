@@ -48,6 +48,7 @@ pub mod joins;
 pub mod limit_exec;
 pub mod orc_exec;
 pub mod orc_sink_exec;
+pub mod paimon_sink_exec;
 pub mod parquet_exec;
 pub mod parquet_sink_exec;
 pub mod project_exec;

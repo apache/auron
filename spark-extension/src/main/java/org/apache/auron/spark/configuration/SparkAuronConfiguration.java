@@ -353,6 +353,23 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable PaimonScanExec operation conversion to native Auron implementations.")
             .withDefaultValue(true);
 
+    public static final ConfigOption<Boolean> ENABLE_PAIMON_WRITE = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enable.paimon.write")
+            .withCategory("Operator Supports")
+            .withDescription("Enable native writing of Paimon append-only (bucket-unaware) parquet tables. "
+                    + "Only takes effect for DataSourceV2 writes, i.e. with spark.paimon.write.use-v2-write=true. "
+                    + "Unsupported tables fall back to the Paimon writer.")
+            .withDefaultValue(false);
+
+    public static final ConfigOption<Boolean> ENABLE_PAIMON_WRITE_NARROW_CONVERT = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.paimon.write.narrowConvert")
+            .withCategory("Operator Supports")
+            .withDescription("When the input of a native Paimon write is not native and is a projection that "
+                    + "outputs more columns than it reads (e.g. pads a wide table with constants), convert "
+                    + "the projection's child to native and run the projection natively, so the row-to-Arrow "
+                    + "conversion only carries the columns that are actually read.")
+            .withDefaultValue(true);
+
     public static final ConfigOption<Boolean> ENABLE_ICEBERG_SCAN = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enable.iceberg.scan")
             .withCategory("Operator Supports")
