@@ -26,6 +26,16 @@ workspace = true
 
 [features]
 default = ["tokio/rt-multi-thread"]
+# The libtest benchmarks require a nightly Rust toolchain.
+nightly-bench = []
+
+[[bench]]
+name = "agg_idx_cache"
+required-features = ["nightly-bench"]
+
+[[bench]]
+name = "explode"
+required-features = ["nightly-bench"]
 
 [dependencies]
 arrow = { workspace = true }
@@ -43,10 +53,12 @@ orc-rust = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bitvec = { workspace = true }
+branches = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
 bytesize = { workspace = true }
 count-write = { workspace = true }
+fearless_simd = { workspace = true }
 foldhash = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }

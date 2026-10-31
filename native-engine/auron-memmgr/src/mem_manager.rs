@@ -124,14 +124,9 @@ impl RuntimeMemManager<Mem> {
         Self::init_with_total(total);
     }
 
-    pub fn register_consumer(mut consumer: Arc<dyn MemConsumer>, spillable: bool) {
+    pub fn register_consumer(consumer: Arc<dyn MemConsumer>, spillable: bool) {
         let consumer_info = Self::register_consumer_info(consumer.name().to_owned(), spillable);
-
-        // SAFETY: callers register before sharing the consumer with other tasks.
-        unsafe {
-            let consumer_mut = Arc::get_mut_unchecked(&mut consumer);
-            consumer_mut.set_consumer_info(Arc::downgrade(&consumer_info));
-        }
+        consumer.set_consumer_info(Arc::downgrade(&consumer_info));
     }
 
     pub fn deregister_consumer(consumer: &dyn MemConsumer) {
@@ -157,9 +152,13 @@ impl RuntimeMemManager<Mem> {
 }
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait MemConsumer: Send + Sync {
     fn name(&self) -> &str;
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>);
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo>;
 
     fn consumer_info(&self) -> Arc<MemConsumerInfo> {
@@ -288,7 +287,7 @@ mod tests {
     const MB: usize = 1 << 20;
 
     struct TestConsumer {
-        info: Weak<MemConsumerInfo>,
+        info: OnceCell<Weak<MemConsumerInfo>>,
         spills: AtomicUsize,
         release_per_spill: usize,
     }
@@ -301,7 +300,7 @@ mod tests {
         fn register_with_spillable(release_per_spill: usize, spillable: bool) -> Arc<Self> {
             MemManager::init(1_000 * MB);
             let consumer = Arc::new(Self {
-                info: Weak::new(),
+                info: OnceCell::new(),
                 spills: AtomicUsize::new(0),
                 release_per_spill,
             });
@@ -316,12 +315,12 @@ mod tests {
             "TestMemConsumer"
         }
 
-        fn set_consumer_info(&mut self, info: Weak<MemConsumerInfo>) {
-            self.info = info;
+        fn set_consumer_info(&self, info: Weak<MemConsumerInfo>) {
+            self.info.set(info).expect("consumer info already set");
         }
 
         fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-            &self.info
+            self.info.get().expect("consumer info not set")
         }
 
         async fn spill(&self) -> Result<()> {

@@ -66,7 +66,7 @@ const _OWNED_KEY_SIZE_CHECKER: [(); 32] = [(); size_of::<OwnedKey>()];
 const SPILL_OFFHEAP_MEM_COST: usize = 200000;
 
 pub struct AggTable {
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     in_mem: Mutex<InMemTable>,
     spills: Mutex<Vec<Box<dyn Spill>>>,
     agg_ctx: Arc<AggContext>,
@@ -80,7 +80,7 @@ impl AggTable {
         let merging_time = exec_ctx.register_timer_metric("merging_time");
         let output_time = exec_ctx.register_timer_metric("output_time");
         Ok(Self {
-            mem_consumer_info: None,
+            mem_consumer_info: OnceCell::new(),
             in_mem: Mutex::new(InMemTable::try_new(
                 0,
                 agg_ctx.clone(),
@@ -126,10 +126,10 @@ impl AggTable {
         self.update_mem_used(mem_used).await?;
 
         // update udaf memory tracker, spill if update failed
-        if let Some(udaf_mem_tracker) = self.agg_ctx.get_udaf_mem_tracker() {
-            if !udaf_mem_tracker.update_used()? {
-                self.force_spill().await?;
-            }
+        if let Some(udaf_mem_tracker) = self.agg_ctx.get_udaf_mem_tracker()
+            && !udaf_mem_tracker.update_used()?
+        {
+            self.force_spill().await?;
         }
         Ok(())
     }
@@ -310,14 +310,14 @@ impl MemConsumer for AggTable {
         "AggTable"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {
@@ -329,10 +329,10 @@ impl MemConsumer for AggTable {
 
         // use pre-merging if cardinality is low
         let mut next_is_hashing = false;
-        if let InMemData::Hashing(hashing_data) = &in_mem.data {
-            if hashing_data.cardinality_ratio() < 0.5 {
-                next_is_hashing = true;
-            }
+        if let InMemData::Hashing(hashing_data) = &in_mem.data
+            && hashing_data.cardinality_ratio() < 0.5
+        {
+            next_is_hashing = true;
         }
         let cur_in_mem = in_mem.renew(next_is_hashing)?;
 
@@ -449,15 +449,14 @@ impl InMemTable {
         if self.id == 0 // only works on first table
             && !self.agg_ctx.is_expand_agg
             && self.agg_ctx.supports_partial_skipping
+            && let InMemData::Hashing(hashing_data) = &self.data
         {
-            if let InMemData::Hashing(hashing_data) = &self.data {
-                let cardinality_ratio = hashing_data.cardinality_ratio();
-                if cardinality_ratio > self.agg_ctx.partial_skipping_ratio {
-                    log::warn!(
-                        "AggTable cardinality ratio = {cardinality_ratio}, will trigger partial skipping",
-                    );
-                    return true;
-                }
+            let cardinality_ratio = hashing_data.cardinality_ratio();
+            if cardinality_ratio > self.agg_ctx.partial_skipping_ratio {
+                log::warn!(
+                    "AggTable cardinality ratio = {cardinality_ratio}, will trigger partial skipping",
+                );
+                return true;
             }
         }
         false

@@ -53,6 +53,10 @@ pub mod rss_single_repartitioner;
 pub mod rss_sort_repartitioner;
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait ShuffleRepartitioner: Send + Sync {
     async fn insert_batch(&self, input: RecordBatch) -> Result<()>;
     async fn shuffle_write(&self) -> Result<()>;

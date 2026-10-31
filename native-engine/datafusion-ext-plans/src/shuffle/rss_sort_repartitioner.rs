@@ -31,7 +31,7 @@ use once_cell::sync::OnceCell;
 use crate::shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData};
 
 pub struct RssSortShuffleRepartitioner {
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     data: Mutex<BufferedData>,
     rss: GlobalRef,
 }
@@ -44,7 +44,7 @@ impl RssSortShuffleRepartitioner {
         output_io_time: Time,
     ) -> Self {
         Self {
-            mem_consumer_info: None,
+            mem_consumer_info: OnceCell::new(),
             data: Mutex::new(BufferedData::new(
                 partitioning,
                 partition_id,
@@ -61,14 +61,14 @@ impl MemConsumer for RssSortShuffleRepartitioner {
         "RssSortShuffleRepartitioner"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {

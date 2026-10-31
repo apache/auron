@@ -134,10 +134,10 @@ fn parse_zone_spec(zone_id: &str) -> Result<ZoneSpec> {
     if let Ok(tz) = zone_id.parse::<Tz>() {
         return Ok(ZoneSpec::Iana(tz));
     }
-    if let Some(secs) = parse_fixed_offset_secs(zone_id.strip_prefix("GMT").unwrap_or(zone_id)) {
-        if let Some(offset) = FixedOffset::east_opt(secs) {
-            return Ok(ZoneSpec::Fixed(offset));
-        }
+    if let Some(secs) = parse_fixed_offset_secs(zone_id.strip_prefix("GMT").unwrap_or(zone_id))
+        && let Some(offset) = FixedOffset::east_opt(secs)
+    {
+        return Ok(ZoneSpec::Fixed(offset));
     }
     Err(DataFusionError::Execution(format!(
         "Flink_UnixTimestamp: invalid timezone {zone_id}"

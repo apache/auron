@@ -87,7 +87,7 @@ impl IpcReaderExec {
 
 impl DisplayAs for IpcReaderExec {
     fn fmt_as(&self, _t: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "IpcReader: [{:?}]", &self.schema)
+        write!(f, "IpcReader: [{:?}]", self.schema)
     }
 }
 
