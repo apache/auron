@@ -445,6 +445,130 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("array_union function") {
+    withTable("t1") {
+      sql("create table t1(id int, a array<int>, b array<int>) using parquet")
+      sql("""insert into t1 values
+          |  (0, array(3, 1, 3), array(1, 2, 2)),
+          |  (1, array(1, null, 1), array(null, 2, null)),
+          |  (2, array(), array(2, 2, 1)),
+          |  (3, array(2, 2, 1), array()),
+          |  (4, array(), array()),
+          |  (5, null, array(1)),
+          |  (6, array(1), null),
+          |  (7, null, null)
+          |""".stripMargin)
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          val query = "select id, array_union(a, b) from t1"
+          checkSparkAnswerAndOperator(query)
+          checkAnswer(
+            sql(query),
+            Seq(
+              Row(0, Seq(3, 1, 2)),
+              Row(1, Seq[Integer](1, null, 2)),
+              Row(2, Seq(2, 1)),
+              Row(3, Seq(2, 1)),
+              Row(4, Seq.empty[Int]),
+              Row(5, null),
+              Row(6, null),
+              Row(7, null)))
+          checkSparkAnswerAndOperator("""select id,
+              |  array_union(a, array(2, 3, null)),
+              |  array_union(array(2, 3, null), b),
+              |  array_union(a, cast(array() as array<int>)),
+              |  array_union(cast(null as array<int>), b),
+              |  array_union(a, cast(null as array<int>))
+              |from t1
+              |""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("array_union function with atomic element types") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array('b', 'a', 'b', null) as strings,
+          |  array(true, false, true, null) as bools,
+          |  array(cast(2 as tinyint), cast(1 as tinyint)) as bytes,
+          |  array(cast(2 as smallint), cast(1 as smallint)) as shorts,
+          |  array(2, 1, 2) as ints,
+          |  array(date'2024-02-29', null) as dates,
+          |  array(timestamp'2024-02-29 12:34:56', null) as timestamps,
+          |  array(cast(2.5 as decimal(10, 2)), null) as decimals,
+          |  array(cast('b' as binary), cast('a' as binary), null) as binaries
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""select
+          |  array_union(strings, array('a', 'c', null)),
+          |  array_union(bools, array(false, null)),
+          |  array_union(bytes, bytes), array_union(shorts, shorts),
+          |  array_union(ints, array(1L, 3L)),
+          |  array_union(dates, array(date'1970-01-01', date'2024-02-29')),
+          |  array_union(timestamps, array(timestamp'1970-01-01 00:00:00')),
+          |  array_union(decimals, array(cast(1 as decimal(10, 2)))),
+          |  array_union(binaries, array(cast('c' as binary), cast('b' as binary)))
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_union function with floating point elements") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t1") {
+        sql("create table t1(id int, a array<double>, b array<double>) using parquet")
+        sql("""insert into t1 values
+            |  (0, array(-0.0D, double('NaN'), null), array(0.0D, double('NaN'), null)),
+            |  (1, array(0.0D, -0.0D, 0.0D), array(2.0D, -0.0D)),
+            |  (2, array(double('Infinity')), array(double('-Infinity'), double('Infinity'))),
+            |  (3, array(), array()),
+            |  (4, null, array(0.0D)),
+            |  (5, array(0.0D), null)
+            |""".stripMargin)
+        val query = """select id, array_union(a, b),
+            |  array_union(cast(a as array<float>), cast(b as array<float>)) from t1
+            |""".stripMargin
+        checkSparkAnswerAndOperator(query)
+        val first = sql(query).collect().find(_.getInt(0) == 0).get
+        val expectedZero = if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "4.2") 0.0 else -0.0
+        assert(
+          java.lang.Double.doubleToRawLongBits(first.getSeq[Double](1).head) ==
+            java.lang.Double.doubleToRawLongBits(expectedZero))
+        assert(
+          java.lang.Float.floatToRawIntBits(first.getSeq[Float](2).head) ==
+            java.lang.Float.floatToRawIntBits(expectedZero.toFloat))
+      }
+    }
+  }
+
+  test("array_union function with unsupported elements falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array(array(1, null), array(2)) as nested,
+          |  array(named_struct('v', 1), named_struct('v', 2)) as structs,
+          |  array(double('NaN'), -0.0D, 0.0D) as doubles
+          |""".stripMargin)
+      withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+        for (column <- Seq("nested", "structs")) {
+          val query = s"select array_union($column, $column) from t1"
+          val expr = sql(query).queryExecution.analyzed.expressions.collectFirst {
+            case Alias(child, _) => child
+          }.get
+          assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+          checkSparkAnswerAndOperator(query)
+        }
+      }
+      if (!AuronTestUtils.isSparkV31OrGreater) {
+        withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "false") {
+          val df = checkSparkAnswer("select array_union(doubles, doubles) from t1")
+          assert(stripAQEPlan(df.queryExecution.executedPlan).collectFirst {
+            case project: ProjectExec => project
+          }.nonEmpty)
+        }
+      }
+    }
+  }
+
   test("hex function") {
     withTable("t1") {
       sql("create table t1(c1 int, c2 string) using parquet")
