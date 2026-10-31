@@ -202,7 +202,6 @@ pub trait MemConsumer: Send + Sync {
                 let old_used = std::mem::replace(&mut consumer_status.mem_used, new_used);
                 (old_used, new_used)
             },
-            false,
             || self.spill(),
         )
         .await
@@ -226,25 +225,6 @@ pub trait MemConsumer: Send + Sync {
                 consumer_status.mem_used = new_used;
                 (old_used, new_used)
             },
-            false,
-            || self.spill(),
-        )
-        .await
-    }
-
-    async fn force_spill(&self) -> Result<()>
-    where
-        Self: Sized,
-    {
-        let consumer_info = self.consumer_info();
-        update_consumer_mem_used_with_custom_updater(
-            self.name(),
-            &consumer_info,
-            |consumer_status| {
-                let used = consumer_status.mem_used;
-                (used, used)
-            },
-            true,
             || self.spill(),
         )
         .await
@@ -357,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn pinning_and_forced_spills_preserve_accounting() -> Result<()> {
+    fn pinning_and_direct_spills_preserve_accounting() -> Result<()> {
         let _guard = TEST_LOCK.lock();
         let consumer = TestConsumer::register(usize::MAX);
         block_on(consumer.update_mem_used(200))?;
@@ -368,8 +348,8 @@ mod tests {
 
         consumer.set_spillable(true);
         assert_eq!(MemManager::get().status.lock().mem_spillables, 200);
-        block_on(consumer.force_spill())?;
-        block_on(consumer.force_spill())?;
+        block_on(consumer.spill())?;
+        block_on(consumer.spill())?;
         assert_eq!(consumer.spills.load(Ordering::SeqCst), 2);
         assert_eq!(MemManager::get().total_used(), 0);
         assert_eq!(MemManager::get().status.lock().mem_spillables, 0);
