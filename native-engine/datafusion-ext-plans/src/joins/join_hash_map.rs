@@ -21,7 +21,10 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, ArrayRef, AsArray, BinaryBuilder, BooleanArray, RecordBatch, UInt32Array},
+    array::{
+        Array, ArrayRef, AsArray, BinaryBuilder, BooleanArray, RecordBatch, RecordBatchOptions,
+        UInt32Array,
+    },
     datatypes::{DataType, Field, FieldRef, Schema, SchemaRef},
 };
 use datafusion::{common::Result, physical_expr::PhysicalExprRef};
@@ -559,9 +562,11 @@ impl JoinHashMap {
                 }
             }
             let metadata_col: ArrayRef = Arc::new(metadata_col_builder.finish());
-            output.push(RecordBatch::try_new(
+            let num_rows = data_batch.num_rows();
+            output.push(RecordBatch::try_new_with_options(
                 schema.clone(),
                 vec![data_batch.columns().to_vec(), vec![metadata_col]].concat(),
+                &RecordBatchOptions::new().with_row_count(Some(num_rows)),
             )?);
         }
         Ok(output)
@@ -644,7 +649,11 @@ impl JoinHashMap {
                     .iter()
                     .map(|&i| batch.column(i).clone())
                     .collect::<Vec<_>>();
-                Ok(RecordBatch::try_new(schema, columns)?)
+                Ok(RecordBatch::try_new_with_options(
+                    schema,
+                    columns,
+                    &RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
+                )?)
             })
             .collect::<Result<Vec<_>>>()?;
         let interleaver = create_batch_interleaver(&projected_batches, false)?;
@@ -971,6 +980,22 @@ mod tests {
             JoinHashMap::create_from_data_batch(int32_data_batch(vec![1, 2, 3]), &[key])?
                 .into_hash_map_batches(None)?;
         assert!(!peek_is_hybrid_join(&normal_batches[0])?);
+        Ok(())
+    }
+
+    #[test]
+    fn gather_no_columns_from_multiple_batches_preserves_rows() -> Result<()> {
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let map = JoinHashMap::create_from_data_batches(
+            vec![int32_data_batch(vec![1, 2]), int32_data_batch(vec![3])],
+            &[key],
+        )?;
+
+        // Column pruning can remove every build-side output column while
+        // the join still needs to gather matched and unmatched build rows.
+        let columns = map.gather_columns(&[], vec![Some(0), Some(2), None])?;
+        assert!(columns.is_empty());
+        assert_eq!(map.num_rows(), 3);
         Ok(())
     }
 

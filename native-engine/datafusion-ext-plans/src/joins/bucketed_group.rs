@@ -158,7 +158,6 @@ pub struct BucketGroupBuilder {
     data_schema: SchemaRef,
     staging: Vec<RecordBatch>,
     staging_mem_size: usize,
-    oversized_count: usize,
 }
 
 impl BucketGroupBuilder {
@@ -173,14 +172,7 @@ impl BucketGroupBuilder {
             data_schema,
             staging: vec![],
             staging_mem_size: 0,
-            oversized_count: 0,
         }
-    }
-
-    /// Number of emitted groups that exceeded `threshold_mem_size` due to a
-    /// single bucket being larger than the threshold on its own.
-    pub fn oversized_count(&self) -> usize {
-        self.oversized_count
     }
 
     /// Feed in a new batch (already sorted ascending by `~BUCKET`, bucket
@@ -265,17 +257,14 @@ impl BucketGroupBuilder {
         self.build_group_batches(group)
     }
 
-    /// Build the final bucketed-group hash-map-batches out of the (bucket
+    /// Build the final bucketed-group hash-map-batch out of the (bucket
     /// column still attached) staging batches belonging to one logical
-    /// group. Normally coalesces them into a single physical `RecordBatch`
-    /// (today's behavior); under extreme single-bucket data skew (total
-    /// size > `threshold_mem_size`), keeps them as multiple un-coalesced
-    /// physical batches instead, to avoid an i32 offset overflow (>2GB)
-    /// when coalescing variable-length columns. Every output batch carries
-    /// the same `group_max_bucket`, packed into its `~TABLE` metadata (see
-    /// [`JoinHashMap::into_hash_map_batches`]) rather than a separate
-    /// column, so the declared hash-map-batch schema never changes
-    /// depending on whether hybrid join is in effect.
+    /// group, always coalesced into a single physical `RecordBatch`. A
+    /// single bucket's data is never split across multiple batches, even if
+    /// it exceeds `threshold_mem_size` (extreme data skew) - a join on such
+    /// a hot key is already outside what hash join is expected to handle
+    /// gracefully, and splitting a group across batches is exactly the
+    /// complexity hybrid join is meant to avoid elsewhere.
     fn build_group_batches(
         &mut self,
         group_with_bucket: Vec<RecordBatch>,
@@ -284,10 +273,6 @@ impl BucketGroupBuilder {
         if total_rows == 0 {
             return Ok(vec![]);
         }
-        let total_mem_size: usize = group_with_bucket
-            .iter()
-            .map(|b| b.get_batch_mem_size())
-            .sum();
 
         let group_max_bucket = {
             let last = group_with_bucket.last().expect("non-empty group");
@@ -297,30 +282,11 @@ impl BucketGroupBuilder {
                 .value(last.num_rows() - 1)
         };
 
-        let data_batches: Vec<RecordBatch> = if total_mem_size <= self.threshold_mem_size {
-            // common case: still coalesce into a single physical batch to
-            // keep today's "1 group = 1 physical batch" output format and
-            // performance.
-            let coalesced =
-                coalesce_batches_unchecked(bucket_schema(&self.data_schema), &group_with_bucket);
-            vec![remove_last_column(coalesced)]
-        } else {
-            self.oversized_count += 1;
-            log::warn!(
-                "hybrid join: bucket group size ({total_mem_size}) exceeds group mem size \
-                 threshold ({}) due to data skew on a single bucket; kept as {} un-coalesced \
-                 batches to avoid 2GB overflow",
-                self.threshold_mem_size,
-                group_with_bucket.len(),
-            );
-            group_with_bucket
-                .into_iter()
-                .map(remove_last_column)
-                .filter(|b| b.num_rows() > 0)
-                .collect()
-        };
+        let coalesced =
+            coalesce_batches_unchecked(bucket_schema(&self.data_schema), &group_with_bucket);
+        let data_batch = remove_last_column(coalesced);
 
-        let hash_map = JoinHashMap::create_from_data_batches(data_batches, &self.keys)?;
+        let hash_map = JoinHashMap::create_from_data_batch(data_batch, &self.keys)?;
         Ok(hash_map
             .into_hash_map_batches(Some(group_max_bucket))?
             .into_iter()
@@ -409,12 +375,13 @@ mod tests {
     }
 
     #[test]
-    fn group_builder_keeps_skewed_single_bucket_as_multiple_batches() -> Result<()> {
+    fn group_builder_keeps_skewed_single_bucket_as_single_batch() -> Result<()> {
         // All rows map to the same bucket (single distinct key) and the
         // memory threshold is tiny, so every batch pushed in should stay
-        // un-coalesced (no safe cut point exists) and the final group must
-        // be emitted as multiple physical hash-map-batches that all share
-        // the same group-max-bucket id.
+        // un-coalesced in staging (no safe cut point exists) - but the
+        // final group is still emitted as exactly one coalesced
+        // hash-map-batch: a bucket group is never split across multiple
+        // batches, regardless of how far it exceeds the memory threshold.
         let schema = data_schema();
         let keys: Vec<PhysicalExprRef> = vec![Arc::new(Column::new("k", 0))];
         let mut builder = BucketGroupBuilder::new(1, keys.clone(), schema.clone());
@@ -438,11 +405,11 @@ mod tests {
         all_groups.extend(builder.finish()?);
 
         // single bucket, never safely splittable -> never flushed early;
-        // everything comes out as one oversized logical group.
-        assert!(builder.oversized_count() >= 1);
-        assert!(
-            all_groups.len() > 1,
-            "expected the skewed group to be emitted as multiple physical batches, got {}",
+        // everything comes out as one group, emitted as a single batch.
+        assert_eq!(
+            all_groups.len(),
+            1,
+            "expected the skewed group to be emitted as exactly one physical batch, got {}",
             all_groups.len()
         );
 
@@ -451,14 +418,11 @@ mod tests {
         for g in &all_groups {
             assert_eq!(g.num_columns(), 2); // k + ~TABLE, never a 3rd column
         }
-        // Only the last batch of a multi-batch group carries the bucket sentinel.
         assert_eq!(
             peek_group_max_bucket(all_groups.last().expect("expected a nonempty bucket group"))?,
             Some(0)
         );
 
-        // round-trip through JoinHashMap to confirm the multi-batch group
-        // is a valid, loadable hash map spanning all physical batches.
         let map = JoinHashMap::load_from_hash_map_batches(all_groups, &keys)?;
         assert_eq!(map.num_rows(), total_pushed_rows);
         Ok(())

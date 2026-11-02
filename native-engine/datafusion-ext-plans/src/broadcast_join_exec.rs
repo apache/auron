@@ -20,7 +20,6 @@ use std::{
     future::Future,
     pin::Pin,
     sync::{Arc, Weak},
-    task::{Context, Poll},
 };
 
 use arrow::{
@@ -45,18 +44,17 @@ use datafusion::{
     },
 };
 use datafusion_ext_commons::{batch_size, df_execution_err};
-use futures::{Stream, StreamExt, TryStreamExt, stream::FusedStream};
+use futures::{StreamExt, TryStreamExt};
 use futures_util::stream::Peekable;
 use hashbrown::HashMap;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
-use tokio::sync::mpsc;
 
 use crate::{
     broadcast_join_build_hash_map_exec::execute_build_hash_map,
     common::{
         column_pruning::ExecuteWithColumnPruning,
-        execution_context::{ExecutionContext, WrappedRecordBatchSender, WrappedSender},
+        execution_context::{ExecutionContext, WrappedRecordBatchSender},
         stream_exec::create_record_batch_stream_exec,
         timer_helper::TimerHelper,
     },
@@ -102,8 +100,7 @@ pub struct BroadcastJoinExec {
     cached_build_hash_map_id: Option<String>,
     is_null_aware_anti_join: bool,
     join_filter: Option<JoinFilter>,
-    // when true, the output must preserve the probe side's original row ordering even if
-    // this join falls back to a hybrid (bucketed hash) join due to a too-large build side.
+    // preserve probe-side row order even when falling back to a hybrid join
     required_reserved_order: bool,
     metrics: ExecutionPlanMetricsSet,
     props: OnceCell<PlanProperties>,
@@ -139,9 +136,8 @@ impl BroadcastJoinExec {
         })
     }
 
-    /// Mark that this join's output must preserve the probe side's original row
-    /// ordering even if it falls back to a hybrid (bucketed hash) join due
-    /// to a too-large build side.
+    /// Keep the probe side's row order in the output, even if this join falls
+    /// back to a hybrid (bucketed hash) join.
     pub fn with_required_reserved_order(mut self, required_reserved_order: bool) -> Self {
         self.required_reserved_order = required_reserved_order;
         self
@@ -465,25 +461,15 @@ async fn execute_join_with_map(
     Ok(())
 }
 
-/// Executes a hybrid join (bucketed hash join): both build and probe sides
-/// are partitioned by `hash(key) % NUM_BUCKETS` (see
-/// `crate::joins::bucketed_group`); the build side is already partitioned
-/// into bucketed-group hash-map-batches (`built`). For every build group we
-/// load its `JoinHashMap`, create a fresh `Joiner`, and feed it only the
-/// probe rows whose bucket id falls within that group's range - bounding
-/// memory usage to roughly one group's worth of data at a time instead of
-/// the whole build/probe side.
-///
-/// Processing probe rows in bucket order (rather than their original
-/// arrival order) means the output no longer preserves the probe side's
-/// row ordering. When `required_reserved_order` is set, a `~ROW_NUM`
-/// column is attached to the probe side before bucketing, carried through
-/// the join projection like an ordinary passthrough column, and used to
-/// sort the buffered output back into the original order before the
-/// temporary column is dropped and the result forwarded to `sender`.
+/// Executes a hybrid join (bucketed hash join): the build side arrives as
+/// bucketed-group hash-map-batches and is probed one group at a time
+/// (`run_hybrid_join`), bounding memory to one group instead of the whole
+/// build/probe side. That loses the probe side's row order, so with
+/// `required_reserved_order` a `~ROW_NUM` column rides through the join and
+/// the output is sorted back into probe order before the column is dropped.
 async fn execute_join_with_hybrid_join(
     probed_plan: Arc<dyn ExecutionPlan>,
-    mut built: SendableRecordBatchStream,
+    built: SendableRecordBatchStream,
     join_params: JoinParams,
     broadcast_side: JoinSide,
     map_keys: Vec<PhysicalExprRef>,
@@ -499,21 +485,11 @@ async fn execute_join_with_hybrid_join(
     let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
     let _timer = elapsed_compute.timer();
 
-    // Register this metric up front (mirroring `reserve_order_sort_time`
-    // below) rather than at the very end of this function. Otherwise, if
-    // the output stream is dropped early (e.g. a downstream `LIMIT` or an
-    // early-stopping probe-outer joiner) before this async function body
-    // runs to completion, `register_timer_metric` for "hybrid_join_time"
-    // would never execute, so the metric would never even be inserted
-    // into the shared `ExecutionPlanMetricsSet` - not reported as zero,
-    // but entirely absent from Spark's SQL metrics UI.
-    //
-    // The timer guard below measures the whole function body (bucketing +
-    // per-group hash map build/probe + tail group), i.e. the actual cost of
-    // falling back to hybrid join - not just a sub-algorithm's own
-    // `elapsed_compute` (which under-counted the real overhead and is also
-    // already included in `exec_ctx`'s own `elapsed_compute` via `_timer`
-    // above, so no separate roll-up into `elapsed_compute` is needed here).
+    // Register up front (mirroring `reserve_order_sort_time` below) so the
+    // metric is present in Spark's SQL metrics UI even if the output stream is
+    // dropped early (e.g. a downstream LIMIT); registering at the end would
+    // leave it entirely absent rather than zero. The guard measures the whole
+    // function body - the actual cost of falling back to hybrid join.
     let hybrid_join_time = exec_ctx.register_timer_metric("hybrid_join_time");
     let _hybrid_join_timer = hybrid_join_time.timer();
 
@@ -537,85 +513,111 @@ async fn execute_join_with_hybrid_join(
         join_params
     };
 
-    // when preserving order, output batches carry a trailing ~ROW_NUM
-    // column and are routed through a spill-capable external sort (reusing
-    // `sort_exec.rs`'s `ExternalSorter`, the exact same one used for the
-    // build/probe bucket sorts above) keyed on ~ROW_NUM, rather than being
-    // buffered wholesale into a `Vec<RecordBatch>` and `concat_batches`'d
-    // in one shot. Reserved-order hybrid join output is not bounded by the
-    // per-bucket-group memory limit that bounds the join itself (it's the
-    // *entire* probe side's output), so naively collecting everything in
-    // memory before sorting risks OOM; worse, `concat_batches` over
-    // variable-length columns silently produces corrupted data (rather
-    // than erroring) once accumulated offsets exceed arrow's i32 (2GB)
-    // limit, which can manifest as wrong results with no visible error.
-    let mut reserved_order_sort_handle = None;
-    let mut effective_sender = Some(if required_reserved_order {
-        let augmented_schema = join_params.projection.schema.clone();
-        let (tx, rx) = mpsc::channel::<Result<RecordBatch>>(16);
-        let collecting_sender = WrappedSender::new(
-            exec_ctx.with_new_output_schema(augmented_schema.clone()),
-            tx,
-        );
+    if !required_reserved_order {
+        return run_hybrid_join(
+            probed_plan,
+            built,
+            join_params,
+            broadcast_side,
+            map_keys,
+            probe_keys,
+            false,
+            exec_ctx,
+            probed_side_hash_time,
+            probed_side_search_time,
+            probed_side_compare_time,
+            build_output_time,
+            sender,
+        )
+        .await;
+    }
 
-        let unsorted_stream: SendableRecordBatchStream = Box::pin(RecordBatchStreamAdapter::new(
-            augmented_schema.clone(),
-            ReceiverStream::new(rx),
-        ));
-        let unsorted_exec =
-            create_record_batch_stream_exec(unsorted_stream, exec_ctx.partition_id())?;
-        let row_num_col: PhysicalExprRef =
-            Arc::new(Column::new(ROW_NUM_COLUMN_NAME, row_num_col_idx));
-        let sort_exec = create_default_ascending_sort_exec(
-            unsorted_exec,
-            &[row_num_col],
-            Some(exec_ctx.execution_plan_metrics().clone()),
-            false, // we record our own reserve_order_sort_time metric below
-        );
+    // Sort the ~ROW_NUM-carrying output back into probe order with a
+    // spill-capable external sort (same `ExternalSorter` as the bucket sorts).
+    // Don't buffer it in memory first: it's the whole probe side, unbounded by
+    // the per-group memory limit, and `concat_batches` over variable-length
+    // columns silently corrupts past arrow's 2GB offset limit.
+    let augmented_schema = join_params.projection.schema.clone();
+    let exec_ctx_join = exec_ctx.clone();
+    let unsorted_stream = exec_ctx
+        .with_new_output_schema(augmented_schema)
+        .output_with_sender("HybridJoin", move |collector| {
+            run_hybrid_join(
+                probed_plan,
+                built,
+                join_params,
+                broadcast_side,
+                map_keys,
+                probe_keys,
+                true,
+                exec_ctx_join,
+                probed_side_hash_time,
+                probed_side_search_time,
+                probed_side_compare_time,
+                build_output_time,
+                collector,
+            )
+        });
 
-        let reserve_order_sort_time = exec_ctx.register_timer_metric("reserve_order_sort_time");
-        let exec_ctx_sort = exec_ctx.clone();
-        let output_schema_sort = output_schema.clone();
-        let sender_sort = sender.clone();
-        reserved_order_sort_handle = Some(tokio::spawn(async move {
-            reserve_order_sort_time
-                .with_timer_async(async move {
-                    let mut sorted_stream = sort_exec
-                        .execute(exec_ctx_sort.partition_id(), exec_ctx_sort.task_ctx())?;
-                    while let Some(sorted_batch) = sorted_stream.next().await.transpose()? {
-                        let data_columns: Vec<_> = sorted_batch
-                            .columns()
-                            .iter()
-                            .enumerate()
-                            .filter(|(idx, _)| *idx != row_num_col_idx)
-                            .map(|(_, col)| col.clone())
-                            .collect();
-                        sender_sort
-                            .send(RecordBatch::try_new(
-                                output_schema_sort.clone(),
-                                data_columns,
-                            )?)
-                            .await;
-                    }
-                    Result::<()>::Ok(())
-                })
-                .await
-        }));
-        collecting_sender
-    } else {
-        sender.clone()
-    });
+    let unsorted_exec = create_record_batch_stream_exec(unsorted_stream, exec_ctx.partition_id())?;
+    let row_num_col: PhysicalExprRef = Arc::new(Column::new(ROW_NUM_COLUMN_NAME, row_num_col_idx));
+    let sort_exec = create_default_ascending_sort_exec(
+        unsorted_exec,
+        &[row_num_col],
+        Some(exec_ctx.execution_plan_metrics().clone()),
+        false, // we record our own reserve_order_sort_time metric below
+    );
 
-    // the build side's declared hash-map-batch schema (data columns + ~TABLE),
-    // used to construct an empty JoinHashMap for the probe-only tail group.
+    // sort by ~ROW_NUM, drop that column, and forward to `sender`.
+    let reserve_order_sort_time = exec_ctx.register_timer_metric("reserve_order_sort_time");
+    let exec_ctx_sort = exec_ctx.clone();
+    reserve_order_sort_time
+        .with_timer_async(async move {
+            let mut sorted_stream =
+                sort_exec.execute(exec_ctx_sort.partition_id(), exec_ctx_sort.task_ctx())?;
+            while let Some(sorted_batch) = sorted_stream.next().await.transpose()? {
+                let data_columns: Vec<_> = sorted_batch
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .filter(|(idx, _)| *idx != row_num_col_idx)
+                    .map(|(_, col)| col.clone())
+                    .collect();
+                sender
+                    .send(RecordBatch::try_new(output_schema.clone(), data_columns)?)
+                    .await;
+            }
+            Result::<()>::Ok(())
+        })
+        .await
+}
+
+/// Probe half of a hybrid join: buckets the probe side, then joins each
+/// build-side bucket group against only the probe rows in its bucket range.
+/// Batches carry the `~ROW_NUM` column when `required_reserved_order` is set.
+async fn run_hybrid_join(
+    probed_plan: Arc<dyn ExecutionPlan>,
+    mut built: SendableRecordBatchStream,
+    join_params: JoinParams,
+    broadcast_side: JoinSide,
+    map_keys: Vec<PhysicalExprRef>,
+    probe_keys: Vec<PhysicalExprRef>,
+    required_reserved_order: bool,
+    exec_ctx: Arc<ExecutionContext>,
+    probed_side_hash_time: Time,
+    probed_side_search_time: Time,
+    probed_side_compare_time: Time,
+    build_output_time: Time,
+    sender: Arc<WrappedRecordBatchSender>,
+) -> Result<()> {
+    // hash-map-batch schema (data columns + ~TABLE) for the empty
+    // JoinHashMap used by the probe-only tail group.
     let hash_map_schema = built.schema();
 
-    // append ~ROW_NUM (when preserving order) and ~BUCKET to the probe side
-    // and group it by ~BUCKET using a spill-capable radix-sort based
-    // repartitioner (reusing the same grouping/spill machinery as shuffle
-    // writes - see `BucketRepartitioner`), rather than a full comparison
-    // sort: the join only needs rows grouped by bucket, not globally
-    // ordered.
+    // Append ~ROW_NUM (when preserving order) and ~BUCKET to the probe side,
+    // then group by ~BUCKET with a spill-capable radix repartitioner
+    // (`BucketRepartitioner`): the join needs rows grouped by bucket, not
+    // globally ordered.
     let probed_schema = probed_plan.schema();
     let probe_bucket_col_idx =
         probed_schema.fields().len() + if required_reserved_order { 1 } else { 0 };
@@ -651,20 +653,18 @@ async fn execute_join_with_hybrid_join(
 
     let mut pending_probe: Option<RecordBatch> = None;
     let mut probe_exhausted = false;
-    // Accumulate hash-map-batch slices for the current group under construction.
-    // `split_hash_map_batch_by_group` returns `(bucket, slice)` pairs where
-    // bucket == -1 means "no sentinel yet in this slice" (middle of a group)
-    // and bucket >= 0 means "this slice ends the group with this bucket id".
-    // The IpcReaderExec coalesces batches but never splits them, so a sentinel
-    // row always ends up as the last non-null row of some coalesced batch.
+    // Accumulate hash-map-batch slices for the current group. Slices come back
+    // as `(bucket, slice)` pairs from `split_hash_map_batch_by_group`: -1 means
+    // mid-group, >= 0 closes the group with that bucket id (a sentinel row,
+    // always the last row of some coalesced batch).
     let mut current_group_batches: Vec<RecordBatch> = vec![];
     let mut current_group_bucket: Option<i32> = None;
     let mut pending_runs: VecDeque<(i32, RecordBatch)> = VecDeque::new();
     let mut built_exhausted = false;
 
     loop {
-        // Pull from the built stream until we have at least one complete group
-        // (a run with bucket >= 0) or the stream is exhausted.
+        // pull built batches until a complete group (a run with bucket >= 0)
+        // is available or the stream is exhausted
         while !built_exhausted && !pending_runs.iter().any(|(b, _)| *b >= 0) {
             match built.next().await.transpose()? {
                 Some(batch) => pending_runs.extend(split_hash_map_batch_by_group(batch)?),
@@ -672,7 +672,7 @@ async fn execute_join_with_hybrid_join(
             }
         }
 
-        // Drain runs into the current group accumulator until we hit a sentinel.
+        // drain runs into the current group until a sentinel
         while let Some((bucket, slice)) = pending_runs.pop_front() {
             if bucket < 0 {
                 current_group_batches.push(slice);
@@ -695,15 +695,9 @@ async fn execute_join_with_hybrid_join(
         } else {
             JoinHashMap::load_from_hash_map_batches(group_batches, &map_keys)?
         });
-        let mut joiner = create_joiner(
-            broadcast_side,
-            join_params.clone(),
-            map,
-            effective_sender.clone().expect("sender must be present"),
-        );
+        let mut joiner = create_joiner(broadcast_side, join_params.clone(), map, sender.clone());
 
-        // process any probe data left over from the previous group that
-        // falls within this group's bucket range.
+        // probe data left over from the previous group, if it belongs here
         if let Some(pending) = pending_probe.take() {
             let (lo, hi) =
                 split_batch_by_bucket_threshold(&pending, probe_bucket_col_idx, group_max_bucket)?;
@@ -722,7 +716,7 @@ async fn execute_join_with_hybrid_join(
             pending_probe = hi;
         }
 
-        // pull more probe batches until we cross into the next group's range.
+        // pull probe batches until we cross into the next group's range
         while pending_probe.is_none() && !probe_exhausted && !joiner.can_early_stop() {
             match probe_sorted.next().await.transpose()? {
                 Some(batch) => {
@@ -759,17 +753,11 @@ async fn execute_join_with_hybrid_join(
             .record_output(joiner.num_output_rows());
     }
 
-    // virtual tail group: probe rows whose bucket id has no corresponding
-    // build-side group must still be visited once, to preserve
-    // outer/anti/existence semantics for probe-driven join types.
+    // virtual tail group: probe rows with no matching build-side group must
+    // still be visited once, to preserve outer/anti/existence semantics.
     if pending_probe.is_some() || !probe_exhausted {
         let empty_map = Arc::new(JoinHashMap::create_empty(hash_map_schema, &map_keys)?);
-        let mut joiner = create_joiner(
-            broadcast_side,
-            join_params,
-            empty_map,
-            effective_sender.take().expect("sender must be present"),
-        );
+        let mut joiner = create_joiner(broadcast_side, join_params, empty_map, sender);
 
         if let Some(pending) = pending_probe.take() {
             joiner
@@ -805,19 +793,6 @@ async fn execute_join_with_hybrid_join(
             .baseline_metrics()
             .record_output(joiner.num_output_rows());
     }
-
-    // drop any remaining sender clone so the receiver (if any) observes
-    // channel closure, letting the spill-capable sort spawned above (see
-    // `reserved_order_sort_handle`) see end-of-input and flush its
-    // sorted output through `sender`.
-    drop(effective_sender.take());
-
-    if let Some(sort_handle) = reserved_order_sort_handle {
-        match sort_handle.await {
-            Ok(result) => result?,
-            Err(e) => df_execution_err!("hybrid join reserved-order sort failed: {e}")?,
-        };
-    }
     Ok(())
 }
 
@@ -827,10 +802,8 @@ fn row_num_field() -> FieldRef {
     Arc::new(Field::new(ROW_NUM_COLUMN_NAME, DataType::UInt64, true))
 }
 
-/// Append a monotonically increasing row number as a trailing `~ROW_NUM`
-/// column, used to recover the probe side's original row order after a
-/// hybrid join (which processes probe rows in bucket order instead of their
-/// original arrival order).
+/// Append a monotonically increasing `~ROW_NUM` column, used to recover the
+/// probe side's original row order after a hybrid join.
 fn append_row_num_column(batch: RecordBatch, next_row_num: &mut u64) -> Result<RecordBatch> {
     let num_rows = batch.num_rows();
     let row_nums: UInt64Array = (*next_row_num..*next_row_num + num_rows as u64).collect();
@@ -849,24 +822,14 @@ fn append_row_num_column(batch: RecordBatch, next_row_num: &mut u64) -> Result<R
     )?)
 }
 
-/// Extend `join_params` so the probe side carries one extra `~ROW_NUM`
-/// column that flows through the existing join projection machinery
-/// unmodified (as an ordinary passthrough column), used to recover the
-/// probe side's original row ordering after a hybrid join. Returns the
-/// augmented params together with the position of the `~ROW_NUM` column
-/// in the final output schema.
+/// Add a `~ROW_NUM` passthrough column to the probe side of `join_params`,
+/// returning the augmented params and the column's index in the output schema.
 ///
-/// For join types whose output concatenates both sides' columns
-/// (Inner/Left/Right/Full), the two sides' columns always appear in
-/// `[left columns][right columns]` order regardless of which side is
-/// probed - see `full_join.rs`'s `flush()`, which emits `[probe_cols,
-/// build_cols]` when probing the left side and `[build_cols, probe_cols]`
-/// when probing the right side, both of which resolve to left-then-right.
-/// So when the probe side is `Left`, `~ROW_NUM` must be inserted right
-/// after the left block (not at the very end); when the probe side is
-/// `Right`, appending at the very end is already correct. For join types
-/// whose output contains only one side's columns (semi/anti/existence),
-/// appending at the very end is always correct.
+/// Placement depends on the output layout. For dual-side joins
+/// (Inner/Left/Right/Full) columns are always `[left][right]` regardless of
+/// probe side (see `full_join.rs`'s `flush()`), so a left probe must insert
+/// `~ROW_NUM` after the left block rather than at the end. For single-side
+/// outputs (semi/anti/existence) appending at the end is always right.
 fn augment_join_params_with_row_num(
     join_params: &JoinParams,
     probe_side: JoinSide,
@@ -919,9 +882,7 @@ fn augment_join_params_with_row_num(
         .cloned()
         .collect::<Vec<_>>();
     let row_num_col_idx = if is_dual_block && probe_side == JoinSide::Left {
-        // left block ends right before the pre-existing left field count
-        // (projection.left just gained one entry from the push above, so
-        // subtract it back out to get the original left-block width).
+        // left block's original width: projection.left just gained one entry.
         augmented.projection.left.len() - 1
     } else {
         out_fields.len()
@@ -931,52 +892,6 @@ fn augment_join_params_with_row_num(
     augmented.projection.schema = augmented_schema.clone();
     augmented.output_schema = augmented_schema;
     (augmented, row_num_col_idx)
-}
-
-/// Adapt an `mpsc::Receiver` into a `Stream` that is safe to poll again
-/// after it has already returned `None`.
-///
-/// `futures::stream::unfold` cannot be used here: it panics if polled after
-/// completion, and `SortExec` (which consumes this stream) may poll its
-/// input one more time after seeing end-of-stream.
-struct ReceiverStream<T> {
-    rx: mpsc::Receiver<T>,
-    terminated: bool,
-}
-
-impl<T> ReceiverStream<T> {
-    fn new(rx: mpsc::Receiver<T>) -> Self {
-        Self {
-            rx,
-            terminated: false,
-        }
-    }
-}
-
-impl<T> Unpin for ReceiverStream<T> {}
-
-impl<T> Stream for ReceiverStream<T> {
-    type Item = T;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
-        if self.terminated {
-            return Poll::Ready(None);
-        }
-        match self.rx.poll_recv(cx) {
-            Poll::Ready(Some(item)) => Poll::Ready(Some(item)),
-            Poll::Ready(None) => {
-                self.terminated = true;
-                Poll::Ready(None)
-            }
-            Poll::Pending => Poll::Pending,
-        }
-    }
-}
-
-impl<T> FusedStream for ReceiverStream<T> {
-    fn is_terminated(&self) -> bool {
-        self.terminated
-    }
 }
 
 async fn execute_join(
@@ -1102,17 +1017,11 @@ async fn collect_join_hash_map_without_caching(
     build_time: Time,
 ) -> Result<CollectJoinHashMapResult> {
     let hash_map_schema = input.get_ref().schema();
-    // the build exec's declared schema is always `data columns + ~TABLE`
-    // (`join_hash_map_schema`), identical whether or not it actually fell
-    // back to hybrid join - a bucketed-group batch packs its bucket group
-    // id into `~TABLE`'s own metadata instead of using a separate column
-    // (see `JoinHashMap::into_hash_map_batches`/`peek_is_hybrid_join`), so
-    // detect hybrid join by decoding that metadata rather than by
-    // comparing column counts. Note this must work correctly even when
-    // the very first bucket group spans multiple physical batches (so its
-    // first batch carries no bucket sentinel yet) - `peek_is_hybrid_join`
-    // (unlike `peek_group_max_bucket`) is designed to answer that from
-    // just row 0 of a single batch.
+    // The build exec's schema is always `data columns + ~TABLE` whether or not
+    // it fell back to hybrid join, so detect the fallback by decoding the
+    // bucket-group id that `JoinHashMap::into_hash_map_batches` packs into
+    // `~TABLE`'s metadata. `peek_is_hybrid_join` answers from just row 0 of one
+    // batch, so it works even when the first group spans multiple batches.
     let is_bucketed_group_join = if let Some(Ok(batch)) = input.as_mut().peek().await {
         peek_is_hybrid_join(batch)?
     } else {
@@ -1128,12 +1037,8 @@ async fn collect_join_hash_map_without_caching(
         let join_hash_map = if total_rows == 0 {
             JoinHashMap::create_empty(hash_map_schema, key_exprs)?
         } else {
-            // Non-hybrid-join hashmaps are logically a single group, but the
-            // broadcast exchange's generic row-count/memory-threshold based
-            // `IpcReaderExec` may still emit more than one physical batch
-            // when the total row count exceeds its batching threshold - it
-            // only ever coalesces, never guarantees collapsing everything
-            // down to exactly one batch.
+            // Logically one group, but IpcReaderExec may still emit several
+            // physical batches (it coalesces to a threshold, never to one).
             JoinHashMap::load_from_hash_map_batches(hash_map_batches, key_exprs)?
         };
         Ok(CollectJoinHashMapResult::Map(Arc::new(join_hash_map)))
@@ -1201,11 +1106,10 @@ async fn get_cached_join_hash_map<Fut: Future<Output = Result<CollectJoinHashMap
     }
 }
 
-/// Fuzz test comparing hybrid join (bucketed hash join, forced into many
-/// tiny groups via a 1-byte group threshold) against a plain in-memory hash
-/// join over the same randomly generated inputs, across all join types and
-/// a mix of key distributions (including duplicate keys, nulls, and keys
-/// that only exist on one side).
+/// Fuzz test comparing hybrid join (forced into many tiny groups via a 1-byte
+/// group threshold) against a plain in-memory hash join over the same random
+/// inputs, across all join types and key distributions (duplicates, nulls,
+/// one-sided keys).
 #[cfg(test)]
 mod fuzztest {
     use arrow::{
@@ -1256,11 +1160,10 @@ mod fuzztest {
         )
     }
 
-    /// Partition `build_batch` into bucketed-group hash-map-batches with a
-    /// tiny memory threshold, forcing many small (and - since the
-    /// threshold is tiny relative to any real row - almost always
-    /// "oversized", multi-physical-batch) groups, to stress the per-group
-    /// probe-splitting logic.
+    /// Partition `build_batch` into bucketed-group hash-map-batches with a tiny
+    /// memory threshold, forcing many small (and, since the threshold is tiny
+    /// relative to any real row, almost always multi-batch) groups to stress
+    /// the per-group probe-splitting logic.
     fn build_bucketed_group_batches(
         build_batch: RecordBatch,
         key: PhysicalExprRef,
@@ -1297,19 +1200,11 @@ mod fuzztest {
         )?))
     }
 
-    /// Re-chunk a sequence of hash-map-batches (as emitted by
-    /// `build_bucketed_group_batches`, one physical batch boundary per
-    /// group or group-fragment) into a new sequence of physical batches
-    /// with *different*, row-count-based boundaries that freely merge
-    /// rows from multiple adjacent logical groups into a single physical
-    /// batch - simulating what the real `IpcReaderExec` does to a
-    /// broadcast exchange's hash-map-batch stream on the read side (see
-    /// `JoinHashMap::into_hash_map_batches`'s and
-    /// `split_hash_map_batch_by_group`'s doc comments). This is the
-    /// exact scenario the sentinel-row/marker-row encoding exists to
-    /// survive, and the scenario `build_bucketed_groups` (which hands
-    /// batches to `TestMemoryExec` with their original, never-recombined
-    /// boundaries) does *not* exercise.
+    /// Re-chunk hash-map-batches with different, row-count-based boundaries that
+    /// freely merge rows from adjacent logical groups into one physical batch -
+    /// what `IpcReaderExec` does to a broadcast exchange's stream on the read
+    /// side. This is the scenario the sentinel-row encoding exists to survive
+    /// and that `build_bucketed_groups`'s original batch boundaries miss.
     fn simulate_ipc_reader_coalesce(
         groups: Vec<RecordBatch>,
         schema: SchemaRef,
@@ -1484,16 +1379,10 @@ mod fuzztest {
         Ok(())
     }
 
-    /// Like `fuzztest_hybrid_join_matches_direct_hash_join`, but additionally
-    /// re-chunks the build side's bucketed-group hash-map-batches across
-    /// their original group boundaries (see `simulate_ipc_reader_coalesce`)
-    /// before feeding them into the join, to simulate what the broadcast
-    /// exchange's `IpcReaderExec` actually does on a real cluster. This
-    /// specifically stresses `split_hash_map_batch_by_group` /
-    /// `peek_is_hybrid_join` / the sentinel-row encoding in
-    /// `JoinHashMap::into_hash_map_batches`, none of which are exercised by
-    /// `fuzztest_hybrid_join_matches_direct_hash_join` (which hands
-    /// `TestMemoryExec` the original, never-recombined batch boundaries).
+    /// Like `fuzztest_hybrid_join_matches_direct_hash_join`, but re-chunks the
+    /// build batches across their original group boundaries first (see
+    /// `simulate_ipc_reader_coalesce`), stressing `split_hash_map_batch_by_group`
+    /// / `peek_is_hybrid_join` / the sentinel-row encoding.
     #[tokio::test]
     async fn fuzztest_hybrid_join_with_coalesced_build_batches_matches_direct_hash_join()
     -> Result<()> {
@@ -1526,11 +1415,9 @@ mod fuzztest {
         rows
     }
 
-    /// Like `gen_batch`, but with an extra leading `{prefix}id` column
-    /// holding sequential row ids (0..n), used by
-    /// `run_one_reserved_order` to identify which probe-side row each
-    /// output row came from, independent of its (possibly duplicated)
-    /// key/value columns.
+    /// Like `gen_batch`, but with an extra leading `{prefix}id` column of
+    /// sequential row ids, so `run_one_reserved_order` can tell which probe
+    /// row each output row came from even when keys/values duplicate.
     fn gen_batch_with_id(
         prefix: &str,
         rng: &mut impl Rng,
@@ -1550,9 +1437,8 @@ mod fuzztest {
         RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).expect("valid id batch")
     }
 
-    /// Extracts column `name` from every batch as a flat vector of
-    /// `Option<i32>` (`None` for either an actual SQL NULL or a row where
-    /// the column type doesn't apply), concatenated in batch/row order.
+    /// Flatten column `name` across all batches into `Vec<Option<i32>>`
+    /// (`None` for SQL NULL), in batch/row order.
     fn extract_i32_col(batches: &[RecordBatch], name: &str) -> Vec<Option<i32>> {
         let mut out = vec![];
         for batch in batches {
@@ -1573,24 +1459,17 @@ mod fuzztest {
         out
     }
 
-    /// Verifies that forcing a hybrid join (bucketed hash join) with
-    /// `required_reserved_order` set preserves the probe side's original
-    /// row order, compared against a plain in-memory hash join (no
-    /// fallback) as the reference. Only join type / broadcast side
-    /// combinations where the probe side actually drives the output row
-    /// order are exercised.
+    /// Verify that a forced hybrid join with `required_reserved_order` preserves
+    /// the probe side's row order, against a plain in-memory hash join as the
+    /// reference. Only join-type/broadcast-side combos where the probe side
+    /// drives output order are exercised.
     ///
-    /// The ordering invariant being checked is: grouping consecutive
-    /// output rows by their probe-side row id, the resulting sequence of
-    /// ids must match between the reference and the hybrid join, and each
-    /// corresponding group must contain the same multiset of rows (ties
-    /// among multiple build-side matches for the same probe row are not
-    /// required to appear in the same relative order, since that order is
-    /// an unspecified implementation detail of hash map iteration -
-    /// different for the reference's single big hash map versus hybrid
-    /// join's per-bucket-group hash maps). Rows with no probe-side id
-    /// (build-side-outer rows unmatched by any probe row) are compared as
-    /// an unordered tail, for the same reason.
+    /// Checked invariant: grouping consecutive output rows by probe row id, the
+    /// id sequence must match the reference and each group must hold the same
+    /// multiset of rows. Ties among multiple build matches for one probe row are
+    /// unordered (hash map iteration order differs between the reference's
+    /// single map and the hybrid join's per-group maps); unmatched build-only
+    /// rows are compared as an unordered tail.
     async fn run_one_reserved_order(seed: u64, simulate_reader_coalesce: bool) -> Result<()> {
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         let left_n = rng.random_range(1..40);
@@ -1756,13 +1635,10 @@ mod fuzztest {
         Ok(())
     }
 
-    /// Like `fuzztest_hybrid_join_reserved_order_matches_probe_order`, but
-    /// additionally simulates the broadcast exchange's `IpcReaderExec`
-    /// re-chunking the build side's hash-map-batches across their original
-    /// bucket-group boundaries (see `simulate_ipc_reader_coalesce`) before
-    /// they reach the hybrid join's reserved-order probe loop. This is
-    /// exactly the combination (hybrid join + required_reserved_order +
-    /// reader-coalesced build batches) seen to misbehave in production.
+    /// Like `fuzztest_hybrid_join_reserved_order_matches_probe_order`, but with
+    /// the build batches re-chunked across their original group boundaries (see
+    /// `simulate_ipc_reader_coalesce`) - the hybrid + reserved-order +
+    /// reader-coalesced combination seen to misbehave in production.
     #[tokio::test]
     async fn fuzztest_hybrid_join_reserved_order_with_coalesced_build_batches_matches_probe_order()
     -> Result<()> {
