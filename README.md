@@ -180,9 +180,8 @@ and may be unavailable even when a diagnostic snapshot is retained.
 
 ### Retention and historical applications
 
-Diagnostic records use `spark.sql.ui.retainedExecutions` for cleanup. Completed
-executions are removed first, then the oldest unfinished executions if needed to
-stay within the limit. Stored physical plan text is limited to 65,536 characters and
+Diagnostic records use `spark.sql.ui.retainedExecutions` for cleanup, preserving
+active executions. Stored physical plan text is limited to 65,536 characters and
 individual fallback reasons to 8,192 characters. These limits bound stored text,
 not the cost of generating the plan string. Plan text and fallback reasons follow
 Spark's configured string redaction pattern; configuration capture uses an

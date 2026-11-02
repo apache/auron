@@ -212,19 +212,4 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
     }
   }
 
-  test("unfinished executions are bounded even when SQL end events are missing") {
-    val conf = new SparkConf(false)
-      .set("spark.sql.ui.retainedExecutions", "2")
-      .set("spark.appStateStore.asyncTracking.enable", "false")
-    val kv = new ElementTrackingStore(new InMemoryStore, conf)
-    try {
-      val listener = new AuronSQLAppStatusListener(conf, kv)
-      (1L to 3L).foreach(id => listener.onOtherEvent(snapshot(id)))
-      val store = new AuronSQLAppStatusStore(kv)
-      assert(store.executionsCount() == 2)
-      assert(store.execution(1).isEmpty)
-      assert(store.executions(0, 2).map(_.executionId) == Seq(3L, 2L))
-    } finally kv.close()
-  }
-
 }

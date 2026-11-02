@@ -43,15 +43,6 @@ class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
           .toVector
       } finally iter.close()
     ids.foreach(id => kvstore.delete(classOf[AuronExecutionUIData], id))
-    val remaining = kvstore.count(classOf[AuronExecutionUIData]) - retained
-    if (remaining > 0) {
-      val oldest =
-        kvstore.view(classOf[AuronExecutionUIData]).max(remaining.toInt).closeableIterator()
-      val oldestIds =
-        try oldest.asScala.map(_.executionId).toVector
-        finally oldest.close()
-      oldestIds.foreach(id => kvstore.delete(classOf[AuronExecutionUIData], id))
-    }
   }
 
   private def current(id: Long): AuronExecutionUIData =
