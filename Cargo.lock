@@ -527,6 +527,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "branches"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "570b591f2c5947596f3e5b0fcf59a71068ece15aa710446ce7eb670c3620350c"
+
+[[package]]
 name = "brotli"
 version = "8.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1117,9 +1123,11 @@ dependencies = [
  "arrow-schema",
  "auron-jni-bridge",
  "bigdecimal",
+ "branches",
  "byteorder",
  "chrono",
  "datafusion",
+ "fearless_simd",
  "itertools 0.15.0",
  "jni",
  "log",
@@ -1182,6 +1190,7 @@ dependencies = [
  "auron-memmgr",
  "base64 0.23.0",
  "bitvec",
+ "branches",
  "byteorder",
  "bytes 1.12.1",
  "bytesize",
@@ -1192,6 +1201,7 @@ dependencies = [
  "datafusion-ext-commons",
  "datafusion-ext-exprs",
  "datafusion-ext-functions",
+ "fearless_simd",
  "foldhash 0.2.0",
  "futures",
  "futures-util",
@@ -1610,6 +1620,12 @@ dependencies = [
  "serde",
  "simdutf8",
 ]
+
+[[package]]
+name = "fearless_simd"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3296eb97d869113eaf148a6bdf01884e90b3828ad7ae2340b0f93362fc158611"
 
 [[package]]
 name = "findshlibs"

@@ -17,7 +17,6 @@ use std::{
     fmt::{Debug, Formatter},
     hash::{BuildHasher, Hasher},
     io::{Cursor, Read, Write},
-    simd::{Simd, cmp::SimdPartialEq},
     sync::Arc,
 };
 
@@ -33,6 +32,7 @@ use datafusion_ext_commons::{
     spark_hash::create_hashes,
     unchecked,
 };
+use fearless_simd::{Level, Simd, dispatch, prelude::*, u32x8};
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use unchecked_index::UncheckedIndex;
@@ -83,7 +83,7 @@ const MAP_VALUE_GROUP_SIZE: usize = 8;
 #[derive(Clone, Copy, Default)]
 #[repr(align(64))] // ensure one group can be cached into a cache line
 struct MapValueGroup {
-    hashes: Simd<u32, MAP_VALUE_GROUP_SIZE>,
+    hashes: [u32; MAP_VALUE_GROUP_SIZE],
     values: [MapValue; MAP_VALUE_GROUP_SIZE],
 }
 const _MAP_VALUE_GROUP_SIZE_CHECKER: [(); 64] = [(); size_of::<MapValueGroup>()];
@@ -106,6 +106,16 @@ impl Table {
     }
 
     fn create_from_key_columns_and_hashes(
+        num_rows: usize,
+        key_columns: &[ArrayRef],
+        hashes: Vec<u32>,
+    ) -> Result<Self> {
+        dispatch!(Level::new(), simd => Self::create_from_key_columns_and_hashes_impl(simd, num_rows, key_columns, hashes))
+    }
+
+    #[inline(always)]
+    fn create_from_key_columns_and_hashes_impl<S: Simd>(
+        simd: S,
         num_rows: usize,
         key_columns: &[ArrayRef],
         hashes: Vec<u32>,
@@ -160,6 +170,7 @@ impl Table {
             .next_power_of_two()
             .trailing_zeros();
         let mut map = unchecked!(vec![MapValueGroup::default(); 1usize << map_mod_bits]);
+        let zeros = u32x8::splat(simd, 0);
 
         macro_rules! entries {
             [$i:expr] => (map_items[$i].0 % (1 << map_mod_bits))
@@ -173,9 +184,12 @@ impl Table {
 
             let mut e = entries![i] as usize;
             loop {
-                let empty = map[e].hashes.simd_eq(Simd::splat(0));
-                if let Some(empty_pos) = empty.first_set() {
-                    map[e].hashes.as_mut_array()[empty_pos] = map_items[i].0;
+                let empty_bits = u32x8::from_slice(simd, &map[e].hashes)
+                    .simd_eq(zeros)
+                    .to_bitmask();
+                if empty_bits != 0 {
+                    let empty_pos = empty_bits.trailing_zeros() as usize;
+                    map[e].hashes[empty_pos] = map_items[i].0;
                     map[e].values[empty_pos] = map_items[i].1;
                     break;
                 }
@@ -229,8 +243,14 @@ impl Table {
     }
 
     pub fn lookup_many(&self, hashes: Vec<u32>) -> Vec<MapValue> {
+        dispatch!(Level::new(), simd => self.lookup_many_impl(simd, hashes))
+    }
+
+    #[inline(always)]
+    fn lookup_many_impl<S: Simd>(&self, simd: S, hashes: Vec<u32>) -> Vec<MapValue> {
         let mut hashes = unchecked!(hashes);
         const PREFETCH_AHEAD: usize = 4;
+        let zeros = u32x8::splat(simd, 0);
 
         macro_rules! entries {
             [$i:expr] => (hashes[$i] % (1 << self.map_mod_bits))
@@ -252,10 +272,13 @@ impl Table {
             prefetch_at!(i + PREFETCH_AHEAD);
             let mut e = entries![i] as usize;
             loop {
-                let hash_matched = self.map[e].hashes.simd_eq(Simd::splat(hashes[i]));
-                let empty = self.map[e].hashes.simd_eq(Simd::splat(0));
+                let group_hashes = u32x8::from_slice(simd, &self.map[e].hashes);
+                let hash_matched = group_hashes.simd_eq(u32x8::splat(simd, hashes[i]));
+                let empty = group_hashes.simd_eq(zeros);
+                let bits = (hash_matched | empty).to_bitmask();
 
-                if let Some(pos) = (hash_matched | empty).first_set() {
+                if bits != 0 {
+                    let pos = bits.trailing_zeros() as usize;
                     hashes[i] = unsafe {
                         // safety: transmute MapValue(u32) to u32
                         std::mem::transmute(self.map[e].values[pos])

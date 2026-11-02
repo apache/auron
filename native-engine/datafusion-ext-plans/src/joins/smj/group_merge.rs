@@ -389,7 +389,7 @@ mod tests {
                 let key_rows = Arc::new(
                     converter
                         .lock()
-                        .convert_columns(&[col.clone()])
+                        .convert_columns(std::slice::from_ref(&col))
                         .expect("valid test key columns"),
                 );
                 let batch =
