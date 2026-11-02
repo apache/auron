@@ -97,8 +97,7 @@ object AuronPlanDiagnostics extends Logging {
 
   def publish(session: SparkSession, plan: SparkPlan): Unit = {
     if (!SparkAuronConfiguration.AURON_ENABLED.get() ||
-      !SparkAuronConfiguration.UI_ENABLED.get() ||
-      plan.isInstanceOf[AdaptiveSparkPlanExec]) {
+      !SparkAuronConfiguration.UI_ENABLED.get()) {
       return
     }
     val sc = session.sparkContext

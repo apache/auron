@@ -62,6 +62,7 @@ class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
       val snapshots = executions.flatMap(_.snapshots)
       assert(executions.exists(e => store.metrics(e.executionId).nonEmpty))
       assert(snapshots.nonEmpty)
+      assert(snapshots.exists(_.nodes.headOption.exists(_.name == "AdaptiveSparkPlan")))
       assert(snapshots.exists(_.nodes.exists(_.status == "Native")))
       assert(snapshots.forall(_.physicalPlan.nonEmpty))
       assert(snapshots.exists(_.configurations.contains("spark.sql.session.timeZone")))
