@@ -276,7 +276,8 @@ class ShimsImpl extends Shims with Logging {
       joinType: JoinType,
       condition: Option[Expression],
       broadcastSide: JoinBuildSide,
-      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase =
+      isNullAwareAntiJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeBroadcastJoinBase =
     NativeBroadcastJoinExec(
       left,
       right,
@@ -286,7 +287,8 @@ class ShimsImpl extends Shims with Logging {
       joinType,
       condition,
       broadcastSide,
-      isNullAwareAntiJoin)
+      isNullAwareAntiJoin,
+      requiredReservedOrder)
 
   override def createNativeSortMergeJoinExec(
       left: SparkPlan,
@@ -313,7 +315,8 @@ class ShimsImpl extends Shims with Logging {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): SparkPlan =
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): SparkPlan =
     NativeShuffledHashJoinExecProvider.provide(
       left,
       right,
@@ -322,7 +325,8 @@ class ShimsImpl extends Shims with Logging {
       joinType,
       condition,
       buildSide,
-      isSkewJoin)
+      isSkewJoin,
+      requiredReservedOrder)
 
   override def createNativeExpandExec(
       projections: Seq[Seq[Expression]],
