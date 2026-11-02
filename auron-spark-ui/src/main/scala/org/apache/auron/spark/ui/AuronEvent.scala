@@ -48,7 +48,7 @@ object AuronFallbackReason {
     else s"Auron could not convert $operator."
   }
 
-  def followOn(operators: Seq[String]): String = {
+  def keptOnJvmBecause(operators: Seq[String]): String = {
     val inputs = operators.distinct
     if (inputs.size == 1) s"Kept on the JVM because ${inputs.head} runs there."
     else s"Kept on the JVM because these inputs run there: ${inputs.mkString(", ")}."

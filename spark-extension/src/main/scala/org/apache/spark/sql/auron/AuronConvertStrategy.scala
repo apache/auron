@@ -217,7 +217,7 @@ object AuronConvertStrategy extends Logging {
           e.children.filterNot(isNative).map(_.getClass.getSimpleName)
         e.setTagValue(
           neverConvertReasonTag,
-          if (nonNativeChildren.nonEmpty) AuronFallbackReason.followOn(nonNativeChildren)
+          if (nonNativeChildren.nonEmpty) AuronFallbackReason.keptOnJvmBecause(nonNativeChildren)
           else AuronFallbackReason.unsupportedOperator(e.getClass.getSimpleName))
     }
   }
@@ -251,7 +251,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isNeverConvert(child),
-            AuronFallbackReason.followOn(Seq(child.getClass.getSimpleName)))
+            AuronFallbackReason.keptOnJvmBecause(Seq(child.getClass.getSimpleName)))
         }
 
         // NonNative -> NativeAgg
@@ -261,7 +261,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isNeverConvert(child),
-            AuronFallbackReason.followOn(Seq(child.getClass.getSimpleName)))
+            AuronFallbackReason.keptOnJvmBecause(Seq(child.getClass.getSimpleName)))
         }
 
         // Agg -> NativeShuffle
@@ -271,7 +271,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isAggregate(child) && isNeverConvert(child),
-            AuronFallbackReason.followOn(Seq(child.getClass.getSimpleName)))
+            AuronFallbackReason.keptOnJvmBecause(Seq(child.getClass.getSimpleName)))
         }
 
         // NativeExpand -> NonNative
@@ -282,7 +282,7 @@ object AuronConvertStrategy extends Logging {
               dontConvertIf(
                 expand,
                 !isNeverConvert(expand),
-                AuronFallbackReason.followOn(Seq(e.getClass.getSimpleName)))
+                AuronFallbackReason.keptOnJvmBecause(Seq(e.getClass.getSimpleName)))
             case _ =>
           }
         }
@@ -295,7 +295,7 @@ object AuronConvertStrategy extends Logging {
               dontConvertIf(
                 scan,
                 !isNeverConvert(scan),
-                AuronFallbackReason.followOn(Seq(e.getClass.getSimpleName)))
+                AuronFallbackReason.keptOnJvmBecause(Seq(e.getClass.getSimpleName)))
             case _ =>
           }
         }
@@ -307,7 +307,7 @@ object AuronConvertStrategy extends Logging {
             dontConvertIf(
               sort,
               !isNeverConvert(sort) && isNeverConvert(sort.children.head),
-              AuronFallbackReason.followOn(
+              AuronFallbackReason.keptOnJvmBecause(
                 Seq(sort.children.head.getClass.getSimpleName, e.getClass.getSimpleName)))
           }
         }
