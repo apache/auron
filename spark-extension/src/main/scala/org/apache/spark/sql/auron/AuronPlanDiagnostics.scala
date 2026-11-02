@@ -32,15 +32,14 @@ import org.apache.spark.util.Utils
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.spark.ui.{AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
-import org.apache.auron.sparkver
 
 /** Diagnostics must neither mutate Spark's operator IDs nor prevent query execution. */
 object AuronPlanDiagnostics extends Logging {
-  @sparkver("3.0 / 3.1")
+  @org.apache.auron.sparkver("3.0 / 3.1")
   private def isAdaptiveShuffleReader(plan: SparkPlan): Boolean =
     plan.isInstanceOf[org.apache.spark.sql.execution.adaptive.CustomShuffleReaderExec]
 
-  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  @org.apache.auron.sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
   private def isAdaptiveShuffleReader(plan: SparkPlan): Boolean =
     plan.isInstanceOf[org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec]
 
