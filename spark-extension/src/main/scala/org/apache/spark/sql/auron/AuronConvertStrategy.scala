@@ -84,8 +84,7 @@ object AuronConvertStrategy extends Logging {
               neverConvertReasonTag,
               converted
                 .getTagValue(neverConvertReasonTag)
-                .getOrElse(
-                  s"Native conversion did not produce a native operator for ${exec.getClass.getSimpleName}. No reason was recorded."))
+                .getOrElse(s"${exec.getClass.getSimpleName} is not supported yet."))
           }
       }
       danglingChildren = newDangling :+ converted
