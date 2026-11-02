@@ -84,7 +84,8 @@ object AuronConvertStrategy extends Logging {
               neverConvertReasonTag,
               converted
                 .getTagValue(neverConvertReasonTag)
-                .getOrElse(AuronFallbackReason.unsupportedOperator(exec.getClass.getSimpleName)))
+                .getOrElse(
+                  s"Native conversion did not produce a native operator for ${exec.getClass.getSimpleName}. No reason was recorded."))
           }
       }
       danglingChildren = newDangling :+ converted
@@ -213,12 +214,9 @@ object AuronConvertStrategy extends Logging {
       case e =>
         // not marked -- default to NeverConvert
         e.setTagValue(convertStrategyTag, NeverConvert)
-        val nonNativeChildren =
-          e.children.filterNot(isNative).map(_.getClass.getSimpleName)
         e.setTagValue(
           neverConvertReasonTag,
-          if (nonNativeChildren.nonEmpty) AuronFallbackReason.keptOnJvmBecause(nonNativeChildren)
-          else AuronFallbackReason.unsupportedOperator(e.getClass.getSimpleName))
+          s"No native conversion strategy was selected for ${e.getClass.getSimpleName}.")
     }
   }
 
@@ -251,7 +249,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isNeverConvert(child),
-            AuronFallbackReason.keptOnJvmBecause(Seq(child.getClass.getSimpleName)))
+            AuronFallbackReason.inputsOnJVM(Seq(child.getClass.getSimpleName)))
         }
 
         // NonNative -> NativeAgg
@@ -261,7 +259,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isNeverConvert(child),
-            AuronFallbackReason.keptOnJvmBecause(Seq(child.getClass.getSimpleName)))
+            AuronFallbackReason.inputsOnJVM(Seq(child.getClass.getSimpleName)))
         }
 
         // Agg -> NativeShuffle
@@ -271,7 +269,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isAggregate(child) && isNeverConvert(child),
-            AuronFallbackReason.keptOnJvmBecause(Seq(child.getClass.getSimpleName)))
+            AuronFallbackReason.inputsOnJVM(Seq(child.getClass.getSimpleName)))
         }
 
         // NativeExpand -> NonNative
@@ -282,7 +280,7 @@ object AuronConvertStrategy extends Logging {
               dontConvertIf(
                 expand,
                 !isNeverConvert(expand),
-                AuronFallbackReason.keptOnJvmBecause(Seq(e.getClass.getSimpleName)))
+                s"Kept on the JVM because its parent ${e.getClass.getSimpleName} runs there.")
             case _ =>
           }
         }
@@ -295,7 +293,7 @@ object AuronConvertStrategy extends Logging {
               dontConvertIf(
                 scan,
                 !isNeverConvert(scan),
-                AuronFallbackReason.keptOnJvmBecause(Seq(e.getClass.getSimpleName)))
+                s"Kept on the JVM because its parent ${e.getClass.getSimpleName} runs there.")
             case _ =>
           }
         }
@@ -307,8 +305,8 @@ object AuronConvertStrategy extends Logging {
             dontConvertIf(
               sort,
               !isNeverConvert(sort) && isNeverConvert(sort.children.head),
-              AuronFallbackReason.keptOnJvmBecause(
-                Seq(sort.children.head.getClass.getSimpleName, e.getClass.getSimpleName)))
+              s"Kept on the JVM because its input ${sort.children.head.getClass.getSimpleName} " +
+                s"and parent ${e.getClass.getSimpleName} run there.")
           }
         }
       }

@@ -20,6 +20,7 @@ import java.io.File
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.auron.AuronConvertStrategy
 import org.apache.spark.sql.execution.ui.{AuronSQLAppStatusListener, AuronSQLAppStatusStore}
 import org.apache.spark.util.Utils
 
@@ -98,6 +99,16 @@ class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
           .filterNot(e => beforeDisabled.contains(e.executionId))
           .forall(_.snapshots.isEmpty))
     }
+  }
+
+  test("default strategy does not infer why native conversion was not selected") {
+    val plan = spark.range(1).selectExpr("id + 1 AS value").queryExecution.sparkPlan
+    AuronConvertStrategy(plan)
+    val project = plan.collectFirst { case p: ProjectExec => p }.get
+    assert(
+      project
+        .getTagValue(AuronConvertStrategy.neverConvertReasonTag)
+        .contains("No native conversion strategy was selected for ProjectExec."))
   }
 
 }

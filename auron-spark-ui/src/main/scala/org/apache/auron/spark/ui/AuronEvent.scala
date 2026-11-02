@@ -38,9 +38,6 @@ case class AuronPlanDiagnosticNode(id: Int, name: String, status: String, reason
 object AuronFallbackReason {
   val keptOnJvm = "Auron kept this operator on the JVM."
 
-  def unsupportedOperator(operator: String): String =
-    s"Auron does not support $operator."
-
   def conversionFailure(operator: String, failure: String): String = {
     val detail =
       Option(failure).getOrElse("").stripPrefix("assertion failed:").trim.stripSuffix(".")
@@ -48,8 +45,8 @@ object AuronFallbackReason {
     else s"Auron could not convert $operator."
   }
 
-  def keptOnJvmBecause(operators: Seq[String]): String = {
-    val inputs = operators.distinct
+  def inputsOnJVM(inputOperators: Seq[String]): String = {
+    val inputs = inputOperators.distinct
     if (inputs.size == 1) s"Kept on the JVM because ${inputs.head} runs there."
     else s"Kept on the JVM because these inputs run there: ${inputs.mkString(", ")}."
   }
