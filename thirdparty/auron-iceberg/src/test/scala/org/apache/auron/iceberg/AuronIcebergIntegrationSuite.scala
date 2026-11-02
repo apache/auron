@@ -457,6 +457,141 @@ class AuronIcebergIntegrationSuite
     }
   }
 
+  Seq("parquet", "orc").foreach { format =>
+    test(s"iceberg primitive projections remain native after nested schema evolution: $format") {
+      withTable("local.db.t_nested_projection") {
+        sql(s"""CREATE TABLE local.db.t_nested_projection (
+             |  id INT, payload STRUCT<a: INT, b: STRING>,
+             |  items ARRAY<INT>, attributes MAP<STRING, INT>
+             |) USING iceberg TBLPROPERTIES ('write.format.default' = '$format')
+             |""".stripMargin)
+        sql("""INSERT INTO local.db.t_nested_projection
+            |VALUES (1, named_struct('a', 10, 'b', 'before'), array(10), map('k', 10))
+            |""".stripMargin)
+        sql("ALTER TABLE local.db.t_nested_projection RENAME COLUMN payload.a TO renamed")
+        sql("""INSERT INTO local.db.t_nested_projection
+            |VALUES (2, named_struct('renamed', 20, 'b', 'after'), array(20), map('k', 20))
+            |""".stripMargin)
+
+        Seq("local.db.t_nested_projection", "local.db.t_nested_projection.changes").foreach {
+          source =>
+            checkAnswer(
+              checkSparkAnswerAndOperator(s"SELECT id FROM $source"),
+              Seq(Row(1), Row(2)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(s"SELECT id FROM $source WHERE id = 2"),
+              Seq(Row(2)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(s"SELECT id, _spec_id FROM $source"),
+              Seq(Row(1, 0), Row(2, 0)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(s"SELECT _spec_id FROM $source"),
+              Seq(Row(0), Row(0)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT payload FROM $source",
+                nativeScanExpected = false),
+              Seq(Row(Row(10, "before")), Row(Row(20, "after"))))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT payload.renamed FROM $source",
+                nativeScanExpected = false),
+              Seq(Row(10), Row(20)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT id FROM $source WHERE payload.renamed = 10",
+                nativeScanExpected = false),
+              Seq(Row(1)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT id FROM $source WHERE length(payload.b) = 6",
+                nativeScanExpected = false),
+              Seq(Row(1)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT items FROM $source",
+                nativeScanExpected = false),
+              Seq(Row(Seq(10)), Row(Seq(20))))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT attributes FROM $source",
+                nativeScanExpected = false),
+              Seq(Row(Map("k" -> 10)), Row(Map("k" -> 20))))
+        }
+
+        sql("ALTER TABLE local.db.t_nested_projection DROP COLUMN payload.renamed")
+        sql("""INSERT INTO local.db.t_nested_projection
+            |VALUES (3, named_struct('b', 'dropped'), array(30), map('k', 30))
+            |""".stripMargin)
+        Seq("local.db.t_nested_projection", "local.db.t_nested_projection.changes").foreach {
+          source =>
+            checkAnswer(
+              checkSparkAnswerAndOperator(s"SELECT id FROM $source"),
+              Seq(Row(1), Row(2), Row(3)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT payload FROM $source",
+                nativeScanExpected = false),
+              Seq(Row(Row("before")), Row(Row("after")), Row(Row("dropped"))))
+        }
+
+        sql("ALTER TABLE local.db.t_nested_projection ADD COLUMN payload.renamed INT")
+        sql("""INSERT INTO local.db.t_nested_projection
+            |VALUES (4, named_struct('b', 'added', 'renamed', 40), array(40), map('k', 40))
+            |""".stripMargin)
+        Seq("local.db.t_nested_projection", "local.db.t_nested_projection.changes").foreach {
+          source =>
+            checkAnswer(
+              checkSparkAnswerAndOperator(s"SELECT id FROM $source"),
+              Seq(Row(1), Row(2), Row(3), Row(4)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT payload.renamed FROM $source",
+                nativeScanExpected = false),
+              Seq(Row(null), Row(null), Row(null), Row(40)))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT id FROM $source WHERE payload.renamed IS NULL",
+                nativeScanExpected = false),
+              Seq(Row(1), Row(2), Row(3)))
+        }
+      }
+    }
+
+    test(s"iceberg primitive projections preserve top-level evolution guards: $format") {
+      withTable("local.db.t_mixed_projection") {
+        sql(s"""CREATE TABLE local.db.t_mixed_projection (
+             |  id INT, value STRING, payload STRUCT<a: INT>
+             |) USING iceberg TBLPROPERTIES ('write.format.default' = '$format')
+             |""".stripMargin)
+        sql("""INSERT INTO local.db.t_mixed_projection
+            |VALUES (1, 'old', named_struct('a', 10))
+            |""".stripMargin)
+        sql("ALTER TABLE local.db.t_mixed_projection RENAME COLUMN id TO renamed_id")
+        sql("ALTER TABLE local.db.t_mixed_projection RENAME COLUMN payload.a TO renamed")
+        sql("ALTER TABLE local.db.t_mixed_projection DROP COLUMN value")
+        sql("ALTER TABLE local.db.t_mixed_projection ADD COLUMN value STRING")
+        sql("""INSERT INTO local.db.t_mixed_projection
+            |VALUES (2, named_struct('renamed', 20), 'new')
+            |""".stripMargin)
+
+        Seq("local.db.t_mixed_projection", "local.db.t_mixed_projection.changes").foreach {
+          source =>
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT renamed_id, value FROM $source",
+                nativeScanExpected = format == "parquet"),
+              Seq(Row(1, null), Row(2, "new")))
+            checkAnswer(
+              checkSparkAnswerAndOperator(
+                s"SELECT renamed_id, payload.renamed FROM $source",
+                nativeScanExpected = false),
+              Seq(Row(1, 10), Row(2, 20)))
+        }
+      }
+    }
+  }
+
   test("iceberg native scan is applied when delete files are null (format v1)") {
     withTable("local.db.t_v1") {
       sql("""
@@ -1728,7 +1863,9 @@ class AuronIcebergIntegrationSuite
   private def currentSnapshotId(tableName: String): Long =
     Spark3Util.loadIcebergTable(spark, tableName).currentSnapshot().snapshotId()
 
-  private def checkSparkAnswerAndOperator(sqlText: String): DataFrame = {
+  private def checkSparkAnswerAndOperator(
+      sqlText: String,
+      nativeScanExpected: Boolean = true): DataFrame = {
     var expected: Seq[Row] = Nil
     withSQLConf("spark.auron.enabled" -> "false") {
       val iceberg = sql(sqlText)
@@ -1743,7 +1880,10 @@ class AuronIcebergIntegrationSuite
       df = sql(sqlText)
       checkAnswer(df, expected)
       val plan = df.queryExecution.executedPlan.toString()
-      assert(plan.contains("NativeIcebergTableScan"), plan)
+      assert(plan.contains("NativeIcebergTableScan") == nativeScanExpected, plan)
+      if (!nativeScanExpected) {
+        assert(plan.contains("BatchScan"), plan)
+      }
     }
     df
   }
