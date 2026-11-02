@@ -23,7 +23,11 @@ use datafusion::common::Result;
 
 use crate::{
     SliceAsRawBytes, UninitializedInit, df_unimplemented_err,
-    io::{read_bytes_slice, read_len, write_len},
+    io::{
+        read_bytes_slice, read_len,
+        transpose::{Lanes, inverse_transpose, transpose},
+        write_len,
+    },
 };
 
 pub enum TransposeOpt {
@@ -228,12 +232,7 @@ fn write_offsets<W: Write>(
         .collect::<Vec<_>>();
 
     if let TransposeOpt::Transpose(buffer) = transpose_opt {
-        transpose::transpose(
-            lens.as_raw_bytes(),
-            buffer.as_raw_bytes_mut()[..4 * lens.len()].as_mut(),
-            4,
-            lens.len(),
-        );
+        transpose(&lens, &mut buffer[..4 * lens.len()]);
         output.write_all(buffer[..4 * lens.len()].as_ref())?;
     } else {
         output.write_all(lens.as_raw_bytes())?;
@@ -250,12 +249,7 @@ fn read_offsets<R: Read>(
 
     if let TransposeOpt::Transpose(buffer) = transpose_opt {
         input.read_exact(buffer[..4 * num_rows].as_mut())?;
-        transpose::transpose(
-            buffer[..4 * num_rows].as_ref(),
-            lens[..num_rows].as_raw_bytes_mut(),
-            num_rows,
-            4,
-        );
+        inverse_transpose(&buffer[..4 * num_rows], &mut lens[..num_rows]);
     } else {
         input.read_exact(lens[..num_rows].as_raw_bytes_mut())?;
     }
@@ -274,7 +268,10 @@ fn write_primitive_array<W: Write, PT: ArrowPrimitiveType>(
     array: &PrimitiveArray<PT>,
     output: &mut W,
     transpose_opt: &mut TransposeOpt,
-) -> Result<()> {
+) -> Result<()>
+where
+    PT::Native: Lanes,
+{
     let len = array.len();
     let array_data = array.to_data();
     if let Some(null_buffer) = array_data.nulls() {
@@ -293,11 +290,9 @@ fn write_primitive_array<W: Write, PT: ArrowPrimitiveType>(
     if let TransposeOpt::Transpose(buffer) = transpose_opt
         && byte_width > 1
     {
-        transpose::transpose(
-            array_data.buffer::<PT::Native>(0)[..len].as_raw_bytes(),
-            buffer[..byte_width * array.len()].as_raw_bytes_mut(),
-            byte_width,
-            array.len(),
+        transpose(
+            &array_data.buffer::<PT::Native>(0)[..len],
+            &mut buffer[..byte_width * array.len()],
         );
         output.write_all(buffer[..byte_width * array.len()].as_ref())?;
     } else {
@@ -310,7 +305,10 @@ fn read_primitive_array<R: Read, PT: ArrowPrimitiveType>(
     num_rows: usize,
     input: &mut R,
     transpose_opt: &mut TransposeOpt,
-) -> Result<ArrayRef> {
+) -> Result<ArrayRef>
+where
+    PT::Native: Lanes,
+{
     let has_null_buffer = read_len(input)? == 1;
     let null_buffer: Option<Buffer> = if has_null_buffer {
         Some(read_bits_buffer(input, num_rows)?)
@@ -324,12 +322,7 @@ fn read_primitive_array<R: Read, PT: ArrowPrimitiveType>(
         && byte_width > 1
     {
         input.read_exact(buffer[..byte_width * num_rows].as_mut())?;
-        transpose::transpose(
-            buffer[..byte_width * num_rows].as_ref(),
-            values.as_raw_bytes_mut(),
-            num_rows,
-            byte_width,
-        );
+        inverse_transpose(&buffer[..byte_width * num_rows], &mut values);
     } else {
         input.read_exact(values.as_raw_bytes_mut())?;
     }

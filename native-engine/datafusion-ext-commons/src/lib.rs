@@ -15,6 +15,7 @@
 
 #![allow(internal_features)]
 #![feature(core_intrinsics)]
+#![feature(portable_simd)]
 #![feature(slice_swap_unchecked)]
 #![feature(vec_into_raw_parts)]
 
@@ -33,6 +34,7 @@ pub mod io;
 pub mod scalar_value;
 pub mod spark_bit_array;
 pub mod spark_bloom_filter;
+pub mod spark_float;
 pub mod spark_hash;
 pub mod uda;
 

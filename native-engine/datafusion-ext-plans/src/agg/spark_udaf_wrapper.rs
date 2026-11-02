@@ -312,11 +312,7 @@ impl AccUDAFBufferRowsColumn {
             from_ffi_and_data_type(ffi_exported_rows, DataType::Binary)?
         };
         let exported_rows = make_array(exported_rows_data);
-        assert_eq!(exported_rows.len(), self.num_records());
-
-        // clear in-memory rows
-        jni_call!(SparkUDAFWrapperContext(self.jcontext.as_obj())
-            .resize(self.obj.as_obj(), 0i32)-> ())?;
+        assert_eq!(exported_rows.len(), idx.len());
         Ok(exported_rows)
     }
 

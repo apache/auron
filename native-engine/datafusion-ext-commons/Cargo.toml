@@ -44,7 +44,6 @@ once_cell = { workspace = true }
 paste = { workspace = true }
 smallvec = { workspace = true }
 tokio = { workspace = true }
-transpose = { workspace = true }
 unchecked-index = { workspace = true }
 zstd = { workspace = true }
 

@@ -17,6 +17,8 @@ specific language governing permissions and limitations
 under the License.
 -->
 
+## Decimal dictionaries
+
 The decimal dictionary fixtures were written with parquet-mr 1.13.1
 `ExampleParquetWriter`, `PARQUET_1_0`, dictionary encoding enabled, and no
 compression. Their schemas are:
@@ -54,3 +56,22 @@ The tests check zero scale, scale equal to precision, both precision limits,
 nulls, and selective pruning across row groups. The unscaled value `1` lies
 within every group's min/max range but is absent from every dictionary, so
 discarding all groups for that value verifies dictionary pruning.
+
+## Integer dictionary
+
+`integer-dictionary.parquet` was written with parquet-mr 1.13.1
+`ExampleParquetWriter`, `PARQUET_1_0`, dictionary encoding enabled, and no
+compression. Its schema is `message schema { required int32 x; }`.
+
+It contains three row groups of 100 rows each. The groups alternate between
+`[-10, -1]`, `[0, 10]`, and `[5, 10]`, respectively. It was written with
+`withRowGroupSize(1)` and `withPageSize(1024)`; parquet-mr checks the row-group
+size every 100 rows.
+
+Both dictionary and data pages use `PLAIN_DICTIONARY` in the footer's page
+encoding statistics. This exercises Auron's legacy dictionary extraction path;
+modern Rust writer output does not enter that path.
+
+For `x = 5`, min/max statistics prune the first group, dictionary filtering
+prunes the second group, and the third group is retained. The regression test
+checks these decisions, the metrics, and matching rows against an unpruned read.

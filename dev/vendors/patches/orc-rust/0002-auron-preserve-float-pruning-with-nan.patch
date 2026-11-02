@@ -1,0 +1,262 @@
+diff --git a/src/row_group_filter.rs b/src/row_group_filter.rs
+index 6478a8a..74a1157 100644
+--- a/src/row_group_filter.rs
++++ b/src/row_group_filter.rs
+@@ -56,7 +56,7 @@ pub fn evaluate_predicate(
+     let num_row_groups = row_index.num_row_groups();
+     let mut result = vec![true; num_row_groups]; // Default: keep all
+
+-    evaluate_predicate_recursive(predicate, row_index, schema, &mut result)?;
++    evaluate_predicate_recursive(predicate, row_index, schema, &mut result, false)?;
+
+     Ok(result)
+ }
+@@ -66,51 +66,56 @@ fn evaluate_predicate_recursive(
+     row_index: &StripeRowIndex,
+     schema: &RootDataType,
+     result: &mut [bool],
++    negated: bool,
+ ) -> Result<()> {
+     match predicate {
+         Predicate::Comparison { column, op, value } => {
+-            evaluate_comparison(column, *op, value, row_index, schema, result)?;
++            let op = if negated {
++                match op {
++                    ComparisonOp::Equal => ComparisonOp::NotEqual,
++                    ComparisonOp::NotEqual => ComparisonOp::Equal,
++                    ComparisonOp::LessThan => ComparisonOp::GreaterThanOrEqual,
++                    ComparisonOp::LessThanOrEqual => ComparisonOp::GreaterThan,
++                    ComparisonOp::GreaterThan => ComparisonOp::LessThanOrEqual,
++                    ComparisonOp::GreaterThanOrEqual => ComparisonOp::LessThan,
++                }
++            } else {
++                *op
++            };
++            evaluate_comparison(column, op, value, row_index, schema, result)?;
+         }
+         Predicate::IsNull { column } => {
+-            evaluate_is_null(column, row_index, schema, result)?;
++            if negated {
++                evaluate_is_not_null(column, row_index, schema, result)?;
++            } else {
++                evaluate_is_null(column, row_index, schema, result)?;
++            }
+         }
+         Predicate::IsNotNull { column } => {
+-            evaluate_is_not_null(column, row_index, schema, result)?;
++            if negated {
++                evaluate_is_null(column, row_index, schema, result)?;
++            } else {
++                evaluate_is_not_null(column, row_index, schema, result)?;
++            }
+         }
+-        Predicate::And(predicates) => {
+-            // For AND: start with all true, then apply each predicate
+-            // Row group is kept only if ALL predicates allow it
++        Predicate::And(predicates) | Predicate::Or(predicates) => {
++            // Push NOT through the group before combining "may match" results.
++            let keep_if_any = matches!(predicate, Predicate::Or(_)) != negated;
++            result.fill(!keep_if_any);
+             for pred in predicates {
+                 let mut temp_result = vec![true; result.len()];
+-                evaluate_predicate_recursive(pred, row_index, schema, &mut temp_result)?;
+-                // AND logic: result[i] = result[i] && temp_result[i]
++                evaluate_predicate_recursive(pred, row_index, schema, &mut temp_result, negated)?;
+                 for (r, t) in result.iter_mut().zip(temp_result.iter()) {
+-                    *r = *r && *t;
++                    if keep_if_any {
++                        *r |= *t;
++                    } else {
++                        *r &= *t;
++                    }
+                 }
+             }
+         }
+-        Predicate::Or(predicates) => {
+-            // For OR: start with all false, then apply each predicate
+-            // Row group is kept if ANY predicate allows it
+-            let mut temp_results = Vec::new();
+-            for pred in predicates {
+-                let mut temp_result = vec![true; result.len()];
+-                evaluate_predicate_recursive(pred, row_index, schema, &mut temp_result)?;
+-                temp_results.push(temp_result);
+-            }
+-            // OR logic: result[i] = any(temp_results[j][i])
+-            for i in 0..result.len() {
+-                result[i] = temp_results.iter().any(|tr| tr[i]);
+-            }
+-        }
+         Predicate::Not(predicate) => {
+-            // For NOT: evaluate predicate, then negate
+-            let mut temp_result = vec![true; result.len()];
+-            evaluate_predicate_recursive(predicate, row_index, schema, &mut temp_result)?;
+-            // NOT logic: result[i] = !temp_result[i]
+-            for (r, t) in result.iter_mut().zip(temp_result.iter()) {
+-                *r = !*t;
+-            }
++            evaluate_predicate_recursive(predicate, row_index, schema, result, !negated)?;
+         }
+     }
+
+@@ -200,7 +205,7 @@ fn evaluate_comparison_with_stats(
+         }
+
+         // Float comparisons
+-        TypeStatistics::Double { min, max, .. } => {
++        TypeStatistics::Double { min, max, sum } => {
+             let v = match value {
+                 PredicateValue::Float32(Some(v)) => *v as f64,
+                 PredicateValue::Float64(Some(v)) => *v,
+@@ -211,7 +216,17 @@ fn evaluate_comparison_with_stats(
+                     .build());
+                 }
+             };
+-            evaluate_float_comparison(*min, *max, op, v)
++            // NaN may be absent from min/max while still present in the row group.
++            // ORC writers include it in the sum; missing or NaN sums are not safe to prune.
++            if v.is_nan()
++                || min.is_nan()
++                || max.is_nan()
++                || sum.as_ref().map_or(true, |sum| sum.is_nan())
++            {
++                true
++            } else {
++                evaluate_float_comparison(*min, *max, op, v)
++            }
+         }
+
+         // String comparisons
+@@ -364,9 +379,7 @@ fn evaluate_float_comparison(min: f64, max: f64, op: ComparisonOp, value: f64) -
+         }
+         ComparisonOp::NotEqual => {
+             // col != value: keep if value is not the only value
+-            // If min and max are very close to value, skip
+-            const EPSILON: f64 = 1e-9;
+-            !((min - value).abs() < EPSILON && (max - value).abs() < EPSILON)
++            min != value || max != value
+         }
+         ComparisonOp::LessThan => {
+             // col < value: keep if min < value
+@@ -571,6 +584,122 @@ mod tests {
+         crate::schema::RootDataType::from_proto(&types).unwrap()
+     }
+
++    #[test]
++    fn test_float_comparison_keeps_uncertain_nan_statistics() {
++        use crate::predicate::{ComparisonOp, PredicateValue};
++
++        for (sum, keep) in [(Some(f64::NAN), true), (None, true), (Some(0.0), false)] {
++            let stats = ColumnStatistics::try_from(&proto::ColumnStatistics {
++                number_of_values: Some(2),
++                double_statistics: Some(proto::DoubleStatistics {
++                    minimum: Some(0.0),
++                    maximum: Some(0.0),
++                    sum,
++                }),
++                ..Default::default()
++            })
++            .unwrap();
++            let actual = super::evaluate_comparison_with_stats(
++                &stats,
++                ComparisonOp::GreaterThan,
++                &PredicateValue::Float64(Some(100.0)),
++            )
++            .unwrap();
++            assert_eq!(actual, keep);
++        }
++    }
++
++    #[test]
++    fn test_negated_float_predicate_keeps_maybe_matching_row_groups() {
++        use crate::predicate::{Predicate, PredicateValue};
++        use crate::proto::{r#type::Kind, Type};
++
++        let schema = crate::schema::RootDataType::from_proto(&[
++            Type {
++                kind: Some(Kind::Struct as i32),
++                subtypes: vec![1],
++                field_names: vec!["d".to_string()],
++                ..Default::default()
++            },
++            Type {
++                kind: Some(Kind::Double as i32),
++                ..Default::default()
++            },
++        ])
++        .unwrap();
++        let entry = |min, max, sum| {
++            RowGroupEntry::new(
++                Some(
++                    ColumnStatistics::try_from(&proto::ColumnStatistics {
++                        number_of_values: Some(2),
++                        double_statistics: Some(proto::DoubleStatistics {
++                            minimum: Some(min),
++                            maximum: Some(max),
++                            sum: Some(sum),
++                        }),
++                        ..Default::default()
++                    })
++                    .unwrap(),
++                ),
++                vec![],
++            )
++        };
++        let row_index = StripeRowIndex::new(
++            HashMap::from([(
++                1,
++                RowGroupIndex::new(
++                    vec![
++                        entry(0.0, 0.0, f64::NAN),
++                        entry(0.0, 10.0, 10.0),
++                        entry(100.0, 100.0, 200.0),
++                    ],
++                    2,
++                    1,
++                ),
++            )]),
++            6,
++            2,
++        );
++
++        let not_in = Predicate::not(Predicate::or(vec![
++            Predicate::eq("d", PredicateValue::Float64(Some(100.0))),
++            Predicate::eq("d", PredicateValue::Float64(Some(200.0))),
++        ]));
++        assert_eq!(
++            super::evaluate_predicate(&not_in, &row_index, &schema).unwrap(),
++            vec![true, true, false]
++        );
++
++        let not_equal = Predicate::not(Predicate::eq("d", PredicateValue::Float64(Some(5.0))));
++        assert_eq!(
++            super::evaluate_predicate(&not_equal, &row_index, &schema).unwrap(),
++            vec![true, true, true]
++        );
++    }
++
++    #[test]
++    fn test_float_not_equal_does_not_skip_nearby_values() {
++        use crate::predicate::{ComparisonOp, PredicateValue};
++
++        let value = 100.0000000001;
++        let stats = ColumnStatistics::try_from(&proto::ColumnStatistics {
++            number_of_values: Some(1),
++            double_statistics: Some(proto::DoubleStatistics {
++                minimum: Some(value),
++                maximum: Some(value),
++                sum: Some(value),
++            }),
++            ..Default::default()
++        })
++        .unwrap();
++        assert!(super::evaluate_comparison_with_stats(
++            &stats,
++            ComparisonOp::NotEqual,
++            &PredicateValue::Float64(Some(100.0)),
++        )
++        .unwrap());
++    }
++
+     #[test]
+     fn test_evaluate_predicate_integer_greater_than() {
+         use crate::predicate::{Predicate, PredicateValue};

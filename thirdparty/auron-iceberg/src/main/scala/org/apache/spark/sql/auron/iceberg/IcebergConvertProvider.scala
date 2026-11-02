@@ -19,6 +19,7 @@ package org.apache.spark.sql.auron.iceberg
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.{AuronConverters, AuronConvertProvider}
+import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.auron.plan.NativeIcebergTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -26,15 +27,17 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.util.SemanticVersion
 
-class IcebergConvertProvider extends AuronConvertProvider with Logging {
+class IcebergConvertProvider extends AuronConvertProvider with PredicateHelper with Logging {
 
   override def prepare(exec: SparkPlan): Unit = {
     exec.foreach {
-      case filter: FilterExec
-          if IcebergScanSupport.isSupportedChangelogTaskFilter(filter.condition) =>
-        changelogScanUnder(filter.child)
-          .filter(scan => filter.condition.references.subsetOf(scan.outputSet))
-          .foreach(IcebergScanSupport.addChangelogTaskFilter(_, filter.condition))
+      case filter: FilterExec if filter.condition.deterministic =>
+        changelogScanUnder(filter.child).foreach { scan =>
+          splitConjunctivePredicates(filter.condition)
+            .filter(IcebergScanSupport.isSupportedChangelogTaskFilter)
+            .filter(_.references.subsetOf(scan.outputSet))
+            .foreach(IcebergScanSupport.addChangelogTaskFilter(scan, _))
+        }
       case _ =>
     }
   }
