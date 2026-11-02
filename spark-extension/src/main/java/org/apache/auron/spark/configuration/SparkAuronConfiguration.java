@@ -189,9 +189,8 @@ public class SparkAuronConfiguration extends AuronConfiguration {
     public static final ConfigOption<Integer> NUM_PARALLEL_SCAN_FILES = new ConfigOption<>(Integer.class)
             .withKey("auron.numParallelScanFiles")
             .withCategory("Data Sources")
-            .withDescription(
-                    "Number of files to scan in parallel within a single task. Increasing this value can "
-                            + "improve throughput for tables with many small files by overlapping I/O across files.")
+            .withDescription("Number of files to scan in parallel within a single task. Increasing this value can "
+                    + "improve throughput for tables with many small files by overlapping I/O across files.")
             .withDefaultValue(1);
 
     public static final ConfigOption<String> SPARK_IO_COMPRESSION_CODEC = new ConfigOption<>(String.class)
