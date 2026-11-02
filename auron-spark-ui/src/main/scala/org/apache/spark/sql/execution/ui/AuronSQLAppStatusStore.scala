@@ -23,7 +23,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
-import org.apache.auron.spark.ui.AuronPlanDiagnosticEvent
+import org.apache.auron.spark.ui.{AuronPlanDiagnosticEvent, AuronPlanFallbackEvent}
 
 class AuronSQLAppStatusStore(store: KVStore) extends Logging {
 
@@ -67,6 +67,9 @@ class AuronSQLAppStatusStore(store: KVStore) extends Logging {
     }
   }
 
+  def physicalPlan(id: Long): Option[String] =
+    sparkStore.execution(id).flatMap(e => Option(e.physicalPlanDescription).filter(_.nonEmpty))
+
   def buildInfo(): Option[AuronBuildInfoUIData] = {
     val kClass = classOf[AuronBuildInfoUIData]
     // KVStore throws when the record doesn't exist; treat missing data as "no build info".
@@ -93,7 +96,8 @@ class AuronExecutionUIData(
     val description: String,
     val startedAt: Long,
     val endedAt: Long,
-    val snapshots: Seq[AuronPlanDiagnosticEvent]) {
+    val snapshots: Seq[AuronPlanDiagnosticEvent],
+    val legacyFallback: Option[AuronPlanFallbackEvent] = None) {
   @JsonIgnore
   @KVIndex
   def id: Long = executionId

@@ -23,7 +23,7 @@ import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.JsonProtocol
 import org.apache.spark.util.kvstore.InMemoryStore
 
-import org.apache.auron.spark.ui.{AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
+import org.apache.auron.spark.ui.{AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode, AuronPlanFallbackEvent}
 import org.apache.auron.sparkver
 
 class AuronDiagnosticsSuite extends SparkFunSuite {
@@ -198,6 +198,87 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
         .find(_.name == wrapper.nodeName)
         .exists(n => n.status == "Wrapper" && n.reason.isEmpty))
     assert(nodes.count(_.reason == "test fallback") == 1)
+  }
+
+  test("legacy reports survive replay and lifecycle updates without inventing snapshot data") {
+    val conf = new SparkConf(false)
+    val kv = new ElementTrackingStore(new InMemoryStore, conf)
+    try {
+      val listener = new AuronSQLAppStatusListener(conf, kv)
+      val store = new AuronSQLAppStatusStore(kv)
+      val event = AuronPlanFallbackEvent(
+        7,
+        3,
+        2,
+        "<legacy plan>",
+        Map("1 Project" -> "unsupported expression"))
+      listener.onOtherEvent(readEvent(writeEvent(event)))
+      listener.onOtherEvent(SparkListenerSQLExecutionEnd(7, 200))
+      listener.onOtherEvent(
+        readEvent("""{"Event":"org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
+        "executionId":7,"description":"legacy query","details":"","physicalPlanDescription":"",
+        "time":100,"modifiedConfigs":{},"jobTags":[]}"""))
+      val stored = store.execution(7).get
+      assert(stored.description == "legacy query")
+      assert(stored.startedAt == 100 && stored.endedAt == 200)
+      assert(stored.snapshots.isEmpty && stored.legacyFallback.contains(event))
+      val serializer = new org.apache.spark.status.KVUtils.KVStoreScalaSerializer
+      val restored =
+        serializer.deserialize(serializer.serialize(stored), classOf[AuronExecutionUIData])
+      assert(restored.legacyFallback.contains(event))
+      val view = new AuronDiagnosticsView(store)
+      val cells = ((view.render(null, null, "") \\ "tbody").head \ "tr").head \ "td"
+      assert(
+        cells.map(_.text.trim).takeRight(4) ==
+          Seq("3", "2", "Not available", "Legacy report"))
+      val details = view.render("7", null, "")
+      assert(details.toString.contains("&lt;legacy plan&gt;"))
+      assert(details.text.contains("1 additional fallback details"))
+      assert(details.text.contains("unsupported expression"))
+    } finally kv.close()
+  }
+
+  test("conversion snapshots take precedence over a legacy report") {
+    val conf = new SparkConf(false)
+    val kv = new ElementTrackingStore(new InMemoryStore, conf)
+    try {
+      val listener = new AuronSQLAppStatusListener(conf, kv)
+      listener.onOtherEvent(
+        AuronPlanFallbackEvent(1, 5, 1, "old plan", Map("1 Project" -> "old")))
+      listener.onOtherEvent(snapshot(1))
+      val view = new AuronDiagnosticsView(new AuronSQLAppStatusStore(kv))
+      val details = view.render("1", null, "").text
+      assert(details.contains("plan 0"))
+      assert(!details.contains("legacy fallback report"))
+      assert(!details.contains("old plan"))
+    } finally kv.close()
+  }
+
+  test("JVM conversion reasons override less specific fallback tags") {
+    Seq(Some("Auron used SortMergeJoin instead."), None).foreach { reason =>
+      val plan = emptyScan()
+      plan.setTagValue(AuronConvertStrategy.convertToNonNativeTag, true)
+      plan.setTagValue(AuronConvertStrategy.neverConvertReasonTag, "less specific reason")
+      reason.foreach(plan.setTagValue(AuronConvertStrategy.convertToNonNativeReasonTag, _))
+      val node = AuronPlanDiagnostics.collect(plan).head
+      assert(node.status == "Fallback")
+      assert(node.reason == reason.getOrElse("Auron kept this operator on the JVM."))
+    }
+  }
+
+  test("unfinished executions are bounded even when SQL end events are missing") {
+    val conf = new SparkConf(false)
+      .set("spark.sql.ui.retainedExecutions", "2")
+      .set("spark.appStateStore.asyncTracking.enable", "false")
+    val kv = new ElementTrackingStore(new InMemoryStore, conf)
+    try {
+      val listener = new AuronSQLAppStatusListener(conf, kv)
+      (1L to 3L).foreach(id => listener.onOtherEvent(snapshot(id)))
+      val store = new AuronSQLAppStatusStore(kv)
+      assert(store.executionsCount() == 2)
+      assert(store.execution(1).isEmpty)
+      assert(store.executions(0, 2).map(_.executionId) == Seq(3L, 2L))
+    } finally kv.close()
   }
 
 }

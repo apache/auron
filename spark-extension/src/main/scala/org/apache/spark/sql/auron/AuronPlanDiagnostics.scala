@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
 
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
-import org.apache.auron.spark.ui.{AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
+import org.apache.auron.spark.ui.{AuronFallbackReason, AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
 
 /** Diagnostics must neither mutate Spark's operator IDs nor prevent query execution. */
 object AuronPlanDiagnostics extends Logging {
@@ -57,13 +57,20 @@ object AuronPlanDiagnostics extends Logging {
       if (visited.put(p, java.lang.Boolean.TRUE) != null) {
         return
       }
-      val reason = p.getTagValue(AuronConvertStrategy.neverConvertReasonTag).getOrElse("")
+      val reason =
+        if (p.getTagValue(AuronConvertStrategy.convertToNonNativeTag).contains(true)) {
+          p.getTagValue(AuronConvertStrategy.convertToNonNativeReasonTag)
+            .getOrElse(AuronFallbackReason.keptOnJvm)
+        } else {
+          p.getTagValue(AuronConvertStrategy.neverConvertReasonTag).getOrElse("")
+        }
       val status = p match {
         case _: AuronConverters.ForceNativeExecutionWrapperBase => "Wrapper"
         case _: NativeSupports => "Native"
         case _: AdaptiveSparkPlanExec | _: QueryStageExec | _: ReusedExchangeExec |
             _: ReusedSubqueryExec | _: InputAdapter | _: WholeStageCodegenExec =>
           "Wrapper"
+        case _ if p.getClass.getSimpleName == "AQEShuffleReadExec" => "Wrapper"
         case _ if reason.nonEmpty => "Fallback"
         case _ => "Spark (no reason recorded)"
       }
@@ -90,7 +97,8 @@ object AuronPlanDiagnostics extends Logging {
 
   def publish(session: SparkSession, plan: SparkPlan): Unit = {
     if (!SparkAuronConfiguration.AURON_ENABLED.get() ||
-      !SparkAuronConfiguration.UI_ENABLED.get()) {
+      !SparkAuronConfiguration.UI_ENABLED.get() ||
+      plan.isInstanceOf[AdaptiveSparkPlanExec]) {
       return
     }
     val sc = session.sparkContext

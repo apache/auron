@@ -27,5 +27,6 @@ class AuronSQLTab(val sqlStore: AuronSQLAppStatusStore, sparkUI: SparkUI)
 
   val parent = sparkUI
   attachPage(new AuronAllExecutionsPage(this))
+  attachPage(new AuronExecutionPage(this))
   parent.attachTab(this)
 }

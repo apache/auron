@@ -35,11 +35,15 @@ import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.execution.window.WindowExec
 
+import org.apache.auron.spark.ui.AuronFallbackReason
+
 object AuronConvertStrategy extends Logging {
   import AuronConverters._
 
   val convertibleTag: TreeNodeTag[Boolean] = TreeNodeTag("auron.convertible")
   val convertToNonNativeTag: TreeNodeTag[Boolean] = TreeNodeTag("auron.convertToNonNative")
+  val convertToNonNativeReasonTag: TreeNodeTag[String] =
+    TreeNodeTag("auron.convertToNonNative.reason")
   val convertStrategyTag: TreeNodeTag[ConvertStrategy] = TreeNodeTag("auron.convert.strategy")
   val neverConvertReasonTag: TreeNodeTag[String] = TreeNodeTag("auron.never.convert.reason")
   val childOrderingRequiredTag: TreeNodeTag[Boolean] = TreeNodeTag(
@@ -63,6 +67,11 @@ object AuronConvertStrategy extends Logging {
         case e if e.getTagValue(convertToNonNativeTag).contains(true) =>
           exec.setTagValue(convertibleTag, false)
           exec.setTagValue(convertToNonNativeTag, true)
+          exec.setTagValue(
+            convertToNonNativeReasonTag,
+            e.getTagValue(convertToNonNativeReasonTag)
+              .orElse(e.getTagValue(neverConvertReasonTag))
+              .getOrElse(AuronFallbackReason.keptOnJvm))
 
         case e if NativeHelper.isNative(e) || e.getTagValue(convertibleTag).contains(true) =>
           exec.setTagValue(convertibleTag, true)
@@ -75,7 +84,7 @@ object AuronConvertStrategy extends Logging {
               neverConvertReasonTag,
               converted
                 .getTagValue(neverConvertReasonTag)
-                .getOrElse(s"${exec.getClass.getSimpleName} is not supported yet."))
+                .getOrElse(AuronFallbackReason.unsupportedOperator(exec.getClass.getSimpleName)))
           }
       }
       danglingChildren = newDangling :+ converted
@@ -204,9 +213,12 @@ object AuronConvertStrategy extends Logging {
       case e =>
         // not marked -- default to NeverConvert
         e.setTagValue(convertStrategyTag, NeverConvert)
+        val nonNativeChildren =
+          e.children.filterNot(isNative).map(_.getClass.getSimpleName)
         e.setTagValue(
           neverConvertReasonTag,
-          s"${exec.getClass.getSimpleName} not marked, default to NeverConvert.")
+          if (nonNativeChildren.nonEmpty) AuronFallbackReason.followOn(nonNativeChildren)
+          else AuronFallbackReason.unsupportedOperator(e.getClass.getSimpleName))
     }
   }
 
@@ -239,7 +251,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isNeverConvert(child),
-            s"${e.getClass.getSimpleName}, children is not native.")
+            AuronFallbackReason.followOn(Seq(child.getClass.getSimpleName)))
         }
 
         // NonNative -> NativeAgg
@@ -249,7 +261,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isNeverConvert(child),
-            s"${e.getClass.getSimpleName}, children is not native.")
+            AuronFallbackReason.followOn(Seq(child.getClass.getSimpleName)))
         }
 
         // Agg -> NativeShuffle
@@ -259,7 +271,7 @@ object AuronConvertStrategy extends Logging {
           dontConvertIf(
             e,
             isAggregate(child) && isNeverConvert(child),
-            s"${e.getClass.getSimpleName}, children is not native and children is agg.")
+            AuronFallbackReason.followOn(Seq(child.getClass.getSimpleName)))
         }
 
         // NativeExpand -> NonNative
@@ -270,7 +282,7 @@ object AuronConvertStrategy extends Logging {
               dontConvertIf(
                 expand,
                 !isNeverConvert(expand),
-                s"${e.getClass.getSimpleName}, children is nativeExpand.")
+                AuronFallbackReason.followOn(Seq(e.getClass.getSimpleName)))
             case _ =>
           }
         }
@@ -283,7 +295,7 @@ object AuronConvertStrategy extends Logging {
               dontConvertIf(
                 scan,
                 !isNeverConvert(scan),
-                s"${e.getClass.getSimpleName}, children is nativeParquetScan.")
+                AuronFallbackReason.followOn(Seq(e.getClass.getSimpleName)))
             case _ =>
           }
         }
@@ -295,7 +307,8 @@ object AuronConvertStrategy extends Logging {
             dontConvertIf(
               sort,
               !isNeverConvert(sort) && isNeverConvert(sort.children.head),
-              s"${e.getClass.getSimpleName}, children and parent both are not native.")
+              AuronFallbackReason.followOn(
+                Seq(sort.children.head.getClass.getSimpleName, e.getClass.getSimpleName)))
           }
         }
       }

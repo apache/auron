@@ -18,6 +18,7 @@ package org.apache.auron.spark.ui
 
 import scala.collection.mutable
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import org.apache.spark.scheduler.SparkListenerEvent
 
 sealed trait AuronEvent extends SparkListenerEvent {}
@@ -34,3 +35,33 @@ case class AuronPlanDiagnosticEvent(
     extends AuronEvent
 
 case class AuronPlanDiagnosticNode(id: Int, name: String, status: String, reason: String)
+
+/** Compatibility with legacy fallback-report event logs. */
+@JsonIgnoreProperties(ignoreUnknown = true)
+case class AuronPlanFallbackEvent(
+    executionId: Long,
+    numAuronNodes: Int,
+    numFallbackNodes: Int,
+    physicalPlanDescription: String,
+    fallbackNodeToReason: Map[String, String])
+    extends AuronEvent
+
+object AuronFallbackReason {
+  val keptOnJvm = "Auron kept this operator on the JVM."
+
+  def unsupportedOperator(operator: String): String =
+    s"Auron does not support $operator."
+
+  def conversionFailure(operator: String, failure: String): String = {
+    val detail =
+      Option(failure).getOrElse("").stripPrefix("assertion failed:").trim.stripSuffix(".")
+    if (detail.nonEmpty) s"Auron could not convert $operator: $detail."
+    else s"Auron could not convert $operator."
+  }
+
+  def followOn(operators: Seq[String]): String = {
+    val inputs = operators.distinct
+    if (inputs.size == 1) s"Kept on the JVM because ${inputs.head} runs there."
+    else s"Kept on the JVM because these inputs run there: ${inputs.mkString(", ")}."
+  }
+}

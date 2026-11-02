@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.status.ElementTrackingStore
 
-import org.apache.auron.spark.ui.{AuronBuildInfoEvent, AuronPlanDiagnosticEvent}
+import org.apache.auron.spark.ui.{AuronBuildInfoEvent, AuronPlanDiagnosticEvent, AuronPlanFallbackEvent}
 
 class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
     extends SparkListener
@@ -43,6 +43,15 @@ class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
           .toVector
       } finally iter.close()
     ids.foreach(id => kvstore.delete(classOf[AuronExecutionUIData], id))
+    val remaining = kvstore.count(classOf[AuronExecutionUIData]) - retained
+    if (remaining > 0) {
+      val oldest =
+        kvstore.view(classOf[AuronExecutionUIData]).max(remaining.toInt).closeableIterator()
+      val oldestIds =
+        try oldest.asScala.map(_.executionId).toVector
+        finally oldest.close()
+      oldestIds.foreach(id => kvstore.delete(classOf[AuronExecutionUIData], id))
+    }
   }
 
   private def current(id: Long): AuronExecutionUIData =
@@ -67,7 +76,8 @@ class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
           e.description,
           e.time,
           old.endedAt,
-          old.snapshots),
+          old.snapshots,
+          old.legacyFallback),
         true)
     case e: SparkListenerSQLExecutionEnd =>
       val old = current(e.executionId)
@@ -77,7 +87,8 @@ class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
           old.description,
           old.startedAt,
           e.time,
-          old.snapshots),
+          old.snapshots,
+          old.legacyFallback),
         true)
     case e: AuronPlanDiagnosticEvent =>
       val old = current(e.executionId)
@@ -96,7 +107,19 @@ class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
           old.description,
           old.startedAt,
           old.endedAt,
-          snapshots),
+          snapshots,
+          old.legacyFallback),
+        true)
+    case e: AuronPlanFallbackEvent =>
+      val old = current(e.executionId)
+      kvstore.write(
+        new AuronExecutionUIData(
+          e.executionId,
+          old.description,
+          old.startedAt,
+          old.endedAt,
+          old.snapshots,
+          Some(e)),
         true)
     case _ => // Ignore
   }
