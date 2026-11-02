@@ -116,13 +116,13 @@ impl ShuffleRepartitioner for RssSortShuffleRepartitioner {
         if self.mem_used_percent() > pct_threshold
             || (size_threshold > 0 && self.mem_used() > size_threshold as usize)
         {
-            self.force_spill().await?;
+            self.spill().await?;
         }
         Ok(())
     }
 
     async fn shuffle_write(&self) -> Result<()> {
-        self.force_spill().await?;
+        self.spill().await?;
         Ok(())
     }
 }

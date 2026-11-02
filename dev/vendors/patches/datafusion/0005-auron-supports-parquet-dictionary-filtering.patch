@@ -8,10 +8,10 @@ Subject: [PATCH] auron: supports parquet dictionary filtering
  datafusion/common/src/pruning.rs              |   5 +
  datafusion/datasource-parquet/src/opener.rs   |   2 +-
  .../datasource-parquet/src/page_filter.rs     |   4 +
- .../src/row_group_filter.rs                   | 151 +++++++++++++-----
+ .../src/row_group_filter.rs                   | 155 +++++++++++++-----
  datafusion/pruning/Cargo.toml                 |   2 +
  datafusion/pruning/src/pruning_predicate.rs   |  62 ++++++-
- 7 files changed, 189 insertions(+), 41 deletions(-)
+ 7 files changed, 193 insertions(+), 41 deletions(-)
 
 diff --git a/datafusion-examples/examples/pruning.rs b/datafusion-examples/examples/pruning.rs
 index b2d2fa13b..430520e73 100644
@@ -72,7 +72,7 @@ index 5f3e05747..c01f6f277 100644
 +    }
  }
 diff --git a/datafusion/datasource-parquet/src/row_group_filter.rs b/datafusion/datasource-parquet/src/row_group_filter.rs
-index 51d50d780..982eed293 100644
+index 51d50d780..c04895f5c 100644
 --- a/datafusion/datasource-parquet/src/row_group_filter.rs
 +++ b/datafusion/datasource-parquet/src/row_group_filter.rs
 @@ -15,12 +15,15 @@
@@ -114,7 +114,7 @@ index 51d50d780..982eed293 100644
          groups: &[RowGroupMetaData],
          predicate: &PruningPredicate,
          metrics: &ParquetFileMetrics,
-@@ -115,35 +117,47 @@ impl RowGroupAccessPlanFilter {
+@@ -115,35 +117,51 @@ impl RowGroupAccessPlanFilter {
  
          assert_eq!(groups.len(), self.access_plan.len());
          // Indexes of row groups still to scan
@@ -156,6 +156,7 @@ index 51d50d780..982eed293 100644
 +                Ok(values) => {
 +                    if !values[0] {
 +                        self.access_plan.skip(rg_idx);
++                        metrics.row_groups_pruned_statistics.add(1);
 +                        continue; // no need to prune with dictionary
                      }
                  }
@@ -177,6 +178,9 @@ index 51d50d780..982eed293 100644
 +                Ok(values) => {
 +                    if !values[0] {
 +                        self.access_plan.skip(rg_idx);
++                        metrics.row_groups_pruned_statistics.add(1);
++                    } else {
++                        metrics.row_groups_matched_statistics.add(1);
 +                    }
 +                }
 +                Err(e) => {
@@ -186,7 +190,7 @@ index 51d50d780..982eed293 100644
              }
          }
      }
-@@ -359,34 +373,51 @@ impl PruningStatistics for BloomFilterStatistics {
+@@ -359,34 +377,51 @@ impl PruningStatistics for BloomFilterStatistics {
  
          Some(BooleanArray::from(vec![contains]))
      }
@@ -247,7 +251,7 @@ index 51d50d780..982eed293 100644
      fn min_values(&self, column: &Column) -> Option<ArrayRef> {
          self.statistics_converter(column)
              .and_then(|c| Ok(c.row_group_mins(self.metadata_iter())?))
-@@ -426,6 +457,50 @@ impl PruningStatistics for RowGroupPruningStatistics<'_> {
+@@ -426,6 +461,50 @@ impl PruningStatistics for RowGroupPruningStatistics<'_> {
      ) -> Option<BooleanArray> {
          None
      }

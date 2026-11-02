@@ -355,22 +355,14 @@ impl AggContext {
                     if !filtered_acc.is_empty() {
                         let filtered_acc_idx =
                             IdxSelection::Indices(&filtered_acc).with_cached_max();
-                        if let Ok(udaf_agg) = downcast_any!(agg, SparkUDAFWrapper) {
-                            udaf_agg.partial_update_with_indices_cache(
-                                acc_col,
-                                filtered_acc_idx,
-                                &input_arrays[*agg_idx],
-                                IdxSelection::Indices(&filtered_input),
-                                &udaf_indices_cache,
-                            )?;
-                        } else {
-                            agg.partial_update(
-                                acc_col,
-                                filtered_acc_idx,
-                                &input_arrays[*agg_idx],
-                                IdxSelection::Indices(&filtered_input),
-                            )?;
-                        }
+                        // FILTER changes the row mapping, so UDAFs must build their
+                        // own indices rather than reuse another aggregate's cache.
+                        agg.partial_update(
+                            acc_col,
+                            filtered_acc_idx,
+                            &input_arrays[*agg_idx],
+                            IdxSelection::Indices(&filtered_input),
+                        )?;
                     }
                 } else {
                     let batch_selection = IdxSelection::Range(batch_start_idx, batch_end_idx);

@@ -73,6 +73,7 @@ pub fn create_auron_ext_function(
         }
         "Spark_ParseJson" => shared_function!(spark_get_json_object::spark_parse_json),
         "Spark_ArrayDistinct" => shared_function!(spark_array::array_distinct),
+        "Spark_ArrayUnion" => shared_function!(spark_array::array_union),
         "Spark_ArrayContains" => shared_function!(spark_array::array_contains),
         "Spark_ArrayReverse" => shared_function!(spark_array::array_reverse),
         "Spark_ArrayFlatten" => shared_function!(spark_array::array_flatten),
