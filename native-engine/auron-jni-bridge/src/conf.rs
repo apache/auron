@@ -63,6 +63,7 @@ define_conf!(BooleanConf, ORC_TIMESTAMP_USE_MICROSECOND);
 define_conf!(BooleanConf, ORC_SCHEMA_CASE_SENSITIVE);
 define_conf!(IntConf, UDAF_FALLBACK_NUM_UDAFS_TRIGGER_SORT_AGG);
 define_conf!(BooleanConf, PARSE_JSON_ERROR_FALLBACK);
+define_conf!(IntConf, NUM_PARALLEL_SCAN_FILES);
 define_conf!(StringConf, NATIVE_LOG_LEVEL);
 define_conf!(IntConf, NUM_MAX_SPILLING_CONSUMERS);
 define_conf!(DoubleConf, MEM_SPILL_WATERMARK_L1);
