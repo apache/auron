@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.auron.{AuronConvertStrategy, AuronPlanDiagnostics, ForceNativeExecutionWrapper}
-import org.apache.spark.sql.execution.{LocalTableScanExec, UnionExec}
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, LocalTableScanExec, SparkPlan, UnionExec}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.JsonProtocol
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -48,6 +48,21 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
 
   @sparkver("4.0 / 4.1 / 4.2")
   private def emptyScan(): LocalTableScanExec = LocalTableScanExec(Nil, Nil, None)
+
+  @sparkver("3.0")
+  private def shuffleReader(child: SparkPlan): SparkPlan =
+    org.apache.spark.sql.execution.adaptive
+      .CustomShuffleReaderExec(child, Seq(CoalescedPartitionSpec(0, 1)), "test")
+
+  @sparkver("3.1")
+  private def shuffleReader(child: SparkPlan): SparkPlan =
+    org.apache.spark.sql.execution.adaptive
+      .CustomShuffleReaderExec(child, Seq(CoalescedPartitionSpec(0, 1)))
+
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  private def shuffleReader(child: SparkPlan): SparkPlan =
+    org.apache.spark.sql.execution.adaptive
+      .AQEShuffleReadExec(child, Seq(CoalescedPartitionSpec(0, 1)))
 
   private def snapshot(id: Long, index: Int = 0): AuronPlanDiagnosticEvent =
     AuronPlanDiagnosticEvent(
@@ -210,6 +225,16 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
       assert(node.status == "Fallback")
       assert(node.reason == reason.getOrElse("Auron kept this operator on the JVM."))
     }
+  }
+
+  test("adaptive shuffle readers are wrappers even when they carry a fallback tag") {
+    val child = emptyScan()
+    val reader = shuffleReader(child)
+    reader.setTagValue(AuronConvertStrategy.neverConvertReasonTag, "not an operator failure")
+    val nodes = AuronPlanDiagnostics.collect(reader)
+    assert(nodes.head.status == "Wrapper")
+    assert(nodes.head.reason.isEmpty)
+    assert(nodes.count(_.name == child.nodeName) == 1)
   }
 
 }
