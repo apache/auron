@@ -90,7 +90,10 @@ abstract class NativeParquetScanBase(basedFileScan: FileSourceScanExec)
             .setParquetScan(nativeParquetScanExecBuilder.build())
             .build()
         },
-        friendlyName = "NativeRDD.ParquetScan")
+        friendlyName = "NativeRDD.ParquetScan") {
+        override protected def getPreferredLocations(split: Partition): Seq[String] =
+          split.asInstanceOf[FilePartition].preferredLocations().toSeq
+      }
     } else {
       new EmptyNativeRDD(sparkContext)
     }

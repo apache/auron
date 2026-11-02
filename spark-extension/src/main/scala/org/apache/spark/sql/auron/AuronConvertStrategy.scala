@@ -45,6 +45,8 @@ object AuronConvertStrategy extends Logging {
   val childOrderingRequiredTag: TreeNodeTag[Boolean] = TreeNodeTag(
     "auron.child.ordering.required")
   val joinSmallerSideTag: TreeNodeTag[JoinBuildSide] = TreeNodeTag("auron.join.smallerSide")
+  val requiredReservedOrderTag: TreeNodeTag[Boolean] = TreeNodeTag(
+    "auron.join.requiredReservedOrder")
 
   def apply(exec: SparkPlan): Unit = {
     exec.foreach(_.setTagValue(convertibleTag, true))
@@ -114,6 +116,20 @@ object AuronConvertStrategy extends Logging {
             child.setTagValue(childOrderingRequiredTag, true)
           }
         }
+    }
+
+    // fill requiredReservedOrder tag for broadcast / shuffled hash joins.
+    // broadcast join and shuffled hash join may both fall back to hybrid (bucketed hash)
+    // join when the build side is too large, which does not guarantee that the output rows
+    // preserve the probe side's original ordering. if some downstream operator relies on
+    // this join's output ordering (i.e. no explicit Sort was inserted because this join's
+    // outputOrdering already satisfies the requirement), we must reserve the probe side
+    // ordering across the hybrid join to avoid producing incorrect results.
+    exec.foreach {
+      case e @ (_: BroadcastHashJoinExec | _: BroadcastNestedLoopJoinExec |
+          _: ShuffledHashJoinExec) if e.getTagValue(childOrderingRequiredTag).contains(true) =>
+        e.setTagValue(requiredReservedOrderTag, true)
+      case _ =>
     }
 
     // execute some special strategies

@@ -97,7 +97,8 @@ abstract class Shims {
       joinType: JoinType,
       condition: Option[Expression],
       broadcastSide: JoinBuildSide,
-      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase
+      isNullAwareAntiJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeBroadcastJoinBase
 
   def createNativeSortMergeJoinExec(
       left: SparkPlan,
@@ -116,7 +117,8 @@ abstract class Shims {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): SparkPlan
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): SparkPlan
 
   def createNativeExpandExec(
       projections: Seq[Seq[Expression]],

@@ -527,6 +527,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "branches"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "570b591f2c5947596f3e5b0fcf59a71068ece15aa710446ce7eb670c3620350c"
+
+[[package]]
 name = "brotli"
 version = "8.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1117,9 +1123,11 @@ dependencies = [
  "arrow-schema",
  "auron-jni-bridge",
  "bigdecimal",
+ "branches",
  "byteorder",
  "chrono",
  "datafusion",
+ "fearless_simd",
  "itertools 0.15.0",
  "jni",
  "log",
@@ -1130,7 +1138,6 @@ dependencies = [
  "rand",
  "smallvec 2.0.0-alpha.11",
  "tokio",
- "transpose",
  "unchecked-index",
  "zstd",
 ]
@@ -1183,6 +1190,7 @@ dependencies = [
  "auron-memmgr",
  "base64 0.23.0",
  "bitvec",
+ "branches",
  "byteorder",
  "bytes 1.12.1",
  "bytesize",
@@ -1193,6 +1201,7 @@ dependencies = [
  "datafusion-ext-commons",
  "datafusion-ext-exprs",
  "datafusion-ext-functions",
+ "fearless_simd",
  "foldhash 0.2.0",
  "futures",
  "futures-util",
@@ -1611,6 +1620,12 @@ dependencies = [
  "serde",
  "simdutf8",
 ]
+
+[[package]]
+name = "fearless_simd"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3296eb97d869113eaf148a6bdf01884e90b3828ad7ae2340b0f93362fc158611"
 
 [[package]]
 name = "findshlibs"
@@ -3883,12 +3898,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9091b6114800a5f2141aee1d1b9d6ca3592ac062dc5decb3764ec5895a47b4eb"
 
 [[package]]
-name = "strength_reduce"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
-
-[[package]]
 name = "strum"
 version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4245,16 +4254,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "transpose"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e"
-dependencies = [
- "num-integer",
- "strength_reduce",
 ]
 
 [[package]]

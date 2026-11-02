@@ -330,7 +330,7 @@ impl<T: ArrowNativeType> AccColumn for AccPrimColumn<T> {
     }
 
     fn mem_used(&self) -> usize {
-        self.values.allocated_size() + (self.valids.capacity() + 7) / 8
+        self.values.allocated_size() + self.valids.capacity().div_ceil(8)
     }
 
     fn freeze_to_arrays(&mut self, idx: IdxSelection<'_>) -> Result<Vec<ArrayRef>> {
@@ -465,10 +465,10 @@ impl AccBytesColumn {
     fn refresh_heap_mem_used(&mut self) {
         self.heap_mem_used = 0;
         for item in &self.items {
-            if let Some(v) = item {
-                if v.spilled() {
-                    self.heap_mem_used += v.capacity();
-                }
+            if let Some(v) = item
+                && v.spilled()
+            {
+                self.heap_mem_used += v.capacity();
             }
         }
     }

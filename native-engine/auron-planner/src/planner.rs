@@ -239,21 +239,25 @@ impl PhysicalPlanner {
 
                 let build_side =
                     protobuf::JoinSide::try_from(hash_join.build_side).expect("invalid BuildSide");
+                let required_reserved_order = hash_join.required_reserved_order;
 
-                Ok(Arc::new(BroadcastJoinExec::try_new(
-                    schema,
-                    left,
-                    right,
-                    on,
-                    join_type,
-                    build_side
-                        .try_into()
-                        .map_err(|_| proto_error("invalid BuildSide"))?,
-                    false,
-                    None,
-                    false,
-                    join_filter,
-                )?))
+                Ok(Arc::new(
+                    BroadcastJoinExec::try_new(
+                        schema,
+                        left,
+                        right,
+                        on,
+                        join_type,
+                        build_side
+                            .try_into()
+                            .map_err(|_| proto_error("invalid BuildSide"))?,
+                        false,
+                        None,
+                        false,
+                        join_filter,
+                    )?
+                    .with_required_reserved_order(required_reserved_order),
+                ))
             }
             PhysicalPlanType::SortMergeJoin(sort_merge_join) => {
                 let schema = Arc::new(convert_required!(sort_merge_join.schema)?);
@@ -418,21 +422,25 @@ impl PhysicalPlanner {
 
                 let cached_build_hash_map_id = broadcast_join.cached_build_hash_map_id.clone();
                 let is_null_aware_anti_join = broadcast_join.is_null_aware_anti_join;
+                let required_reserved_order = broadcast_join.required_reserved_order;
 
-                Ok(Arc::new(BroadcastJoinExec::try_new(
-                    schema,
-                    left,
-                    right,
-                    on,
-                    join_type,
-                    broadcast_side
-                        .try_into()
-                        .map_err(|_| proto_error("invalid BroadcastSide"))?,
-                    true,
-                    Some(cached_build_hash_map_id),
-                    is_null_aware_anti_join,
-                    join_filter,
-                )?))
+                Ok(Arc::new(
+                    BroadcastJoinExec::try_new(
+                        schema,
+                        left,
+                        right,
+                        on,
+                        join_type,
+                        broadcast_side
+                            .try_into()
+                            .map_err(|_| proto_error("invalid BroadcastSide"))?,
+                        true,
+                        Some(cached_build_hash_map_id),
+                        is_null_aware_anti_join,
+                        join_filter,
+                    )?
+                    .with_required_reserved_order(required_reserved_order),
+                ))
             }
             PhysicalPlanType::Union(union) => {
                 let schema: SchemaRef = Arc::new(convert_required!(union.schema)?);
@@ -857,7 +865,7 @@ impl PhysicalPlanner {
                         kafka_scan.kafka_topic.clone(),
                         kafka_scan.kafka_properties_json.clone(),
                         schema,
-                        kafka_scan.batch_size as i32,
+                        kafka_scan.batch_size,
                         kafka_scan.startup_mode,
                         kafka_scan.auron_operator_id.clone(),
                         kafka_scan.data_format,

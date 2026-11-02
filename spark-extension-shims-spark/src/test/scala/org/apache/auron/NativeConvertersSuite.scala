@@ -18,8 +18,8 @@ package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, GreaterThan, Literal}
+import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, StringType}
 
 import org.apache.auron.protobuf.ScalarFunction
 
@@ -82,5 +82,21 @@ class NativeConvertersSuite
     val childExpr = nativeExpr.getTryCast.getExpr
     assert(!childExpr.hasScalarFunction)
     assert(childExpr.hasLiteral)
+  }
+
+  test("float scan pruning keeps column and literal comparisons") {
+    val comparisons = Seq(
+      GreaterThan(AttributeReference("d", DoubleType)(), Literal(100.0)),
+      GreaterThan(AttributeReference("f", FloatType)(), Literal(100.0f)))
+
+    comparisons.foreach { expr =>
+      val pruning = NativeConverters.convertScanPruningExpr(expr).getBinaryExpr
+      assert(pruning.getL.hasColumn)
+      assert(pruning.getR.hasLiteral)
+
+      val rowFilter = NativeConverters.convertExpr(expr).getBinaryExpr
+      assert(rowFilter.getL.getScalarFunction.getName == "Spark_NormalizeNanAndZero")
+      assert(rowFilter.getR.getScalarFunction.getName == "Spark_NormalizeNanAndZero")
+    }
   }
 }

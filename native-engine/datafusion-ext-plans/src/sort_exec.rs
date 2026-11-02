@@ -124,6 +124,13 @@ pub fn create_default_ascending_sort_exec(
     execution_plan_metrics: Option<ExecutionPlanMetricsSet>,
     record_output: bool,
 ) -> Arc<dyn ExecutionPlan> {
+    // This helper has no limit or offset, so an empty ordering is a no-op.
+    // Preserve zero-column batch row counts instead of passing them through
+    // RowConverter without any columns.
+    if key_exprs.is_empty() {
+        return input;
+    }
+
     let mut sort_exec = SortExec::new(
         input,
         key_exprs
@@ -230,10 +237,10 @@ impl SortExec {
             projection,
             &self.exprs,
         )?);
-        let mut sorter = Arc::new(ExternalSorter {
+        let sorter = Arc::new_cyclic(|weak| ExternalSorter {
             exec_ctx,
-            mem_consumer_info: None,
-            weak: Weak::new(),
+            mem_consumer_info: OnceCell::new(),
+            weak: weak.clone(),
             prune_sort_keys_from_batch: prune_sort_keys_from_batch.clone(),
             skip: self.offset,
             limit: self.limit.unwrap_or(usize::MAX),
@@ -244,13 +251,6 @@ impl SortExec {
             mem_total_size: Default::default(),
         });
         MemManager::register_consumer(sorter.clone(), true);
-
-        unsafe {
-            // safety: set weak reference to sorter
-            let weak = Arc::downgrade(&sorter);
-            let sorter_mut = Arc::get_mut_unchecked(&mut sorter);
-            sorter_mut.weak = weak;
-        }
         Ok(sorter)
     }
 
@@ -348,7 +348,7 @@ struct LevelSpill {
 
 struct ExternalSorter {
     exec_ctx: Arc<ExecutionContext>,
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     weak: Weak<Self>,
     prune_sort_keys_from_batch: Arc<PruneSortKeysFromBatch>,
     skip: usize,
@@ -380,14 +380,14 @@ impl MemConsumer for ExternalSorter {
         "ExternalSorter"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {
@@ -748,7 +748,7 @@ impl ExternalSorter {
                 self.name(),
                 ByteSize(self.mem_used() as u64),
             );
-            self.force_spill().await?;
+            self.spill().await?;
         }
         self.set_spillable(false);
 
@@ -1497,10 +1497,7 @@ impl SortedKeysWriter {
                 self.cur_key
                     .reserve(key.len().saturating_sub(self.cur_key.len()));
                 self.cur_key.set_len(key.len());
-                let write_buf = self
-                    .cur_key
-                    .get_unchecked_mut(prefix_len..key.len())
-                    .as_mut();
+                let write_buf = self.cur_key.get_unchecked_mut(prefix_len..key.len());
                 write_buf.copy_from_slice(key.get_unchecked(prefix_len..));
                 write_buf
             };
@@ -1531,9 +1528,7 @@ impl SortedKeysReader {
                 self.cur_key
                     .reserve(new_key_len.saturating_sub(self.cur_key.len()));
                 self.cur_key.set_len(new_key_len);
-                self.cur_key
-                    .get_unchecked_mut(prefix_len..new_key_len)
-                    .as_mut()
+                self.cur_key.get_unchecked_mut(prefix_len..new_key_len)
             };
             r.read_exact(read_buf)?;
         } else {
@@ -1783,6 +1778,76 @@ mod test {
 
         Ok(())
     }
+
+    mod default_sort_tests {
+        use arrow::{compute::concat_batches, record_batch::RecordBatchOptions};
+        use datafusion::{physical_expr::PhysicalExpr, physical_plan::ExecutionPlanProperties};
+
+        use super::*;
+        use crate::sort_exec::create_default_ascending_sort_exec;
+
+        #[tokio::test]
+        async fn test_default_sort_zero_column_batches() -> Result<()> {
+            MemManager::init(100);
+            let schema = Arc::new(Schema::empty());
+            let row_counts: &[&[usize]] = &[&[1], &[0, 4, 0, 100001], &[0], &[]];
+            let mut partitions = vec![];
+            for rows in row_counts {
+                let mut batches = vec![];
+                for &num_rows in *rows {
+                    batches.push(RecordBatch::try_new_with_options(
+                        schema.clone(),
+                        vec![],
+                        &RecordBatchOptions::new().with_row_count(Some(num_rows)),
+                    )?);
+                }
+                partitions.push(batches);
+            }
+            let input = Arc::new(TestMemoryExec::try_new(&partitions, schema.clone(), None)?);
+            let sort = create_default_ascending_sort_exec(input, &[], None, true);
+            assert_eq!(sort.schema(), schema);
+            assert_eq!(
+                sort.output_partitioning().partition_count(),
+                partitions.len()
+            );
+
+            let task_ctx = SessionContext::new().task_ctx();
+            for (partition, rows) in row_counts.iter().enumerate() {
+                let batches = common::collect(sort.execute(partition, task_ctx.clone())?).await?;
+                assert!(batches.iter().all(|batch| batch.num_columns() == 0));
+                assert_eq!(
+                    batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
+                    rows.iter().sum::<usize>(),
+                );
+                if rows.is_empty() {
+                    assert!(batches.is_empty());
+                }
+            }
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn test_default_sort_values() -> Result<()> {
+            MemManager::init(100);
+            for (with_key, expected) in [(false, [3, 1, 2]), (true, [1, 2, 3])] {
+                let input = build_single_column_table("id", vec![3, 1, 2])?;
+                let keys: Vec<Arc<dyn PhysicalExpr>> = if with_key {
+                    vec![Arc::new(Column::new("id", 0))]
+                } else {
+                    vec![]
+                };
+                let sort = create_default_ascending_sort_exec(input, &keys, None, true);
+                let batches =
+                    common::collect(sort.execute(0, SessionContext::new().task_ctx())?).await?;
+                let batch = concat_batches(&sort.schema(), &batches)?;
+                assert_eq!(
+                    batch.column(0).as_any().downcast_ref::<Int32Array>(),
+                    Some(&Int32Array::from(expected.to_vec())),
+                );
+            }
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1813,9 +1878,9 @@ mod fuzztest {
     /// lineitem.l_orderkey distribution.
     fn build_repeated_i64_batch(num_rows: usize, repeat: usize, seed: u64) -> RecordBatch {
         use rand::{Rng, SeedableRng};
-        let unique_keys = (num_rows + repeat - 1) / repeat;
+        let unique_keys = num_rows.div_ceil(repeat);
         let mut values: Vec<i64> = (0..unique_keys)
-            .flat_map(|v| std::iter::repeat(v as i64).take(repeat))
+            .flat_map(|v| std::iter::repeat_n(v as i64, repeat))
             .take(num_rows)
             .collect();
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);

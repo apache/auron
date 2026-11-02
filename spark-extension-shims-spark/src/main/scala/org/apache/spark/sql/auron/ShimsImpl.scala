@@ -276,7 +276,8 @@ class ShimsImpl extends Shims with Logging {
       joinType: JoinType,
       condition: Option[Expression],
       broadcastSide: JoinBuildSide,
-      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase =
+      isNullAwareAntiJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeBroadcastJoinBase =
     NativeBroadcastJoinExec(
       left,
       right,
@@ -286,7 +287,8 @@ class ShimsImpl extends Shims with Logging {
       joinType,
       condition,
       broadcastSide,
-      isNullAwareAntiJoin)
+      isNullAwareAntiJoin,
+      requiredReservedOrder)
 
   override def createNativeSortMergeJoinExec(
       left: SparkPlan,
@@ -313,7 +315,8 @@ class ShimsImpl extends Shims with Logging {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): SparkPlan =
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): SparkPlan =
     NativeShuffledHashJoinExecProvider.provide(
       left,
       right,
@@ -322,7 +325,8 @@ class ShimsImpl extends Shims with Logging {
       joinType,
       condition,
       buildSide,
-      isSkewJoin)
+      isSkewJoin,
+      requiredReservedOrder)
 
   override def createNativeExpandExec(
       projections: Seq[Seq[Expression]],
@@ -700,6 +704,10 @@ class ShimsImpl extends Shims with Logging {
       case e: TaggingExpression =>
         Some(NativeConverters.convertExprWithFallback(e.child, isPruningExpr, fallback))
       case e =>
+        convertFloatingArrayNormalization(e, isPruningExpr, fallback) match {
+          case Some(v) => return Some(v)
+          case None =>
+        }
         convertPromotePrecision(e, isPruningExpr, fallback) match {
           case Some(v) => return Some(v)
           case None =>
@@ -709,6 +717,43 @@ class ShimsImpl extends Shims with Logging {
           case None =>
         }
         None
+    }
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  @nowarn("cat=unused")
+  private def convertFloatingArrayNormalization(
+      e: Expression,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = None
+
+  @sparkver("4.2")
+  private def convertFloatingArrayNormalization(
+      e: Expression,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = {
+    import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable}
+    import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
+    import org.apache.spark.sql.types.{DoubleType, FloatType}
+
+    e match {
+      case ArrayTransform(
+            array,
+            LambdaFunction(
+              KnownFloatingPointNormalized(NormalizeNaNAndZero(value: NamedLambdaVariable)),
+              Seq(argument: NamedLambdaVariable),
+              false))
+          if value.exprId == argument.exprId &&
+            (argument.dataType == FloatType || argument.dataType == DoubleType) &&
+            array.dataType == ArrayType(argument.dataType, argument.nullable) =>
+        Some(
+          NativeConverters.buildExtScalarFunctionNode(
+            "Spark_NormalizeNanAndZero",
+            array :: Nil,
+            array.dataType,
+            isPruningExpr,
+            fallback))
+      case _ => None
     }
   }
 

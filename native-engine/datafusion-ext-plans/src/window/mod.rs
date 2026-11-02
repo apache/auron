@@ -102,7 +102,7 @@ impl WindowExpr {
             WindowFunction::CumeDist => Ok(Box::new(CumeDistProcessor::new())),
             WindowFunction::Agg(agg_func) => {
                 let agg = create_agg(
-                    agg_func.clone(),
+                    agg_func,
                     &self.children,
                     &context.input_schema,
                     self.return_type.clone(),
@@ -110,6 +110,10 @@ impl WindowExpr {
                 Ok(Box::new(AggProcessor::try_new(agg)?))
             }
         }
+    }
+
+    pub fn is_rank_like(&self) -> bool {
+        matches!(self.func, WindowFunction::RankLike(_))
     }
 
     pub fn requires_full_partition(&self) -> bool {
