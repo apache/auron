@@ -903,9 +903,11 @@ mod tests {
     fn normal_and_hybrid_batches_share_identical_schema() -> Result<()> {
         let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
 
-        let normal_batches =
-            JoinHashMap::create_from_data_batch(int32_data_batch(vec![1, 2, 3]), &[key.clone()])?
-                .into_hash_map_batches(None)?;
+        let normal_batches = JoinHashMap::create_from_data_batch(
+            int32_data_batch(vec![1, 2, 3]),
+            std::slice::from_ref(&key),
+        )?
+        .into_hash_map_batches(None)?;
 
         let hybrid_batches = JoinHashMap::create_from_data_batches(
             vec![int32_data_batch(vec![1, 2]), int32_data_batch(vec![3])],
@@ -952,7 +954,7 @@ mod tests {
         // oversized group spanning >1 batches) carries no sentinel.
         let hybrid_batches = JoinHashMap::create_from_data_batches(
             vec![int32_data_batch(vec![1, 2]), int32_data_batch(vec![3])],
-            &[key.clone()],
+            std::slice::from_ref(&key),
         )?
         .into_hash_map_batches(Some(7))?;
         assert_eq!(hybrid_batches.len(), 2, "expected one batch per data batch");
@@ -996,7 +998,7 @@ mod tests {
         let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
         let batches = JoinHashMap::create_from_data_batches(
             vec![int32_data_batch(vec![1, 2]), int32_data_batch(vec![3, 1])],
-            &[key.clone()],
+            std::slice::from_ref(&key),
         )?
         .into_hash_map_batches(Some(3))?;
 

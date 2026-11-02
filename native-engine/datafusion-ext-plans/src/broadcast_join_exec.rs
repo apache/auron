@@ -1266,7 +1266,7 @@ mod fuzztest {
         key: PhysicalExprRef,
         threshold: usize,
     ) -> Result<Vec<RecordBatch>> {
-        let bucketed = append_bucket_id_column(build_batch.clone(), &[key.clone()])?;
+        let bucketed = append_bucket_id_column(build_batch.clone(), std::slice::from_ref(&key))?;
         let bucket_col_idx = bucketed.num_columns() - 1;
         let sort_indices =
             arrow::compute::sort_to_indices(bucketed.column(bucket_col_idx), None, None)?;
@@ -1735,7 +1735,7 @@ mod fuzztest {
             "probe row id sequence mismatch: {}",
             msg()
         );
-        for ((pid0, mut g0), (pid1, mut g1)) in groups0.into_iter().zip(groups1.into_iter()) {
+        for ((pid0, mut g0), (pid1, mut g1)) in groups0.into_iter().zip(groups1) {
             assert_eq!(pid0, pid1);
             g0.sort();
             g1.sort();

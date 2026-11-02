@@ -225,7 +225,7 @@ impl MemConsumer for BucketRepartitioner {
         "BucketRepartitioner"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
         self.mem_consumer_info
             .set(consumer_info)
             .expect("consumer info already set");
@@ -398,7 +398,7 @@ mod tests {
         let mut all_expected = vec![];
         for chunk in [vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]] {
             let batch = int32_batch(schema.clone(), chunk);
-            let bucketed = append_bucket_id_column(batch, &[key.clone()])?;
+            let bucketed = append_bucket_id_column(batch, std::slice::from_ref(&key))?;
             let bucket_values: Vec<i32> = {
                 let col = bucketed.column(bucketed.num_columns() - 1);
                 col.as_any()

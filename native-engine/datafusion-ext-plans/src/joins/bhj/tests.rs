@@ -418,8 +418,10 @@ async fn residual_hash_join_operator_and_spill_parity() -> Result<()> {
                         // require rows to be pre-sorted ascending by
                         // ~BUCKET (mirrors the real build-exec pipeline's
                         // SortExec stage).
-                        let bucketed =
-                            append_bucket_id_column(build_batch.clone(), &[key.clone()])?;
+                        let bucketed = append_bucket_id_column(
+                            build_batch.clone(),
+                            std::slice::from_ref(&key),
+                        )?;
                         let bucket_col_idx = bucketed.num_columns() - 1;
                         let sort_indices = arrow::compute::sort_to_indices(
                             bucketed.column(bucket_col_idx),
