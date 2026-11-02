@@ -87,7 +87,7 @@ impl JoinFilter {
         self.expression
             .clone()
             .transform_up(|expr| {
-                let Some(column) = expr.as_any().downcast_ref::<Column>() else {
+                let Some(column) = expr.downcast_ref::<Column>() else {
                     return Ok(Transformed::no(expr));
                 };
                 let Some(source) = self.column_indices.get(column.index()) else {

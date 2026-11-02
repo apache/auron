@@ -20,7 +20,10 @@ use arrow::{
     datatypes::{DataType, Field},
 };
 use datafusion::{
-    common::{Result, ScalarValue, cast::as_binary_array, utils::take_function_args},
+    common::{
+        Result, ScalarValue, cast::as_binary_array, config::ConfigOptions,
+        utils::take_function_args,
+    },
     functions::crypto::{
         basic::{DigestAlgorithm, digest_process},
         sha224, sha256, sha384, sha512,
@@ -68,6 +71,7 @@ fn digest_and_wrap_as_hex(args: &[ColumnarValue], digest: Arc<ScalarUDF>) -> Res
         arg_fields: vec![Arc::new(Field::new("arg", DataType::Binary, true))],
         number_rows: 0,
         return_field: Arc::new(Field::new("result", DataType::Utf8, true)),
+        config_options: Arc::new(ConfigOptions::default()),
     })?;
     to_hex_string(value)
 }

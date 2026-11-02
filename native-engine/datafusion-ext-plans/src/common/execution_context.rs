@@ -43,7 +43,7 @@ use datafusion::{
 };
 use datafusion_ext_commons::{
     arrow::{array_size::BatchSize, coalesce::coalesce_batches_unchecked},
-    batch_size, df_execution_err, downcast_any, suggested_batch_mem_size,
+    batch_size, df_execution_err, downcast_any, downcast_any_dyn, suggested_batch_mem_size,
 };
 use futures::{Stream, StreamExt};
 use futures_util::{FutureExt, stream::BoxStream};
@@ -260,7 +260,7 @@ impl ExecutionContext {
         input: &Arc<dyn ExecutionPlan>,
         keys: &[PhysicalSortExpr],
     ) -> Result<SendableRecordBatchWithKeyRowsStream> {
-        if let Ok(sort) = downcast_any!(input, SortExec)
+        if let Ok(sort) = downcast_any_dyn!(input, SortExec)
             && keys == sort.sort_exprs()
         {
             return sort.execute_with_key_rows(self.partition_id, self.task_ctx.clone());
@@ -312,7 +312,7 @@ impl ExecutionContext {
         keys: &[PhysicalSortExpr],
         projection: &[usize],
     ) -> Result<SendableRecordBatchWithKeyRowsStream> {
-        if let Ok(sort) = downcast_any!(input, SortExec)
+        if let Ok(sort) = downcast_any_dyn!(input, SortExec)
             && keys == sort.sort_exprs()
         {
             return sort.execute_projected_with_key_rows(

@@ -26,7 +26,7 @@ use auron_jni_bridge::{
 use bytes::Bytes;
 use datafusion::{
     datasource::{
-        physical_plan::{FileMeta, FileOpenFuture, FileOpener, FileScanConfig, FileStream},
+        physical_plan::{FileOpenFuture, FileOpener, FileScanConfig, FileStream},
         schema_adapter::SchemaMapper,
     },
     error::Result,
@@ -74,7 +74,7 @@ pub struct OrcExec {
     projected_schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
     predicate: Option<PhysicalExprRef>,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl OrcExec {
@@ -87,8 +87,14 @@ impl OrcExec {
     ) -> Self {
         let metrics = ExecutionPlanMetricsSet::new();
 
-        let (projected_schema, _constraints, projected_statistics, _projected_output_ordering) =
-            base_config.project();
+        let projected_schema = base_config.projected_schema().unwrap_or_else(|_| {
+            base_config
+                .file_source
+                .table_schema()
+                .table_schema()
+                .clone()
+        });
+        let projected_statistics = base_config.statistics();
 
         Self {
             fs_resource_id,
@@ -105,7 +111,7 @@ impl OrcExec {
 impl DisplayAs for OrcExec {
     fn fmt_as(&self, _t: DisplayFormatType, f: &mut Formatter) -> fmt::Result {
         let limit = self.base_config.limit;
-        let projection = self.base_config.projection.clone();
+        let projection = self.base_config.file_source.projection().cloned();
         let file_group = &self.base_config.file_groups;
         let pred = &self.predicate;
 
@@ -121,23 +127,28 @@ impl ExecutionPlan for OrcExec {
         "OrcExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         Arc::clone(&self.projected_schema)
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 Partitioning::UnknownPartitioning(self.base_config.file_groups.len()),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -166,7 +177,7 @@ impl ExecutionPlan for OrcExec {
 
         let projection = match self.base_config.file_column_projection_indices() {
             Some(proj) => proj,
-            None => (0..self.base_config.file_schema.fields().len()).collect(),
+            None => (0..self.base_config.file_schema().fields().len()).collect(),
         };
 
         let force_positional_evolution = conf::ORC_FORCE_POSITIONAL_EVOLUTION.value()?;
@@ -176,7 +187,7 @@ impl ExecutionPlan for OrcExec {
         let opener: Arc<dyn FileOpener> = Arc::new(OrcOpener {
             projection,
             batch_size: conf::ORC_BATCH_SIZE.value()? as usize,
-            table_schema: self.base_config.file_schema.clone(),
+            table_schema: self.base_config.file_schema().clone(),
             fs_provider,
             partition_index: partition,
             metrics: self.metrics.clone(),
@@ -199,10 +210,6 @@ impl ExecutionPlan for OrcExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        Ok(self.projected_statistics.clone())
     }
 }
 
@@ -236,7 +243,7 @@ struct OrcOpener {
 }
 
 impl FileOpener for OrcOpener {
-    fn open(&self, file_meta: FileMeta, _file: PartitionedFile) -> Result<FileOpenFuture> {
+    fn open(&self, file_meta: PartitionedFile) -> Result<FileOpenFuture> {
         let reader = OrcFileReaderRef {
             inner: Arc::new(InternalFileReader::try_new(
                 self.fs_provider.clone(),
@@ -291,10 +298,8 @@ impl FileOpener for OrcOpener {
             let stream = builder.build_async();
 
             let adapted = stream
-                .map_err(|e| ArrowError::ExternalError(Box::new(e)))
-                .map(move |maybe_batch| {
-                    maybe_batch.and_then(|b| schema_mapping.map_batch(b).map_err(Into::into))
-                });
+                .map_err(|e| datafusion::common::DataFusionError::External(Box::new(e)))
+                .map(move |maybe_batch| maybe_batch.and_then(|b| schema_mapping.map_batch(b)));
 
             Ok(adapted.boxed())
         }))
@@ -449,7 +454,7 @@ fn collect_and_predicates(
     predicates: &mut Vec<Predicate>,
 ) {
     // Handle short-circuit AND expression (SCAndExpr)
-    if let Some(sc_and) = expr.as_any().downcast_ref::<SCAndExpr>() {
+    if let Some(sc_and) = expr.downcast_ref::<SCAndExpr>() {
         // Recursively collect AND sub-conditions from both sides
         collect_and_predicates(&sc_and.left, schema, predicates);
         collect_and_predicates(&sc_and.right, schema, predicates);
@@ -457,7 +462,7 @@ fn collect_and_predicates(
     }
 
     // Handle BinaryExpr with AND operator
-    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>()
+    if let Some(binary) = expr.downcast_ref::<BinaryExpr>()
         && matches!(binary.op(), Operator::And)
     {
         // Recursively collect AND sub-conditions from both sides
@@ -489,14 +494,14 @@ fn collect_or_predicates(
     predicates: &mut Vec<Predicate>,
 ) -> bool {
     // Handle short-circuit OR expression (SCOrExpr)
-    if let Some(sc_or) = expr.as_any().downcast_ref::<SCOrExpr>() {
+    if let Some(sc_or) = expr.downcast_ref::<SCOrExpr>() {
         // Recursively collect OR sub-conditions from both sides
         return collect_or_predicates(&sc_or.left, schema, predicates)
             && collect_or_predicates(&sc_or.right, schema, predicates);
     }
 
     // Handle BinaryExpr with OR operator
-    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>()
+    if let Some(binary) = expr.downcast_ref::<BinaryExpr>()
         && matches!(binary.op(), Operator::Or)
     {
         // Recursively collect OR sub-conditions from both sides
@@ -521,7 +526,7 @@ fn convert_expr_to_orc(
     schema: &SchemaRef,
 ) -> Option<Predicate> {
     // Handle top-level short-circuit AND expression (SCAndExpr)
-    if let Some(_sc_and) = expr.as_any().downcast_ref::<SCAndExpr>() {
+    if let Some(_sc_and) = expr.downcast_ref::<SCAndExpr>() {
         let mut predicates = Vec::new();
         collect_and_predicates(expr, schema, &mut predicates);
 
@@ -542,7 +547,7 @@ fn convert_expr_to_orc(
     }
 
     // Handle top-level short-circuit OR expression (SCOrExpr)
-    if let Some(_sc_or) = expr.as_any().downcast_ref::<SCOrExpr>() {
+    if let Some(_sc_or) = expr.downcast_ref::<SCOrExpr>() {
         let mut predicates = Vec::new();
         if !collect_or_predicates(expr, schema, &mut predicates) {
             // an OR disjunct could not be converted: pushing a narrowed
@@ -567,7 +572,7 @@ fn convert_expr_to_orc(
     }
 
     // Handle top-level AND expression (BinaryExpr with AND operator)
-    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
+    if let Some(binary) = expr.downcast_ref::<BinaryExpr>() {
         if matches!(binary.op(), Operator::And) {
             let mut predicates = Vec::new();
             collect_and_predicates(expr, schema, &mut predicates);
@@ -623,7 +628,7 @@ fn convert_expr_to_orc_internal(
     schema: &SchemaRef,
 ) -> Option<Predicate> {
     // Handle Literal expressions (WHERE true, WHERE false, etc.)
-    if let Some(lit) = expr.as_any().downcast_ref::<Literal>() {
+    if let Some(lit) = expr.downcast_ref::<Literal>() {
         match lit.value() {
             ScalarValue::Boolean(Some(true)) => {
                 // WHERE true - no filtering needed, return None to skip predicate
@@ -655,7 +660,7 @@ fn convert_expr_to_orc_internal(
     }
 
     // Handle NOT expressions (WHERE NOT condition)
-    if let Some(not_expr) = expr.as_any().downcast_ref::<NotExpr>() {
+    if let Some(not_expr) = expr.downcast_ref::<NotExpr>() {
         if let Some(inner_pred) = convert_expr_to_orc(not_expr.arg(), schema) {
             return Some(Predicate::not(inner_pred));
         }
@@ -663,8 +668,8 @@ fn convert_expr_to_orc_internal(
     }
 
     // Handle IS NULL expressions
-    if let Some(is_null) = expr.as_any().downcast_ref::<IsNullExpr>() {
-        if let Some(col) = is_null.arg().as_any().downcast_ref::<Column>() {
+    if let Some(is_null) = expr.downcast_ref::<IsNullExpr>() {
+        if let Some(col) = is_null.arg().downcast_ref::<Column>() {
             let col_name = col.name();
             return Some(Predicate::is_null(col_name));
         }
@@ -672,8 +677,8 @@ fn convert_expr_to_orc_internal(
     }
 
     // Handle IS NOT NULL expressions
-    if let Some(is_not_null) = expr.as_any().downcast_ref::<IsNotNullExpr>() {
-        if let Some(col) = is_not_null.arg().as_any().downcast_ref::<Column>() {
+    if let Some(is_not_null) = expr.downcast_ref::<IsNotNullExpr>() {
+        if let Some(col) = is_not_null.arg().downcast_ref::<Column>() {
             let col_name = col.name();
             return Some(Predicate::not(Predicate::is_null(col_name)));
         }
@@ -681,14 +686,14 @@ fn convert_expr_to_orc_internal(
     }
 
     // Handle IN expressions (WHERE col IN (val1, val2, ...))
-    if let Some(in_list) = expr.as_any().downcast_ref::<InListExpr>() {
-        if let Some(col) = in_list.expr().as_any().downcast_ref::<Column>() {
+    if let Some(in_list) = expr.downcast_ref::<InListExpr>() {
+        if let Some(col) = in_list.expr().downcast_ref::<Column>() {
             let col_name = col.name();
 
             // Convert IN to multiple OR conditions: col = val1 OR col = val2 OR ...
             let mut predicates = Vec::new();
             for list_expr in in_list.list() {
-                if let Some(lit) = list_expr.as_any().downcast_ref::<Literal>()
+                if let Some(lit) = list_expr.downcast_ref::<Literal>()
                     && let Some(pred_value) = convert_scalar_value(lit.value())
                 {
                     predicates.push(Predicate::eq(col_name, pred_value));
@@ -710,7 +715,7 @@ fn convert_expr_to_orc_internal(
     }
 
     // Handle BinaryExpr (comparison operations)
-    if let Some(binary) = expr.as_any().downcast_ref::<BinaryExpr>() {
+    if let Some(binary) = expr.downcast_ref::<BinaryExpr>() {
         let left = binary.left();
         let right = binary.right();
         let op = binary.op();
@@ -720,16 +725,16 @@ fn convert_expr_to_orc_internal(
             return None;
         }
 
-        if let Some(col) = left.as_any().downcast_ref::<Column>()
-            && let Some(lit) = right.as_any().downcast_ref::<Literal>()
+        if let Some(col) = left.downcast_ref::<Column>()
+            && let Some(lit) = right.downcast_ref::<Literal>()
         {
             let col_name = col.name();
             let value = lit.value();
             return build_comparison_predicate(col_name, op, value);
         }
 
-        if let Some(lit) = left.as_any().downcast_ref::<Literal>()
-            && let Some(col) = right.as_any().downcast_ref::<Column>()
+        if let Some(lit) = left.downcast_ref::<Literal>()
+            && let Some(col) = right.downcast_ref::<Column>()
         {
             let col_name = col.name();
             let value = lit.value();
@@ -799,8 +804,8 @@ mod tests {
     use datafusion::{
         logical_expr::Operator,
         physical_expr::expressions::{
-            BinaryExpr, Column, InListExpr, IsNotNullExpr, IsNullExpr, Literal, NotExpr, SCAndExpr,
-            SCOrExpr,
+            BinaryExpr, Column, IsNotNullExpr, IsNullExpr, Literal, NotExpr, SCAndExpr, SCOrExpr,
+            in_list,
         },
         scalar::ScalarValue,
     };
@@ -1015,7 +1020,7 @@ mod tests {
             Arc::new(Literal::new(ScalarValue::Int32(Some(3))))
                 as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
         ];
-        let expr = Arc::new(InListExpr::new(col, values, false, None));
+        let expr = in_list(col, values, &false, &schema).expect("valid test in list");
 
         let result = convert_predicate_to_orc(Some(expr), &schema);
         assert!(result.is_some());
@@ -1034,7 +1039,7 @@ mod tests {
             Arc::new(Literal::new(ScalarValue::Utf8(Some("bar".to_string()))))
                 as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
         ];
-        let expr = Arc::new(InListExpr::new(col, values, true, None));
+        let expr = in_list(col, values, &true, &schema).expect("valid test in list");
 
         let result = convert_predicate_to_orc(Some(expr), &schema);
         assert!(result.is_some());
@@ -1444,7 +1449,7 @@ mod tests {
             Arc::new(Literal::new(ScalarValue::Int32(Some(3))))
                 as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
         ];
-        let expr = Arc::new(InListExpr::new(col.clone(), values, false, None));
+        let expr = in_list(col.clone(), values, &false, &schema).expect("valid test in list");
 
         let result = convert_predicate_to_orc(Some(expr), &schema);
         assert!(result.is_some());
@@ -1469,7 +1474,7 @@ mod tests {
             Arc::new(Literal::new(ScalarValue::Utf8(Some("bar".to_string()))))
                 as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
         ];
-        let expr = Arc::new(InListExpr::new(col, values, true, None));
+        let expr = in_list(col, values, &true, &schema).expect("valid test in list");
 
         let result = convert_predicate_to_orc(Some(expr), &schema);
         assert!(result.is_some());
@@ -1494,7 +1499,7 @@ mod tests {
             Arc::new(Literal::new(ScalarValue::Int32(None)))
                 as Arc<dyn datafusion::physical_expr::PhysicalExpr>,
         ];
-        let expr = Arc::new(InListExpr::new(col, values, false, None));
+        let expr = in_list(col, values, &false, &schema).expect("valid test in list");
 
         let result = convert_predicate_to_orc(Some(expr), &schema);
         // Should still produce a predicate (though it won't match anything)

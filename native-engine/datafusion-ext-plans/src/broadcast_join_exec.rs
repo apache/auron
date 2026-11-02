@@ -106,7 +106,7 @@ pub struct BroadcastJoinExec {
     // this join falls back to a hybrid (bucketed hash) join due to a too-large build side.
     required_reserved_order: bool,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl BroadcastJoinExec {
@@ -306,17 +306,13 @@ impl ExecutionPlan for BroadcastJoinExec {
         "BroadcastJoin"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 match self.broadcast_side {
                     JoinSide::Left => self.right.output_partitioning().clone(),
@@ -325,8 +321,17 @@ impl ExecutionPlan for BroadcastJoinExec {
                 },
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -365,10 +370,6 @@ impl ExecutionPlan for BroadcastJoinExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        unimplemented!()
     }
 }
 

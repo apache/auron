@@ -15,19 +15,98 @@
 
 use std::{fmt::Debug, sync::Arc};
 
+use arrow::array::{RecordBatch, RecordBatchOptions};
 use arrow::{
     array::{Array, ArrayRef, AsArray, ListArray},
     datatypes::{DataType, Schema, SchemaRef},
 };
 use arrow_schema::Field;
 use datafusion::{
-    common::Result,
-    datasource::schema_adapter::{
-        SchemaAdapter, SchemaAdapterFactory, SchemaMapper, SchemaMapping,
-    },
+    common::{ColumnStatistics, Result, stats::Precision},
+    datasource::schema_adapter::{SchemaAdapter, SchemaAdapterFactory, SchemaMapper},
     parquet::arrow::PARQUET_FIELD_ID_META_KEY,
 };
 use datafusion_ext_commons::df_execution_err;
+
+type CastColumn = dyn Fn(&ArrayRef, &Field) -> Result<ArrayRef> + Send + Sync;
+
+/// Replacement for datafusion's removed `SchemaMapping`, re-implementing the
+/// same field-remapping + per-column casting behavior that was dropped in
+/// favor of `PhysicalExprAdapterFactory`.
+pub struct AuronSchemaMapping {
+    table_schema: SchemaRef,
+    field_mappings: Vec<Option<usize>>,
+    cast_column: Arc<CastColumn>,
+}
+
+impl Debug for AuronSchemaMapping {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuronSchemaMapping")
+            .field("table_schema", &self.table_schema)
+            .field("field_mappings", &self.field_mappings)
+            .finish()
+    }
+}
+
+impl AuronSchemaMapping {
+    pub fn new(
+        table_schema: SchemaRef,
+        field_mappings: Vec<Option<usize>>,
+        cast_column: Arc<CastColumn>,
+    ) -> Self {
+        Self {
+            table_schema,
+            field_mappings,
+            cast_column,
+        }
+    }
+}
+
+impl SchemaMapper for AuronSchemaMapping {
+    fn map_batch(&self, batch: RecordBatch) -> Result<RecordBatch> {
+        let cols = self
+            .table_schema
+            .fields()
+            .iter()
+            .zip(&self.field_mappings)
+            .map(|(field, file_idx)| match file_idx {
+                Some(batch_idx) => (self.cast_column)(batch.column(*batch_idx), field),
+                None => Ok(arrow::array::new_null_array(
+                    field.data_type(),
+                    batch.num_rows(),
+                )),
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(RecordBatch::try_new_with_options(
+            self.table_schema.clone(),
+            cols,
+            &RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
+        )?)
+    }
+
+    fn map_column_statistics(
+        &self,
+        file_col_statistics: &[ColumnStatistics],
+    ) -> Result<Vec<ColumnStatistics>> {
+        Ok(self
+            .field_mappings
+            .iter()
+            .map(|file_idx| {
+                file_idx
+                    .and_then(|idx| file_col_statistics.get(idx))
+                    .cloned()
+                    .unwrap_or_else(|| ColumnStatistics {
+                        null_count: Precision::Absent,
+                        max_value: Precision::Absent,
+                        min_value: Precision::Absent,
+                        sum_value: Precision::Absent,
+                        distinct_count: Precision::Absent,
+                        byte_size: Precision::Absent,
+                    })
+            })
+            .collect())
+    }
+}
 
 pub mod internal_file_reader;
 pub mod parallel;
@@ -81,7 +160,7 @@ impl SchemaAdapter for AuronSchemaAdapter {
             }
         }
 
-        let schema_mapper: Arc<dyn SchemaMapper> = Arc::new(SchemaMapping::new(
+        let schema_mapper: Arc<dyn SchemaMapper> = Arc::new(AuronSchemaMapping::new(
             self.table_schema.clone(),
             field_mappings,
             Arc::new(|col, field| schema_adapter_cast_column(col, field)),
@@ -93,7 +172,13 @@ impl SchemaAdapter for AuronSchemaAdapter {
 fn fields_match(table_field: &Field, file_field: &Field) -> bool {
     match table_field.metadata().get(PARQUET_FIELD_ID_META_KEY) {
         Some(table_field_id) => match file_field.metadata().get(PARQUET_FIELD_ID_META_KEY) {
-            Some(file_field_id) => file_field_id == table_field_id,
+            Some(file_field_id) => {
+                if file_field_id == table_field_id {
+                    true
+                } else {
+                    table_field.name().eq_ignore_ascii_case(file_field.name())
+                }
+            }
             None => table_field.name().eq_ignore_ascii_case(file_field.name()),
         },
         None => table_field.name().eq_ignore_ascii_case(file_field.name()),
@@ -104,7 +189,7 @@ pub fn create_auron_schema_mapper(
     table_schema: &SchemaRef,
     field_mappings: &[Option<usize>],
 ) -> Arc<dyn SchemaMapper> {
-    Arc::new(SchemaMapping::new(
+    Arc::new(AuronSchemaMapping::new(
         table_schema.clone(),
         field_mappings.to_vec(),
         Arc::new(|col, field| schema_adapter_cast_column(col, field)),
@@ -168,5 +253,32 @@ fn schema_adapter_cast_column(col: &ArrayRef, field: &Field) -> Result<ArrayRef>
             ),
         },
         _ => datafusion_ext_commons::arrow::cast::cast_scan_input_array(col.as_ref(), cast_dt),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_projection_preserves_row_count() -> Result<()> {
+        let schema = Arc::new(Schema::empty());
+        let adapter = AuronSchemaAdapter::new(schema.clone());
+        let file_schema = Schema::new(vec![Field::new("value", DataType::Int32, true)]);
+        let (mapper, projection) = adapter.map_schema(&file_schema)?;
+        assert!(projection.is_empty());
+
+        for num_rows in [0, 1, 1024] {
+            let batch = RecordBatch::try_new_with_options(
+                schema.clone(),
+                vec![],
+                &RecordBatchOptions::new().with_row_count(Some(num_rows)),
+            )?;
+            let mapped = mapper.map_batch(batch)?;
+            assert_eq!(mapped.num_columns(), 0);
+            assert_eq!(mapped.num_rows(), num_rows);
+            assert_eq!(mapped.schema(), schema);
+        }
+        Ok(())
     }
 }

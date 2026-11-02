@@ -67,6 +67,20 @@ macro_rules! downcast_any {
     }};
 }
 
+/// Like [`downcast_any`], but for types whose trait already has `Any` as a
+/// supertrait (e.g. `dyn PhysicalExpr`, `dyn ExecutionPlan`) and therefore no
+/// longer expose an explicit `as_any()` method -- the value can be downcast
+/// directly via trait-object upcasting.
+#[macro_export]
+macro_rules! downcast_any_dyn {
+    ($value:expr, $ty:ty) => {{
+        match ($value).downcast_ref::<$ty>() {
+            Some(v) => Ok(v),
+            None => $crate::df_execution_err!("error downcasting to {}", stringify!($ty)),
+        }
+    }};
+}
+
 pub fn batch_size() -> usize {
     static CACHED_BATCH_SIZE: OnceCell<usize> = OnceCell::new();
     *CACHED_BATCH_SIZE.get_or_init(|| BATCH_SIZE.value().unwrap_or(10000) as usize)

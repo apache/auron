@@ -125,9 +125,116 @@ pub fn create_auron_ext_function(
 
 #[cfg(test)]
 mod tests {
-    use datafusion::{arrow::datatypes::DataType, logical_expr::Volatility, prelude::create_udf};
+    use datafusion::{
+        arrow::{
+            array::{Decimal128Array, Int64Array},
+            datatypes::{DataType, Field, Schema},
+            record_batch::RecordBatch,
+        },
+        common::{ScalarValue, config::ConfigOptions},
+        logical_expr::{ColumnarValue, Operator, ScalarFunctionArgs, Volatility},
+        physical_expr::{
+            PhysicalExpr, PhysicalExprRef, ScalarFunctionExpr,
+            expressions::{BinaryExpr, CaseExpr, Column, Literal, TryCastExpr},
+        },
+        prelude::create_udf,
+    };
 
     use super::*;
+
+    #[test]
+    fn round_decimal_case_return_type() -> Result<()> {
+        let input_type = DataType::Decimal128(28, 8);
+        let return_type = DataType::Decimal128(29, 4);
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("play_cnt", DataType::Int64, true),
+            Field::new("ratio", input_type.clone(), true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int64Array::from(vec![Some(0), Some(1), Some(1)])),
+                Arc::new(
+                    Decimal128Array::from(vec![None, Some(123_456_789), None])
+                        .with_precision_and_scale(28, 8)?,
+                ),
+            ],
+        )?;
+        let udf = datafusion_spark::function::math::round();
+        let round: PhysicalExprRef = Arc::new(ScalarFunctionExpr::new(
+            udf.name(),
+            udf.clone(),
+            vec![
+                Arc::new(Column::new("ratio", 1)),
+                Arc::new(Literal::new(ScalarValue::Int32(Some(4)))),
+            ],
+            Arc::new(Field::new("result", return_type.clone(), true)),
+            Arc::new(ConfigOptions::default()),
+        ));
+        let rounded = round.evaluate(&batch)?.into_array(batch.num_rows())?;
+        assert_eq!(round.data_type(&schema)?, return_type);
+        let expected_round = Decimal128Array::from(vec![None, Some(12_346), None])
+            .with_precision_and_scale(29, 4)?;
+        assert_eq!(rounded.as_ref(), &expected_round);
+        let predicate: PhysicalExprRef = Arc::new(BinaryExpr::new(
+            Arc::new(Column::new("play_cnt", 0)),
+            Operator::Eq,
+            Arc::new(Literal::new(ScalarValue::Int64(Some(0)))),
+        ));
+        let zero: PhysicalExprRef = Arc::new(TryCastExpr::new(
+            Arc::new(Literal::new(ScalarValue::Decimal128(Some(0), 5, 4))),
+            return_type.clone(),
+        ));
+        let case = CaseExpr::try_new(None, vec![(predicate, zero)], Some(round))?;
+        assert_eq!(case.data_type(&schema)?, return_type);
+        let result = case.evaluate(&batch)?.into_array(batch.num_rows())?;
+        let expected = Decimal128Array::from(vec![Some(0), Some(12_346), None])
+            .with_precision_and_scale(29, 4)?;
+        assert_eq!(result.as_ref(), &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn round_decimal_scalar_and_array_return_type() -> Result<()> {
+        for (value, scale, precision, output_scale, expected) in [
+            (Some(123_456_789), Some(4), 29, 4, Some(12_346)),
+            (Some(-123_456_789), Some(4), 29, 4, Some(-12_346)),
+            (Some(999_950_000), Some(3), 29, 3, Some(10_000)),
+            (Some(12_500_000_000), Some(-1), 22, 0, Some(130)),
+            (Some(123_456_789), Some(10), 29, 8, Some(123_456_789)),
+            (None, Some(4), 29, 4, None),
+            (Some(123_456_789), None, 29, 4, None),
+        ] {
+            let input_type = DataType::Decimal128(28, 8);
+            let return_type = DataType::Decimal128(precision, output_scale);
+            let udf = datafusion_spark::function::math::round();
+            let scalar = ScalarValue::Decimal128(value, 28, 8);
+            for input in [
+                ColumnarValue::Scalar(scalar.clone()),
+                ColumnarValue::Array(scalar.to_array_of_size(2)?),
+            ] {
+                let scalar_input = matches!(input, ColumnarValue::Scalar(_));
+                let result = udf.invoke_with_args(ScalarFunctionArgs {
+                    args: vec![input, ColumnarValue::Scalar(ScalarValue::Int32(scale))],
+                    arg_fields: vec![
+                        Arc::new(Field::new("value", input_type.clone(), true)),
+                        Arc::new(Field::new("scale", DataType::Int32, true)),
+                    ],
+                    number_rows: 2,
+                    return_field: Arc::new(Field::new("result", return_type.clone(), true)),
+                    config_options: Arc::new(ConfigOptions::default()),
+                })?;
+                assert_eq!(result.data_type(), return_type);
+                if scalar_input {
+                    assert!(matches!(result, ColumnarValue::Scalar(_)));
+                }
+                let expected = ScalarValue::Decimal128(expected, precision, output_scale)
+                    .to_array_of_size(2)?;
+                assert_eq!(result.into_array(2)?.as_ref(), expected.as_ref());
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn reuses_function_implementation() -> Result<()> {

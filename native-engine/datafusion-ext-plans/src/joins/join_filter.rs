@@ -53,7 +53,7 @@ use datafusion::{
     },
     physical_plan::{ColumnarValue, metrics::Time},
 };
-use datafusion_ext_commons::{df_execution_err, downcast_any};
+use datafusion_ext_commons::{df_execution_err, downcast_any, downcast_any_dyn};
 
 use crate::joins::{Idx, IdxRange, ProductBlock, ranges_num_rows};
 
@@ -119,7 +119,7 @@ impl AnalyzedPhysicalExpr {
             let expr = expr
                 .clone()
                 .transform_up(|expr| {
-                    let Ok(column) = downcast_any!(expr, Column) else {
+                    let Ok(column) = downcast_any_dyn!(expr, Column) else {
                         return Ok(Transformed::no(expr));
                     };
                     Ok(Transformed::yes(Arc::new(Column::new(
@@ -141,7 +141,7 @@ impl AnalyzedPhysicalExpr {
         let mut new_children = vec![];
 
         for child in expr.children() {
-            if downcast_any!(child, Literal).is_ok() {
+            if downcast_any_dyn!(child, Literal).is_ok() {
                 new_children.push(child.clone());
                 continue;
             }
@@ -169,7 +169,7 @@ impl AnalyzedPhysicalExpr {
 
     /// Unknown expressions may be lazy or volatile; keep them intact.
     fn can_evaluate_children_eagerly(expr: &PhysicalExprRef) -> bool {
-        let any = expr.as_any();
+        let any: &dyn std::any::Any = expr.as_ref();
         if let Some(binary) = any.downcast_ref::<BinaryExpr>() {
             return !matches!(binary.op(), Operator::And | Operator::Or);
         }
@@ -252,7 +252,7 @@ impl JoinFilter {
 
         let filter_expr = filter_expr
             .transform_up(|expr| {
-                let Ok(column) = downcast_any!(expr, Column) else {
+                let Ok(column) = downcast_any_dyn!(expr, Column) else {
                     return Ok(Transformed::no(expr));
                 };
                 match remapped.get(&column.index()) {
@@ -550,7 +550,7 @@ impl<'a> EvalCtx<'a> {
 
     fn eval(&self, analyzed: &AnalyzedPhysicalExpr) -> Result<Evaluated> {
         // A single run can read each input column as a slice.
-        if let Ok(column) = downcast_any!(&analyzed.expr, Column) {
+        if let Ok(column) = downcast_any_dyn!(&analyzed.expr, Column) {
             let idx = column.index();
             let is_left = idx < self.num_left_cols;
             let col = self.side_column(&self.cols[idx], is_left)?;
@@ -560,7 +560,7 @@ impl<'a> EvalCtx<'a> {
             });
         }
 
-        if let Ok(literal) = downcast_any!(&analyzed.expr, Literal) {
+        if let Ok(literal) = downcast_any_dyn!(&analyzed.expr, Literal) {
             return Ok(Evaluated::Scalar(literal.value().clone()));
         }
 
@@ -670,7 +670,7 @@ impl<'a> EvalCtx<'a> {
         expr: &PhysicalExprRef,
         children: &[Evaluated],
     ) -> Result<Option<ArrayRef>> {
-        let Ok(binary) = downcast_any!(expr, BinaryExpr) else {
+        let Ok(binary) = downcast_any_dyn!(expr, BinaryExpr) else {
             return Ok(None);
         };
         let (lhs, rhs, swapped) = match children {
@@ -1279,11 +1279,14 @@ mod tests {
     #[test]
     fn test_volatile_functions_keep_pair_cardinality() {
         use std::{
-            any::Any,
+            hash::{Hash, Hasher},
             sync::atomic::{AtomicUsize, Ordering},
         };
 
-        use datafusion::logical_expr::{ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature};
+        use datafusion::{
+            common::config::ConfigOptions,
+            logical_expr::{ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature},
+        };
 
         #[derive(Debug)]
         struct Sequence {
@@ -1291,10 +1294,22 @@ mod tests {
             rows: Arc<AtomicUsize>,
         }
 
-        impl ScalarUDFImpl for Sequence {
-            fn as_any(&self) -> &dyn Any {
-                self
+        impl PartialEq for Sequence {
+            fn eq(&self, other: &Self) -> bool {
+                self.signature == other.signature && Arc::ptr_eq(&self.rows, &other.rows)
             }
+        }
+
+        impl Eq for Sequence {}
+
+        impl Hash for Sequence {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                self.signature.hash(state);
+                Arc::as_ptr(&self.rows).hash(state);
+            }
+        }
+
+        impl ScalarUDFImpl for Sequence {
             fn name(&self) -> &str {
                 "sequence"
             }
@@ -1332,8 +1347,13 @@ mod tests {
             }));
             let expr = Arc::new(BinaryExpr::new(
                 Arc::new(
-                    ScalarFunctionExpr::try_new(udf, args, &schema())
-                        .expect("valid test scalar function"),
+                    ScalarFunctionExpr::try_new(
+                        udf,
+                        args,
+                        &schema(),
+                        Arc::<ConfigOptions>::default(),
+                    )
+                    .expect("valid test scalar function"),
                 ),
                 Operator::Lt,
                 Arc::new(Column::new("r_int", 3)),
