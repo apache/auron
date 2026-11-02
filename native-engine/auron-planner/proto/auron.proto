@@ -53,6 +53,7 @@ message PhysicalPlanNode {
     OrcScanExecNode orc_scan = 25;
     KafkaScanExecNode kafka_scan = 26;
     OrcSinkExecNode orc_sink = 27;
+    CartesianProductExecNode cartesian_product = 28;
   }
 }
 
@@ -473,6 +474,16 @@ message SortMergeJoinExecNode {
   repeated JoinOn on = 4;
   repeated SortOptions sort_options = 5;
   JoinType join_type = 6;
+  JoinFilter filter = 7;
+}
+
+message CartesianProductExecNode {
+  Schema schema = 1;
+  PhysicalPlanNode left = 2;
+  PhysicalPlanNode right = 3;
+  uint32 left_partition = 4;
+  uint32 right_partition = 5;
+  uint32 num_partitions = 6;
   JoinFilter filter = 7;
 }
 

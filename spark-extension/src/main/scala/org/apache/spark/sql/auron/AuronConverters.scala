@@ -103,6 +103,7 @@ object AuronConverters extends Logging {
   def enableShj: Boolean = SparkAuronConfiguration.ENABLE_SHJ.get()
   def enableBhj: Boolean = SparkAuronConfiguration.ENABLE_BHJ.get()
   def enableBnlj: Boolean = SparkAuronConfiguration.ENABLE_BNLJ.get()
+  def enableCartesianProduct: Boolean = SparkAuronConfiguration.ENABLE_CARTESIAN_PRODUCT.get()
   def enableLocalLimit: Boolean = SparkAuronConfiguration.ENABLE_LOCAL_LIMIT.get()
   def enableGlobalLimit: Boolean = SparkAuronConfiguration.ENABLE_GLOBAL_LIMIT.get()
   def enableTakeOrderedAndProject: Boolean =
@@ -250,6 +251,8 @@ object AuronConverters extends Logging {
         tryConvert(e, convertBroadcastHashJoinExec)
       case e: BroadcastNestedLoopJoinExec if enableBnlj => // broadcast nested loop join
         tryConvert(e, convertBroadcastNestedLoopJoinExec)
+      case e: CartesianProductExec if enableCartesianProduct =>
+        tryConvert(e, convertCartesianProductExec)
       case e: LocalLimitExec if enableLocalLimit => // local limit
         tryConvert(e, convertLocalLimitExec)
       case e: GlobalLimitExec if enableGlobalLimit => // global limit
@@ -361,6 +364,8 @@ object AuronConverters extends Logging {
           "Conversion disabled: spark.auron.enable.bhj=false."
         case _: BroadcastNestedLoopJoinExec if !enableBnlj =>
           "Conversion disabled: spark.auron.enable.bnlj=false."
+        case _: CartesianProductExec if !enableCartesianProduct =>
+          "Conversion disabled: spark.auron.enable.cartesianProduct=false."
         case _: LocalLimitExec if !enableLocalLimit =>
           "Conversion disabled: spark.auron.enable.local.limit=false."
         case _: GlobalLimitExec if !enableGlobalLimit =>
@@ -831,6 +836,15 @@ object AuronConverters extends Logging {
         underlyingBroadcast.setTagValue(NativeBroadcastExchangeBase.nativeExecutionTag, false)
         throw e
     }
+  }
+
+  def convertCartesianProductExec(exec: CartesianProductExec): SparkPlan = {
+    logDebugPlanConversion(exec, Seq("condition" -> exec.condition))
+    validateNativeJoinCondition(exec.condition)
+    Shims.get.createNativeCartesianProductExec(
+      addRenameColumnsExec(convertToNative(exec.left)),
+      addRenameColumnsExec(convertToNative(exec.right)),
+      exec.condition)
   }
 
   def convertBroadcastExchangeExec(exec: BroadcastExchangeExec): SparkPlan = {

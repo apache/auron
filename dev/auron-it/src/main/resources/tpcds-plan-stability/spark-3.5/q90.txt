@@ -1,8 +1,8 @@
 == Physical Plan ==
 AdaptiveSparkPlan (160)
 +- == Final Plan ==
-   * Project (93)
-   +- CartesianProduct Inner (92)
+   NativeProject (93)
+   +- NativeCartesianProduct (92)
       :- NativeProject (56)
       :  +- NativeHashAggregate (55)
       :     +- ShuffleQueryStage (54), Statistics(X)
@@ -552,11 +552,13 @@ Results [1]: [count(1)#20]
 Output [1]: [count(1)#20 AS pmc#21]
 Input [1]: [count(1)#20]
 
-(92) CartesianProduct
+(92) NativeCartesianProduct
+Left output [1]: [amc#13]
+Right output [1]: [pmc#21]
 Join type: Inner
 Join condition: None
 
-(93) Project [codegen id : X]
+(93) NativeProject
 Output [1]: [(cast(amc#13 as decimal(15,4)) / cast(pmc#21 as decimal(15,4))) AS am_pm_ratio#22]
 Input [2]: [amc#13, pmc#21]
 
