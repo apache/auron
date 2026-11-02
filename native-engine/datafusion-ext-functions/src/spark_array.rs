@@ -743,7 +743,7 @@ mod test {
         ]));
         let arg = ColumnarValue::Array(Arc::clone(&list));
         assert!(array_union(&[]).is_err());
-        assert!(array_union(&[arg.clone()]).is_err());
+        assert!(array_union(std::slice::from_ref(&arg)).is_err());
         assert!(array_union(&[arg.clone(), arg.clone(), arg.clone()]).is_err());
         assert!(array_union(&[arg.clone(), ColumnarValue::Scalar(1.into())]).is_err());
         assert!(array_union(&[arg.clone(), ColumnarValue::Array(list.slice(0, 0))]).is_err());

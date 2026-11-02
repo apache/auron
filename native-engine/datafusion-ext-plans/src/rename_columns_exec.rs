@@ -74,7 +74,7 @@ impl RenameColumnsExec {
 
 impl DisplayAs for RenameColumnsExec {
     fn fmt_as(&self, _t: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "RenameColumnsExec: {:?}", &self.renamed_column_names)
+        write!(f, "RenameColumnsExec: {:?}", self.renamed_column_names)
     }
 }
 

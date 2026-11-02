@@ -283,10 +283,10 @@ where
         drop(consumer_status);
         drop(status);
 
-        if new_used < old_used {
-            if let Some(coordinator) = D::coordinator_cell().get() {
-                coordinator.wake_waiters();
-            }
+        if new_used < old_used
+            && let Some(coordinator) = D::coordinator_cell().get()
+        {
+            coordinator.wake_waiters();
         }
         if new_used == 0 || !spillable || new_used <= old_used || new_used <= D::min_trigger_size()
         {

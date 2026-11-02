@@ -397,6 +397,10 @@ macro_rules! compare_cursor {
 }
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait Joiner {
     async fn join(
         self: Pin<&mut Self>,
