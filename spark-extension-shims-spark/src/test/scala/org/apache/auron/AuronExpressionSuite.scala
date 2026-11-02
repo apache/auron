@@ -30,6 +30,8 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
               |(123.45, 7.00), (-123.45, 7.00), (1.00, 8.00), (NULL, 7.00), (1.00, NULL)
               |""".stripMargin)
         checkSparkAnswerAndOperator("SELECT round(a / b, 2) FROM literal_fallback")
+        checkSparkAnswerAndOperator(
+          "SELECT round(a, 4), round(a, -1), round(a, 0), round(a, 2) FROM literal_fallback")
       }
     }
   }

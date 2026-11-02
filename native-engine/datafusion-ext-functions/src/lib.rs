@@ -127,7 +127,7 @@ pub fn create_auron_ext_function(
 mod tests {
     use datafusion::{
         arrow::{
-            array::{Decimal128Array, Int64Array},
+            array::{Decimal128Array, Int64Array, StringArray},
             datatypes::{DataType, Field, Schema},
             record_batch::RecordBatch,
         },
@@ -141,6 +141,99 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn pad_array_lengths_preserve_spark_semantics() -> Result<()> {
+        let strings = StringArray::from(vec![
+            Some("hi"),
+            Some("hi"),
+            Some("hi"),
+            Some("hi"),
+            Some("hi"),
+            Some("hi"),
+            None,
+            Some("é"),
+        ]);
+        let lengths = Int64Array::from(vec![
+            Some(-1),
+            Some(i64::MIN),
+            Some(0),
+            Some(4),
+            Some(2),
+            None,
+            Some(i64::MAX),
+            Some(3),
+        ]);
+        for udf in [
+            datafusion::functions::unicode::lpad(),
+            datafusion::functions::unicode::rpad(),
+        ] {
+            for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+                for explicit_fill in [false, true] {
+                    let mut args = vec![
+                        ColumnarValue::Array(arrow::compute::cast(&strings, &data_type)?),
+                        ColumnarValue::Array(Arc::new(lengths.clone())),
+                    ];
+                    if explicit_fill {
+                        let fill = StringArray::from(vec![
+                            Some("_"),
+                            Some("_"),
+                            Some("_"),
+                            Some("_"),
+                            None,
+                            Some("_"),
+                            Some("_"),
+                            Some("_"),
+                        ]);
+                        args.push(ColumnarValue::Array(arrow::compute::cast(
+                            &fill, &data_type,
+                        )?));
+                    }
+                    let arg_types = args
+                        .iter()
+                        .map(ColumnarValue::data_type)
+                        .collect::<Vec<_>>();
+                    let return_type = udf.return_type(&arg_types)?;
+                    let result = udf
+                        .invoke_with_args(ScalarFunctionArgs {
+                            args,
+                            arg_fields: arg_types
+                                .into_iter()
+                                .map(|t| Arc::new(Field::new("arg", t, true)))
+                                .collect(),
+                            number_rows: 8,
+                            return_field: Arc::new(Field::new("result", return_type.clone(), true)),
+                            config_options: Arc::new(ConfigOptions::default()),
+                        })?
+                        .into_array(8)?;
+                    let pad = if explicit_fill { "__" } else { "  " };
+                    let (padded, unicode) = if udf.name() == "lpad" {
+                        (format!("{pad}hi"), format!("{pad}é"))
+                    } else {
+                        (format!("hi{pad}"), format!("é{pad}"))
+                    };
+                    let expected = StringArray::from(vec![
+                        Some(""),
+                        Some(""),
+                        Some(""),
+                        Some(padded.as_str()),
+                        if explicit_fill { None } else { Some("hi") },
+                        None,
+                        None,
+                        Some(unicode.as_str()),
+                    ]);
+                    let expected = arrow::compute::cast(&expected, &return_type)?;
+                    assert_eq!(
+                        result.as_ref(),
+                        expected.as_ref(),
+                        "{} {data_type:?} fill={explicit_fill}",
+                        udf.name()
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn round_decimal_case_return_type() -> Result<()> {

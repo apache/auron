@@ -48,7 +48,9 @@ use datafusion::{
     scalar::ScalarValue,
 };
 use datafusion_datasource::PartitionedFile;
-use datafusion_ext_commons::{df_execution_err, hadoop_fs::FsProvider};
+use datafusion_ext_commons::{
+    arrow::scan_util::splice_partition_columns, df_execution_err, hadoop_fs::FsProvider,
+};
 use futures::{FutureExt, StreamExt, future::BoxFuture};
 use futures_util::TryStreamExt;
 use once_cell::sync::OnceCell;
@@ -179,6 +181,12 @@ impl ExecutionPlan for OrcExec {
             Some(proj) => proj,
             None => (0..self.base_config.file_schema().fields().len()).collect(),
         };
+        let num_file_schema_fields = self.base_config.file_schema().fields().len();
+        let full_projection = match self.base_config.file_source.projection() {
+            Some(proj) => proj.ordered_column_indices(),
+            None => (0..num_file_schema_fields + self.base_config.table_partition_cols().len())
+                .collect(),
+        };
 
         let force_positional_evolution = conf::ORC_FORCE_POSITIONAL_EVOLUTION.value()?;
         let use_microsecond_precision = conf::ORC_TIMESTAMP_USE_MICROSECOND.value()?;
@@ -186,6 +194,8 @@ impl ExecutionPlan for OrcExec {
 
         let opener: Arc<dyn FileOpener> = Arc::new(OrcOpener {
             projection,
+            full_projection,
+            output_schema: self.projected_schema.clone(),
             batch_size: conf::ORC_BATCH_SIZE.value()? as usize,
             table_schema: self.base_config.file_schema().clone(),
             fs_provider,
@@ -231,6 +241,8 @@ fn execute_orc_scan(
 
 struct OrcOpener {
     projection: Vec<usize>,
+    full_projection: Vec<usize>,
+    output_schema: SchemaRef,
     batch_size: usize,
     table_schema: SchemaRef,
     fs_provider: Arc<FsProvider>,
@@ -270,6 +282,9 @@ impl FileOpener for OrcOpener {
         let use_microsecond = self.use_microsecond_precision;
         let is_case = self.is_case_sensitive;
         let predicate = self.predicate.clone();
+        let full_projection = self.full_projection.clone();
+        let output_schema = self.output_schema.clone();
+        let num_file_schema_fields = self.table_schema.fields().len();
 
         Ok(Box::pin(async move {
             let mut builder = ArrowReaderBuilder::try_new_async(reader)
@@ -299,7 +314,22 @@ impl FileOpener for OrcOpener {
 
             let adapted = stream
                 .map_err(|e| datafusion::common::DataFusionError::External(Box::new(e)))
-                .map(move |maybe_batch| maybe_batch.and_then(|b| schema_mapping.map_batch(b)));
+                .map(move |maybe_batch| {
+                    maybe_batch.and_then(|batch| {
+                        let batch = schema_mapping.map_batch(batch)?;
+                        if file_meta.partition_values.is_empty() {
+                            return Ok(batch);
+                        }
+                        // DataFusion 55 no longer adds partition columns in FileStream.
+                        splice_partition_columns(
+                            batch,
+                            &full_projection,
+                            num_file_schema_fields,
+                            &file_meta.partition_values,
+                            output_schema.clone(),
+                        )
+                    })
+                });
 
             Ok(adapted.boxed())
         }))

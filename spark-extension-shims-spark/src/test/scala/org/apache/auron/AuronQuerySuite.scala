@@ -345,12 +345,20 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
           SparkAuronConfiguration.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
-            Seq[(Integer, Integer, Integer)]((1, 2, 1), (3, 4, 2), (5, 6, 3), (null, null, 4))
+            Seq[(Integer, Integer, Integer)](
+              (1, 2, 1),
+              (3, 4, 2),
+              (5, 6, 3),
+              (null, null, 4),
+              (7, 8, null))
               .toDF("c1", "c2", "p")
               .write
               .partitionBy("p")
               .orc(path)
             checkSparkAnswerAndOperator(() => spark.read.orc(path))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).select("p", "c2", "c1"))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).select("p"))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).selectExpr("count(*)"))
 
             withTable("t") {
               sql(s"""
@@ -361,6 +369,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                      |""".stripMargin)
               sql("MSCK REPAIR TABLE t")
               checkSparkAnswerAndOperator(() => spark.table("t"))
+              checkSparkAnswerAndOperator(() => spark.table("t").select("p", "c2", "c3"))
             }
           }
         }

@@ -1215,11 +1215,15 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
-  test("pow: zero base with negative exponent yields +infinity") {
+  test("pow: signed zero with negative exponents") {
     withTable("t1") {
       sql("create table t1(c1 double, c2 double) using parquet")
-      sql("insert into t1 values(0.0, -2.5), (0.0, -3)")
-      checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+      sql("""insert into t1 values
+            |(0.0, -2.5), (0.0, -3),
+            |(cast('-0.0' as double), -3), (cast('-0.0' as double), -2.5)
+            |""".stripMargin)
+      checkSparkAnswerAndOperator(
+        "select pow(c1, c2), power(c1, c2), pow(c1, -3.0), pow(0.0, c2) from t1")
     }
   }
 
