@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.status.ElementTrackingStore
 
-import org.apache.auron.spark.ui.{AuronBuildInfoEvent, AuronPlanDiagnosticEvent, AuronPlanFallbackEvent}
+import org.apache.auron.spark.ui.{AuronBuildInfoEvent, AuronPlanDiagnosticEvent}
 
 class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
     extends SparkListener
@@ -76,8 +76,7 @@ class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
           e.description,
           e.time,
           old.endedAt,
-          old.snapshots,
-          old.legacyFallback),
+          old.snapshots),
         true)
     case e: SparkListenerSQLExecutionEnd =>
       val old = current(e.executionId)
@@ -87,8 +86,7 @@ class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
           old.description,
           old.startedAt,
           e.time,
-          old.snapshots,
-          old.legacyFallback),
+          old.snapshots),
         true)
     case e: AuronPlanDiagnosticEvent =>
       val old = current(e.executionId)
@@ -107,19 +105,7 @@ class AuronSQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore)
           old.description,
           old.startedAt,
           old.endedAt,
-          snapshots,
-          old.legacyFallback),
-        true)
-    case e: AuronPlanFallbackEvent =>
-      val old = current(e.executionId)
-      kvstore.write(
-        new AuronExecutionUIData(
-          e.executionId,
-          old.description,
-          old.startedAt,
-          old.endedAt,
-          old.snapshots,
-          Some(e)),
+          snapshots),
         true)
     case _ => // Ignore
   }

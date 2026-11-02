@@ -194,13 +194,6 @@ JAR available on the Spark History Server classpath so its bundled history plugi
 can replay diagnostic events. Event logs created without those events cannot
 reconstruct conversion snapshots.
 
-Older fallback reports retain their recorded native/fallback counts, reasons, and
-available physical plan. They are labeled **Legacy report** because per-node native
-details and configuration snapshots were not recorded. Existing
-`/auron/execution/?id=...` links still work. New snapshots take precedence when both
-formats are present. Rebuild persistent SHS application-store caches after upgrading
-to replay logs into the updated record schema.
-
 ## Performance
 
 TPC-DS 1TB Benchmark Results:

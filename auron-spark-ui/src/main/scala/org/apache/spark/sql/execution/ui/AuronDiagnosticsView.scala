@@ -46,15 +46,7 @@ private[ui] class AuronDiagnosticsView(sqlStore: AuronSQLAppStatusStore) {
         rows.map { e =>
           val nodes = e.snapshots.lastOption.toSeq.flatMap(_.nodes)
           def count(status: String): String = {
-            if (e.snapshots.nonEmpty) {
-              nodes.count(_.status == status).toString
-            } else {
-              e.legacyFallback match {
-                case Some(legacy) if status == "Native" => legacy.numAuronNodes.toString
-                case Some(legacy) if status == "Fallback" => legacy.numFallbackNodes.toString
-                case _ => "Not available"
-              }
-            }
+            if (e.snapshots.isEmpty) "Not available" else nodes.count(_.status == status).toString
           }
           <tr><td><a href={s"$base/auron/?id=${e.executionId}"}>{e.executionId}</a></td>
               <td>{e.description}</td><td>{
@@ -63,10 +55,7 @@ private[ui] class AuronDiagnosticsView(sqlStore: AuronSQLAppStatusStore) {
               <td>{count("Native")}</td>
               <td>{count("Fallback")}</td>
               <td>{count("Spark (no reason recorded)")}</td>
-              <td>{
-            if (e.snapshots.isEmpty && e.legacyFallback.isDefined) "Legacy report"
-            else e.snapshots.size.toString
-          }</td></tr>
+              <td>{e.snapshots.size}</td></tr>
         }
       }</tbody>
         </table>
@@ -100,22 +89,7 @@ private[ui] class AuronDiagnosticsView(sqlStore: AuronSQLAppStatusStore) {
         Plans are limited to 65,536 characters and individual reasons to 8,192 characters.</p>
       {
       if (e.snapshots.isEmpty) {
-        e.legacyFallback match {
-          case Some(legacy) =>
-            <div>
-              <p>This event log contains a legacy fallback report, not conversion snapshots.
-                Per-operator native details and configuration were not recorded.</p>
-              {
-              AuronExecutionPage.renderContent(
-                Some(legacy),
-                Option(legacy.physicalPlanDescription)
-                  .filter(_.nonEmpty)
-                  .orElse(sqlStore.physicalPlan(e.executionId)))
-            }
-            </div>
-          case None =>
-            <p>No conversion snapshot was captured for this execution.</p>
-        }
+        <p>No conversion snapshot was captured for this execution.</p>
       } else {
         e.snapshots.reverse.map { snapshot =>
           <details><summary>Snapshot {new java.util.Date(snapshot.timestamp).toString}
