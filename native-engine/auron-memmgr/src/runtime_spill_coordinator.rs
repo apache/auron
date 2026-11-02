@@ -154,108 +154,6 @@ impl<D: MemDomain + RuntimeWatermarkEvaluator<D>> RuntimeSpillCoordinator<D> {
         SpillAction::WaitAndRetry(receiver)
     }
 
-    /// Forces a spill with a slot guard that wakes waiters on completion or
-    /// cancellation.
-    pub async fn spill_in_action<F, Fut>(
-        &self,
-        consumer_name: &str,
-        consumer_info: &Arc<ConsumerInfo<D>>,
-        do_spill: F,
-    ) -> Result<()>
-    where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<()>>,
-    {
-        self.spill_with_mode(consumer_name, consumer_info, do_spill, true)
-            .await
-    }
-
-    async fn spill_with_mode<F, Fut>(
-        &self,
-        consumer_name: &str,
-        consumer_info: &Arc<ConsumerInfo<D>>,
-        do_spill: F,
-        forced: bool,
-    ) -> Result<()>
-    where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<()>>,
-    {
-        // Reserve the slot under the same lock used for admission.
-        let _guard = loop {
-            let receiver = {
-                let mut state = self.state.lock();
-                let status = *consumer_info.status.lock();
-                if !status.spillable
-                    || (!forced && status.mem_used == 0)
-                    || state
-                        .active_consumers
-                        .iter()
-                        .any(|active| weak_ptr_eq(active, consumer_info))
-                {
-                    return Ok(());
-                }
-                let watermark = <D as RuntimeWatermarkEvaluator<D>>::watermark();
-                if !forced && watermark < self.watermark_l1 {
-                    return Ok(());
-                }
-                let limit = if watermark < self.watermark_l2 {
-                    1
-                } else {
-                    self.num_max_spilling_consumers
-                };
-                if state.active_consumers.len() < limit {
-                    state.active_consumers.push(Arc::downgrade(consumer_info));
-                    break SpillInActionGuard {
-                        coordinator: self,
-                        consumer: Arc::downgrade(consumer_info),
-                    };
-                }
-                match Self::park_reporter(&mut state) {
-                    SpillAction::WaitAndRetry(receiver) => receiver,
-                    _ => unreachable!("parking must return a waiter"),
-                }
-            };
-            wait_for_spill(receiver).await;
-        };
-
-        if !consumer_info.status.lock().spillable {
-            log::info!(
-                "{} spill coordinator: {} was pinned before its spill started, skipping",
-                D::name(),
-                consumer_info.name,
-            );
-            return Ok(());
-        }
-
-        let mem_used = consumer_info.status.lock().mem_used;
-        let unspillable = {
-            let mm_status = *RuntimeMemManager::<D>::get().status.lock();
-            mm_status
-                .total_used
-                .saturating_sub(mm_status.mem_spillables)
-        };
-        D::on_before_spill(consumer_name).await;
-        let status = *consumer_info.status.lock();
-        if !status.spillable
-            || (!forced
-                && (status.mem_used == 0
-                    || <D as RuntimeWatermarkEvaluator<D>>::watermark() < self.watermark_l1))
-        {
-            return Ok(());
-        }
-        log::info!(
-            "{} manager spilling {consumer_name} (consumer: {}), unspillable: {}, \
-             logical watermark: {:.3}, physical watermark: {:.3}",
-            D::name(),
-            ByteSize(mem_used as u64),
-            ByteSize(unspillable as u64),
-            <D as RuntimeWatermarkEvaluator<D>>::logical_watermark(),
-            <D as RuntimeWatermarkEvaluator<D>>::physical_watermark(),
-        );
-        do_spill().await
-    }
-
     pub fn remove_consumer(&self, consumer_info: &Arc<ConsumerInfo<D>>) {
         let mut state = self.state.lock();
         state
@@ -267,26 +165,6 @@ impl<D: MemDomain + RuntimeWatermarkEvaluator<D>> RuntimeSpillCoordinator<D> {
 impl<D: MemDomain> RuntimeSpillCoordinator<D> {
     pub(crate) fn wake_waiters(&self) {
         let notifiers = std::mem::take(&mut self.state.lock().pending_notifiers);
-        for notifier in notifiers {
-            let _ = notifier.send(());
-        }
-    }
-}
-
-struct SpillInActionGuard<'a, D: MemDomain> {
-    coordinator: &'a RuntimeSpillCoordinator<D>,
-    consumer: Weak<ConsumerInfo<D>>,
-}
-
-impl<D: MemDomain> Drop for SpillInActionGuard<'_, D> {
-    fn drop(&mut self) {
-        let notifiers = {
-            let mut state = self.coordinator.state.lock();
-            state
-                .active_consumers
-                .retain(|active| !Weak::ptr_eq(active, &self.consumer));
-            std::mem::take(&mut state.pending_notifiers)
-        };
         for notifier in notifiers {
             let _ = notifier.send(());
         }
@@ -378,7 +256,6 @@ pub async fn update_consumer_mem_used_with_custom_updater<D, F, Fut>(
     consumer_name: &str,
     consumer_info: &Arc<ConsumerInfo<D>>,
     updater: impl Fn(&mut ConsumerStatus) -> (usize, usize),
-    forced: bool,
     do_spill: F,
 ) -> Result<()>
 where
@@ -386,6 +263,7 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = Result<()>>,
 {
+    let _ = consumer_name;
     let mm = RuntimeMemManager::<D>::get();
 
     {
@@ -395,11 +273,6 @@ where
         let (old_used, new_used) = updater(&mut consumer_status);
         let spillable = consumer_status.spillable;
         let diff_used = new_used as isize - old_used as isize;
-        assert!(
-            !forced || spillable,
-            "forced spilling an unspillable {} consumer",
-            D::name()
-        );
 
         status.update_total_used_with_diff(diff_used);
 
@@ -415,27 +288,16 @@ where
                 coordinator.wake_waiters();
             }
         }
-        if !forced
-            && (new_used == 0
-                || !spillable
-                || new_used <= old_used
-                || new_used <= D::min_trigger_size())
+        if new_used == 0 || !spillable || new_used <= old_used || new_used <= D::min_trigger_size()
         {
             return Ok(());
         }
     }
 
-    if forced {
-        return RuntimeSpillCoordinator::<D>::get()
-            .spill_in_action(consumer_name, consumer_info, do_spill)
-            .await;
-    }
-
-    spill_consumer_if_needed(consumer_name, consumer_info, do_spill).await
+    spill_consumer_if_needed(consumer_info, do_spill).await
 }
 
 async fn spill_consumer_if_needed<D, F, Fut>(
-    consumer_name: &str,
     consumer_info: &Arc<ConsumerInfo<D>>,
     do_spill: F,
 ) -> Result<()>
@@ -452,11 +314,7 @@ where
     loop {
         match coordinator.update_consumer_mem_used(consumer_info) {
             SpillAction::DoNotSpill => return Ok(()),
-            SpillAction::DoSpill => {
-                return coordinator
-                    .spill_with_mode(consumer_name, consumer_info, do_spill, false)
-                    .await;
-            }
+            SpillAction::DoSpill => return do_spill().await,
             SpillAction::WaitAndRetry(receiver) => {
                 wait_for_spill(receiver).await;
             }

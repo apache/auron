@@ -128,7 +128,7 @@ impl AggTable {
         // update udaf memory tracker, spill if update failed
         if let Some(udaf_mem_tracker) = self.agg_ctx.get_udaf_mem_tracker() {
             if !udaf_mem_tracker.update_used()? {
-                self.force_spill().await?;
+                self.spill().await?;
             }
         }
         Ok(())

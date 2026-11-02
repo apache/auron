@@ -1214,6 +1214,31 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("UDAF fallback with different aggregate filters") {
+    withTable("udaf_filter_indices") {
+      // Keep both filtered groups in the same input partition.
+      sql("""CREATE TABLE udaf_filter_indices USING parquet AS
+        |SELECT /*+ COALESCE(1) */ * FROM VALUES
+        |('a', 1D, true), ('a', 3D, true), ('a', 10D, false), ('a', 30D, false)
+        |AS t(category, value, flag)""".stripMargin)
+
+      Seq("global", "hash", "sort").foreach { mode =>
+        withSparkConf(
+          "spark.auron.udafFallback.num.udafs.trigger.sortAgg" ->
+            (if (mode == "hash") "4" else "1")) {
+          val groupBy = if (mode == "global") "" else "GROUP BY category"
+          checkAnswer(
+            checkSparkAnswerAndOperator(s"""SELECT
+              |var_pop(value) FILTER (WHERE flag),
+              |var_pop(value) FILTER (WHERE NOT flag),
+              |var_pop(value)
+              |FROM udaf_filter_indices $groupBy""".stripMargin),
+            Seq(Row(1d, 100d, 131.5d)))
+        }
+      }
+    }
+  }
+
   test("aggregate filter excludes null predicates") {
     withTable("t_filter_agg_null") {
       sql("""CREATE TABLE t_filter_agg_null(category STRING, amount INT, flag BOOLEAN)

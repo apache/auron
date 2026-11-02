@@ -24,10 +24,18 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.iceberg.{AddedRowsScanTask, ChangelogScanTask, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, PartitionData, ScanTask}
+import org.apache.hadoop.fs.Path
+import org.apache.iceberg.{AddedRowsScanTask, ChangelogScanTask, DataFiles, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, PartitionData, ScanTask}
 import org.apache.iceberg.data.{GenericAppenderFactory, GenericRecord, Record}
 import org.apache.iceberg.deletes.PositionDelete
 import org.apache.iceberg.spark.Spark3Util
+import org.apache.parquet.column.ParquetProperties.WriterVersion
+import org.apache.parquet.example.data.simple.SimpleGroupFactory
+import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.hadoop.util.HadoopInputFile
+import org.apache.parquet.io.api.Binary
+import org.apache.parquet.schema.MessageTypeParser
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.AuronColumnarOverrides
@@ -488,6 +496,145 @@ class AuronIcebergIntegrationSuite
       val plan = df.queryExecution.executedPlan.toString()
       assert(plan.contains("NativeIcebergTableScan"))
       assert(plan.contains("NativeFilter"))
+    }
+  }
+
+  Seq(
+    ("int32", 9, 2),
+    ("int64", 18, 0),
+    ("int64", 18, 2),
+    ("int64", 18, 18),
+    ("fixed_len_byte_array(8)", 18, 2))
+    .foreach { case (physicalType, precision, scale) =>
+      test(
+        s"iceberg decimal pruning skips Parquet row groups safely: $physicalType, scale $scale") {
+        withTable("local.db.t_decimal_pruning") {
+          sql(
+            s"CREATE TABLE local.db.t_decimal_pruning (id INT, d DECIMAL($precision, $scale)) USING iceberg")
+          val table = Spark3Util.loadIcebergTable(spark, "local.db.t_decimal_pruning")
+          val path = new Path(table.locationProvider().newDataLocation("decimal-pruning.parquet"))
+          val parquetSchema = MessageTypeParser.parseMessageType(s"""
+            |message decimal_pruning {
+            |  required int32 id = 1;
+            |  optional $physicalType d (DECIMAL($precision, $scale)) = 2;
+            |}
+            |""".stripMargin)
+          val groups = new SimpleGroupFactory(parquetSchema)
+          val writer = ExampleParquetWriter
+            .builder(path)
+            .withConf(spark.sessionState.newHadoopConf())
+            .withType(parquetSchema)
+            .withWriterVersion(WriterVersion.PARQUET_1_0)
+            .withDictionaryEncoding(true)
+            .withBloomFilterEnabled("d", true)
+            .withBloomFilterNDV("d", 16L)
+            .config("parquet.bloom.filter.max.bytes", "1024")
+            .withRowGroupSize(1024L)
+            .withMinRowCountForPageSizeCheck(100)
+            .withMaxRowCountForPageSizeCheck(100)
+            .build()
+          val max = BigInt(10).pow(precision).toLong - 1
+          val values =
+            Seq(Some(-max), Some(-100L), Some(0L), Some(100L), Some(500L), Some(max), None)
+          def decimalLiteral(unscaled: Long): String =
+            java.math.BigDecimal.valueOf(unscaled, scale).toPlainString
+          val rowsPerValue = 500
+          try {
+            values.zipWithIndex.foreach { case (value, index) =>
+              (0 until rowsPerValue).foreach { offset =>
+                val group = groups.newGroup().append("id", index * rowsPerValue + offset)
+                value.foreach { unscaled =>
+                  physicalType match {
+                    case "int32" => group.append("d", unscaled.toInt)
+                    case "int64" => group.append("d", unscaled)
+                    case _ =>
+                      group.append(
+                        "d",
+                        Binary.fromConstantByteArray(
+                          java.nio.ByteBuffer.allocate(8).putLong(unscaled).array()))
+                  }
+                }
+                writer.write(group)
+              }
+            }
+          } finally {
+            writer.close()
+          }
+          val reader = ParquetFileReader.open(
+            HadoopInputFile.fromPath(path, spark.sessionState.newHadoopConf()))
+          val footer =
+            try reader.getFooter
+            finally reader.close()
+          assert(footer.getBlocks.size() > 1)
+          assert(footer.getBlocks.asScala.exists(_.getColumns.get(1).getBloomFilterOffset > 0))
+          if (physicalType != "fixed_len_byte_array(8)") {
+            assert(
+              footer.getBlocks.asScala.exists(
+                _.getColumns.get(1).getEncodings.asScala.exists(_.name() == "PLAIN_DICTIONARY")))
+          }
+          val dataFile = DataFiles
+            .builder(table.spec())
+            .withInputFile(table.io().newInputFile(path.toString))
+            .withRecordCount(values.size * rowsPerValue)
+            .build()
+          table.newAppend().appendFile(dataFile).commit()
+
+          withSQLConf(
+            "spark.sql.adaptive.enabled" -> "false",
+            "spark.auron.parquet.enable.pageFiltering" -> "false",
+            "spark.auron.parquet.enable.bloomFilter" -> "true") {
+            Seq(
+              s"= ${decimalLiteral(100)}",
+              s"= ${decimalLiteral(-100)}",
+              "= 0",
+              s"= ${decimalLiteral(500)}",
+              s"= ${decimalLiteral(150)}",
+              s"= ${decimalLiteral(max)}",
+              s"= ${decimalLiteral(-max)}",
+              "< 0",
+              s"<= ${decimalLiteral(-100)}",
+              "> 0",
+              s">= ${decimalLiteral(100)}")
+              .foreach { predicate =>
+                val df = checkSparkAnswerAndOperator(
+                  s"SELECT * FROM local.db.t_decimal_pruning WHERE d $predicate")
+                val scanPlan = icebergScanPlan(df).get
+                assert(scanPlan.scanTasks.map(_.location).distinct.size == 1)
+                assert(scanPlan.pruningPredicates.nonEmpty)
+                assert(df.queryExecution.executedPlan.toString.contains("NativeFilter"))
+                val scan = executedNativeIcebergTableScanExec(df)
+                assert(scan.metrics("numFiles").value == scanPlan.scanTasks.size)
+                // Exclude pruning provided by IS NOT NULL, with page filtering disabled.
+                assert(
+                  scan.metrics("output_rows").value < values.count(_.nonEmpty) * rowsPerValue)
+                assert(scan.metrics("row_groups_pruned_bloom_filter").value == 0)
+              }
+            checkSparkAnswerAndOperator(
+              "SELECT * FROM local.db.t_decimal_pruning WHERE d IS NULL")
+            checkSparkAnswerAndOperator(
+              s"SELECT * FROM local.db.t_decimal_pruning WHERE d != ${decimalLiteral(100)}")
+            checkSparkAnswerAndOperator(
+              s"SELECT * FROM local.db.t_decimal_pruning WHERE d IN (${decimalLiteral(100)}, ${decimalLiteral(500)})")
+            checkSparkAnswerAndOperator(
+              s"SELECT * FROM local.db.t_decimal_pruning WHERE d = ${decimalLiteral(100)} OR id < 10")
+            checkSparkAnswerAndOperator(
+              s"SELECT * FROM local.db.t_decimal_pruning.changes WHERE d = ${decimalLiteral(100)}")
+            withSQLConf("spark.auron.parquet.enable.pageFiltering" -> "true") {
+              checkSparkAnswerAndOperator(
+                s"SELECT * FROM local.db.t_decimal_pruning WHERE d = ${decimalLiteral(100)}")
+            }
+          }
+        }
+      }
+    }
+
+  test("iceberg ORC decimal comparisons keep post-scan filtering") {
+    withTable("local.db.t_orc_decimal") {
+      sql("""CREATE TABLE local.db.t_orc_decimal (id INT, d DECIMAL(18, 2)) USING iceberg
+          |TBLPROPERTIES ('write.format.default'='orc')""".stripMargin)
+      sql("INSERT INTO local.db.t_orc_decimal VALUES (1, -1.00), (2, 1.00), (3, NULL)")
+      val df = checkSparkAnswerAndOperator("SELECT * FROM local.db.t_orc_decimal WHERE d = 1.00")
+      assert(icebergScanPlan(df).get.pruningPredicates.forall(_.hasIsNotNullExpr))
     }
   }
 
