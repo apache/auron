@@ -132,12 +132,117 @@ mod tests {
         logical_expr::{ColumnarValue, Operator, ScalarFunctionArgs, Volatility},
         physical_expr::{
             PhysicalExpr, PhysicalExprRef, ScalarFunctionExpr,
-            expressions::{BinaryExpr, CaseExpr, Column, Literal, TryCastExpr},
+            expressions::{
+                BinaryExpr, CaseExpr, Column, IsNotNullExpr, IsNullExpr, Literal, TryCastExpr,
+            },
         },
         prelude::create_udf,
     };
 
     use super::*;
+
+    #[test]
+    fn case_nullability_does_not_evaluate_aggregate_placeholders() -> Result<()> {
+        let udf = Arc::new(create_udf(
+            "spark_ext_function_Placeholder",
+            vec![],
+            DataType::Int64,
+            Volatility::Volatile,
+            create_auron_ext_function("Placeholder", 0)?,
+        ));
+        let placeholder: PhysicalExprRef = Arc::new(ScalarFunctionExpr::new(
+            udf.name(),
+            udf.clone(),
+            vec![],
+            Arc::new(Field::new("placeholder", DataType::Int64, true)),
+            Arc::new(ConfigOptions::default()),
+        ));
+        for nested in [false, true] {
+            let mut predicate: PhysicalExprRef = Arc::new(IsNullExpr::new(placeholder.clone()));
+            if nested {
+                predicate = Arc::new(BinaryExpr::new(
+                    Arc::new(Literal::new(ScalarValue::Boolean(Some(false)))),
+                    Operator::Or,
+                    predicate,
+                ));
+            }
+            let case = CaseExpr::try_new(
+                None,
+                vec![(predicate, Arc::new(Literal::new(ScalarValue::Int64(None))))],
+                Some(Arc::new(Literal::new(ScalarValue::Int64(Some(1))))),
+            )?;
+            assert!(case.nullable(&Schema::empty())?);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn case_nullability_preserves_volatile_predicates_and_results() -> Result<()> {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        for shared_result in [false, true] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let udf_calls = calls.clone();
+            let udf = Arc::new(create_udf(
+                "alternating_nullable",
+                vec![],
+                DataType::Int64,
+                Volatility::Volatile,
+                Arc::new(move |_| {
+                    let first = udf_calls.fetch_add(1, Ordering::SeqCst) == 0;
+                    Ok(ColumnarValue::Scalar(ScalarValue::Int64(
+                        first.then_some(1),
+                    )))
+                }),
+            ));
+            let value: PhysicalExprRef = Arc::new(ScalarFunctionExpr::new(
+                udf.name(),
+                udf.clone(),
+                vec![],
+                Arc::new(Field::new("value", DataType::Int64, true)),
+                Arc::new(ConfigOptions::default()),
+            ));
+            let (predicate, result): (PhysicalExprRef, PhysicalExprRef) = if shared_result {
+                (Arc::new(IsNotNullExpr::new(value.clone())), value)
+            } else {
+                (
+                    Arc::new(IsNullExpr::new(value)),
+                    Arc::new(Literal::new(ScalarValue::Int64(None))),
+                )
+            };
+            let case = CaseExpr::try_new(
+                None,
+                vec![(predicate, result)],
+                Some(Arc::new(Literal::new(ScalarValue::Int64(Some(0))))),
+            )?;
+            assert!(case.nullable(&Schema::empty())?);
+            assert_eq!(calls.load(Ordering::SeqCst), 0);
+            if shared_result {
+                let batch = RecordBatch::try_new_with_options(
+                    Arc::new(Schema::empty()),
+                    vec![],
+                    &arrow::array::RecordBatchOptions::new().with_row_count(Some(1)),
+                )?;
+                let result = case.evaluate(&batch)?.into_array(1)?;
+                assert_eq!(result.null_count(), 1);
+                assert_eq!(calls.load(Ordering::SeqCst), 2);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn case_nullability_still_infers_non_null_guarded_columns() -> Result<()> {
+        let schema = Schema::new(vec![Field::new("value", DataType::Int64, true)]);
+        let column: PhysicalExprRef = Arc::new(Column::new("value", 0));
+        let case = CaseExpr::try_new(
+            None,
+            vec![(Arc::new(IsNotNullExpr::new(column.clone())), column)],
+            Some(Arc::new(Literal::new(ScalarValue::Int64(Some(0))))),
+        )?;
+        assert!(!case.nullable(&schema)?);
+        Ok(())
+    }
 
     #[test]
     fn pad_array_lengths_preserve_spark_semantics() -> Result<()> {
