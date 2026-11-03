@@ -47,10 +47,11 @@ use datafusion::{
     error::{DataFusionError, Result},
     execution::context::TaskContext,
     parquet::{
-        arrow::arrow_reader::ArrowReaderOptions, errors::ParquetError,
-        file::metadata::ParquetMetaData,
+        arrow::PARQUET_FIELD_ID_META_KEY, arrow::arrow_reader::ArrowReaderOptions,
+        errors::ParquetError, file::metadata::ParquetMetaData,
     },
     physical_expr::{EquivalenceProperties, PhysicalExprRef},
+    physical_expr_adapter::PhysicalExprAdapterFactory,
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
         SendableRecordBatchStream, Statistics,
@@ -70,8 +71,8 @@ use parking_lot::Mutex;
 use crate::{
     common::execution_context::ExecutionContext,
     scan::{
-        AuronSchemaAdapterFactory, internal_file_reader::InternalFileReader,
-        parallel::parallel_scan,
+        AuronPhysicalExprAdapterFactory, AuronSchemaAdapterFactory,
+        internal_file_reader::InternalFileReader, parallel::parallel_scan,
     },
 };
 
@@ -230,6 +231,15 @@ impl ExecutionPlan for ParquetExec {
         let parquet_file_reader_factory = Arc::new(FsReaderFactory::new(fs_provider));
 
         let schema_adapter_factory = Arc::new(AuronSchemaAdapterFactory);
+        let expr_adapter_factory = self
+            .base_config
+            .file_schema()
+            .fields()
+            .iter()
+            .any(|field| field.metadata().contains_key(PARQUET_FIELD_ID_META_KEY))
+            .then(|| {
+                Arc::new(AuronPhysicalExprAdapterFactory) as Arc<dyn PhysicalExprAdapterFactory>
+            });
         let projection: Arc<[usize]> = match self.base_config.file_column_projection_indices() {
             Some(proj) => proj.into(),
             None => (0..self.base_config.file_schema().fields().len())
@@ -283,7 +293,7 @@ impl ExecutionPlan for ParquetExec {
                 enable_row_group_stats_pruning: true,
                 coerce_int96: Some(TimeUnit::Millisecond),
                 file_decryption_properties: None,
-                expr_adapter_factory: None,
+                expr_adapter_factory: expr_adapter_factory.clone(),
             };
             PartitionSplicingOpener {
                 inner,

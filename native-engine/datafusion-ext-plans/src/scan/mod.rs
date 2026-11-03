@@ -22,9 +22,18 @@ use arrow::{
 };
 use arrow_schema::Field;
 use datafusion::{
-    common::{ColumnStatistics, Result, stats::Precision},
+    common::{
+        ColumnStatistics, Result, ScalarValue,
+        stats::Precision,
+        tree_node::{Transformed, TransformedResult, TreeNode},
+    },
     datasource::schema_adapter::{SchemaAdapter, SchemaAdapterFactory, SchemaMapper},
     parquet::arrow::PARQUET_FIELD_ID_META_KEY,
+    physical_expr::{
+        PhysicalExprRef,
+        expressions::{CastExpr, Column, Literal},
+    },
+    physical_expr_adapter::{PhysicalExprAdapter, PhysicalExprAdapterFactory},
 };
 use datafusion_ext_commons::df_execution_err;
 
@@ -172,16 +181,63 @@ impl SchemaAdapter for AuronSchemaAdapter {
 fn fields_match(table_field: &Field, file_field: &Field) -> bool {
     match table_field.metadata().get(PARQUET_FIELD_ID_META_KEY) {
         Some(table_field_id) => match file_field.metadata().get(PARQUET_FIELD_ID_META_KEY) {
-            Some(file_field_id) => {
-                if file_field_id == table_field_id {
-                    true
-                } else {
-                    table_field.name().eq_ignore_ascii_case(file_field.name())
-                }
-            }
+            // A dropped and re-added column can reuse its name, but not its id.
+            Some(file_field_id) => file_field_id == table_field_id,
             None => table_field.name().eq_ignore_ascii_case(file_field.name()),
         },
         None => table_field.name().eq_ignore_ascii_case(file_field.name()),
+    }
+}
+
+/// Resolve predicates by the same identities as projected columns, before
+/// Parquet statistics, Bloom filters or row filters see the physical schema.
+#[derive(Debug)]
+pub struct AuronPhysicalExprAdapterFactory;
+
+impl PhysicalExprAdapterFactory for AuronPhysicalExprAdapterFactory {
+    fn create(
+        &self,
+        logical_file_schema: SchemaRef,
+        physical_file_schema: SchemaRef,
+    ) -> Result<Arc<dyn PhysicalExprAdapter>> {
+        Ok(Arc::new(AuronPhysicalExprAdapter {
+            logical_file_schema,
+            physical_file_schema,
+        }))
+    }
+}
+
+#[derive(Debug)]
+struct AuronPhysicalExprAdapter {
+    logical_file_schema: SchemaRef,
+    physical_file_schema: SchemaRef,
+}
+
+impl PhysicalExprAdapter for AuronPhysicalExprAdapter {
+    fn rewrite(&self, expr: PhysicalExprRef) -> Result<PhysicalExprRef> {
+        let adapter = AuronSchemaAdapter::new(self.logical_file_schema.clone());
+        expr.transform_up(|expr| {
+            let Some(column) = expr.downcast_ref::<Column>() else {
+                return Ok(Transformed::no(expr));
+            };
+            let index = self.logical_file_schema.index_of(column.name())?;
+            let field = self.logical_file_schema.field(index);
+            let mapped: PhysicalExprRef =
+                match adapter.map_column_index(index, &self.physical_file_schema) {
+                    Some(file_index) => {
+                        let file_field = self.physical_file_schema.field(file_index);
+                        let column = Arc::new(Column::new(file_field.name(), file_index));
+                        if file_field.data_type() == field.data_type() {
+                            column
+                        } else {
+                            Arc::new(CastExpr::new(column, field.data_type().clone(), None))
+                        }
+                    }
+                    None => Arc::new(Literal::new(ScalarValue::try_from(field.data_type())?)),
+                };
+            Ok(Transformed::yes(mapped))
+        })
+        .data()
     }
 }
 
@@ -259,6 +315,113 @@ fn schema_adapter_cast_column(col: &ArrayRef, field: &Field) -> Result<ArrayRef>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arrow::array::Int32Array;
+
+    fn field_with_id(name: &str, id: &str) -> Field {
+        Field::new(name, DataType::Int32, true)
+            .with_metadata([(PARQUET_FIELD_ID_META_KEY.to_string(), id.to_string())].into())
+    }
+
+    #[test]
+    fn test_field_ids_take_precedence_over_names() -> Result<()> {
+        let table_schema = Arc::new(Schema::new(vec![field_with_id("value", "3")]));
+        let adapter = AuronSchemaAdapter::new(table_schema.clone());
+
+        // A dropped and re-added column has the same name but a new identity.
+        // If its field id is absent, the old values must not reappear.
+        for has_matching_id in [false, true] {
+            let mut fields = vec![field_with_id("value", "2")];
+            let mut columns = vec![Arc::new(Int32Array::from(vec![10, 20])) as ArrayRef];
+            if has_matching_id {
+                // A rename keeps its field id, even when another field has its name.
+                fields.push(field_with_id("previous_name", "3"));
+                columns.push(Arc::new(Int32Array::from(vec![30, 40])));
+            }
+            let file_schema = Arc::new(Schema::new(fields));
+            let file_batch = RecordBatch::try_new(file_schema.clone(), columns)?;
+            let (mapper, projection) = adapter.map_schema(&file_schema)?;
+            assert_eq!(
+                adapter.map_column_index(0, &file_schema),
+                has_matching_id.then_some(1)
+            );
+            assert_eq!(projection, if has_matching_id { vec![1] } else { vec![] });
+            let mapped = mapper.map_batch(file_batch.project(&projection)?)?;
+            assert_eq!(mapped.schema(), table_schema);
+            assert_eq!(mapped.num_rows(), 2);
+            assert_eq!(
+                mapped
+                    .column(0)
+                    .as_primitive::<arrow::datatypes::Int32Type>(),
+                &Int32Array::from(if has_matching_id {
+                    vec![Some(30), Some(40)]
+                } else {
+                    vec![None, None]
+                })
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_field_names_are_used_when_ids_are_unavailable() {
+        for (table, file) in [
+            (
+                field_with_id("value", "3"),
+                Field::new("VALUE", DataType::Int32, true),
+            ),
+            (
+                Field::new("value", DataType::Int32, true),
+                field_with_id("VALUE", "2"),
+            ),
+            (
+                Field::new("value", DataType::Int32, true),
+                Field::new("VALUE", DataType::Int32, true),
+            ),
+        ] {
+            assert!(fields_match(&table, &file));
+            assert!(!fields_match(&table, &file.with_name("different")));
+        }
+    }
+
+    #[test]
+    fn test_predicates_follow_field_ids_and_preserve_promoted_types() -> Result<()> {
+        use datafusion::physical_expr::expressions::IsNullExpr;
+
+        let logical_schema = Arc::new(Schema::new(vec![
+            field_with_id("value", "3").with_data_type(DataType::Int64),
+        ]));
+        for has_matching_id in [false, true] {
+            let mut fields = vec![field_with_id("value", "2")];
+            let mut columns = vec![Arc::new(Int32Array::from(vec![10, 20])) as ArrayRef];
+            if has_matching_id {
+                fields.push(field_with_id("previous_name", "3"));
+                columns.push(Arc::new(Int32Array::from(vec![Some(30), None])));
+            }
+            let physical_schema = Arc::new(Schema::new(fields));
+            let batch = RecordBatch::try_new(physical_schema.clone(), columns)?;
+            let adapter = AuronPhysicalExprAdapterFactory
+                .create(logical_schema.clone(), physical_schema.clone())?;
+            let column = Arc::new(Column::new("value", 0)) as PhysicalExprRef;
+            let rewritten = adapter.rewrite(column.clone())?;
+            assert_eq!(rewritten.data_type(&physical_schema)?, DataType::Int64);
+            let values = rewritten.evaluate(&batch)?.into_array(2)?;
+            assert_eq!(
+                values.as_primitive::<arrow::datatypes::Int64Type>(),
+                &arrow::array::Int64Array::from(if has_matching_id {
+                    vec![Some(30), None]
+                } else {
+                    vec![None, None]
+                }),
+            );
+            let predicate = adapter.rewrite(Arc::new(IsNullExpr::new(column)))?;
+            let result = predicate.evaluate(&batch)?.into_array(2)?;
+            assert_eq!(
+                result.as_boolean(),
+                &arrow::array::BooleanArray::from(vec![!has_matching_id, true]),
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_empty_projection_preserves_row_count() -> Result<()> {
