@@ -21,7 +21,7 @@ use arrow::{
 };
 use bigdecimal::{BigDecimal, RoundingMode};
 use datafusion::{
-    common::{Result, ScalarValue, exec_err},
+    common::{Result, ScalarValue, exec_datafusion_err, exec_err},
     logical_expr::{
         ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, TypeSignature, Volatility,
     },
@@ -121,14 +121,14 @@ impl ScalarUDFImpl for SparkRound {
             DataType::Float32 => Arc::new(
                 array
                     .as_primitive::<Float32Type>()
-                    .unary::<_, Float32Type>(|v| {
-                        round_float(f64::from(v), scale, self.half_even) as f32
-                    }),
+                    .try_unary::<_, Float32Type, _>(|v| {
+                        round_float(f64::from(v), scale, self.half_even).map(|v| v as f32)
+                    })?,
             ),
             DataType::Float64 => Arc::new(
                 array
                     .as_primitive::<Float64Type>()
-                    .unary::<_, Float64Type>(|v| round_float(v, scale, self.half_even)),
+                    .try_unary::<_, Float64Type, _>(|v| round_float(v, scale, self.half_even))?,
             ),
             DataType::Decimal128(_, input_scale) => {
                 let DataType::Decimal128(precision, output_scale) = result_type else {
@@ -233,15 +233,15 @@ fn round_decimal(
     Ok(result)
 }
 
-fn round_float(value: f64, scale: i32, half_even: bool) -> f64 {
+fn round_float(value: f64, scale: i32, half_even: bool) -> Result<f64> {
     if !value.is_finite() {
-        return value;
+        return Ok(value);
     }
     if value == 0.0 || scale <= -309 {
-        return 0.0;
+        return Ok(0.0);
     }
     if scale >= 324 || (scale >= 0 && value.fract() == 0.0) {
-        return value;
+        return Ok(value);
     }
     if scale == 0 {
         let result = if half_even {
@@ -249,11 +249,14 @@ fn round_float(value: f64, scale: i32, half_even: bool) -> f64 {
         } else {
             value.round()
         };
-        return if result == 0.0 { 0.0 } else { result };
+        return Ok(if result == 0.0 { 0.0 } else { result });
     }
     // Spark rounds BigDecimal.valueOf(double), including float inputs widened
     // to double, rather than multiplying a binary float by a power of ten.
-    let decimal = value.to_string().parse::<BigDecimal>().unwrap();
+    let decimal = value
+        .to_string()
+        .parse::<BigDecimal>()
+        .map_err(|e| exec_datafusion_err!("cannot convert floating-point value to decimal: {e}"))?;
     let mode = if half_even {
         RoundingMode::HalfEven
     } else {
@@ -263,8 +266,10 @@ fn round_float(value: f64, scale: i32, half_even: bool) -> f64 {
         .with_scale_round(i64::from(scale), mode)
         .to_string()
         .parse::<f64>()
-        .unwrap();
-    if result == 0.0 { 0.0 } else { result }
+        .map_err(|e| {
+            exec_datafusion_err!("cannot convert rounded decimal to floating-point value: {e}")
+        })?;
+    Ok(if result == 0.0 { 0.0 } else { result })
 }
 
 #[cfg(test)]

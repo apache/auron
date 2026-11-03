@@ -359,9 +359,10 @@ mod tests {
                             }
                         })
                         .collect::<Result<Vec<_>>>()?;
+                    let arg_field = Arc::new(Field::new("arg", DataType::Float64, true));
                     let result = udf.invoke_with_args(ScalarFunctionArgs {
                         args,
-                        arg_fields: vec![Arc::new(Field::new("arg", DataType::Float64, true)); 2],
+                        arg_fields: vec![arg_field; 2],
                         number_rows: 2,
                         return_field: Arc::new(Field::new("result", DataType::Float64, true)),
                         config_options: Arc::new(ConfigOptions::default()),
@@ -374,9 +375,7 @@ mod tests {
                     for actual in array.as_primitive::<Float64Type>() {
                         match (actual, expected) {
                             (Some(a), Some(e)) if e.is_nan() => assert!(a.is_nan()),
-                            (Some(a), Some(e)) => assert_eq!(a.to_bits(), e.to_bits()),
-                            (None, None) => {}
-                            _ => panic!("unexpected null: {actual:?} vs {expected:?}"),
+                            _ => assert_eq!(actual.map(f64::to_bits), expected.map(f64::to_bits)),
                         }
                     }
                 }
