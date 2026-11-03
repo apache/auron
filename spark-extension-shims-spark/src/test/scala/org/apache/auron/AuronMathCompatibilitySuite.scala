@@ -16,12 +16,43 @@
  */
 package org.apache.auron
 
-import org.apache.spark.sql.{AnalysisException, AuronQueryTest}
+import org.apache.spark.sql.{AnalysisException, AuronQueryTest, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 
 import org.apache.auron.util.SparkVersionUtil
 
 class AuronMathCompatibilitySuite extends AuronQueryTest with BaseAuronSQLSuite {
+  // QueryTest compares raw bits; JVM and native math may use different NaN signs/payloads.
+  private def canonicalizeNaNs(rows: Seq[Row]): Seq[Row] = {
+    rows.map(row =>
+      Row.fromSeq(row.toSeq.map {
+        case value: Double if value.isNaN => Double.NaN
+        case value => value
+      }))
+  }
+
+  test("power result comparison ignores only NaN encodings") {
+    val expected = Seq(Row(Double.NaN, -0.0d, Double.PositiveInfinity, null))
+    for (bits <- Seq(0x7ff8000000000001L, 0xfff8000000000000L)) {
+      val actual =
+        Seq(Row(java.lang.Double.longBitsToDouble(bits), -0.0d, Double.PositiveInfinity, null))
+      QueryTest
+        .sameRows(canonicalizeNaNs(expected), canonicalizeNaNs(actual))
+        .foreach(message => fail(message))
+    }
+    for ((expected, actual) <- Seq(
+        (Row(0.0d), Row(-0.0d)),
+        (Row(1.0d), Row(java.lang.Math.nextUp(1.0d))),
+        (Row(Double.PositiveInfinity), Row(Double.NegativeInfinity)),
+        (Row(null), Row(Double.NaN)),
+        (Row(Double.NaN), Row(0.0d)))) {
+      assert(
+        QueryTest
+          .sameRows(canonicalizeNaNs(Seq(expected)), canonicalizeNaNs(Seq(actual)))
+          .nonEmpty)
+    }
+  }
+
   test("power preserves Spark NaN, infinity, signed zero and null semantics") {
     withTable("math_inputs") {
       sql("create table math_inputs (x double, y double) using parquet")
@@ -31,9 +62,18 @@ class AuronMathCompatibilitySuite extends AuronQueryTest with BaseAuronSQLSuite 
           |(cast('-0.0' as double), -3), (cast('-0.0' as double), 3),
           |(cast('-0.0' as double), -2.5), (-2, 0.5), (null, 0), (1, null)
           |""".stripMargin)
-      checkSparkAnswerAndOperator("""select pow(x, y), power(x, y),
+      val query = """select pow(x, y), power(x, y),
           |pow(1.0D, y), pow(x, cast('NaN' as double)),
-          |pow(x, cast('Infinity' as double)) from math_inputs""".stripMargin)
+          |pow(x, cast('Infinity' as double)) from math_inputs""".stripMargin
+      var expected = Seq.empty[Row]
+      withSQLConf("spark.auron.enable" -> "false") {
+        expected = canonicalizeNaNs(sql(query).collect().toSeq)
+      }
+      val df = sql(query)
+      QueryTest
+        .sameRows(expected, canonicalizeNaNs(df.collect().toSeq))
+        .foreach(message => fail(message))
+      assertPlanIsNative(df)
     }
   }
 
