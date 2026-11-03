@@ -903,20 +903,18 @@ object NativeConverters extends Logging {
             }
           }
           .getOrElse(fallback(e))
-      case e: Round =>
-        e.scale match {
-          case Literal(n: Int, _) =>
-            buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(n.toLong)), e.dataType)
-          case _ =>
-            buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(0L)), e.dataType)
-        }
-
-      case e: BRound =>
-        e.scale match {
-          case Literal(n: Int, _) =>
-            buildExtScalarFunction("Spark_BRound", Seq(e.child, Literal(n.toLong)), e.dataType)
-          case _ =>
-            buildExtScalarFunction("Spark_BRound", Seq(e.child, Literal(0L)), e.dataType)
+      case e @ (_: Round | _: BRound) =>
+        val scale = e.children(1).eval()
+        if (scale == null) {
+          convertExprWithFallback(Literal.create(null, e.dataType), isPruningExpr, fallback)
+        } else {
+          buildExtScalarFunction(
+            if (e.isInstanceOf[BRound]) "Spark_BRound" else "Spark_Round",
+            Seq(
+              e.children.head,
+              Literal.create(scale, IntegerType),
+              Literal(Shims.get.getRoundFailOnError(e))),
+            e.dataType)
         }
 
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)

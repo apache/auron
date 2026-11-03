@@ -21,7 +21,6 @@ use datafusion_ext_commons::df_unimplemented_err;
 mod brickhouse;
 mod flink_datetime;
 mod spark_array;
-mod spark_bround;
 mod spark_check_overflow;
 mod spark_crypto;
 mod spark_dates;
@@ -34,7 +33,7 @@ mod spark_make_decimal;
 mod spark_map;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
-mod spark_round;
+pub mod spark_round;
 mod spark_strings;
 mod spark_unscaled_value;
 
@@ -111,8 +110,6 @@ pub fn create_auron_ext_function(
         "Spark_Second" => shared_function!(spark_dates::spark_second),
         "Spark_MonthsBetween" => shared_function!(spark_dates::spark_months_between),
         "Spark_BrickhouseArrayUnion" => shared_function!(brickhouse::array_union::array_union),
-        "Spark_Round" => shared_function!(spark_round::spark_round),
-        "Spark_BRound" => shared_function!(spark_bround::spark_bround),
         "Spark_NormalizeNanAndZero" => {
             shared_function!(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
@@ -253,7 +250,9 @@ mod tests {
                 ),
             ],
         )?;
-        let udf = datafusion_spark::function::math::round();
+        let udf = Arc::new(datafusion::logical_expr::ScalarUDF::from(
+            spark_round::SparkRound::new(false),
+        ));
         let round: PhysicalExprRef = Arc::new(ScalarFunctionExpr::new(
             udf.name(),
             udf.clone(),
@@ -300,7 +299,9 @@ mod tests {
         ] {
             let input_type = DataType::Decimal128(28, 8);
             let return_type = DataType::Decimal128(precision, output_scale);
-            let udf = datafusion_spark::function::math::round();
+            let udf = Arc::new(datafusion::logical_expr::ScalarUDF::from(
+                spark_round::SparkRound::new(false),
+            ));
             let scalar = ScalarValue::Decimal128(value, 28, 8);
             for input in [
                 ColumnarValue::Scalar(scalar.clone()),
@@ -324,6 +325,61 @@ mod tests {
                 let expected = ScalarValue::Decimal128(expected, precision, output_scale)
                     .to_array_of_size(2)?;
                 assert_eq!(result.into_array(2)?.as_ref(), expected.as_ref());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn spark_power_special_values_and_scalar_paths() -> Result<()> {
+        use arrow::{array::AsArray, datatypes::Float64Type};
+        let udf = datafusion_spark::function::math::pow();
+        for (base, exponent, expected) in [
+            (Some(1.0), Some(f64::NAN), Some(f64::NAN)),
+            (Some(1.0), Some(f64::INFINITY), Some(f64::NAN)),
+            (Some(-1.0), Some(f64::NEG_INFINITY), Some(f64::NAN)),
+            (Some(f64::NAN), Some(0.0), Some(1.0)),
+            (Some(-0.0), Some(-3.0), Some(f64::NEG_INFINITY)),
+            (Some(-0.0), Some(3.0), Some(-0.0)),
+            (Some(-0.0), Some(-2.5), Some(f64::INFINITY)),
+            (Some(-2.0), Some(0.5), Some(f64::NAN)),
+            (None, Some(0.0), None),
+            (Some(1.0), None, None),
+        ] {
+            for array_base in [false, true] {
+                for array_exponent in [false, true] {
+                    let args = [(base, array_base), (exponent, array_exponent)]
+                        .into_iter()
+                        .map(|(v, array)| {
+                            let scalar = ScalarValue::Float64(v);
+                            if array {
+                                Ok(ColumnarValue::Array(scalar.to_array_of_size(2)?))
+                            } else {
+                                Ok(ColumnarValue::Scalar(scalar))
+                            }
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let result = udf.invoke_with_args(ScalarFunctionArgs {
+                        args,
+                        arg_fields: vec![Arc::new(Field::new("arg", DataType::Float64, true)); 2],
+                        number_rows: 2,
+                        return_field: Arc::new(Field::new("result", DataType::Float64, true)),
+                        config_options: Arc::new(ConfigOptions::default()),
+                    })?;
+                    assert_eq!(
+                        matches!(result, ColumnarValue::Scalar(_)),
+                        !array_base && !array_exponent
+                    );
+                    let array = result.into_array(2)?;
+                    for actual in array.as_primitive::<Float64Type>() {
+                        match (actual, expected) {
+                            (Some(a), Some(e)) if e.is_nan() => assert!(a.is_nan()),
+                            (Some(a), Some(e)) => assert_eq!(a.to_bits(), e.to_bits()),
+                            (None, None) => {}
+                            _ => panic!("unexpected null: {actual:?} vs {expected:?}"),
+                        }
+                    }
+                }
             }
         }
         Ok(())

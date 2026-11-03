@@ -31,7 +31,11 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
               |""".stripMargin)
         checkSparkAnswerAndOperator("SELECT round(a / b, 2) FROM literal_fallback")
         checkSparkAnswerAndOperator(
-          "SELECT round(a, 4), round(a, -1), round(a, 0), round(a, 2) FROM literal_fallback")
+          "SELECT round(a, 4), round(a, 0), round(a, 2) FROM literal_fallback")
+        // Spark 3.0-3.2 require legacy mode for a negative decimal result scale.
+        withSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal" -> "true") {
+          checkSparkAnswerAndOperator("SELECT round(a, -1) FROM literal_fallback")
+        }
       }
     }
   }

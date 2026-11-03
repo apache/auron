@@ -1239,6 +1239,7 @@ version = "8.0.0"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
+ "bigdecimal",
  "chrono",
  "chrono-tz",
  "datafusion",

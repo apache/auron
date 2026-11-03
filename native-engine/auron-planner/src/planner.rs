@@ -1013,10 +1013,13 @@ impl PhysicalPlanner {
                     .collect::<Result<Vec<_>, _>>()?;
 
                 let scalar_udf = if scalar_function == protobuf::ScalarFunction::AuronExtFunctions
-                    && e.name == "Spark_Round"
+                    && matches!(e.name.as_str(), "Spark_Round" | "Spark_BRound")
                 {
-                    // SparkRound honors Spark's declared decimal result precision and scale.
-                    datafusion_spark::function::math::round()
+                    Arc::new(ScalarUDF::from(
+                        datafusion_ext_functions::spark_round::SparkRound::new(
+                            e.name == "Spark_BRound",
+                        ),
+                    ))
                 } else if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
                     let fun_name = &e.name;
                     let fun = datafusion_ext_functions::create_auron_ext_function(
@@ -1400,7 +1403,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Factorial => spark_fun::math::factorial(),
             ScalarFunction::Hex => spark_fun::math::hex(),
 
-            ScalarFunction::Power => f::math::power(),
+            ScalarFunction::Power => spark_fun::math::pow(),
             ScalarFunction::IsNaN => f::math::isnan(),
 
             ScalarFunction::AuronExtFunctions => {

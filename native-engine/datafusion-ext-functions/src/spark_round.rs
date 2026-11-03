@@ -16,432 +16,460 @@
 use std::sync::Arc;
 
 use arrow::{
-    array::{Decimal128Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array},
-    datatypes::DataType,
+    array::{Array, ArrayRef, AsArray, Decimal128Array, PrimitiveArray},
+    datatypes::{DataType, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type},
 };
+use bigdecimal::{BigDecimal, RoundingMode};
 use datafusion::{
-    common::{
-        DataFusionError, Result, ScalarValue,
-        cast::{
-            as_decimal128_array, as_float32_array, as_float64_array, as_int16_array,
-            as_int32_array, as_int64_array,
-        },
+    common::{Result, ScalarValue, exec_err},
+    logical_expr::{
+        ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, TypeSignature, Volatility,
     },
-    physical_plan::ColumnarValue,
 };
 
-/// Spark-style `round(expr, scale)` implementation.
-/// - Uses HALF_UP rounding mode (`0.5 → 1`, `-0.5 → -1`)
-/// - Supports negative scales (e.g., `round(123.4, -1) = 120`)
-/// - Handles Float, Decimal, Int16/32/64
-/// - Null-safe
-pub fn spark_round(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    if args.len() != 2 {
-        return Err(DataFusionError::Execution(
-            "spark_round() requires two arguments".to_string(),
-        ));
-    }
+/// Spark RoundBase: shared HALF_UP/HALF_EVEN implementation with Spark's result type.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct SparkRound {
+    half_even: bool,
+    signature: Signature,
+}
 
-    let value = &args[0];
-    let scale_val = &args[1];
-
-    // Parse scale (must be a literal integer)
-    let scale = match scale_val {
-        ColumnarValue::Scalar(ScalarValue::Int32(Some(n))) => *n,
-        ColumnarValue::Scalar(ScalarValue::Int64(Some(n))) => *n as i32,
-        _ => {
-            return Err(DataFusionError::Execution(
-                "spark_round() scale must be a literal integer".to_string(),
-            ));
-        }
-    };
-
-    match value {
-        // ---------- Array input ----------
-        ColumnarValue::Array(arr) => match arr.data_type() {
-            DataType::Decimal128(..) => {
-                let dec_arr = as_decimal128_array(arr)?;
-                let precision = dec_arr.precision();
-                let in_scale = dec_arr.scale();
-
-                let result = Decimal128Array::from_iter(dec_arr.iter().map(|opt| {
-                    opt.map(|v| {
-                        let diff = in_scale as i32 - scale;
-                        if diff >= 0 {
-                            round_i128_half_up(v, -diff)
-                        } else {
-                            v * 10_i128.pow((-diff) as u32)
-                        }
-                    })
-                }))
-                .with_precision_and_scale(precision, in_scale)
-                .map_err(|e| DataFusionError::Execution(e.to_string()))?;
-
-                Ok(ColumnarValue::Array(Arc::new(result)))
-            }
-
-            DataType::Int64 => Ok(ColumnarValue::Array(Arc::new(Int64Array::from_iter(
-                as_int64_array(arr)?
-                    .iter()
-                    .map(|opt| opt.map(|v| round_i128_half_up(v as i128, scale) as i64)),
-            )))),
-
-            DataType::Int32 => Ok(ColumnarValue::Array(Arc::new(Int32Array::from_iter(
-                as_int32_array(arr)?
-                    .iter()
-                    .map(|opt| opt.map(|v| round_i128_half_up(v as i128, scale) as i32)),
-            )))),
-
-            DataType::Int16 => Ok(ColumnarValue::Array(Arc::new(Int16Array::from_iter(
-                as_int16_array(arr)?
-                    .iter()
-                    .map(|opt| opt.map(|v| round_i128_half_up(v as i128, scale) as i16)),
-            )))),
-
-            DataType::Float32 => {
-                // Handle Float32 Array case
-                let arr = as_float32_array(arr)?;
-                let factor = 10_f32.powi(scale);
-                let result = Float32Array::from_iter(arr.iter().map(|opt| {
-                    opt.map(|v| {
-                        if v.is_nan() || v.is_infinite() {
-                            v
-                        } else {
-                            round_half_up_f32(v * factor) / factor
-                        }
-                    })
-                }));
-
-                Ok(ColumnarValue::Array(Arc::new(result)))
-            }
-
-            // Float64 fallback
-            _ => {
-                let arr = as_float64_array(arr)?;
-                let factor = 10_f64.powi(scale);
-                let result = Float64Array::from_iter(arr.iter().map(|opt| {
-                    opt.map(|v| {
-                        if v.is_nan() || v.is_infinite() {
-                            v
-                        } else {
-                            round_half_up_f64(v * factor) / factor
-                        }
-                    })
-                }));
-                Ok(ColumnarValue::Array(Arc::new(result)))
-            }
-        },
-
-        // ---------- Scalar input ----------
-        ColumnarValue::Scalar(sv) => {
-            if sv.is_null() {
-                return Ok(ColumnarValue::Scalar(sv.clone()));
-            }
-
-            Ok(match sv {
-                ScalarValue::Float64(Some(v)) => {
-                    let f = 10_f64.powi(scale);
-                    ColumnarValue::Scalar(ScalarValue::Float64(Some(round_half_up_f64(v * f) / f)))
-                }
-                ScalarValue::Float32(Some(v)) => {
-                    let f = 10_f64.powi(scale);
-                    ColumnarValue::Scalar(ScalarValue::Float32(Some(
-                        (round_half_up_f64((*v as f64) * f) / f) as f32,
-                    )))
-                }
-                ScalarValue::Int64(Some(v)) => ColumnarValue::Scalar(ScalarValue::Int64(Some(
-                    round_i128_half_up(*v as i128, scale) as i64,
-                ))),
-                ScalarValue::Int32(Some(v)) => ColumnarValue::Scalar(ScalarValue::Int32(Some(
-                    round_i128_half_up(*v as i128, scale) as i32,
-                ))),
-                ScalarValue::Int16(Some(v)) => ColumnarValue::Scalar(ScalarValue::Int16(Some(
-                    round_i128_half_up(*v as i128, scale) as i16,
-                ))),
-                ScalarValue::Decimal128(Some(v), p, s) => ColumnarValue::Scalar(
-                    ScalarValue::Decimal128(Some(round_i128_half_up(*v, scale)), *p, *s),
-                ),
-                _ => {
-                    return Err(DataFusionError::Execution(
-                        "Unsupported type for spark_round()".to_string(),
-                    ));
-                }
-            })
+impl SparkRound {
+    pub fn new(half_even: bool) -> Self {
+        Self {
+            half_even,
+            signature: Signature::one_of(
+                vec![TypeSignature::Any(2), TypeSignature::Any(3)],
+                Volatility::Immutable,
+            ),
         }
     }
 }
 
-/// Spark-style HALF_UP rounding (0.5 → 1, -0.5 → -1)
-fn round_half_up_f64(x: f64) -> f64 {
-    if x >= 0.0 {
-        (x + 0.5).floor()
-    } else {
-        (x - 0.5).ceil()
+impl ScalarUDFImpl for SparkRound {
+    fn name(&self) -> &str {
+        if self.half_even {
+            "Spark_BRound"
+        } else {
+            "Spark_Round"
+        }
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
+        // The physical planner supplies Spark's analyzed decimal result type.
+        Ok(arg_types[0].clone())
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let result_type = args.return_field.data_type();
+        let scale = match args.args.get(1) {
+            Some(ColumnarValue::Scalar(v)) if v.is_null() => {
+                return Ok(ColumnarValue::Scalar(ScalarValue::try_from(result_type)?));
+            }
+            Some(ColumnarValue::Scalar(ScalarValue::Int32(Some(v)))) => *v,
+            Some(ColumnarValue::Scalar(ScalarValue::Int64(Some(v)))) => {
+                i32::try_from(*v).map_err(|_| {
+                    datafusion::common::DataFusionError::Execution(
+                        "round scale is outside the int32 range".into(),
+                    )
+                })?
+            }
+            _ => return exec_err!("round scale must be a constant integer"),
+        };
+        let ansi = match args.args.get(2) {
+            Some(ColumnarValue::Scalar(ScalarValue::Boolean(Some(v)))) => *v,
+            None => args.config_options.execution.enable_ansi_mode,
+            _ => return exec_err!("round ANSI mode must be a constant boolean"),
+        };
+        let input = &args.args[0];
+        if scale >= 0 && input.data_type().is_integer() {
+            return Ok(input.clone());
+        }
+        let scalar = matches!(input, ColumnarValue::Scalar(_));
+        let array = input.to_array(if scalar { 1 } else { args.number_rows })?;
+
+        macro_rules! integer {
+            ($t:ty, $native:ty) => {{
+                let values = array.as_primitive::<$t>();
+                let result: PrimitiveArray<$t> = values.try_unary(|v| {
+                    // i128 can represent the intermediate 10^19 for every Spark integer.
+                    let rounded = round_integer(i128::from(v), scale, self.half_even);
+                    if ansi {
+                        <$native>::try_from(rounded).map_err(|_| {
+                            datafusion::common::DataFusionError::Execution(format!(
+                                "{} overflow on {}({v}, {scale})",
+                                stringify!($native),
+                                self.name()
+                            ))
+                        })
+                    } else {
+                        Ok(rounded as $native)
+                    }
+                })?;
+                Arc::new(result) as ArrayRef
+            }};
+        }
+        let result: ArrayRef = match array.data_type() {
+            DataType::Int8 => integer!(Int8Type, i8),
+            DataType::Int16 => integer!(Int16Type, i16),
+            DataType::Int32 => integer!(Int32Type, i32),
+            DataType::Int64 => integer!(Int64Type, i64),
+            DataType::Float32 => Arc::new(
+                array
+                    .as_primitive::<Float32Type>()
+                    .unary::<_, Float32Type>(|v| {
+                        round_float(f64::from(v), scale, self.half_even) as f32
+                    }),
+            ),
+            DataType::Float64 => Arc::new(
+                array
+                    .as_primitive::<Float64Type>()
+                    .unary::<_, Float64Type>(|v| round_float(v, scale, self.half_even)),
+            ),
+            DataType::Decimal128(_, input_scale) => {
+                let DataType::Decimal128(precision, output_scale) = result_type else {
+                    return exec_err!("round decimal result must be decimal128");
+                };
+                // Produce the final unscaled value directly; do not round and then cast
+                // an intermediate array carrying the input precision and scale.
+                let mut builder = Decimal128Array::builder(array.len());
+                for value in array.as_primitive::<arrow::datatypes::Decimal128Type>() {
+                    builder.append_option(match value {
+                        Some(v) => round_decimal(
+                            v,
+                            *input_scale,
+                            scale,
+                            *precision,
+                            *output_scale,
+                            self.half_even,
+                        )?,
+                        None => None,
+                    });
+                }
+                Arc::new(
+                    builder
+                        .finish()
+                        .with_precision_and_scale(*precision, *output_scale)?,
+                )
+            }
+            DataType::Null => {
+                return Ok(ColumnarValue::Scalar(ScalarValue::try_from(result_type)?));
+            }
+            t => return exec_err!("unsupported Spark rounding type: {t}"),
+        };
+        if scalar {
+            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+                &result, 0,
+            )?))
+        } else {
+            Ok(ColumnarValue::Array(result))
+        }
     }
 }
 
-/// Spark-style HALF_UP rounding (0.5 → 1, -0.5 → -1) for Float32
-fn round_half_up_f32(x: f32) -> f32 {
-    if x >= 0.0 {
-        (x + 0.5).floor()
+/// Divide by a power of ten with the requested tie rule. Spark decimals have
+/// at most 38 digits; rounding further to the left always produces zero.
+fn rounded_quotient(value: i128, digits: i64, half_even: bool) -> i128 {
+    if digits <= 0 {
+        return value;
+    }
+    if digits > 38 {
+        return 0;
+    }
+    let factor = 10_i128.pow(digits as u32);
+    let quotient = value / factor;
+    let remainder = (value % factor).abs();
+    let half = factor / 2;
+    if remainder > half || (remainder == half && (!half_even || quotient % 2 != 0)) {
+        quotient + value.signum()
     } else {
-        (x - 0.5).ceil()
+        quotient
     }
 }
 
-/// Integer rounding using Spark's HALF_UP logic without float precision loss
-fn round_i128_half_up(value: i128, scale: i32) -> i128 {
+fn round_integer(value: i128, scale: i32, half_even: bool) -> i128 {
     if scale >= 0 {
         return value;
     }
-    let factor = 10_i128.pow((-scale) as u32);
-    let remainder = value % factor;
-    let base = value - remainder;
-
-    if value >= 0 {
-        if remainder * 2 >= factor {
-            base + factor
-        } else {
-            base
-        }
-    } else if remainder.abs() * 2 >= factor {
-        base - factor
-    } else {
-        base
+    let digits = -i64::from(scale);
+    // All Spark integral values are i64 or narrower.
+    if digits > 19 {
+        return 0;
     }
+    rounded_quotient(value, digits, half_even) * 10_i128.pow(digits as u32)
+}
+
+fn round_decimal(
+    value: i128,
+    input_scale: i8,
+    scale: i32,
+    precision: u8,
+    output_scale: i8,
+    half_even: bool,
+) -> Result<Option<i128>> {
+    let rounding_scale = i64::from(scale).min(i64::from(input_scale));
+    let quotient = rounded_quotient(value, i64::from(input_scale) - rounding_scale, half_even);
+    let shift = i64::from(output_scale) - rounding_scale;
+    let result = if quotient == 0 {
+        Some(0)
+    } else if shift < 0 {
+        return exec_err!("round result scale is below the rounding scale");
+    } else {
+        u32::try_from(shift)
+            .ok()
+            .and_then(|s| 10_i128.checked_pow(s))
+            .and_then(|factor| quotient.checked_mul(factor))
+    }
+    .filter(|v| v.abs() < 10_i128.pow(u32::from(precision)));
+    // Spark Decimal.toPrecision returns null; Decimal.set for a negative scale
+    // throws on precision overflow, independently of ANSI mode.
+    if result.is_none() && scale < 0 {
+        return exec_err!("decimal precision exceeds {precision} while rounding");
+    }
+    Ok(result)
+}
+
+fn round_float(value: f64, scale: i32, half_even: bool) -> f64 {
+    if !value.is_finite() {
+        return value;
+    }
+    if value == 0.0 || scale <= -309 {
+        return 0.0;
+    }
+    if scale >= 324 || (scale >= 0 && value.fract() == 0.0) {
+        return value;
+    }
+    if scale == 0 {
+        let result = if half_even {
+            value.round_ties_even()
+        } else {
+            value.round()
+        };
+        return if result == 0.0 { 0.0 } else { result };
+    }
+    // Spark rounds BigDecimal.valueOf(double), including float inputs widened
+    // to double, rather than multiplying a binary float by a power of ten.
+    let decimal = value.to_string().parse::<BigDecimal>().unwrap();
+    let mode = if half_even {
+        RoundingMode::HalfEven
+    } else {
+        RoundingMode::HalfUp
+    };
+    let result = decimal
+        .with_scale_round(i64::from(scale), mode)
+        .to_string()
+        .parse::<f64>()
+        .unwrap();
+    if result == 0.0 { 0.0 } else { result }
 }
 
 #[cfg(test)]
 mod tests {
-    use datafusion::{
-        common::{Result, ScalarValue, cast::*},
-        physical_plan::ColumnarValue,
-    };
-
     use super::*;
+    use arrow::datatypes::Field;
+    use datafusion::common::config::ConfigOptions;
 
-    /// Unit test for `spark_round()` verifying correct rounding behavior on
-    /// Decimal128 inputs.
-    #[test]
-    fn test_round_decimal() -> Result<()> {
-        let arr = Arc::new(
-            Decimal128Array::from_iter_values([12345_i128, -67895_i128])
-                .with_precision_and_scale(10, 2)?,
-        );
-
-        let result = spark_round(&[
-            ColumnarValue::Array(arr.clone()),
-            ColumnarValue::Scalar(ScalarValue::Int32(Some(1))),
-        ])?;
-
-        assert!(matches!(result, ColumnarValue::Array(_)));
-
-        let out = result.into_array(2)?;
-        let arr = as_decimal128_array(&out)?;
-        let values: Vec<_> = arr.iter().collect();
-        assert_eq!(values, vec![Some(12350_i128), Some(-67900_i128)]);
-
-        Ok(())
+    fn invoke(
+        value: ScalarValue,
+        scale: Option<i32>,
+        output_type: DataType,
+        even: bool,
+        ansi: bool,
+        array: bool,
+    ) -> Result<ColumnarValue> {
+        let input = if array {
+            ColumnarValue::Array(value.to_array_of_size(2)?)
+        } else {
+            ColumnarValue::Scalar(value)
+        };
+        let args = vec![
+            input,
+            ColumnarValue::Scalar(ScalarValue::Int32(scale)),
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(ansi))),
+        ];
+        SparkRound::new(even).invoke_with_args(ScalarFunctionArgs {
+            arg_fields: args
+                .iter()
+                .map(|v| Arc::new(Field::new("arg", v.data_type(), true)))
+                .collect(),
+            args,
+            number_rows: 2,
+            return_field: Arc::new(Field::new("result", output_type, true)),
+            config_options: Arc::new(ConfigOptions::default()),
+        })
     }
 
-    /// Unit test for `spark_round()` verifying correct rounding behavior
-    /// when a **negative scale** is provided (i.e., rounding to tens, hundreds,
-    /// etc.).
     #[test]
-    fn test_round_negative_scale() -> Result<()> {
-        let arr = Arc::new(Float64Array::from(vec![Some(123.45), Some(-678.9)]));
-        let result = spark_round(&[
-            ColumnarValue::Array(arr),
-            ColumnarValue::Scalar(ScalarValue::Int32(Some(-1))),
-        ])?;
-
-        let out = result.into_array(2)?;
-        let out = as_float64_array(&out)?;
-        let v: Vec<_> = out.iter().collect();
-
-        assert_eq!(v, vec![Some(120.0), Some(-680.0)]);
-        Ok(())
-    }
-
-    /// Unit test for `spark_round()` verifying rounding of Float64 values to a
-    /// positive decimal
-    #[test]
-    fn test_round_float() -> Result<()> {
-        let arr = Arc::new(Float64Array::from(vec![
-            Some(1.2345),
-            Some(-2.3456),
-            Some(0.5),
-            Some(-0.5),
-            None,
-        ]));
-
-        let result = spark_round(&[
-            ColumnarValue::Array(arr),
-            ColumnarValue::Scalar(ScalarValue::Int32(Some(2))),
-        ])?;
-
-        let out = result.into_array(5)?;
-        let out = as_float64_array(&out)?;
-        let v: Vec<_> = out.iter().collect();
-
-        assert_eq!(
-            v,
-            vec![Some(1.23), Some(-2.35), Some(0.5), Some(-0.5), None]
-        );
-        Ok(())
-    }
-
-    /// Unit test for `spark_round()` verifying Spark-style half-away-from-zero
-    /// rounding on scalar Float64.
-    #[allow(clippy::panic)]
-    #[test]
-    fn test_round_scalar() -> Result<()> {
-        let s = ColumnarValue::Scalar(ScalarValue::Float64(Some(-1.5)));
-        let result = spark_round(&[s, ColumnarValue::Scalar(ScalarValue::Int32(Some(0)))])?;
-        match result {
-            ColumnarValue::Scalar(ScalarValue::Float64(Some(v))) => assert_eq!(v, -2.0),
-            _ => panic!("wrong result"),
+    fn decimal_ties_scales_and_overflow() -> Result<()> {
+        for array in [false, true] {
+            for even in [false, true] {
+                for (value, input_scale, scale, precision, output_scale, expected) in [
+                    (
+                        Some(2685),
+                        3,
+                        Some(2),
+                        10,
+                        2,
+                        Some(if even { 268 } else { 269 }),
+                    ),
+                    (
+                        Some(-2685),
+                        3,
+                        Some(2),
+                        10,
+                        2,
+                        Some(if even { -268 } else { -269 }),
+                    ),
+                    (Some(2675), 3, Some(2), 10, 2, Some(268)),
+                    (
+                        Some(125),
+                        0,
+                        Some(-1),
+                        10,
+                        0,
+                        Some(if even { 120 } else { 130 }),
+                    ),
+                    (Some(2675), 3, Some(8), 10, 3, Some(2675)),
+                    (None, 3, Some(2), 10, 2, None),
+                    (Some(2675), 3, None, 10, 0, None),
+                    (
+                        Some(10_i128.pow(38) - 1),
+                        38,
+                        Some(37),
+                        38,
+                        37,
+                        Some(10_i128.pow(37)),
+                    ),
+                ] {
+                    let output_type = DataType::Decimal128(precision, output_scale);
+                    let result = invoke(
+                        ScalarValue::Decimal128(value, 38, input_scale),
+                        scale,
+                        output_type.clone(),
+                        even,
+                        false,
+                        array,
+                    )?;
+                    assert_eq!(result.data_type(), output_type);
+                    let expected = ScalarValue::Decimal128(expected, precision, output_scale)
+                        .to_array_of_size(2)?;
+                    assert_eq!(result.into_array(2)?.as_ref(), expected.as_ref());
+                }
+                for ansi in [false, true] {
+                    assert!(
+                        invoke(
+                            ScalarValue::Decimal128(Some(10_i128.pow(38) - 1), 38, 0),
+                            Some(-1),
+                            DataType::Decimal128(38, 0),
+                            even,
+                            ansi,
+                            array
+                        )
+                        .is_err()
+                    );
+                }
+            }
         }
         Ok(())
     }
 
-    /// Tests Spark-compatible rounding for 16-bit integer (Short).
     #[test]
-    fn test_spark_round_short_pi_scales() -> Result<()> {
-        let short_pi: i16 = 31415;
-        let expected: Vec<i16> = vec![
-            0, 0, 30000, 31000, 31400, 31420, 31415, 31415, 31415, 31415, 31415, 31415, 31415,
-        ];
-
-        for (i, scale) in (-6..=6).enumerate() {
-            let result = spark_round(&[
-                ColumnarValue::Scalar(ScalarValue::Int16(Some(short_pi))),
-                ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
-            ])?;
-
-            let arr = result.into_array(1)?;
-            let out = as_int16_array(&arr)?;
-            assert_eq!(out.value(0), expected[i]);
+    fn integer_limits_and_ansi() -> Result<()> {
+        for array in [false, true] {
+            for even in [false, true] {
+                for value in [i64::MIN, i64::MAX] {
+                    let expected = (i128::from(value.signum()) * 10_i128.pow(19)) as i64;
+                    let result = invoke(
+                        ScalarValue::Int64(Some(value)),
+                        Some(-19),
+                        DataType::Int64,
+                        even,
+                        false,
+                        array,
+                    )?;
+                    assert_eq!(
+                        result.into_array(2)?.as_ref(),
+                        ScalarValue::Int64(Some(expected))
+                            .to_array_of_size(2)?
+                            .as_ref()
+                    );
+                    assert!(
+                        invoke(
+                            ScalarValue::Int64(Some(value)),
+                            Some(-19),
+                            DataType::Int64,
+                            even,
+                            true,
+                            array
+                        )
+                        .is_err()
+                    );
+                }
+                for value in [
+                    ScalarValue::Int8(Some(127)),
+                    ScalarValue::Int16(Some(32767)),
+                    ScalarValue::Int32(Some(i32::MAX)),
+                ] {
+                    assert!(
+                        invoke(
+                            value.clone(),
+                            Some(-1),
+                            value.data_type(),
+                            even,
+                            true,
+                            array
+                        )
+                        .is_err()
+                    );
+                }
+                let null = invoke(
+                    ScalarValue::Int64(None),
+                    Some(-19),
+                    DataType::Int64,
+                    even,
+                    true,
+                    array,
+                )?;
+                assert_eq!(null.into_array(2)?.null_count(), 2);
+            }
         }
         Ok(())
     }
 
-    /// Tests Spark-compatible rounding for Float32.
     #[test]
-    fn test_spark_round_float_pi_scales() -> Result<()> {
-        let float_pi = 3.1415_f32;
-        let expected = vec![
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.141, 3.1415, 3.1415, 3.1415,
-        ];
-
-        for (i, scale) in (-6..=6).enumerate() {
-            let result = spark_round(&[
-                ColumnarValue::Scalar(ScalarValue::Float32(Some(float_pi))),
-                ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
-            ])?;
-
-            let arr = result.into_array(1)?;
-            let out = as_float32_array(&arr)?;
-            assert!(
-                (out.value(0) - expected[i]).abs() < 1e-6,
-                "Mismatch at scale {scale}: expected {}, got {}",
-                expected[i],
-                out.value(0)
-            );
-        }
-        Ok(())
-    }
-
-    /// Tests Spark-compatible rounding for Float64 (Double precision).
-    #[test]
-    fn test_spark_round_double_pi_scales() -> Result<()> {
-        let double_pi = std::f64::consts::PI;
-        let expected = vec![
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142, 3.1416, 3.14159, 3.141593,
-        ];
-
-        for (i, scale) in (-6..=6).enumerate() {
-            let result = spark_round(&[
-                ColumnarValue::Scalar(ScalarValue::Float64(Some(double_pi))),
-                ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
-            ])?;
-
-            let arr = result.into_array(1)?;
-            let out = as_float64_array(&arr)?;
-            let actual = out.value(0);
-            assert!(
-                (actual - expected[i]).abs() < 1e-9,
-                "Mismatch at scale {scale}: expected {}, got {}",
-                expected[i],
-                actual
-            );
-        }
-        Ok(())
-    }
-
-    /// Tests Spark-compatible rounding for Int32.
-    #[test]
-    fn test_spark_round_int_pi_scales() -> Result<()> {
-        let int_pi = 314159265_i32;
-        let expected = vec![
-            314000000, 314200000, 314160000, 314159000, 314159300, 314159270, 314159265, 314159265,
-            314159265, 314159265, 314159265, 314159265, 314159265,
-        ];
-
-        for (i, scale) in (-6..=6).enumerate() {
-            let result = spark_round(&[
-                ColumnarValue::Scalar(ScalarValue::Int32(Some(int_pi))),
-                ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
-            ])?;
-
-            let arr = result.into_array(1)?;
-            let out = as_int32_array(&arr)?;
-            assert_eq!(
-                out.value(0),
-                expected[i],
-                "Mismatch at scale {scale}: expected {}, got {}",
-                expected[i],
-                out.value(0)
-            );
-        }
-        Ok(())
-    }
-
-    /// Tests Spark-compatible rounding for Decimal128 (Long in Spark).
-    #[test]
-    fn test_spark_round_long_pi_scales() -> Result<()> {
-        let long_pi = 31415926535897932_i128;
-        let expected = vec![
-            31415926536000000,
-            31415926535900000,
-            31415926535900000,
-            31415926535898000,
-            31415926535897900,
-            31415926535897930,
-            31415926535897932,
-            31415926535897932,
-            31415926535897932,
-            31415926535897932,
-            31415926535897932,
-            31415926535897932,
-            31415926535897932,
-        ];
-
-        for (i, scale) in (-6..=6).enumerate() {
-            let result = spark_round(&[
-                ColumnarValue::Scalar(ScalarValue::Decimal128(Some(long_pi), 38, 0)),
-                ColumnarValue::Scalar(ScalarValue::Int32(Some(scale))),
-            ])?;
-
-            let arr = result.into_array(1)?;
-            let out = as_decimal128_array(&arr)?;
-            assert_eq!(
-                out.value(0),
-                expected[i],
-                "Mismatch at scale {scale}: expected {}, got {}",
-                expected[i],
-                out.value(0)
-            );
+    fn floating_point_rounding_and_positive_zero() -> Result<()> {
+        for array in [false, true] {
+            for even in [false, true] {
+                for (value, scale, expected) in [
+                    (1.015, 2, 1.02),
+                    (2.5, 0, if even { 2.0 } else { 3.0 }),
+                    (-2.5, 0, if even { -2.0 } else { -3.0 }),
+                    (3.5, 0, 4.0),
+                    (1e23, 0, 1e23),
+                    (2.685, 2, if even { 2.68 } else { 2.69 }),
+                    (-0.0, 2, 0.0),
+                    (-0.01, 0, 0.0),
+                    (f64::INFINITY, 0, f64::INFINITY),
+                ] {
+                    let result = invoke(
+                        ScalarValue::Float64(Some(value)),
+                        Some(scale),
+                        DataType::Float64,
+                        even,
+                        false,
+                        array,
+                    )?
+                    .into_array(2)?;
+                    assert_eq!(
+                        result.as_primitive::<Float64Type>().value(0).to_bits(),
+                        expected.to_bits()
+                    );
+                }
+            }
         }
         Ok(())
     }
