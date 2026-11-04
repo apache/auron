@@ -21,6 +21,7 @@ import java.util.ServiceLoader
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
@@ -28,7 +29,7 @@ import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag, requiredReservedOrderTag}
+import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, neverConvertReasonTag, requiredReservedOrderTag}
 import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.join.JoinBuildSides
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
@@ -48,6 +49,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -62,6 +64,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeOrcInsertIntoHiveTableBase
 import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
+import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeSortBase
 import org.apache.spark.sql.execution.auron.plan.NativeUnionBase
 import org.apache.spark.sql.execution.auron.plan.Util
@@ -198,13 +201,45 @@ object AuronConverters extends Logging {
       exec
         .getTagValue(childOrderingRequiredTag)
         .foreach(newExec.setTagValue(childOrderingRequiredTag, _))
-      exec.getTagValue(joinSmallerSideTag).foreach(newExec.setTagValue(joinSmallerSideTag, _))
       exec
         .getTagValue(requiredReservedOrderTag)
         .foreach(newExec.setTagValue(requiredReservedOrderTag, _))
 
       if (!isNeverConvert(newExec)) {
         newExec = convertSparkPlan(newExec)
+      }
+      if (exec.isInstanceOf[SortMergeJoinExec] &&
+        newExec.isInstanceOf[NativeShuffledHashJoinBase]) {
+        def resetOrdering(plan: SparkPlan, required: Boolean): Boolean = {
+          var changed = plan.getTagValue(childOrderingRequiredTag).contains(true) != required
+          plan.setTagValue(childOrderingRequiredTag, required)
+          plan match {
+            case _: BroadcastHashJoinExec | _: BroadcastNestedLoopJoinExec |
+                _: ShuffledHashJoinExec =>
+              changed ||= plan.getTagValue(requiredReservedOrderTag).contains(true) != required
+              plan.setTagValue(requiredReservedOrderTag, required)
+            case _ =>
+          }
+          val inherited = required && !plan.isInstanceOf[SortExec] &&
+            !plan.isInstanceOf[NativeSortBase]
+          plan.children.zip(plan.requiredChildOrdering).foreach { case (child, ordering) =>
+            val childChanged = resetOrdering(child, inherited || ordering.nonEmpty)
+            changed ||= childChanged
+          }
+          changed
+        }
+        val children = exec.children.zip(newExec.children).map { case (child, converted) =>
+          val input = child match {
+            case sort: SortExec => sort.child
+            case other => other
+          }
+          if (resetOrdering(input, required = false)) {
+            addRenameColumnsExec(convertToNative(convertSparkPlanRecursively(input)))
+          } else {
+            converted
+          }
+        }
+        newExec = newExec.withNewChildren(children)
       }
       danglingConverted = newDanglingConverted :+ newExec
     }
@@ -568,13 +603,59 @@ object AuronConverters extends Logging {
       exec.output)
   }
 
+  private def getForcedShuffledHashJoinBuildSide(exec: SortMergeJoinExec): JoinBuildSide = {
+    import org.apache.spark.sql.execution.adaptive.QueryStageExec
+    import org.apache.spark.sql.execution.auron.plan.NativeRenameColumnsBase
+
+    def runtimeSize(plan: SparkPlan): Option[BigInt] = plan match {
+      case stage: QueryStageExec => stage.computeStats().map(_.sizeInBytes)
+      case _: NativeSortBase | _: SortExec | _: NativeRenameColumnsBase |
+          _: ConvertToNativeBase | _: InputAdapter =>
+        runtimeSize(plan.children.head)
+      case reader if Seq("AQEShuffleRead", "CustomShuffleReader").contains(reader.nodeName) =>
+        runtimeSize(reader.children.head)
+      case _ => None
+    }
+
+    def validSize(size: BigInt): Boolean = size >= 0 && size < BigInt(Long.MaxValue)
+
+    val sizes = try {
+      val runtimeSizes = for {
+        leftSize <- runtimeSize(exec.left).filter(validSize)
+        rightSize <- runtimeSize(exec.right).filter(validSize)
+      } yield (leftSize, rightSize, "runtime")
+      runtimeSizes.orElse {
+        exec.logicalLink.collect { case join: Join =>
+          (join.left.stats.sizeInBytes, join.right.stats.sizeInBytes, "logical")
+        }.filter { case (leftSize, rightSize, _) =>
+          Seq(leftSize, rightSize).forall(size =>
+            validSize(size) && size != SQLConf.get.defaultSizeInBytes)
+        }
+      }
+    } catch {
+      case NonFatal(err) =>
+        logWarning("Unable to read join statistics, defaults to BuildRight", err)
+        None
+    }
+    sizes match {
+      case Some((leftSize, rightSize, source)) =>
+        val buildSide = if (leftSize < rightSize) JoinBuildLeft else JoinBuildRight
+        logInfo(
+          s"Forced shuffled hash join: leftKeys=${exec.leftKeys}, rightKeys=${exec.rightKeys}, " +
+            s"statistics=$source, leftSize=$leftSize, rightSize=$rightSize, buildSide=$buildSide")
+        buildSide
+      case None =>
+        logWarning("Join statistics are missing or invalid, defaults to BuildRight")
+        JoinBuildRight
+    }
+  }
+
   def convertSortMergeJoinExec(exec: SortMergeJoinExec): SparkPlan = {
     val requireOrdering = exec.getTagValue(childOrderingRequiredTag).contains(true)
 
     // force shuffled-hash join
     if (!requireOrdering
-      && sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN)
-      && exec.children.forall(_.isInstanceOf[NativeSortBase])) {
+      && sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN)) {
       val (leftKeys, rightKeys, joinType, condition, left, right, isSkewJoin) =
         (
           exec.leftKeys,
@@ -592,18 +673,17 @@ object AuronConverters extends Logging {
           "joinType" -> joinType,
           "condition" -> condition))
 
-      val buildSide = exec
-        .getTagValue(joinSmallerSideTag)
-        .map(_.asInstanceOf[JoinBuildSide])
-        .getOrElse {
-          logWarning("JoinSmallerSideTag is missing, defaults to BuildRight")
-          JoinBuildRight
-        }
+      val buildSide = getForcedShuffledHashJoinBuildSide(exec)
+      def withoutSort(plan: SparkPlan): SparkPlan = plan match {
+        case sort: NativeSortBase => sort.child
+        case sort: SortExec => sort.child
+        case other => other
+      }
 
       validateNativeJoinCondition(condition)
       return Shims.get.createNativeShuffledHashJoinExec(
-        addRenameColumnsExec(convertToNative(left.children(0))),
-        addRenameColumnsExec(convertToNative(right.children(0))),
+        addRenameColumnsExec(convertToNative(withoutSort(left))),
+        addRenameColumnsExec(convertToNative(withoutSort(right))),
         leftKeys,
         rightKeys,
         joinType,

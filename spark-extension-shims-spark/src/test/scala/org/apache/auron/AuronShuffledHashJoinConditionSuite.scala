@@ -16,9 +16,16 @@
  */
 package org.apache.auron
 
-import org.apache.spark.sql.catalyst.expressions.LessThan
-import org.apache.spark.sql.catalyst.plans.ExistenceJoin
-import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
+import org.apache.spark.sql.auron.{AuronConvertStrategy, AuronConverters, Shims}
+import org.apache.spark.sql.auron.AuronConvertStrategy.childOrderingRequiredTag
+import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, LessThan}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LeafNode, Statistics}
+import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.auron.plan.{NativeShuffledHashJoinBase, NativeSortBase, NativeSortMergeJoinBase}
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.internal.SQLConf
 
 import org.apache.auron.util.AuronTestUtils
 
@@ -80,6 +87,180 @@ class AuronShuffledHashJoinConditionSuite extends AuronJoinConditionTestBase {
             |ON l.k = r.k AND l.v < r.v
             |""".stripMargin,
           _.isInstanceOf[NativeShuffledHashJoinBase])
+      }
+    }
+  }
+
+  private case class SizedJoinInput(output: Seq[Attribute], size: BigInt) extends LeafNode {
+    override def computeStats(): Statistics = Statistics(sizeInBytes = size)
+  }
+
+  test("forced SHJ selects by valid statistics and defaults to BuildRight otherwise") {
+    withShuffledJoin(force = true) {
+      val defaultSize = BigInt(SQLConf.get.defaultSizeInBytes)
+      val cases = Seq(
+        (Some((BigInt(8), BigInt(80))), JoinBuildLeft),
+        (Some((BigInt(80), BigInt(8))), JoinBuildRight),
+        (Some((BigInt(8), BigInt(8))), JoinBuildRight),
+        (Some((BigInt(0), BigInt(80))), JoinBuildLeft),
+        (Some((BigInt(-1), BigInt(80))), JoinBuildRight),
+        (Some((BigInt(8), BigInt(-1))), JoinBuildRight),
+        (Some((defaultSize, BigInt(80))), JoinBuildRight),
+        (Some((BigInt(8), defaultSize)), JoinBuildRight),
+        (Some((BigInt(8), BigInt(Long.MaxValue))), JoinBuildRight),
+        (None, JoinBuildRight))
+      for ((sizes, expected) <- cases) {
+        val original = withSQLConf("spark.auron.enabled" -> "false") {
+          spark
+            .sql("""
+              |SELECT /*+ MERGE(l, r) */ *
+              |FROM condition_left l JOIN condition_right r ON l.k = r.k
+              |""".stripMargin)
+            .queryExecution
+            .executedPlan
+            .collectFirst { case join: SortMergeJoinExec => join }
+            .get
+        }
+        val logicalJoin = original.logicalLink.get.asInstanceOf[Join]
+        val join = original
+          .makeCopy(original.productIterator.map(_.asInstanceOf[AnyRef]).toArray)
+          .asInstanceOf[SortMergeJoinExec]
+        sizes match {
+          case Some((leftSize, rightSize)) =>
+            join.setLogicalLink(
+              logicalJoin.copy(
+                left = SizedJoinInput(logicalJoin.left.output, leftSize),
+                right = SizedJoinInput(logicalJoin.right.output, rightSize)))
+          case None =>
+            join.unsetTagValue(SparkPlan.LOGICAL_PLAN_TAG)
+            join.unsetTagValue(SparkPlan.LOGICAL_PLAN_INHERITED_TAG)
+        }
+        AuronConvertStrategy.apply(join)
+        val converted = AuronConverters.convertSparkPlanRecursively(join)
+        assert(converted.isInstanceOf[NativeShuffledHashJoinBase], converted.toString)
+        assert(converted.productIterator.contains(expected), s"sizes=$sizes, plan=$converted")
+      }
+    }
+  }
+
+  for (adaptive <- Seq(false, true); (leftSize, rightSize) <- Seq((4, 100), (100, 4))) {
+    test(s"forced SHJ builds the smaller side: AQE=$adaptive, left=$leftSize, right=$rightSize") {
+      withShuffledJoin(force = true) {
+        withSQLConf("spark.sql.adaptive.enabled" -> adaptive.toString) {
+          val expected = if (leftSize < rightSize) JoinBuildLeft else JoinBuildRight
+          checkJoinPlan(
+            s"""
+              |SELECT /*+ MERGE(l, r) */ l.id
+              |FROM range($leftSize) l JOIN range($rightSize) r ON l.id = r.id
+              |""".stripMargin,
+            {
+              case join: NativeShuffledHashJoinBase => join.productIterator.contains(expected)
+              case _ => false
+            })
+        }
+      }
+    }
+  }
+
+  test("cascaded forced SHJ uses intermediate runtime statistics instead of logical estimates") {
+    withShuffledJoin(force = true) {
+      withSQLConf("spark.sql.adaptive.enabled" -> "true") {
+        val df = checkSparkAnswer("""
+          |SELECT /*+ MERGE(ab, c) */ ab.id
+          |FROM (
+          |  SELECT /*+ MERGE(a, b) */ a.id
+          |  FROM (SELECT id FROM range(0, 10000, 1, 2) WHERE id % 1000 = 0) a
+          |  JOIN range(0, 2000, 1, 2) b ON a.id = b.id
+          |) ab
+          |JOIN range(0, 100, 1, 2) c ON ab.id = c.id
+          |""".stripMargin)
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        def collectJoins(plan: SparkPlan): Seq[NativeShuffledHashJoinBase] = {
+          val current = plan match {
+            case join: NativeShuffledHashJoinBase => Seq(join)
+            case _ => Nil
+          }
+          val children = if (Shims.get.isQueryStageInput(plan)) {
+            Seq(Shims.get.getChildStage(plan))
+          } else {
+            plan.children
+          }
+          current ++ children.flatMap(collectJoins)
+        }
+        val joins = collectJoins(plan)
+        assert(joins.size == 2, plan.toString)
+        assert(joins.forall(_.productIterator.contains(JoinBuildLeft)), plan.toString)
+      }
+    }
+  }
+
+  test("forced SHJ accepts a direct SMJ input without discarding its children") {
+    withShuffledJoin(force = true) {
+      val original = withSQLConf("spark.auron.enabled" -> "false") {
+        spark
+          .sql("""
+            |SELECT /*+ MERGE(l, r) */ *
+            |FROM condition_left l JOIN condition_right r ON l.k = r.k
+            |""".stripMargin)
+          .queryExecution
+          .executedPlan
+          .collectFirst { case join: SortMergeJoinExec => join }
+          .get
+      }
+      val semi = original.copy(joinType = LeftSemi)
+      val lower = withSparkConf("spark.auron.forceShuffledHashJoin" -> "false") {
+        AuronConvertStrategy.apply(semi)
+        AuronConverters.convertSparkPlanRecursively(semi)
+      }
+      assert(lower.isInstanceOf[NativeSortMergeJoinBase], lower.toString)
+      val upper = original.copy(left = lower)
+      val converted = AuronConverters.convertSortMergeJoinExec(upper)
+      assert(converted.isInstanceOf[NativeShuffledHashJoinBase], converted.toString)
+      assert(converted.output == upper.output)
+      assert(converted.collect { case join: NativeSortMergeJoinBase => join }.size == 1)
+      assert(converted.collect { case _: NativeSortBase | _: SortExec => 1 }.size == 2)
+    }
+  }
+
+  for (requireOrdering <- Seq(false, true)) {
+    test(s"cascaded SMJ resets child ordering after conversion: requireOrdering=$requireOrdering") {
+      withShuffledJoin(force = true) {
+        val original = withSQLConf("spark.auron.enabled" -> "false") {
+          spark
+            .sql("""
+              |SELECT /*+ MERGE(l, r) */ *
+              |FROM condition_left l JOIN condition_right r ON l.k = r.k
+              |""".stripMargin)
+            .queryExecution
+            .executedPlan
+            .collectFirst { case join: SortMergeJoinExec => join }
+            .get
+        }
+        val semi = original.copy(joinType = LeftSemi)
+        val anti = original.copy(left = semi, joinType = LeftAnti)
+        val upper = original.copy(left = anti, joinType = LeftSemi)
+        AuronConvertStrategy.apply(upper)
+        assert(semi.getTagValue(childOrderingRequiredTag).contains(true))
+        assert(anti.getTagValue(childOrderingRequiredTag).contains(true))
+        upper.setTagValue(childOrderingRequiredTag, requireOrdering)
+        if (requireOrdering) {
+          anti.setTagValue(childOrderingRequiredTag, true)
+        }
+        val converted = AuronConverters.convertSparkPlanRecursively(upper)
+        assert(converted.output == upper.output)
+        val hashJoins = converted.collect { case join: NativeShuffledHashJoinBase => join }
+        val mergeJoins = converted.collect { case join: NativeSortMergeJoinBase => join }
+        if (requireOrdering) {
+          assert(hashJoins.isEmpty, converted.toString)
+          assert(mergeJoins.size == 3, converted.toString)
+          assert(converted.collect { case _: NativeSortBase | _: SortExec => 1 }.size == 4)
+        } else {
+          assert(hashJoins.size == 3, converted.toString)
+          assert(mergeJoins.isEmpty, converted.toString)
+          assert(converted.collect { case _: NativeSortBase | _: SortExec => 1 }.isEmpty)
+          assert(!semi.getTagValue(childOrderingRequiredTag).contains(true))
+          assert(!anti.getTagValue(childOrderingRequiredTag).contains(true))
+        }
       }
     }
   }
