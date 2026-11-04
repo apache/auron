@@ -349,6 +349,12 @@ class AuronIcebergIntegrationSuite
       val df = sql("select id, new_name from local.db.t_rename")
       checkAnswer(df, Seq(Row(1, "before"), Row(2, "after")))
       assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+      for (pageFiltering <- Seq("false", "true")) {
+        withSQLConf("spark.auron.parquet.enable.pageFiltering" -> pageFiltering) {
+          checkSparkAnswerAndOperator(
+            "select id from local.db.t_rename where new_name = 'before'")
+        }
+      }
     }
   }
 
@@ -360,9 +366,18 @@ class AuronIcebergIntegrationSuite
       sql("alter table local.db.t_drop_add add column value string")
       sql("insert into local.db.t_drop_add values (2, 'new')")
 
-      val df = sql("select id, value from local.db.t_drop_add")
+      val df = checkSparkAnswerAndOperator("select id, value from local.db.t_drop_add")
       checkAnswer(df, Seq(Row(1, null), Row(2, "new")))
-      assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+      // The old file has no matching field when only the new column is projected.
+      checkSparkAnswerAndOperator("select value from local.db.t_drop_add")
+      for (pageFiltering <- Seq("false", "true")) {
+        withSQLConf("spark.auron.parquet.enable.pageFiltering" -> pageFiltering) {
+          checkSparkAnswerAndOperator("select id from local.db.t_drop_add where value is null")
+          checkSparkAnswerAndOperator("select id from local.db.t_drop_add where value = 'old'")
+          checkSparkAnswerAndOperator(
+            "select id from local.db.t_drop_add where value is null or value = 'new'")
+        }
+      }
     }
   }
 

@@ -1215,11 +1215,15 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
-  test("pow: zero base with negative exponent yields +infinity") {
+  test("pow: signed zero with negative exponents") {
     withTable("t1") {
       sql("create table t1(c1 double, c2 double) using parquet")
-      sql("insert into t1 values(0.0, -2.5), (0.0, -3)")
-      checkSparkAnswerAndOperator("select pow(c1, c2) from t1")
+      sql("""insert into t1 values
+            |(0.0, -2.5), (0.0, -3),
+            |(cast('-0.0' as double), -3), (cast('-0.0' as double), -2.5)
+            |""".stripMargin)
+      checkSparkAnswerAndOperator(
+        "select pow(c1, c2), power(c1, c2), pow(c1, -3.0), pow(0.0, c2) from t1")
     }
   }
 
@@ -1721,27 +1725,11 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       sql(s"CREATE TABLE t1(c1 FLOAT) USING parquet")
       sql(s"INSERT INTO t1 VALUES($floatPi)")
 
-      val scales = -6 to 6
-      val expectedResults = Map(
-        -6 -> 0.0f,
-        -5 -> 0.0f,
-        -4 -> 0.0f,
-        -3 -> 0.0f,
-        -2 -> 0.0f,
-        -1 -> 0.0f,
-        0 -> 3.0f,
-        1 -> 3.1f,
-        2 -> 3.14f,
-        3 -> 3.142f,
-        4 -> 3.1415f,
-        5 -> 3.1415f,
-        6 -> 3.1415f)
-
-      scales.foreach { scale =>
-        val df = sql(s"SELECT bround(c1, $scale) FROM t1")
-        val expected = expectedResults(scale)
-        checkAnswer(df, Seq(Row(expected)))
+      (-6 to 6).foreach { scale =>
+        checkSparkAnswerAndOperator(s"SELECT bround(c1, $scale) FROM t1")
       }
+      // Widening 3.1415f to double gives 3.141499996..., below the halfway point.
+      checkAnswer(sql("SELECT bround(c1, 3) FROM t1"), Seq(Row(3.141f)))
     }
   }
 

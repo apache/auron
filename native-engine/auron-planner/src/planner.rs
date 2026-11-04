@@ -32,7 +32,8 @@ use datafusion::{
         file_format::file_compression_type::FileCompressionType,
         listing::{FileRange, PartitionedFile},
         object_store::ObjectStoreUrl,
-        physical_plan::{FileGroup, FileOpener, FileScanConfig, FileSource},
+        physical_plan::{FileGroup, FileOpener, FileScanConfig, FileScanConfigBuilder, FileSource},
+        table_schema::TableSchema,
     },
     logical_expr::{Operator, ScalarUDF, Volatility},
     physical_expr::{
@@ -174,7 +175,7 @@ impl PhysicalPlanner {
                     .pruning_predicates
                     .iter()
                     .filter_map(|predicate| {
-                        self.try_parse_physical_expr(predicate, &conf.file_schema)
+                        self.try_parse_physical_expr(predicate, conf.file_schema())
                             .ok()
                     })
                     .fold(phys_expr::lit(true), |a, b| {
@@ -196,7 +197,7 @@ impl PhysicalPlanner {
                     .pruning_predicates
                     .iter()
                     .filter_map(|predicate| {
-                        self.try_parse_physical_expr(predicate, &conf.file_schema)
+                        self.try_parse_physical_expr(predicate, conf.file_schema())
                             .ok()
                     })
                     .fold(phys_expr::lit(true), |a, b| {
@@ -1011,7 +1012,15 @@ impl PhysicalPlanner {
                     .map(|x| self.try_parse_physical_expr(x, input_schema))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let scalar_udf = if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
+                let scalar_udf = if scalar_function == protobuf::ScalarFunction::AuronExtFunctions
+                    && matches!(e.name.as_str(), "Spark_Round" | "Spark_BRound")
+                {
+                    Arc::new(ScalarUDF::from(
+                        datafusion_ext_functions::spark_round::SparkRound::new(
+                            e.name == "Spark_BRound",
+                        ),
+                    ))
+                } else if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
                     let fun_name = &e.name;
                     let fun = datafusion_ext_functions::create_auron_ext_function(
                         fun_name,
@@ -1039,6 +1048,7 @@ impl PhysicalPlanner {
                         convert_required!(e.return_type)?,
                         true,
                     )),
+                    Arc::new(datafusion::common::config::ConfigOptions::default()),
                 ))
             }
             ExprType::SparkUdfWrapperExpr(e) => Arc::new(SparkUDFWrapperExpr::try_new(
@@ -1332,7 +1342,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Trim => f::string::btrim(),
             ScalarFunction::Ltrim => f::string::ltrim(),
             ScalarFunction::Rtrim => f::string::rtrim(),
-            ScalarFunction::ToTimestamp => f::datetime::to_timestamp(),
+            ScalarFunction::ToTimestamp => f::datetime::to_timestamp(&Default::default()),
             ScalarFunction::NullIf => f::core::nullif(),
             ScalarFunction::Nvl2 => f::core::nvl2(),
             ScalarFunction::Nvl => f::core::nvl(),
@@ -1344,7 +1354,9 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             // ScalarFunction::Sha384 => f::crypto::sha384(),
             // ScalarFunction::Sha512 => f::crypto::sha512(),
             ScalarFunction::Digest => f::crypto::digest(),
-            ScalarFunction::ToTimestampMillis => f::datetime::to_timestamp_millis(),
+            ScalarFunction::ToTimestampMillis => {
+                f::datetime::to_timestamp_millis(&Default::default())
+            }
             ScalarFunction::Log2 => f::math::log2(),
             ScalarFunction::Signum => f::math::signum(),
             ScalarFunction::Ascii => f::string::ascii(),
@@ -1371,9 +1383,13 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Strpos => f::unicode::strpos(),
             ScalarFunction::Substr => f::unicode::substr(),
             // ScalarFunction::ToHex => f::string::to_hex(),
-            ScalarFunction::ToTimestampMicros => f::datetime::to_timestamp_micros(),
-            ScalarFunction::ToTimestampSeconds => f::datetime::to_timestamp_seconds(),
-            ScalarFunction::Now => f::datetime::now(),
+            ScalarFunction::ToTimestampMicros => {
+                f::datetime::to_timestamp_micros(&Default::default())
+            }
+            ScalarFunction::ToTimestampSeconds => {
+                f::datetime::to_timestamp_seconds(&Default::default())
+            }
+            ScalarFunction::Now => f::datetime::now(&Default::default()),
             ScalarFunction::MakeDate => f::datetime::make_date(),
             ScalarFunction::Translate => f::unicode::translate(),
             ScalarFunction::RegexpMatch => f::regex::regexp_match(),
@@ -1387,7 +1403,7 @@ impl From<protobuf::ScalarFunction> for Arc<ScalarUDF> {
             ScalarFunction::Factorial => spark_fun::math::factorial(),
             ScalarFunction::Hex => spark_fun::math::hex(),
 
-            ScalarFunction::Power => f::math::power(),
+            ScalarFunction::Power => spark_fun::math::pow(),
             ScalarFunction::IsNaN => f::math::isnan(),
 
             ScalarFunction::AuronExtFunctions => {
@@ -1416,8 +1432,11 @@ impl TryFrom<&protobuf::PartitionedFile> for PartitionedFile {
                 .collect::<Result<Vec<_>, _>>()?,
             range: val.range.as_ref().map(|v| v.try_into()).transpose()?,
             statistics: None,
-            extensions: None,
+            ordering: None,
+            extensions: Default::default(),
             metadata_size_hint: None,
+            table_reference: None,
+            arrow_schema: None,
         })
     }
 }
@@ -1460,6 +1479,7 @@ impl From<&protobuf::ColumnStats> for ColumnStatistics {
                 .unwrap_or(Precision::Absent),
             sum_value: Precision::Absent,
             distinct_count: Precision::Exact(cs.distinct_count as usize),
+            byte_size: Precision::Absent,
         }
     }
 }
@@ -1520,43 +1540,58 @@ impl TryInto<FileScanConfig> for &protobuf::FileScanExecConf {
             })
             .collect::<Result<Vec<_>, PlanSerDeError>>()?;
 
-        struct UnusedFileSource(Statistics);
+        struct UnusedFileSource {
+            table_schema: TableSchema,
+            metrics: ExecutionPlanMetricsSet,
+            projection: Option<datafusion::physical_expr::projection::ProjectionExprs>,
+        }
         impl FileSource for UnusedFileSource {
             fn create_file_opener(
                 &self,
                 _object_store: Arc<dyn ObjectStore>,
                 _base_config: &FileScanConfig,
                 _partition: usize,
-            ) -> Arc<dyn FileOpener> {
+            ) -> Result<Arc<dyn FileOpener>> {
                 unimplemented!()
             }
 
-            fn as_any(&self) -> &dyn Any {
-                self
+            fn table_schema(&self) -> &TableSchema {
+                &self.table_schema
+            }
+
+            fn projection(
+                &self,
+            ) -> Option<&datafusion::physical_expr::projection::ProjectionExprs> {
+                self.projection.as_ref()
+            }
+
+            fn try_pushdown_projection(
+                &self,
+                projection: &datafusion::physical_expr::projection::ProjectionExprs,
+            ) -> Result<Option<Arc<dyn FileSource>>> {
+                Ok(Some(Arc::new(UnusedFileSource {
+                    table_schema: self.table_schema.clone(),
+                    metrics: self.metrics.clone(),
+                    projection: Some(projection.clone()),
+                })))
+            }
+
+            fn apply_expressions(
+                &self,
+                _f: &mut dyn FnMut(
+                    &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+                )
+                    -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+            ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+                Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
             }
 
             fn with_batch_size(&self, _batch_size: usize) -> Arc<dyn FileSource> {
                 unimplemented!()
             }
 
-            fn with_schema(&self, _schema: SchemaRef) -> Arc<dyn FileSource> {
-                unimplemented!()
-            }
-
-            fn with_projection(&self, _config: &FileScanConfig) -> Arc<dyn FileSource> {
-                unimplemented!()
-            }
-
-            fn with_statistics(&self, _statistics: Statistics) -> Arc<dyn FileSource> {
-                unimplemented!()
-            }
-
             fn metrics(&self) -> &ExecutionPlanMetricsSet {
-                unimplemented!()
-            }
-
-            fn statistics(&self) -> Result<Statistics> {
-                Ok(self.0.clone())
+                &self.metrics
             }
 
             fn file_type(&self) -> &str {
@@ -1564,25 +1599,30 @@ impl TryInto<FileScanConfig> for &protobuf::FileScanExecConf {
             }
         }
 
-        Ok(FileScanConfig {
-            object_store_url: ObjectStoreUrl::local_filesystem(), // not used
-            file_schema: schema,
-            file_groups,
-            constraints: Default::default(),
-            projection,
-            limit: self.limit.as_ref().map(|sl| sl.limit as usize),
-            table_partition_cols: partition_schema
-                .fields()
-                .iter()
-                .map(|field| Field::new(field.name().clone(), field.data_type().clone(), true))
-                .map(Arc::new)
-                .collect(),
-            output_ordering: vec![],
-            file_compression_type: FileCompressionType::UNCOMPRESSED, // unused
-            new_lines_in_values: false,
-            file_source: Arc::new(UnusedFileSource(statistics.as_ref().clone())),
-            batch_size: None,
-            expr_adapter_factory: None,
-        })
+        let table_partition_cols: Vec<FieldRef> = partition_schema
+            .fields()
+            .iter()
+            .map(|field| Field::new(field.name().clone(), field.data_type().clone(), true))
+            .map(Arc::new)
+            .collect();
+        let table_schema = TableSchema::builder(schema)
+            .with_table_partition_cols(table_partition_cols)
+            .build();
+        let file_source: Arc<dyn FileSource> = Arc::new(UnusedFileSource {
+            table_schema,
+            metrics: ExecutionPlanMetricsSet::new(),
+            projection: None,
+        });
+
+        Ok(FileScanConfigBuilder::new(
+            ObjectStoreUrl::local_filesystem(), // not used
+            file_source,
+        )
+        .with_projection_indices(projection)?
+        .with_limit(self.limit.as_ref().map(|sl| sl.limit as usize))
+        .with_file_groups(file_groups)
+        .with_statistics(statistics.as_ref().clone())
+        .with_file_compression_type(FileCompressionType::UNCOMPRESSED) // unused
+        .build())
     }
 }

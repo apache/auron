@@ -257,6 +257,8 @@ abstract class Shims {
 
   def getMakeDateFailOnError(expr: Expression): Boolean
 
+  def getRoundFailOnError(expr: Expression): Boolean
+
   def getNextDayFailOnError(expr: Expression): Boolean
 
   def getAggregateExpressionFilter(expr: Expression): Option[Expression]

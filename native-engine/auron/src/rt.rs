@@ -42,7 +42,7 @@ use datafusion::{
         ExecutionPlan, displayable, empty::EmptyExec, metrics::ExecutionPlanMetricsSet,
     },
 };
-use datafusion_ext_commons::{df_execution_err, downcast_any};
+use datafusion_ext_commons::{df_execution_err, downcast_any, downcast_any_dyn};
 use datafusion_ext_plans::{
     common::execution_context::{ExecutionContext, cancel_all_tasks},
     ipc_writer_exec::IpcWriterExec,
@@ -156,11 +156,11 @@ impl NativeExecutionRuntime {
             let mut stream = exec_ctx_cloned.execute(&execution_plan_cloned)?;
 
             // coalesce output stream if necessary
-            if downcast_any!(execution_plan_cloned, EmptyExec).is_err()
-                && downcast_any!(execution_plan_cloned, OrcSinkExec).is_err()
-                && downcast_any!(execution_plan_cloned, ParquetSinkExec).is_err()
-                && downcast_any!(execution_plan_cloned, IpcWriterExec).is_err()
-                && downcast_any!(execution_plan_cloned, ShuffleWriterExec).is_err()
+            if downcast_any_dyn!(execution_plan_cloned, EmptyExec).is_err()
+                && downcast_any_dyn!(execution_plan_cloned, OrcSinkExec).is_err()
+                && downcast_any_dyn!(execution_plan_cloned, ParquetSinkExec).is_err()
+                && downcast_any_dyn!(execution_plan_cloned, IpcWriterExec).is_err()
+                && downcast_any_dyn!(execution_plan_cloned, ShuffleWriterExec).is_err()
             {
                 stream = exec_ctx_cloned.coalesce_with_default_batch_size(stream);
             }

@@ -60,14 +60,7 @@ impl PartialEq for SparkUDFWrapperExpr {
     }
 }
 
-impl DynEq for SparkUDFWrapperExpr {
-    fn dyn_eq(&self, other: &dyn Any) -> bool {
-        other
-            .downcast_ref::<Self>()
-            .map(|other| other.eq(self))
-            .unwrap_or(false)
-    }
-}
+impl Eq for SparkUDFWrapperExpr {}
 
 impl SparkUDFWrapperExpr {
     pub fn try_new(
@@ -120,10 +113,6 @@ impl Hash for SparkUDFWrapperExpr {
 }
 
 impl PhysicalExpr for SparkUDFWrapperExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
         Ok(self.return_type.clone())
     }

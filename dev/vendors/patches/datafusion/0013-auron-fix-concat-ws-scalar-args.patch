@@ -1,0 +1,144 @@
+diff --git a/datafusion/spark/src/function/string/concat_ws.rs b/datafusion/spark/src/function/string/concat_ws.rs
+index c9ed136..265b71f 100644
+--- a/datafusion/spark/src/function/string/concat_ws.rs
++++ b/datafusion/spark/src/function/string/concat_ws.rs
+@@ -34,7 +34,7 @@ use arrow::array::{
+     StringArray, StringBuilder, StringViewArray,
+ };
+ use arrow::datatypes::{DataType, Field};
+-use datafusion_common::{Result, ScalarValue};
++use datafusion_common::{Result, ScalarValue, internal_err};
+ use datafusion_expr::{
+     ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+ };
+@@ -148,7 +148,16 @@ fn only_separator(sep: &ColumnarValue) -> Result<ColumnarValue> {
+ }
+ 
+ fn spark_concat_ws(args: &[ColumnarValue], num_rows: usize) -> Result<ColumnarValue> {
++    let is_scalar = args
++        .iter()
++        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
++    let num_rows = if is_scalar { 1 } else { num_rows };
+     let arrays = ColumnarValue::values_to_arrays(args)?;
++    if arrays.iter().any(|array| array.len() != num_rows) {
++        return internal_err!(
++            "concat_ws argument array length does not match the expected row count: {num_rows}"
++        );
++    }
+     let sep_view = StringView::try_new(&arrays[0])?;
+     let arg_views: Vec<ArgView> = arrays[1..]
+         .iter()
+@@ -174,7 +183,12 @@ fn spark_concat_ws(args: &[ColumnarValue], num_rows: usize) -> Result<ColumnarVa
+         builder.append_value("");
+     }
+ 
+-    Ok(ColumnarValue::Array(Arc::new(builder.finish()) as ArrayRef))
++    let output = builder.finish();
++    if is_scalar {
++        ScalarValue::try_from_array(&output, 0).map(ColumnarValue::Scalar)
++    } else {
++        Ok(ColumnarValue::Array(Arc::new(output) as ArrayRef))
++    }
+ }
+ 
+ /// Typed view over a string array that downcasts once and exposes
+@@ -295,3 +309,99 @@ fn push_part(builder: &mut StringBuilder, part: &str, sep: &str, first: &mut boo
+         .write_str(part)
+         .expect("StringBuilder::write_str is infallible");
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn invoke(args: Vec<ColumnarValue>, number_rows: usize) -> Result<ColumnarValue> {
++        let arg_fields = args
++            .iter()
++            .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
++            .collect();
++        SparkConcatWs::new().invoke_with_args(ScalarFunctionArgs {
++            args,
++            arg_fields,
++            number_rows,
++            return_field: Arc::new(Field::new("result", DataType::Utf8, true)),
++            config_options: Arc::new(datafusion_common::config::ConfigOptions::default()),
++        })
++    }
++
++    #[test]
++    fn test_concat_ws_scalar_args_with_batch_rows() -> Result<()> {
++        for number_rows in [0, 1, 2, 1024] {
++            for (separator, values, expected) in [
++                (
++                    Some(","),
++                    vec![Some("黑马词"), None, Some("蓝海词")],
++                    Some("黑马词,蓝海词"),
++                ),
++                (Some(","), vec![None, None], Some("")),
++                (None, vec![Some("黑马词")], None),
++            ] {
++                let mut args = vec![ColumnarValue::Scalar(ScalarValue::Utf8(
++                    separator.map(str::to_owned),
++                ))];
++                args.extend(values.into_iter().map(|value| {
++                    ColumnarValue::Scalar(ScalarValue::Utf8(value.map(str::to_owned)))
++                }));
++                let output = invoke(args, number_rows)?;
++                let ColumnarValue::Scalar(output) = output else {
++                    panic!("应返回标量");
++                };
++                assert_eq!(output, ScalarValue::Utf8(expected.map(str::to_owned)));
++            }
++        }
++        Ok(())
++    }
++
++    #[test]
++    fn test_concat_ws_mixed_scalar_and_array_args() -> Result<()> {
++        let output = invoke(
++            vec![
++                ColumnarValue::Scalar(ScalarValue::Utf8(Some(",".to_owned()))),
++                ColumnarValue::Array(Arc::new(StringArray::from(vec![
++                    Some("黑马词"),
++                    None,
++                ]))),
++                ColumnarValue::Scalar(ScalarValue::Utf8(Some("蓝海词".to_owned()))),
++            ],
++            2,
++        )?;
++        let ColumnarValue::Array(array) = output else {
++            panic!("应返回数组");
++        };
++        assert_eq!(
++            array.as_string::<i32>(),
++            &StringArray::from(vec!["黑马词,蓝海词", "蓝海词"])
++        );
++        Ok(())
++    }
++
++    #[test]
++    fn test_concat_ws_single_row_array_remains_array() -> Result<()> {
++        let output = invoke(
++            vec![
++                ColumnarValue::Scalar(ScalarValue::Utf8(Some(",".to_owned()))),
++                ColumnarValue::Array(Arc::new(StringArray::from(vec!["黑马词"]))),
++            ],
++            1,
++        )?;
++        assert!(matches!(output, ColumnarValue::Array(array) if array.len() == 1));
++        Ok(())
++    }
++
++    #[test]
++    fn test_concat_ws_rejects_array_length_mismatch() -> Result<()> {
++        let result = invoke(
++            vec![
++                ColumnarValue::Scalar(ScalarValue::Utf8(Some(",".to_owned()))),
++                ColumnarValue::Array(Arc::new(StringArray::from(vec!["黑马词"]))),
++            ],
++            2,
++        );
++        assert!(result.is_err());
++        Ok(())
++    }
++}
