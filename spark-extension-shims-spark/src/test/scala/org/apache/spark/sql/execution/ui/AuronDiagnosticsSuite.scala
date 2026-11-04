@@ -99,6 +99,35 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
     } finally kv.close()
   }
 
+  test("execution metrics use the live SQL store when available") {
+    val conf = new SparkConf(false)
+      .set("spark.appStateStore.asyncTracking.enable", "false")
+    val kv = new ElementTrackingStore(new InMemoryStore, conf)
+    try {
+      var liveStore = Option.empty[SQLAppStatusStore]
+      val store = new AuronSQLAppStatusStore(kv, liveStore)
+      val listener = new SQLAppStatusListener(conf, kv, live = true)
+      listener.onOtherEvent(readEvent("""{
+        "Event":"org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
+        "executionId":7,"description":"query","details":"","physicalPlanDescription":"Scan",
+        "sparkPlanInfo":{"nodeName":"Scan","simpleString":"Scan","children":[],
+          "metadata":{},"metrics":[
+            {"name":"number of output rows","accumulatorId":1,"metricType":"sum"}]},
+        "time":100,"modifiedConfigs":{},"jobTags":[]
+      }"""))
+      listener.onOtherEvent(SparkListenerDriverAccumUpdates(7, Seq(1L -> 42L)))
+      assert(store.metrics(7).head._3 == "Not available yet")
+
+      // Spark's live store may become available after Auron's first metrics read.
+      liveStore = Some(new SQLAppStatusStore(kv, Some(listener)))
+      assert(store.metrics(7) == Seq(("0: Scan", "number of output rows", "42")))
+
+      listener.onOtherEvent(SparkListenerSQLExecutionEnd(7, 200))
+      assert(store.metrics(7).head._3 == "42")
+      assert(new AuronSQLAppStatusStore(kv).metrics(7).head._3 == "42")
+    } finally kv.close()
+  }
+
   test("shared plan instances are visited once and operator tags are left unchanged") {
     val leaf = emptyScan()
     val tag = org.apache.spark.sql.catalyst.trees.TreeNodeTag[Int]("operatorId")
