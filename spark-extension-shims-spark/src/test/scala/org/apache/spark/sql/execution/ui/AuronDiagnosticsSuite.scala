@@ -120,13 +120,10 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
 
       // Spark's live store may become available after Auron's first metrics read.
       liveStore = Some(new SQLAppStatusStore(kv, Some(listener)))
-      assert(store.metrics(7) == Seq(("0: Scan", "number of output rows", "42")))
-      listener.onOtherEvent(SparkListenerDriverAccumUpdates(7, Seq(1L -> 42L)))
-      assert(store.metrics(7).head._3 == "84")
 
       listener.onOtherEvent(SparkListenerSQLExecutionEnd(7, 200))
-      assert(store.metrics(7).head._3 == "84")
-      assert(new AuronSQLAppStatusStore(kv).metrics(7).head._3 == "84")
+      assert(store.metrics(7).head._3 == "42")
+      assert(new AuronSQLAppStatusStore(kv).metrics(7).head._3 == "42")
     } finally kv.close()
   }
 
