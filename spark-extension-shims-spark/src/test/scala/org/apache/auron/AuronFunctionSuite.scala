@@ -1848,6 +1848,69 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("rand function matches Spark for seeded inputs") {
+    withTable("t_rand") {
+      sql("create table t_rand using parquet as select id from range(0, 97, 1, 1)")
+      val query = """select id, rand(0), rand(42), rand(-42),
+          |  rand(cast('-9223372036854775808' as bigint)),
+          |  rand(cast('9223372036854775807' as bigint)), rand(null),
+          |  rand(cast(42 as bigint)), rand(40 + 2)
+          |from t_rand
+          |""".stripMargin
+      checkSparkAnswerAndOperator(query)
+      checkSparkAnswerAndOperator("select id, rand(42) from t_rand where rand(42) > 0.5")
+      checkSparkAnswerAndOperator("""select id,
+          |  case when id % 2 = 0 then rand(42) else rand(42) end, rand(42)
+          |from t_rand
+          |""".stripMargin)
+    }
+  }
+
+  test("rand function preserves partition and batch state") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempPath { path =>
+        withSQLConf("spark.auron.enabled" -> "false") {
+          spark.range(60037).write.parquet(path.getCanonicalPath)
+        }
+        val df = checkSparkAnswerAndOperator(() =>
+          spark.read
+            .parquet(path.getCanonicalPath)
+            .repartition(3, col("id"))
+            .sortWithinPartitions("id")
+            .selectExpr(
+              "id",
+              "spark_partition_id() as p",
+              "rand(42) as r",
+              "rand(42) as same_seed",
+              "rand(-1) as other_seed"))
+        val project = collectFirst(df.queryExecution.executedPlan) { case p: NativeProjectBase =>
+          p
+        }.get
+        assert(project.metrics("input_batch_count").value > 3)
+      }
+    }
+  }
+
+  test("rand function without seed uses the Spark-resolved seed") {
+    withTable("t_rand") {
+      sql("create table t_rand using parquet as select id from range(0, 97, 1, 1)")
+      val df = sql("select id, rand() as r from t_rand")
+      val seed = df.queryExecution.analyzed.expressions
+        .flatMap(_.collect { case e: org.apache.spark.sql.catalyst.expressions.Rand =>
+          e.child.eval(null).asInstanceOf[Number].longValue()
+        })
+        .head
+      var expected: Seq[Row] = Nil
+      withSQLConf("spark.auron.enabled" -> "false") {
+        expected = sql(s"select id, rand($seed) as r from t_rand").collect().toSeq
+      }
+      checkAnswer(df, expected)
+      assertPlanIsNative(df)
+      assert(!df.schema("r").nullable)
+      assert(expected.forall(r => r.getDouble(1) >= 0.0 && r.getDouble(1) < 1.0))
+    }
+  }
+
   test("randn function with seed") {
     withTable("t1") {
       sql("CREATE TABLE t1(id INT) USING parquet")
