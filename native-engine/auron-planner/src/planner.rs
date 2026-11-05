@@ -1020,6 +1020,12 @@ impl PhysicalPlanner {
                             e.name == "Spark_BRound",
                         ),
                     ))
+                } else if scalar_function == protobuf::ScalarFunction::AuronExtFunctions
+                    && e.name == "Spark_ParseJson"
+                {
+                    Arc::new(ScalarUDF::from(
+                        datafusion_ext_functions::spark_get_json_object::SparkParseJson::default(),
+                    ))
                 } else if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
                     let fun_name = &e.name;
                     let fun = datafusion_ext_functions::create_auron_ext_function(

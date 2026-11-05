@@ -20,7 +20,7 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.{Alias, GetJsonObject}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.functions.{col, split}
@@ -29,6 +29,38 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
 
 class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
+
+  test("get_json_object with scalar subquery inputs") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      "spark.auron.udf.UDFJson.enabled" -> "true") {
+      withTable("t_json_scalar") {
+        spark
+          .range(0, 8, 1, 1)
+          .selectExpr("cast(id as int) as id")
+          .write
+          .format("parquet")
+          .saveAsTable("t_json_scalar")
+        val inputs = Seq(
+          ("""max(concat('{"name":"user_', cast(id as string), '"}'))""", "user_7"),
+          ("max(case when id < 0 then cast(id as string) end)", null))
+        for ((input, expected) <- inputs) {
+          val query = s"""select o.id,
+              |  get_json_object((select $input from range(0, 8, 1, 1)), '$$.name') as name
+              |from t_json_scalar o
+              |""".stripMargin
+          val df = checkSparkAnswer(query)
+          checkAnswer(df, (0 until 8).map(id => Row(id, expected)))
+          val json = collectFirst(df.queryExecution.executedPlan) {
+            case project: NativeProjectBase
+                if project.expressions.exists(_.find(_.isInstanceOf[GetJsonObject]).isDefined) =>
+              project.expressions.flatMap(_.collect { case json: GetJsonObject => json }).head
+          }.getOrElse(fail(s"Missing native JSON projection: ${df.queryExecution.executedPlan}"))
+          assert(NativeConverters.convertExpr(json).hasScalarFunction)
+        }
+      }
+    }
+  }
 
   test("float comparisons follow Spark NaN and signed zero ordering") {
     withTable("t_float_ordering") {

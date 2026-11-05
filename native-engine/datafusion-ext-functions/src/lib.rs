@@ -70,7 +70,6 @@ pub fn create_auron_ext_function(
         "Spark_GetParsedJsonObject" => {
             shared_function!(spark_get_json_object::spark_get_parsed_json_object)
         }
-        "Spark_ParseJson" => shared_function!(spark_get_json_object::spark_parse_json),
         "Spark_ArrayDistinct" => shared_function!(spark_array::array_distinct),
         "Spark_ArrayUnion" => shared_function!(spark_array::array_union),
         "Spark_ArrayContains" => shared_function!(spark_array::array_contains),
@@ -493,7 +492,7 @@ mod tests {
     fn reuses_function_implementation() -> Result<()> {
         let first = create_auron_ext_function("Spark_GetJsonObject", 0)?;
         let second = create_auron_ext_function("Spark_GetJsonObject", 0)?;
-        let other = create_auron_ext_function("Spark_ParseJson", 0)?;
+        let other = create_auron_ext_function("Spark_GetParsedJsonObject", 0)?;
 
         assert!(Arc::ptr_eq(&first, &second));
         assert!(!Arc::ptr_eq(&first, &other));
