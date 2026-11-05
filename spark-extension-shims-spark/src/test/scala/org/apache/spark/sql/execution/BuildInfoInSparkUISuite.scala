@@ -20,14 +20,28 @@ import java.io.File
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AuronQueryTest
+import org.apache.spark.sql.auron.{AuronConverters, AuronConvertStrategy, AuronPlanDiagnostics}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.{AuronSQLAppStatusListener, AuronSQLAppStatusStore}
 import org.apache.spark.util.Utils
 
-import org.apache.auron.BaseAuronSQLSuite
+import org.apache.auron.{AuronSQLTestHelper, BaseAuronSQLSuite}
+import org.apache.auron.sparkver
 
-class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
+class BuildInfoInSparkUISuite
+    extends AuronQueryTest
+    with BaseAuronSQLSuite
+    with AuronSQLTestHelper {
 
   var testDir: File = _
+
+  @sparkver("3.0")
+  private def buildLeft = org.apache.spark.sql.execution.joins.BuildLeft
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  private def buildLeft = org.apache.spark.sql.catalyst.optimizer.BuildLeft
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set("spark.eventLog.dir", testDir.toString)
@@ -62,6 +76,7 @@ class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
       val snapshots = executions.flatMap(_.snapshots)
       assert(executions.exists(e => store.metrics(e.executionId).nonEmpty))
       assert(snapshots.nonEmpty)
+      assert(snapshots.exists(_.nodes.headOption.exists(_.name == "AdaptiveSparkPlan")))
       assert(snapshots.exists(_.nodes.exists(_.status == "Native")))
       assert(snapshots.forall(_.physicalPlan.nonEmpty))
       assert(snapshots.exists(_.configurations.contains("spark.sql.session.timeZone")))
@@ -84,7 +99,20 @@ class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
         .filterNot(e => beforeFallback.contains(e.executionId))
         .flatMap(_.snapshots)
       assert(fallbackSnapshots.exists(_.nodes.exists(n =>
-        n.status == "Fallback" && n.reason.nonEmpty)))
+        n.name == "Project" && n.status == "Fallback" && n.reason.contains("ScalaUDF"))))
+
+      val beforeResultProjection = store.executions(0, 100).map(_.executionId).toSet
+      val result =
+        sql("select auron_ui_passthrough(cast(sum(value) as int)) from auron_ui_diagnostics")
+      assert(result.collect().head.getInt(0) == 3)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      val resultSnapshots = store
+        .executions(0, 100)
+        .filterNot(e => beforeResultProjection.contains(e.executionId))
+        .flatMap(_.snapshots)
+      assert(resultSnapshots.exists(_.nodes.exists(_.status == "Native")))
+      assert(resultSnapshots.exists(_.nodes.exists(n =>
+        n.name == "Project" && n.status == "Fallback" && n.reason.contains("ScalaUDF"))))
 
       val beforeDisabled = store.executions(0, 100).map(_.executionId).toSet
       withSQLConf("spark.auron.enabled" -> "false") {
@@ -96,6 +124,44 @@ class BuildInfoInSparkUISuite extends AuronQueryTest with BaseAuronSQLSuite {
           .executions(0, 100)
           .filterNot(e => beforeDisabled.contains(e.executionId))
           .forall(_.snapshots.isEmpty))
+    }
+  }
+
+  test("default strategy does not infer why native conversion was not selected") {
+    val plan = spark.range(1).selectExpr("id + 1 AS value").queryExecution.sparkPlan
+    AuronConvertStrategy(plan)
+    val project = plan.collectFirst { case p: ProjectExec => p }.get
+    assert(
+      project
+        .getTagValue(AuronConvertStrategy.neverConvertReasonTag)
+        .contains("No native conversion strategy was selected for ProjectExec."))
+  }
+
+  test("forced hash-join rewrites preserve the rejected condition reason through conversion") {
+    withSparkConf("spark.auron.forceShuffledHashJoin" -> "true") {
+      withSQLConf("spark.auron.enable.native.join.condition" -> "false") {
+        val left = spark.range(1).queryExecution.sparkPlan
+        val right = spark.range(1).queryExecution.sparkPlan
+        val join = ShuffledHashJoinExec(
+          left.output,
+          right.output,
+          Inner,
+          buildLeft,
+          Some(Literal(true)),
+          left,
+          right)
+        AuronConvertStrategy(join)
+        assert(
+          join
+            .getTagValue(AuronConvertStrategy.convertToNonNativeReasonTag)
+            .exists(_.contains("native join condition is disabled")))
+        val converted = AuronConverters.convertSparkPlanRecursively(join)
+        assert(converted.isInstanceOf[SortMergeJoinExec])
+        val node = AuronPlanDiagnostics.collect(converted).head
+        assert(node.status == "Fallback")
+        assert(node.reason.contains("SortMergeJoin"))
+        assert(node.reason.contains("native join condition is disabled"))
+      }
     }
   }
 

@@ -229,4 +229,16 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
     assert(nodes.count(_.reason == "test fallback") == 1)
   }
 
+  test("JVM conversion reasons override less specific fallback tags") {
+    Seq(Some("Auron used SortMergeJoin instead."), None).foreach { reason =>
+      val plan = emptyScan()
+      plan.setTagValue(AuronConvertStrategy.convertToNonNativeTag, true)
+      plan.setTagValue(AuronConvertStrategy.neverConvertReasonTag, "less specific reason")
+      reason.foreach(plan.setTagValue(AuronConvertStrategy.convertToNonNativeReasonTag, _))
+      val node = AuronPlanDiagnostics.collect(plan).head
+      assert(node.status == "Fallback")
+      assert(node.reason == reason.getOrElse("Auron kept this operator on the JVM."))
+    }
+  }
+
 }

@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
 
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
-import org.apache.auron.spark.ui.{AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
+import org.apache.auron.spark.ui.{AuronFallbackReason, AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
 
 /** Diagnostics must neither mutate Spark's operator IDs nor prevent query execution. */
 object AuronPlanDiagnostics extends Logging {
@@ -57,7 +57,13 @@ object AuronPlanDiagnostics extends Logging {
       if (visited.put(p, java.lang.Boolean.TRUE) != null) {
         return
       }
-      val reason = p.getTagValue(AuronConvertStrategy.neverConvertReasonTag).getOrElse("")
+      val reason =
+        if (p.getTagValue(AuronConvertStrategy.convertToNonNativeTag).contains(true)) {
+          p.getTagValue(AuronConvertStrategy.convertToNonNativeReasonTag)
+            .getOrElse(AuronFallbackReason.keptOnJvm)
+        } else {
+          p.getTagValue(AuronConvertStrategy.neverConvertReasonTag).getOrElse("")
+        }
       val status = p match {
         case _: AuronConverters.ForceNativeExecutionWrapperBase => "Wrapper"
         case _: NativeSupports => "Native"
