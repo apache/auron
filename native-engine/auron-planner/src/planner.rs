@@ -450,8 +450,9 @@ impl PhysicalPlanner {
                     .input
                     .iter()
                     .map(|input| {
-                        let input_exec =
-                            self.create_plan(input.input.as_ref().ok_or_else(|| {
+                        // A union task can have a different index from its child partition.
+                        let input_exec = PhysicalPlanner::new(input.partition as usize)
+                            .create_plan(input.input.as_ref().ok_or_else(|| {
                                 proto_error("Missing required field in protobuf")
                             })?)?;
                         Ok(UnionInput(input_exec, input.partition as usize))

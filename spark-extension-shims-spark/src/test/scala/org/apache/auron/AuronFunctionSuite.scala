@@ -1863,6 +1863,11 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           |  case when id % 2 = 0 then rand(42) else rand(42) end, rand(42)
           |from t_rand
           |""".stripMargin)
+      checkSparkAnswerAndOperator("""select id, rand(42) * 10, 100 + rand(42),
+          |  round(rand(42), 2), abs(rand(42)),
+          |  rand(42) * (case when id % 2 = 0 then cast(null as double) else 1.0 end)
+          |from t_rand
+          |""".stripMargin)
     }
   }
 
@@ -1891,6 +1896,58 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("rand function uses child partition IDs below union") {
+    withTable("t_rand") {
+      sql("create table t_rand using parquet as select id from range(0, 97, 1, 1)")
+      checkSparkAnswerAndOperator("""select 0 as branch, id, rand(42) as r from t_rand
+          |union all
+          |select 1 as branch, id, rand(42) as r from t_rand
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""select id, rand(42) as r from (
+          |  select id from t_rand
+          |  union all
+          |  select id from t_rand
+          |) t
+          |""".stripMargin)
+    }
+  }
+
+  test("rand function preserves short-circuit boolean evaluation") {
+    withTable("t_rand") {
+      sql("create table t_rand using parquet as select id from range(0, 97, 1, 1)")
+      checkSparkAnswerAndOperator("""select id,
+          |  (id % 4 < 3 and rand(42) < 0.5),
+          |  (id % 2 = 0 or rand(42) < 0.5),
+          |  ((case when id % 3 = 0 then cast(null as boolean) else id % 2 = 0 end)
+          |    and rand(42) < 0.5),
+          |  ((case when id % 3 = 0 then cast(null as boolean) else id % 2 = 0 end)
+          |    or rand(42) < 0.5)
+          |from t_rand
+          |""".stripMargin)
+    }
+  }
+
+  test("rand function preserves lazy coalesce evaluation") {
+    withTable("t_rand") {
+      sql("create table t_rand using parquet as select id from range(0, 97, 1, 1)")
+      val query = """select id,
+          |  coalesce(case when id % 2 = 0 then 1.0 end, rand(42)),
+          |  coalesce(case when id % 2 = 0 then rand(42) end, rand(84)),
+          |  coalesce(case when id % 3 = 0 then 1.0 end,
+          |    case when id % 3 = 1 then rand(42) end, rand(84))
+          |from t_rand
+          |""".stripMargin
+      for (fallbackEnabled <- Seq("false", "true")) {
+        withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> fallbackEnabled) {
+          val df = checkSparkAnswer(query)
+          assert(collectFirst(df.queryExecution.executedPlan) { case _: ProjectExec =>
+            true
+          }.contains(true))
+        }
+      }
+    }
+  }
+
   test("rand function without seed uses the Spark-resolved seed") {
     withTable("t_rand") {
       sql("create table t_rand using parquet as select id from range(0, 97, 1, 1)")
@@ -1908,6 +1965,34 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       assertPlanIsNative(df)
       assert(!df.schema("r").nullable)
       assert(expected.forall(r => r.getDouble(1) >= 0.0 && r.getDouble(1) < 1.0))
+    }
+  }
+
+  test("rand function preserves Spark evaluation in nullable arithmetic") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withTable("t_rand") {
+        sql("create table t_rand using parquet as select id from range(0, 97, 1, 1)")
+        val expressions = Seq(
+          "(case when id % 2 = 0 then cast(null as double) else 1.0 end) * rand(42)",
+          "rand(42) / (case when id % 2 = 0 then 0.0 else 2.0 end)",
+          "pmod(rand(42), case when id % 2 = 0 then 0.0 else 2.0 end)",
+          """concat(case when id % 2 = 0 then cast(null as string) else 'x' end,
+            |  cast(rand(42) as string))""".stripMargin,
+          "nanvl(case when id % 2 = 0 then cast('NaN' as double) else 1.0 end, rand(42))",
+          "id in (0, cast(rand(42) * 96 as bigint))",
+          "elt(cast(id % 2 + 1 as int), cast(rand(42) as string), cast(rand(84) as string))")
+        for {
+          fallbackEnabled <- Seq("false", "true")
+          expression <- expressions
+        } {
+          withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> fallbackEnabled) {
+            val df = checkSparkAnswer(s"select id, $expression from t_rand")
+            assert(collectFirst(df.queryExecution.executedPlan) { case _: ProjectExec =>
+              true
+            }.contains(true))
+          }
+        }
+      }
     }
   }
 
