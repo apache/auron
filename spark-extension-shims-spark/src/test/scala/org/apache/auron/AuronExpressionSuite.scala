@@ -40,6 +40,22 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("sqrt returns NaN for negative inputs") {
+    withTable("sqrt_inputs") {
+      sql("CREATE TABLE sqrt_inputs(x DOUBLE) USING parquet")
+      sql("""INSERT INTO sqrt_inputs VALUES
+            |(-1.0D), (4.0D), (0.0D), (-0.0D), (NULL),
+            |(CAST('NaN' AS DOUBLE)), (CAST('Infinity' AS DOUBLE)),
+            |(CAST('-Infinity' AS DOUBLE))
+            |""".stripMargin)
+      Seq("false", "true").foreach { ansi =>
+        withSQLConf("spark.sql.ansi.enabled" -> ansi) {
+          checkSparkAnswerAndOperator("SELECT sqrt(x) FROM sqrt_inputs")
+        }
+      }
+    }
+  }
+
   test("EqualNullSafe") {
     withTable("t1") {
       sql("CREATE TABLE t1(id INT, flag BOOLEAN) USING parquet")
