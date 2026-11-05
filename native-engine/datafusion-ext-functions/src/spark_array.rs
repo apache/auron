@@ -1226,8 +1226,7 @@ mod test {
             ColumnarValue::Scalar(ScalarValue::from(1)),
         ])?
         .into_array(4)?;
-        let expected: ArrayRef =
-            Arc::new(Int64Array::from(vec![Some(1), Some(2), Some(0), None]));
+        let expected: ArrayRef = Arc::new(Int64Array::from(vec![Some(1), Some(2), Some(0), None]));
         assert_eq!(&result, &expected);
 
         let null_list = ScalarValue::List(Arc::new(ListArray::new_null(
