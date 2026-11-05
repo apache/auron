@@ -417,10 +417,10 @@ object NativeConverters extends Logging {
       this.buildExtScalarFunctionNode(_, _, _, isPruningExpr, fallback)
 
     sparkExpr match {
-      case e @ (_: Year | _: Month | _: DayOfMonth | _: DayOfYear | _: DayOfWeek |
-          _: WeekOfYear | _: Quarter | _: Hour | _: Minute | _: Second | _: LastDay |
-          _: NextDay | _: DateDiff | _: DateAdd | _: DateSub | _: AddMonths |
-          _: MonthsBetween | _: TruncTimestamp) if !nativeDateTimeFunctionsEnabled =>
+      case e @ (_: Year | _: Month | _: DayOfMonth | _: DayOfYear | _: DayOfWeek | _: WeekOfYear |
+          _: Quarter | _: Hour | _: Minute | _: Second | _: LastDay | _: NextDay | _: DateDiff |
+          _: DateAdd | _: DateSub | _: AddMonths | _: MonthsBetween | _: TruncTimestamp)
+          if !nativeDateTimeFunctionsEnabled =>
         fallback(e)
       case e: NativeExprWrapperBase => e.wrapped
       case e: Literal =>
@@ -849,8 +849,7 @@ object NativeConverters extends Logging {
       case e: Acosh => buildScalarFunction(pb.ScalarFunction.Acosh, e.children, e.dataType)
       case e: Atan => buildScalarFunction(pb.ScalarFunction.Atan, e.children, e.dataType)
       case e: Exp => buildScalarFunction(pb.ScalarFunction.Exp, e.children, e.dataType)
-      case e: MakeDate
-        if nativeDateTimeFunctionsEnabled =>
+      case e: MakeDate if nativeDateTimeFunctionsEnabled =>
         buildExtScalarFunction(
           "Spark_MakeDate",
           e.children :+ Literal(Shims.get.getMakeDateFailOnError(e)),
