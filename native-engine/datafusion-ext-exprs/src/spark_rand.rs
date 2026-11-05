@@ -114,16 +114,16 @@ impl Hash for SparkRandExpr {
 }
 
 impl PhysicalExpr for SparkRandExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
         Ok(DataType::Float64)
     }
 
     fn nullable(&self, _input_schema: &Schema) -> Result<bool> {
         Ok(false)
+    }
+
+    fn is_volatile_node(&self) -> bool {
+        true
     }
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
@@ -164,7 +164,11 @@ impl PartialEq<dyn Any> for SparkRandExpr {
 #[cfg(test)]
 mod tests {
     use arrow::array::{Array, RecordBatchOptions};
-    use datafusion::common::cast::as_float64_array;
+    use datafusion::{
+        common::{ScalarValue, cast::as_float64_array},
+        logical_expr::Operator,
+        physical_expr::expressions::{BinaryExpr, CaseExpr, lit},
+    };
 
     use super::*;
 
@@ -246,6 +250,25 @@ mod tests {
         let expected = evaluate(expr.as_ref(), 5)?;
         let rebuilt = expr.with_new_children(vec![])?;
         assert_eq!(evaluate(rebuilt.as_ref(), 5)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_case_nullability_does_not_advance_rng() -> Result<()> {
+        let rand: PhysicalExprRef = Arc::new(SparkRandExpr::new(42, 0));
+        let predicate = Arc::new(BinaryExpr::new(rand.clone(), Operator::Lt, lit(0.5_f64)));
+        let case = CaseExpr::try_new(
+            None,
+            vec![(predicate, lit(ScalarValue::Float64(None)))],
+            Some(lit(1.0_f64)),
+        )?;
+
+        let nullable = case.nullable(&Schema::empty())?;
+        assert_eq!(
+            evaluate(rand.as_ref(), 5)?,
+            evaluate(&SparkRandExpr::new(42, 0), 5)?,
+        );
+        assert!(nullable);
         Ok(())
     }
 }
