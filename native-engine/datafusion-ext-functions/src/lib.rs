@@ -74,6 +74,7 @@ pub fn create_auron_ext_function(
         "Spark_ArrayDistinct" => shared_function!(spark_array::array_distinct),
         "Spark_ArrayUnion" => shared_function!(spark_array::array_union),
         "Spark_ArrayContains" => shared_function!(spark_array::array_contains),
+        "Spark_ArrayPosition" => shared_function!(spark_array::array_position),
         "Spark_ArrayReverse" => shared_function!(spark_array::array_reverse),
         "Spark_ArrayFlatten" => shared_function!(spark_array::array_flatten),
         "Spark_MakeArray" => shared_function!(spark_make_array::array),
