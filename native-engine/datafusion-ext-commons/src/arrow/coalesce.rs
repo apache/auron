@@ -100,6 +100,10 @@ impl BatchCoalescer {
         !self.completed_batches.is_empty()
     }
 
+    pub fn has_buffered_batches(&self) -> bool {
+        !self.staging_batches.is_empty()
+    }
+
     pub fn next_completed_batch(&mut self) -> Option<RecordBatch> {
         self.completed_batches.pop_front()
     }
