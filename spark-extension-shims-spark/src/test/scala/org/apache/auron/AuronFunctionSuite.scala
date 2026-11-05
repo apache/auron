@@ -18,6 +18,7 @@ package org.apache.auron
 
 import java.text.SimpleDateFormat
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -86,6 +87,9 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         "select isnan(max(d)), min(d), isnan(max(f)), min(f) from t_float_ordering")
     }
   }
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set("spark.auron.enableNativeDateTimeFunctions", "true")
 
   test("sum function with float input") {
     if (AuronTestUtils.isSparkV31OrGreater) {
