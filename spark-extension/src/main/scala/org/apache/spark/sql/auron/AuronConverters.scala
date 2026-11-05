@@ -609,8 +609,8 @@ object AuronConverters extends Logging {
 
     def runtimeSize(plan: SparkPlan): Option[BigInt] = plan match {
       case stage: QueryStageExec => stage.computeStats().map(_.sizeInBytes)
-      case _: NativeSortBase | _: SortExec | _: NativeRenameColumnsBase |
-          _: ConvertToNativeBase | _: InputAdapter =>
+      case _: NativeSortBase | _: SortExec | _: NativeRenameColumnsBase | _: ConvertToNativeBase |
+          _: InputAdapter =>
         runtimeSize(plan.children.head)
       case reader if Seq("AQEShuffleRead", "CustomShuffleReader").contains(reader.nodeName) =>
         runtimeSize(reader.children.head)
@@ -619,24 +619,27 @@ object AuronConverters extends Logging {
 
     def validSize(size: BigInt): Boolean = size >= 0 && size < BigInt(Long.MaxValue)
 
-    val sizes = try {
-      val runtimeSizes = for {
-        leftSize <- runtimeSize(exec.left).filter(validSize)
-        rightSize <- runtimeSize(exec.right).filter(validSize)
-      } yield (leftSize, rightSize, "runtime")
-      runtimeSizes.orElse {
-        exec.logicalLink.collect { case join: Join =>
-          (join.left.stats.sizeInBytes, join.right.stats.sizeInBytes, "logical")
-        }.filter { case (leftSize, rightSize, _) =>
-          Seq(leftSize, rightSize).forall(size =>
-            validSize(size) && size != SQLConf.get.defaultSizeInBytes)
+    val sizes =
+      try {
+        val runtimeSizes = for {
+          leftSize <- runtimeSize(exec.left).filter(validSize)
+          rightSize <- runtimeSize(exec.right).filter(validSize)
+        } yield (leftSize, rightSize, "runtime")
+        runtimeSizes.orElse {
+          exec.logicalLink
+            .collect { case join: Join =>
+              (join.left.stats.sizeInBytes, join.right.stats.sizeInBytes, "logical")
+            }
+            .filter { case (leftSize, rightSize, _) =>
+              Seq(leftSize, rightSize).forall(size =>
+                validSize(size) && size != SQLConf.get.defaultSizeInBytes)
+            }
         }
+      } catch {
+        case NonFatal(err) =>
+          logWarning("Unable to read join statistics, defaults to BuildRight", err)
+          None
       }
-    } catch {
-      case NonFatal(err) =>
-        logWarning("Unable to read join statistics, defaults to BuildRight", err)
-        None
-    }
     sizes match {
       case Some((leftSize, rightSize, source)) =>
         val buildSide = if (leftSize < rightSize) JoinBuildLeft else JoinBuildRight

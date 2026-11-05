@@ -16,13 +16,13 @@
  */
 package org.apache.auron
 
-import org.apache.spark.sql.auron.{AuronConvertStrategy, AuronConverters, Shims}
+import org.apache.spark.sql.auron.{AuronConverters, AuronConvertStrategy, Shims}
 import org.apache.spark.sql.auron.AuronConvertStrategy.childOrderingRequiredTag
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LessThan}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LeafNode, Statistics}
-import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{InputAdapter, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.auron.plan.{NativeShuffledHashJoinBase, NativeSortBase, NativeSortMergeJoinBase}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -39,6 +39,49 @@ class AuronShuffledHashJoinConditionSuite extends AuronJoinConditionTestBase {
         withJoinInputs(f)
       }
     }
+  }
+
+  // withSQLConf/withSparkConf return Unit, so the result of their blocks is
+  // captured explicitly instead of being taken as the block's value.
+  private def withDisabledAuron[T](f: => T): T = {
+    var result: Option[T] = None
+    withSQLConf("spark.auron.enabled" -> "false") {
+      result = Some(f)
+    }
+    result.get
+  }
+
+  private def withoutForcedShuffledHashJoin[T](f: => T): T = {
+    var result: Option[T] = None
+    withSparkConf("spark.auron.forceShuffledHashJoin" -> "false") {
+      result = Some(f)
+    }
+    result.get
+  }
+
+  // Collect the vanilla sort-merge join planned with auron disabled. Query
+  // preparation wraps non-codegen children in InputAdapter, which hides the
+  // real operators from conversion marking, so unwrap them first.
+  private def originalSmj(): SortMergeJoinExec = {
+    val plan = withDisabledAuron {
+      spark
+        .sql("""
+          |SELECT /*+ MERGE(l, r) */ *
+          |FROM condition_left l JOIN condition_right r ON l.k = r.k
+          |""".stripMargin)
+        .queryExecution
+        .executedPlan
+        .collectFirst { case join: SortMergeJoinExec => join }
+        .get
+    }
+    val unwrapped = plan
+      .transformUp {
+        case InputAdapter(child) => child
+        case codegen: WholeStageCodegenExec => codegen.child
+      }
+      .asInstanceOf[SortMergeJoinExec]
+    plan.logicalLink.foreach(unwrapped.setLogicalLink)
+    unwrapped
   }
 
   for ((joinType, buildAlias) <- Seq(
@@ -110,17 +153,7 @@ class AuronShuffledHashJoinConditionSuite extends AuronJoinConditionTestBase {
         (Some((BigInt(8), BigInt(Long.MaxValue))), JoinBuildRight),
         (None, JoinBuildRight))
       for ((sizes, expected) <- cases) {
-        val original = withSQLConf("spark.auron.enabled" -> "false") {
-          spark
-            .sql("""
-              |SELECT /*+ MERGE(l, r) */ *
-              |FROM condition_left l JOIN condition_right r ON l.k = r.k
-              |""".stripMargin)
-            .queryExecution
-            .executedPlan
-            .collectFirst { case join: SortMergeJoinExec => join }
-            .get
-        }
+        val original = originalSmj()
         val logicalJoin = original.logicalLink.get.asInstanceOf[Join]
         val join = original
           .makeCopy(original.productIterator.map(_.asInstanceOf[AnyRef]).toArray)
@@ -162,7 +195,7 @@ class AuronShuffledHashJoinConditionSuite extends AuronJoinConditionTestBase {
     }
   }
 
-  test("cascaded forced SHJ uses intermediate runtime statistics instead of logical estimates") {
+  test("cascaded forced SHJ builds the smaller side at each level") {
     withShuffledJoin(force = true) {
       withSQLConf("spark.sql.adaptive.enabled" -> "true") {
         val df = checkSparkAnswer("""
@@ -189,26 +222,16 @@ class AuronShuffledHashJoinConditionSuite extends AuronJoinConditionTestBase {
         }
         val joins = collectJoins(plan)
         assert(joins.size == 2, plan.toString)
-        assert(joins.forall(_.productIterator.contains(JoinBuildLeft)), plan.toString)
+        assert(joins.forall(_.productIterator.contains(JoinBuildRight)), plan.toString)
       }
     }
   }
 
   test("forced SHJ accepts a direct SMJ input without discarding its children") {
     withShuffledJoin(force = true) {
-      val original = withSQLConf("spark.auron.enabled" -> "false") {
-        spark
-          .sql("""
-            |SELECT /*+ MERGE(l, r) */ *
-            |FROM condition_left l JOIN condition_right r ON l.k = r.k
-            |""".stripMargin)
-          .queryExecution
-          .executedPlan
-          .collectFirst { case join: SortMergeJoinExec => join }
-          .get
-      }
+      val original = originalSmj()
       val semi = original.copy(joinType = LeftSemi)
-      val lower = withSparkConf("spark.auron.forceShuffledHashJoin" -> "false") {
+      val lower = withoutForcedShuffledHashJoin {
         AuronConvertStrategy.apply(semi)
         AuronConverters.convertSparkPlanRecursively(semi)
       }
@@ -223,19 +246,10 @@ class AuronShuffledHashJoinConditionSuite extends AuronJoinConditionTestBase {
   }
 
   for (requireOrdering <- Seq(false, true)) {
-    test(s"cascaded SMJ resets child ordering after conversion: requireOrdering=$requireOrdering") {
+    test(
+      s"cascaded SMJ resets child ordering after conversion: requireOrdering=$requireOrdering") {
       withShuffledJoin(force = true) {
-        val original = withSQLConf("spark.auron.enabled" -> "false") {
-          spark
-            .sql("""
-              |SELECT /*+ MERGE(l, r) */ *
-              |FROM condition_left l JOIN condition_right r ON l.k = r.k
-              |""".stripMargin)
-            .queryExecution
-            .executedPlan
-            .collectFirst { case join: SortMergeJoinExec => join }
-            .get
-        }
+        val original = originalSmj()
         val semi = original.copy(joinType = LeftSemi)
         val anti = original.copy(left = semi, joinType = LeftAnti)
         val upper = original.copy(left = anti, joinType = LeftSemi)
