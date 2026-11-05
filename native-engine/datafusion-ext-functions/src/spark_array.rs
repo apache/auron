@@ -223,10 +223,11 @@ pub fn array_contains(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }
 }
 
-/// Returns the 1-based position of the first element equal to `element` in
-/// each list, following Spark's `array_position`: a null list or null element
-/// yields null, null list entries are skipped, no match yields 0, and floats
-/// treat NaN as equal to NaN and -0.0 as equal to 0.0.
+/// Returns the 1-based position of the first element equal to the search value
+/// in each list, following Spark's `array_position`: a null list or null search
+/// value yields null, null entries never match but still count toward the
+/// position, no match yields 0, and floats treat NaN as equal to NaN and -0.0
+/// as equal to 0.0.
 pub fn array_position(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 2 {
         return df_execution_err!(
@@ -1240,6 +1241,18 @@ mod test {
             ])?,
             ColumnarValue::Scalar(ScalarValue::Int64(None))
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_array_position_null_type_list() -> Result<()> {
+        let result = array_position(&[
+            ColumnarValue::Array(Arc::new(NullArray::new(2))),
+            ColumnarValue::Array(Arc::new(Int32Array::from(vec![1, 2]))),
+        ])?
+        .into_array(2)?;
+        let expected: ArrayRef = Arc::new(Int64Array::from(vec![None, None]));
+        assert_eq!(&result, &expected);
         Ok(())
     }
 
