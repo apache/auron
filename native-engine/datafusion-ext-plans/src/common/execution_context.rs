@@ -42,8 +42,8 @@ use datafusion::{
     },
 };
 use datafusion_ext_commons::{
-    arrow::{array_size::BatchSize, coalesce::coalesce_batches_unchecked},
-    batch_size, df_execution_err, downcast_any, downcast_any_dyn, suggested_batch_mem_size,
+    arrow::{array_size::BatchSize, coalesce::BatchCoalescer},
+    df_execution_err, downcast_any, downcast_any_dyn,
 };
 use futures::{Stream, StreamExt};
 use futures_util::{FutureExt, stream::BoxStream};
@@ -147,31 +147,16 @@ impl ExecutionContext {
         self: &Arc<Self>,
         input: SendableRecordBatchStream,
     ) -> SendableRecordBatchStream {
-        pub struct CoalesceStream {
+        struct CoalesceStream {
             input: SendableRecordBatchStream,
-            staging_batches: Vec<RecordBatch>,
-            staging_rows: usize,
-            staging_batches_mem_size: usize,
+            coalescer: BatchCoalescer,
+            input_exhausted: bool,
             elapsed_compute: Time,
-        }
-
-        impl CoalesceStream {
-            fn coalesce(&mut self) -> RecordBatch {
-                let staging_batches = std::mem::take(&mut self.staging_batches);
-                self.staging_rows = 0;
-                self.staging_batches_mem_size = 0;
-                coalesce_batches_unchecked(self.schema(), &staging_batches)
-            }
-
-            fn should_flush(&self) -> bool {
-                self.staging_rows >= batch_size()
-                    || self.staging_batches_mem_size > suggested_batch_mem_size()
-            }
         }
 
         impl RecordBatchStream for CoalesceStream {
             fn schema(&self) -> SchemaRef {
-                self.input.schema()
+                self.coalescer.schema()
             }
         }
 
@@ -179,54 +164,37 @@ impl ExecutionContext {
             type Item = Result<RecordBatch>;
 
             fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-                let elapsed_time = self.elapsed_compute.clone();
                 loop {
+                    if let Some(batch) = self.coalescer.next_completed_batch() {
+                        let elapsed = self.elapsed_compute.clone();
+                        let _timer = elapsed.timer();
+                        return Poll::Ready(Some(Ok(batch)));
+                    }
+                    if self.input_exhausted {
+                        return Poll::Ready(None);
+                    }
                     match ready!(self.input.as_mut().poll_next_unpin(cx)).transpose()? {
                         Some(batch) => {
-                            let _timer = elapsed_time.timer();
-                            if batch.is_empty() {
-                                continue;
-                            }
-
-                            // short path for not coalescable batches
-                            let batch_num_rows = batch.batch().num_rows();
-                            if self.staging_batches.is_empty() && batch_num_rows > batch_size() / 4
-                            {
-                                return Poll::Ready(Some(Ok(batch)));
-                            }
-                            let batch_mem_size = batch.batch().get_batch_mem_size();
-                            if self.staging_batches.is_empty()
-                                && batch_mem_size >= suggested_batch_mem_size() / 4
-                            {
-                                return Poll::Ready(Some(Ok(batch)));
-                            }
-
-                            self.staging_rows += batch_num_rows;
-                            self.staging_batches_mem_size += batch_mem_size;
-                            self.staging_batches.push(batch);
-                            if self.should_flush() {
-                                let coalesced = self.coalesce();
-                                return Poll::Ready(Some(Ok(coalesced)));
-                            }
-                        }
-                        None if !self.staging_batches.is_empty() => {
-                            let _timer = elapsed_time.timer();
-                            let coalesced = self.coalesce();
-                            return Poll::Ready(Some(Ok(coalesced)));
+                            let elapsed = self.elapsed_compute.clone();
+                            let _timer = elapsed.timer();
+                            self.coalescer.push_batch(batch)?;
                         }
                         None => {
-                            return Poll::Ready(None);
+                            let elapsed = self.elapsed_compute.clone();
+                            let _timer = elapsed.timer();
+                            self.input_exhausted = true;
+                            self.coalescer.finish_buffered_batch()?;
                         }
                     }
                 }
             }
         }
 
+        let schema = input.schema();
         Box::pin(CoalesceStream {
             input,
-            staging_batches: vec![],
-            staging_rows: 0,
-            staging_batches_mem_size: 0,
+            coalescer: BatchCoalescer::new_with_default_batch_size(schema),
+            input_exhausted: false,
             elapsed_compute: self.baseline_metrics().elapsed_compute().clone(),
         })
     }
