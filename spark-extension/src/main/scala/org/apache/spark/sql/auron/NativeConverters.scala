@@ -89,6 +89,8 @@ object NativeConverters extends Logging {
   def udfJsonEnabled: Boolean = SparkAuronConfiguration.UDF_JSON_ENABLED.get()
   def udfBrickHouseEnabled: Boolean = SparkAuronConfiguration.UDF_BRICKHOUSE_ENABLED.get()
   def decimalArithOpEnabled: Boolean = SparkAuronConfiguration.DECIMAL_ARITH_OP_ENABLED.get()
+  def nativeDateTimeFunctionsEnabled: Boolean =
+    SparkAuronConfiguration.ENABLE_NATIVE_DATETIME_FUNCTIONS.get()
   def datetimeExtractEnabled: Boolean = SparkAuronConfiguration.DATETIME_EXTRACT_ENABLED.get()
   def castTrimStringEnabled: Boolean = SparkAuronConfiguration.CAST_STRING_TRIM_ENABLE.get()
   def singleChildFallbackEnabled: Boolean =
@@ -415,6 +417,11 @@ object NativeConverters extends Logging {
       this.buildExtScalarFunctionNode(_, _, _, isPruningExpr, fallback)
 
     sparkExpr match {
+      case e @ (_: Year | _: Month | _: DayOfMonth | _: DayOfYear | _: DayOfWeek | _: WeekOfYear |
+          _: Quarter | _: Hour | _: Minute | _: Second | _: LastDay | _: NextDay | _: DateDiff |
+          _: DateAdd | _: DateSub | _: AddMonths | _: MonthsBetween | _: TruncTimestamp)
+          if !nativeDateTimeFunctionsEnabled =>
+        fallback(e)
       case e: NativeExprWrapperBase => e.wrapped
       case e: Literal =>
         val schema = StructType(Seq(StructField("", e.dataType, e.nullable)))
@@ -842,7 +849,7 @@ object NativeConverters extends Logging {
       case e: Acosh => buildScalarFunction(pb.ScalarFunction.Acosh, e.children, e.dataType)
       case e: Atan => buildScalarFunction(pb.ScalarFunction.Atan, e.children, e.dataType)
       case e: Exp => buildScalarFunction(pb.ScalarFunction.Exp, e.children, e.dataType)
-      case e: MakeDate =>
+      case e: MakeDate if nativeDateTimeFunctionsEnabled =>
         buildExtScalarFunction(
           "Spark_MakeDate",
           e.children :+ Literal(Shims.get.getMakeDateFailOnError(e)),
