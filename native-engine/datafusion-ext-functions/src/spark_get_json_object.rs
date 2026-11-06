@@ -21,14 +21,14 @@ use arrow::{
         new_null_array,
     },
     datatypes::{DataType, Field, Fields},
-    ffi::{FFI_ArrowArray, from_ffi_and_data_type, to_ffi},
+    ffi::{FFI_ArrowArray, from_ffi_and_data_type},
 };
 use auron_jni_bridge::{conf, conf::BooleanConf, jni_call, jni_new_object, jni_new_string};
 use datafusion::{
     common::{Result, ScalarValue},
     physical_plan::ColumnarValue,
 };
-use datafusion_ext_commons::{downcast_any, uda::UserDefinedArray};
+use datafusion_ext_commons::{arrow::ffi::export_ffi_array, downcast_any, uda::UserDefinedArray};
 use sonic_rs::{JsonContainerTrait, JsonValueTrait};
 
 /// implement hive/spark's UDFGetJson
@@ -242,7 +242,7 @@ fn parse_fallback(json_path: &str, json_array: &UserDefinedArray) -> Result<Stri
                 vec![Arc::new(fallback_jsons_array)],
                 None,
             );
-            let (mut ffi_export_array, _) = to_ffi(&export_array.to_data())?;
+            let mut ffi_export_array = export_ffi_array(&export_array);
             let mut ffi_import_array = FFI_ArrowArray::empty();
             jni_call!(AuronJsonFallbackWrapper(fallback_wrapper.as_obj()).parseJsons(
                 &mut ffi_export_array as *mut FFI_ArrowArray as i64,

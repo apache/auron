@@ -24,7 +24,7 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, StructArray},
+    array::StructArray,
     ffi::{FFI_ArrowArray, FFI_ArrowSchema},
     record_batch::RecordBatch,
 };
@@ -42,7 +42,9 @@ use datafusion::{
         ExecutionPlan, displayable, empty::EmptyExec, metrics::ExecutionPlanMetricsSet,
     },
 };
-use datafusion_ext_commons::{df_execution_err, downcast_any, downcast_any_dyn};
+use datafusion_ext_commons::{
+    arrow::ffi::export_ffi_array, df_execution_err, downcast_any, downcast_any_dyn,
+};
 use datafusion_ext_plans::{
     common::execution_context::{ExecutionContext, cancel_all_tasks},
     ipc_writer_exec::IpcWriterExec,
@@ -259,7 +261,7 @@ impl NativeExecutionRuntime {
             {
                 Some(batch) => {
                     let struct_array = StructArray::from(batch);
-                    let ffi_array = FFI_ArrowArray::new(&struct_array.to_data());
+                    let ffi_array = export_ffi_array(&struct_array);
                     jni_call!(AuronCallNativeWrapper(self.native_wrapper.as_obj())
                         .importBatch(&ffi_array as *const FFI_ArrowArray as i64) -> ()
                     )?;
@@ -291,9 +293,10 @@ impl NativeExecutionRuntime {
         self.update_metrics().unwrap_or_default();
         drop(self.plan);
 
-        // Set finalizing flag before dropping receiver and native_wrapper to prevent
-        // concurrent set_error calls from next_batch/tokio workers from accessing a
-        // freed GlobalRef after finalize completes.
+        // Set finalizing flag before dropping receiver and native_wrapper to
+        // prevent concurrent set_error calls from next_batch/tokio
+        // workers from accessing a freed GlobalRef after finalize
+        // completes.
         self.is_finalizing.store(true, Ordering::Release);
         drop(self.batch_receiver);
 
