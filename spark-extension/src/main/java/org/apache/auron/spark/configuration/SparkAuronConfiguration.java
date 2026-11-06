@@ -580,9 +580,8 @@ public class SparkAuronConfiguration extends AuronConfiguration {
     public static final ConfigOption<Boolean> ENABLE_NATIVE_DATETIME_FUNCTIONS = new SQLConfOption<>(Boolean.class)
             .withKey("auron.enableNativeDateTimeFunctions")
             .withCategory("Expression/Function Supports")
-            .withDescription(
-                    "Enable datetime function conversion to native Auron implementations. "
-                            + "Defaults to falling back to Spark.")
+            .withDescription("Enable datetime function conversion to native Auron implementations. "
+                    + "Defaults to falling back to Spark.")
             .withDefaultValue(false);
 
     public static final ConfigOption<Boolean> DATETIME_EXTRACT_ENABLED = new SQLConfOption<>(Boolean.class)
