@@ -319,8 +319,9 @@ case class NativeIcebergTableScanExec(
     val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
     val minPartitionNum = Shims.get.getMinPartitionNum(sparkSession)
+    // Match FilePartition packing: account for each scan range and its open cost.
     val totalBytes = tasks
-      .map(task => task.fileSizeInBytes + openCostInBytes)
+      .map(task => task.length + openCostInBytes)
       .sum
     val bytesPerCore = if (minPartitionNum > 0) totalBytes / minPartitionNum else totalBytes
 
