@@ -17,8 +17,11 @@ use std::sync::Arc;
 
 use crate::create_auron_ext_udf;
 use arrow::{
-    array::{Array, ArrayRef, Int32Array, Int64Array, StringArray},
-    datatypes::{DataType, Field, TimeUnit},
+    array::{
+        Array, ArrayRef, AsArray, Int32Array, Int64Array, ListArray, NullArray, StringArray,
+        StructArray,
+    },
+    datatypes::{DataType, Field, Int32Type, TimeUnit},
 };
 use datafusion::{
     common::{Result, ScalarValue, config::ConfigOptions},
@@ -187,5 +190,143 @@ fn sha2_coerces_string_arrays_before_invocation() -> Result<()> {
         None,
     ]));
     assert_eq!(&result.into_array(3)?, &expected);
+    Ok(())
+}
+
+#[test]
+fn make_array_coerces_nested_nullability_before_flatten() -> Result<()> {
+    let nonnull_type = DataType::List(Arc::new(Field::new("item", DataType::Int32, false)));
+    let input = ListArray::from_iter_primitive::<Int32Type, _, _>([
+        Some(vec![Some(1), Some(2), Some(3)]),
+        Some(vec![]),
+        None,
+    ]);
+    let input = datafusion_ext_commons::arrow::cast::cast(&input, &nonnull_type)?;
+    let literal = ListArray::from_iter_primitive::<Int32Type, _, _>([Some(vec![None, Some(5)])]);
+    let element_type = literal.data_type().clone();
+    let return_type = DataType::List(Arc::new(Field::new("item", element_type.clone(), true)));
+    for rows in [1, 0, 3] {
+        let result = invoke(
+            "Spark_MakeArray",
+            vec![
+                ColumnarValue::Array(input.slice(0, rows)),
+                ColumnarValue::Scalar(ScalarValue::List(Arc::new(literal.clone()))),
+            ],
+            return_type.clone(),
+            rows,
+        )?;
+        assert_eq!(result.data_type(), return_type);
+        let flattened = invoke(
+            "Spark_ArrayFlatten",
+            vec![result],
+            element_type.clone(),
+            rows,
+        )?;
+        let expected: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
+            Some(vec![Some(1), Some(2), Some(3), None, Some(5)]),
+            Some(vec![None, Some(5)]),
+            None,
+        ]));
+        assert_eq!(&flattened.into_array(rows)?, &expected.slice(0, rows));
+    }
+    Ok(())
+}
+
+#[test]
+fn make_array_preserves_null_column_row_counts() -> Result<()> {
+    let return_type = DataType::List(Arc::new(Field::new("element", DataType::Null, true)));
+    for rows in [0, 1, 3] {
+        for extra_null in [false, true] {
+            let mut args = vec![ColumnarValue::Array(Arc::new(NullArray::new(rows)))];
+            if extra_null {
+                args.push(ColumnarValue::Scalar(ScalarValue::Null));
+            }
+            let width = args.len();
+            let result = invoke("Spark_MakeArray", args, return_type.clone(), rows)?;
+            assert!(matches!(result, ColumnarValue::Array(_)));
+            let result = result.into_array(rows)?;
+            let lists = result.as_list::<i32>();
+            assert_eq!(lists.len(), rows);
+            assert_eq!(lists.null_count(), 0);
+            for row in 0..rows {
+                assert_eq!(lists.value_length(row) as usize, width);
+                assert_eq!(lists.value(row).logical_null_count(), width);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn make_array_preserves_scalar_and_empty_results() -> Result<()> {
+    for rows in [0, 1, 3] {
+        for count in [0, 1, 2] {
+            let return_type = DataType::List(Arc::new(Field::new("item", DataType::Null, true)));
+            let result = invoke(
+                "Spark_MakeArray",
+                vec![ColumnarValue::Scalar(ScalarValue::Null); count],
+                return_type.clone(),
+                rows,
+            )?;
+            assert!(matches!(result, ColumnarValue::Scalar(_)));
+            assert_eq!(result.data_type(), return_type);
+            let result = result.into_array(rows)?;
+            let lists = result.as_list::<i32>();
+            assert_eq!(lists.len(), rows);
+            for row in 0..rows {
+                assert_eq!(lists.value_length(row) as usize, count);
+            }
+        }
+    }
+    let return_type = DataType::List(Arc::new(Field::new("item", DataType::Int32, false)));
+    let result = invoke(
+        "Spark_MakeArray",
+        vec![ColumnarValue::Scalar(ScalarValue::Int32(Some(7)))],
+        return_type.clone(),
+        3,
+    )?;
+    assert!(matches!(result, ColumnarValue::Scalar(_)));
+    assert_eq!(result.data_type(), return_type);
+    assert_eq!(
+        result
+            .into_array(3)?
+            .as_list::<i32>()
+            .values()
+            .as_primitive::<Int32Type>()
+            .values(),
+        &[7, 7, 7]
+    );
+    Ok(())
+}
+
+#[test]
+fn make_array_coerces_struct_fields_by_position() -> Result<()> {
+    let input = StructArray::from(vec![(
+        Arc::new(Field::new("left", DataType::Int32, false)),
+        Arc::new(Int32Array::from(vec![1, 2])) as ArrayRef,
+    )]);
+    let literal = StructArray::from(vec![(
+        Arc::new(Field::new("right", DataType::Int32, true)),
+        Arc::new(Int32Array::from(vec![None])) as ArrayRef,
+    )]);
+    let element_type = DataType::Struct(vec![Field::new("value", DataType::Int32, true)].into());
+    let return_type = DataType::List(Arc::new(Field::new("item", element_type, false)));
+    let result = invoke(
+        "Spark_MakeArray",
+        vec![
+            ColumnarValue::Array(Arc::new(input)),
+            ColumnarValue::Scalar(ScalarValue::Struct(Arc::new(literal))),
+        ],
+        return_type.clone(),
+        2,
+    )?;
+    assert_eq!(result.data_type(), return_type);
+    let result = result.into_array(2)?;
+    let lists = result.as_list::<i32>();
+    assert_eq!(lists.value_offsets(), &[0, 2, 4]);
+    assert_eq!(
+        lists.values().as_struct().column(0).as_ref(),
+        &Int32Array::from(vec![Some(1), None, Some(2), None]) as &dyn Array
+    );
     Ok(())
 }

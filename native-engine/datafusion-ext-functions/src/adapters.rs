@@ -16,7 +16,7 @@
 //! Thin `ScalarUDF` adapters that reconcile Auron's ext-function calling
 //! convention with the `datafusion-spark` UDFs they delegate to.
 //!
-//! Adapters supply SHA-2 argument types and width, and the session timezone.
+//! Adapters supply Spark's planned array types, SHA-2 width, and session timezone.
 
 use std::sync::Arc;
 
@@ -27,9 +27,11 @@ use arrow::{
 use datafusion::{
     common::{DataFusionError, Result, ScalarValue, config::ConfigOptions, exec_err},
     logical_expr::{
-        ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+        ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+        Volatility,
     },
 };
+use datafusion_ext_commons::arrow::cast::cast;
 
 // ---------------------------------------------------------------------------
 // shared helpers
@@ -122,6 +124,89 @@ fn forward(
         number_rows,
         return_field,
         config_options,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// MakeArrayUdf — coerce nested elements to Spark's planned common type
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct MakeArrayUdf {
+    inner: Arc<ScalarUDF>,
+    return_type: DataType,
+    sig: Signature,
+}
+
+impl MakeArrayUdf {
+    pub fn new(return_type: DataType) -> Self {
+        Self {
+            inner: datafusion_spark::function::array::array(),
+            return_type,
+            sig: Signature::variadic_any(Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for MakeArrayUdf {
+    fn name(&self) -> &str {
+        "Spark_MakeArray"
+    }
+    fn signature(&self) -> &Signature {
+        &self.sig
+    }
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(self.return_type.clone())
+    }
+    fn invoke_with_args(&self, mut args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let DataType::List(element) = &self.return_type else {
+            return exec_err!("array: expected a List return type");
+        };
+        // Auron builds physical expressions directly, bypassing DataFusion's
+        // logical coercion of nested field names and nullability.
+        args.args = args
+            .args
+            .into_iter()
+            .map(|value| cast_value(value, element.data_type()))
+            .collect::<Result<_>>()?;
+        args.arg_fields = args
+            .arg_fields
+            .into_iter()
+            .map(|field| {
+                Arc::new(
+                    field
+                        .as_ref()
+                        .clone()
+                        .with_data_type(element.data_type().clone()),
+                )
+            })
+            .collect();
+        args.return_field = self.inner.return_field_from_args(ReturnFieldArgs {
+            arg_fields: &args.arg_fields,
+            scalar_arguments: &args
+                .args
+                .iter()
+                .map(|value| match value {
+                    ColumnarValue::Scalar(scalar) => Some(scalar),
+                    ColumnarValue::Array(_) => None,
+                })
+                .collect::<Vec<_>>(),
+        })?;
+        // SparkArray always marks its elements nullable; retain Spark's schema.
+        cast_value(self.inner.invoke_with_args(args)?, &self.return_type)
+    }
+}
+
+fn cast_value(value: ColumnarValue, data_type: &DataType) -> Result<ColumnarValue> {
+    if value.data_type() == *data_type {
+        return Ok(value);
+    }
+    Ok(match value {
+        ColumnarValue::Array(array) => ColumnarValue::Array(cast(array.as_ref(), data_type)?),
+        ColumnarValue::Scalar(scalar) => ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &cast(scalar.to_array()?.as_ref(), data_type)?,
+            0,
+        )?),
     })
 }
 

@@ -125,8 +125,8 @@ fn adapted<T: datafusion::logical_expr::ScalarUDFImpl>(impl_: T) -> Arc<ScalarUD
 /// `datafusion-spark` implementation where one exists.
 ///
 /// `arg_types` / `return_type` are the plan-level types from the protobuf
-/// node; they are only used to wrap legacy ext implementations in a
-/// `ScalarUDF`. `datafusion-spark` UDFs carry their own signatures.
+/// node; adapters use them to preserve Spark's types where DataFusion's
+/// logical type coercion is bypassed.
 pub fn create_auron_ext_udf(
     name: &str,
     spark_partition_id: usize,
@@ -146,7 +146,6 @@ pub fn create_auron_ext_udf(
         "Spark_Substring" => Some(spark_fn::string::substring()),
         "Spark_StringConcat" => Some(spark_fn::string::concat()),
         "Spark_StringConcatWs" => Some(spark_fn::string::concat_ws()),
-        "Spark_MakeArray" => Some(spark_fn::array::array()),
         "Spark_DateAdd" => Some(spark_fn::datetime::date_add()),
         "Spark_DateSub" => Some(spark_fn::datetime::date_sub()),
         "Spark_LastDay" => Some(spark_fn::datetime::last_day()),
@@ -159,6 +158,7 @@ pub fn create_auron_ext_udf(
 
     // --- datafusion-spark behind a thin calling-convention adapter ---
     let adapted: Option<Arc<ScalarUDF>> = match name {
+        "Spark_MakeArray" => Some(adapted(MakeArrayUdf::new(ret))),
         "Spark_Sha224" => Some(adapted(Sha2BitsUdf::new(224, ret))),
         "Spark_Sha256" => Some(adapted(Sha2BitsUdf::new(256, ret))),
         "Spark_Sha384" => Some(adapted(Sha2BitsUdf::new(384, ret))),
