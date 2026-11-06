@@ -16,7 +16,7 @@
 use std::sync::{Arc, OnceLock};
 
 use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
-use datafusion_ext_commons::df_unimplemented_err;
+use datafusion_ext_commons::{df_execution_err, df_unimplemented_err};
 
 mod brickhouse;
 mod flink_datetime;
@@ -44,7 +44,6 @@ macro_rules! shared_function {
     }};
 }
 
-#[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 pub fn create_auron_ext_function(
     name: &str,
     #[allow(unused_variables)] spark_partition_id: usize,
@@ -53,7 +52,9 @@ pub fn create_auron_ext_function(
     // if used for flink should be start with 'Flink_',
     // same to other engines.
     Ok(match name {
-        "Placeholder" => shared_function!(|_| panic!("placeholder() should never be called")),
+        "Placeholder" => {
+            shared_function!(|_| df_execution_err!("placeholder() should never be called"))
+        }
         "Spark_NullIf" => shared_function!(spark_null_if::spark_null_if),
         "Spark_NullIfZero" => shared_function!(spark_null_if::spark_null_if_zero),
         "Spark_UnscaledValue" => shared_function!(spark_unscaled_value::spark_unscaled_value),
@@ -140,6 +141,59 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn placeholder_returns_error() -> Result<()> {
+        let placeholder = create_auron_ext_function("Placeholder", 0)?;
+        assert!(matches!(
+            placeholder(&[]),
+            Err(datafusion::common::DataFusionError::Execution(message))
+                if message == "placeholder() should never be called"
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn multi_column_count_placeholder_nullability() -> Result<()> {
+        let schema = Schema::empty();
+        let udf = Arc::new(create_udf(
+            "spark_ext_function_Placeholder",
+            vec![],
+            DataType::Int64,
+            Volatility::Volatile,
+            create_auron_ext_function("Placeholder", 0)?,
+        ));
+        let placeholder: PhysicalExprRef = Arc::new(ScalarFunctionExpr::new(
+            udf.name(),
+            udf.clone(),
+            vec![],
+            Arc::new(Field::new("placeholder", DataType::Int64, true)),
+            Arc::new(ConfigOptions::default()),
+        ));
+        assert_eq!(placeholder.data_type(&schema)?, DataType::Int64);
+        assert!(placeholder.nullable(&schema)?);
+        for nullable_columns in [1, 2] {
+            let is_null: PhysicalExprRef = Arc::new(IsNullExpr::new(placeholder.clone()));
+            let predicate = if nullable_columns == 1 {
+                is_null
+            } else {
+                Arc::new(BinaryExpr::new(is_null.clone(), Operator::Or, is_null))
+            };
+            let count_expr = CaseExpr::try_new(
+                None,
+                vec![(predicate, Arc::new(Literal::new(ScalarValue::Int32(None))))],
+                Some(Arc::new(Literal::new(ScalarValue::Int32(Some(1))))),
+            )?;
+            assert_eq!(count_expr.data_type(&schema)?, DataType::Int32);
+            assert!(count_expr.nullable(&schema)?);
+            assert!(
+                count_expr
+                    .evaluate(&RecordBatch::new_empty(Arc::new(schema.clone())))
+                    .is_err()
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn case_nullability_does_not_evaluate_aggregate_placeholders() -> Result<()> {
