@@ -105,7 +105,7 @@ import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 import org.apache.spark.sql.execution.joins.auron.plan.NativeShuffledHashJoinExecProvider
 import org.apache.spark.sql.execution.joins.auron.plan.NativeSortMergeJoinExecProvider
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
-import org.apache.spark.sql.execution.ui.{AuronEventUtils, AuronSQLAppStatusListener, AuronSQLAppStatusStore, AuronSQLTab}
+import org.apache.spark.sql.execution.ui.{AuronEventUtils, AuronSQLAppStatusListener, AuronSQLAppStatusStore, AuronSQLTab, SQLTab}
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, StringType}
 import org.apache.spark.status.ElementTrackingStore
@@ -205,7 +205,10 @@ class ShimsImpl extends Shims with Logging {
         throw new IllegalStateException("No active spark context found that should not happen")
       }
       val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
-      val statusStore = new AuronSQLAppStatusStore(kvStore)
+      // Spark's SQL tab may be initialized after this extension, so resolve it on each read.
+      val statusStore = new AuronSQLAppStatusStore(
+        kvStore,
+        sparkContext.ui.flatMap(_.getTabs.collectFirst { case tab: SQLTab => tab.sqlStore }))
       sparkContext.ui.foreach(new AuronSQLTab(statusStore, _))
       logInfo(" onApplyingExtension add register ")
       AuronSQLAppStatusListener.register(sparkContext)
@@ -688,7 +691,7 @@ class ShimsImpl extends Shims with Logging {
             .build()
         }
 
-      case e if isUnixDateConversion(e) =>
+      case e if NativeConverters.nativeDateTimeFunctionsEnabled && isUnixDateConversion(e) =>
         // Date32 and Int32 share the same epoch-day representation.
         Some(
           pb.PhysicalExprNode
