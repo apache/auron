@@ -42,7 +42,7 @@ use datafusion::{
     },
 };
 use datafusion_ext_commons::{
-    arrow::{array_size::BatchSize, coalesce::coalesce_batches_unchecked},
+    arrow::{array_size::BatchSize, coalesce::BatchCoalescer},
     batch_size, df_execution_err, downcast_any, downcast_any_dyn, suggested_batch_mem_size,
 };
 use futures::{Stream, StreamExt};
@@ -147,31 +147,16 @@ impl ExecutionContext {
         self: &Arc<Self>,
         input: SendableRecordBatchStream,
     ) -> SendableRecordBatchStream {
-        pub struct CoalesceStream {
+        struct CoalesceStream {
             input: SendableRecordBatchStream,
-            staging_batches: Vec<RecordBatch>,
-            staging_rows: usize,
-            staging_batches_mem_size: usize,
+            coalescer: BatchCoalescer,
+            input_exhausted: bool,
             elapsed_compute: Time,
-        }
-
-        impl CoalesceStream {
-            fn coalesce(&mut self) -> RecordBatch {
-                let staging_batches = std::mem::take(&mut self.staging_batches);
-                self.staging_rows = 0;
-                self.staging_batches_mem_size = 0;
-                coalesce_batches_unchecked(self.schema(), &staging_batches)
-            }
-
-            fn should_flush(&self) -> bool {
-                self.staging_rows >= batch_size()
-                    || self.staging_batches_mem_size > suggested_batch_mem_size()
-            }
         }
 
         impl RecordBatchStream for CoalesceStream {
             fn schema(&self) -> SchemaRef {
-                self.input.schema()
+                self.coalescer.schema()
             }
         }
 
@@ -179,54 +164,47 @@ impl ExecutionContext {
             type Item = Result<RecordBatch>;
 
             fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-                let elapsed_time = self.elapsed_compute.clone();
                 loop {
+                    if let Some(batch) = self.coalescer.next_completed_batch() {
+                        let elapsed = self.elapsed_compute.clone();
+                        let _timer = elapsed.timer();
+                        return Poll::Ready(Some(Ok(batch)));
+                    }
+                    if self.input_exhausted {
+                        return Poll::Ready(None);
+                    }
                     match ready!(self.input.as_mut().poll_next_unpin(cx)).transpose()? {
                         Some(batch) => {
-                            let _timer = elapsed_time.timer();
-                            if batch.is_empty() {
+                            let elapsed = self.elapsed_compute.clone();
+                            let _timer = elapsed.timer();
+                            if batch.num_rows() == 0 {
                                 continue;
                             }
-
-                            // short path for not coalescable batches
-                            let batch_num_rows = batch.batch().num_rows();
-                            if self.staging_batches.is_empty() && batch_num_rows > batch_size() / 4
+                            // Avoid copying sufficiently large batches, preserving input order.
+                            if !self.coalescer.has_buffered_batches()
+                                && (batch.num_rows() > batch_size() / 4
+                                    || batch.get_batch_mem_size() >= suggested_batch_mem_size() / 4)
                             {
                                 return Poll::Ready(Some(Ok(batch)));
                             }
-                            let batch_mem_size = batch.batch().get_batch_mem_size();
-                            if self.staging_batches.is_empty()
-                                && batch_mem_size >= suggested_batch_mem_size() / 4
-                            {
-                                return Poll::Ready(Some(Ok(batch)));
-                            }
-
-                            self.staging_rows += batch_num_rows;
-                            self.staging_batches_mem_size += batch_mem_size;
-                            self.staging_batches.push(batch);
-                            if self.should_flush() {
-                                let coalesced = self.coalesce();
-                                return Poll::Ready(Some(Ok(coalesced)));
-                            }
-                        }
-                        None if !self.staging_batches.is_empty() => {
-                            let _timer = elapsed_time.timer();
-                            let coalesced = self.coalesce();
-                            return Poll::Ready(Some(Ok(coalesced)));
+                            self.coalescer.push_batch(batch)?;
                         }
                         None => {
-                            return Poll::Ready(None);
+                            let elapsed = self.elapsed_compute.clone();
+                            let _timer = elapsed.timer();
+                            self.input_exhausted = true;
+                            self.coalescer.finish_buffered_batch()?;
                         }
                     }
                 }
             }
         }
 
+        let schema = input.schema();
         Box::pin(CoalesceStream {
             input,
-            staging_batches: vec![],
-            staging_rows: 0,
-            staging_batches_mem_size: 0,
+            coalescer: BatchCoalescer::new_with_default_batch_size(schema),
+            input_exhausted: false,
             elapsed_compute: self.baseline_metrics().elapsed_compute().clone(),
         })
     }
@@ -772,4 +750,121 @@ pub fn cancel_all_tasks(task_ctx: &Arc<TaskContext>) {
             None => false,   // already released
         })
         .collect();
+}
+
+#[cfg(test)]
+mod tests {
+    use arrow::{
+        array::{BinaryArray, Int64Array, StringArray},
+        datatypes::{DataType, Field},
+    };
+    use futures::TryStreamExt;
+
+    use super::*;
+
+    async fn coalesce(batches: Vec<RecordBatch>) -> Result<Vec<RecordBatch>> {
+        let schema = batches[0].schema();
+        let exec_ctx = ExecutionContext::new(
+            Arc::new(TaskContext::default()),
+            0,
+            schema.clone(),
+            &ExecutionPlanMetricsSet::new(),
+        );
+        let input = Box::pin(RecordBatchStreamAdapter::new(
+            schema,
+            futures::stream::iter(batches.into_iter().map(Ok)),
+        ));
+        exec_ctx
+            .coalesce_with_default_batch_size(input)
+            .try_collect()
+            .await
+    }
+
+    fn integer_batch(start: i64, len: usize) -> Result<RecordBatch> {
+        Ok(RecordBatch::try_from_iter([(
+            "id",
+            Arc::new(Int64Array::from_iter_values(start..start + len as i64))
+                as arrow::array::ArrayRef,
+        )])?)
+    }
+
+    #[tokio::test]
+    async fn coalesce_preserves_large_row_batches_without_copying() -> Result<()> {
+        for len in [batch_size() / 4, batch_size() / 4 + 1] {
+            let first = integer_batch(0, len)?;
+            let second = integer_batch(len as i64, len)?;
+            let input = vec![first, second];
+            let output = coalesce(input.clone()).await?;
+            if len > batch_size() / 4 {
+                assert_eq!(output.len(), 2);
+                for (input, output) in input.iter().zip(&output) {
+                    assert!(Arc::ptr_eq(input.column(0), output.column(0)));
+                }
+            } else {
+                assert_eq!(output.len(), 1);
+                assert_eq!(output[0].num_rows(), 2 * len);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn coalesce_preserves_large_orc_batches_without_copying() -> Result<()> {
+        let value_size = suggested_batch_mem_size() * 3 / 8;
+        let text = "x".repeat(value_size);
+        let bytes = vec![b'y'; value_size];
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("s", DataType::Utf8, true),
+            Field::new("b", DataType::Binary, true),
+        ]));
+        let mut input = vec![];
+        for id in 0..7i64 {
+            let string = match id {
+                0 => None,
+                1 => Some(""),
+                _ => Some(text.as_str()),
+            };
+            let binary = match id {
+                2 => None,
+                3 => Some(b"".as_slice()),
+                _ => Some(bytes.as_slice()),
+            };
+            let batch = RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int64Array::from(vec![id])),
+                    Arc::new(StringArray::from(vec![string])),
+                    Arc::new(BinaryArray::from(vec![binary])),
+                ],
+            )?;
+            assert!(batch.get_batch_mem_size() >= suggested_batch_mem_size() / 4);
+            input.push(batch);
+        }
+        let mut batches = vec![input[0].slice(0, 0)];
+        batches.extend(input.clone());
+        let output = coalesce(batches).await?;
+        assert_eq!(output.len(), 7);
+        for (input, output) in input.iter().zip(&output) {
+            for (input, output) in input.columns().iter().zip(output.columns()) {
+                assert!(Arc::ptr_eq(input, output));
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn coalesce_large_batch_does_not_overtake_buffered_rows() -> Result<()> {
+        let first = integer_batch(0, 1)?;
+        let second = integer_batch(1, batch_size() / 4 + 1)?;
+        let input = vec![
+            first.clone(),
+            RecordBatch::new_empty(first.schema()),
+            second,
+        ];
+        let expected = arrow::compute::concat_batches(&first.schema(), &input)?;
+        let output = coalesce(input).await?;
+        assert_eq!(output, vec![expected]);
+        Ok(())
+    }
 }
