@@ -60,7 +60,7 @@ class NativeConvertersSuite
     }
   }
 
-  test("日期时间 native 翻译默认关闭") {
+  test("datetime native conversion is disabled by default") {
     assert(!SparkAuronConfiguration.ENABLE_NATIVE_DATETIME_FUNCTIONS.defaultValue())
     assert(!NativeConverters.nativeDateTimeFunctionsEnabled)
     withSQLConf(
@@ -72,7 +72,7 @@ class NativeConvertersSuite
     }
   }
 
-  test("关闭日期时间 native 翻译时普通表达式和裁剪表达式均回退") {
+  test("datetime expressions fall back for regular and pruning conversion when disabled") {
     withSQLConf(
       "spark.auron.enableNativeDateTimeFunctions" -> "false",
       "spark.auron.datetime.extract.enabled" -> "true") {
@@ -92,7 +92,7 @@ class NativeConvertersSuite
     }
   }
 
-  test("开启日期时间 native 翻译后恢复现有转换") {
+  test("datetime expressions keep their native conversion when enabled") {
     withSQLConf(
       "spark.auron.enableNativeDateTimeFunctions" -> "true",
       "spark.auron.datetime.extract.enabled" -> "true",
@@ -104,7 +104,7 @@ class NativeConvertersSuite
     }
   }
 
-  test("日期时间总开关不覆盖时分秒提取开关") {
+  test("datetime master switch does not override the time-part extract switch") {
     withSQLConf(
       "spark.auron.enableNativeDateTimeFunctions" -> "true",
       "spark.auron.datetime.extract.enabled" -> "false",
