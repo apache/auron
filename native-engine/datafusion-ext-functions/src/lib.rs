@@ -152,6 +152,7 @@ pub fn create_auron_ext_udf(
         "Spark_DateAdd" => Some(spark_fn::datetime::date_add()),
         "Spark_DateSub" => Some(spark_fn::datetime::date_sub()),
         "Spark_LastDay" => Some(spark_fn::datetime::last_day()),
+        "Spark_Pmod" => Some(spark_fn::math::pmod()),
         "Spark_XxHash64" => Some(spark_fn::hash::xxhash64()),
         _ => None,
     };
@@ -558,6 +559,46 @@ mod tests {
         let expected = Decimal128Array::from(vec![Some(0), Some(12_346), None])
             .with_precision_and_scale(29, 4)?;
         assert_eq!(result.as_ref(), &expected);
+        Ok(())
+    }
+
+    #[test]
+    fn pmod_partition_id_expr() -> Result<()> {
+        use datafusion::arrow::array::{Array, Int32Array};
+
+        let udf = create_auron_ext_udf(
+            "Spark_Pmod",
+            0,
+            vec![DataType::Int32, DataType::Int32],
+            DataType::Int32,
+        )?;
+        for values in [
+            ColumnarValue::Array(Arc::new(Int32Array::from(vec![
+                Some(i32::MIN),
+                Some(-1),
+                Some(0),
+                Some(1),
+                Some(i32::MAX),
+                None,
+            ]))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(-1))),
+        ] {
+            let expected = match &values {
+                ColumnarValue::Scalar(_) => Int32Array::from(vec![Some(6)]),
+                _ => Int32Array::from(vec![Some(5), Some(6), Some(0), Some(1), Some(1), None]),
+            };
+            let result = udf.invoke_with_args(ScalarFunctionArgs {
+                args: vec![values, ColumnarValue::Scalar(ScalarValue::Int32(Some(7)))],
+                arg_fields: vec![
+                    Arc::new(Field::new("hash", DataType::Int32, true)),
+                    Arc::new(Field::new("partitions", DataType::Int32, false)),
+                ],
+                number_rows: expected.len(),
+                return_field: Arc::new(Field::new("partition_id", DataType::Int32, true)),
+                config_options: Arc::new(ConfigOptions::default()),
+            })?;
+            assert_eq!(result.into_array(expected.len())?.as_ref(), &expected);
+        }
         Ok(())
     }
 

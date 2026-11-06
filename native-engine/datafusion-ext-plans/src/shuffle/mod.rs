@@ -25,8 +25,7 @@ use std::{
 };
 
 use arrow::{
-    array::ArrayRef,
-    error::Result as ArrowResult,
+    array::{Array, ArrayRef, Int32Array},
     record_batch::RecordBatch,
     row::{Row, RowConverter, Rows, SortField},
 };
@@ -38,7 +37,7 @@ use datafusion::{
     physical_expr::{PhysicalExprRef, PhysicalSortExpr},
     physical_plan::SendableRecordBatchStream,
 };
-use datafusion_ext_commons::{arrow::array_size::BatchSize, spark_hash::create_murmur3_hashes};
+use datafusion_ext_commons::{arrow::array_size::BatchSize, df_execution_err};
 use futures::StreamExt;
 use parking_lot::Mutex as SyncMutex;
 
@@ -119,7 +118,7 @@ pub enum Partitioning {
     RoundRobinPartitioning(usize),
     /// Allocate rows based on a hash of one of more expressions and the
     /// specified number of partitions
-    HashPartitioning(Vec<PhysicalExprRef>, usize),
+    HashPartitioning(PhysicalExprRef, usize),
     /// Single partitioning scheme with a known number of partitions
     SinglePartitioning(),
     /// Range partitioning
@@ -150,13 +149,8 @@ impl fmt::Display for Partitioning {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Partitioning::RoundRobinPartitioning(size) => write!(f, "RoundRobinBatch({size})"),
-            Partitioning::HashPartitioning(phy_exprs, size) => {
-                let phy_exprs_str = phy_exprs
-                    .iter()
-                    .map(|e| format!("{e}"))
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                write!(f, "Hash([{phy_exprs_str}], {size})")
+            Partitioning::HashPartitioning(expr, size) => {
+                write!(f, "Hash({expr}, {size})")
             }
             Partitioning::SinglePartitioning() => {
                 write!(f, "SinglePartitioning()")
@@ -176,31 +170,30 @@ impl fmt::Display for Partitioning {
     }
 }
 
-fn evaluate_hashes(partitioning: &Partitioning, batch: &RecordBatch) -> ArrowResult<Vec<i32>> {
-    match partitioning {
-        Partitioning::HashPartitioning(exprs, _) => {
-            let arrays = exprs
-                .iter()
-                .map(|expr| Ok(expr.evaluate(batch)?.into_array(batch.num_rows())?))
-                .collect::<Result<Vec<_>>>()?;
-
-            // compute hash array, use identical seed as spark hash partition
-            Ok(create_murmur3_hashes(arrays[0].len(), &arrays, 42))
-        }
-        _ => unreachable!("unsupported partitioning: {:?}", partitioning),
+fn evaluate_partition_ids(
+    expr: &PhysicalExprRef,
+    batch: &RecordBatch,
+    num_partitions: usize,
+) -> Result<Vec<u32>> {
+    let array = expr.evaluate(batch)?.into_array(batch.num_rows())?;
+    let ids = array
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .ok_or_else(|| DataFusionError::Execution("partition_id_expr must return Int32".into()))?;
+    if ids.null_count() != 0 {
+        return df_execution_err!("partition_id_expr returned null partition ids");
     }
-}
-
-fn evaluate_partition_ids(mut hashes: Vec<i32>, num_partitions: usize) -> Vec<u32> {
-    // evaluate part_id = pmod(hash, num_partitions)
-    for h in &mut hashes {
-        *h = h.rem_euclid(num_partitions as i32);
-    }
-
-    unsafe {
-        // safety: transmute Vec<i32> to Vec<u32>
-        std::mem::transmute(hashes)
-    }
+    ids.values()
+        .iter()
+        .map(|&id| {
+            if id < 0 || id as usize >= num_partitions {
+                return df_execution_err!(
+                    "partition_id_expr returned invalid partition id {id} for {num_partitions} partitions"
+                );
+            }
+            Ok(id as u32)
+        })
+        .collect()
 }
 
 fn evaluate_robin_partition_ids(

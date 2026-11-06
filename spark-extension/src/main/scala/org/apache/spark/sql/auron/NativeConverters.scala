@@ -770,6 +770,12 @@ object NativeConverters extends Logging {
           }
         }
 
+      case e: Pmod if e.dataType == IntegerType && (e.right match {
+            case Literal(n: Int, IntegerType) => n > 0
+            case _ => false
+          }) =>
+        buildExtScalarFunction("Spark_Pmod", e.children, e.dataType)
+
       case e: Remainder =>
         val lhs = e.left
         val rhs = e.right
