@@ -29,6 +29,7 @@ arrow = { workspace = true }
 bigdecimal = { workspace = true }
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }
+datafusion-spark = { workspace = true }
 datafusion-ext-commons = { workspace = true }
 jni = { workspace = true }
 
@@ -41,6 +42,3 @@ serde_json = { workspace = true }
 sonic-rs = { workspace = true }
 chrono = "0.4.45"
 chrono-tz = "0.10.4"
-
-[dev-dependencies]
-datafusion-spark = { workspace = true }
