@@ -230,7 +230,8 @@ impl Joiner for ExistenceJoiner {
         cur1: &mut StreamCursor,
         cur2: &mut StreamCursor,
     ) -> Result<()> {
-        let mut merger = GroupMerger::new();
+        // Every left row is output; right rows that match nothing are not.
+        let mut merger = GroupMerger::new(true, false);
 
         while let Some(action) = merger.next(cur1, cur2).await? {
             // Note: the slices of the groups below live inside the merger and
