@@ -281,9 +281,36 @@ object NativeConverters extends Logging {
     override def toString(): String = s"$getClass() dataType:$dataType)"
   }
 
+  private def containsRand(expr: Expression): Boolean = expr.find(_.isInstanceOf[Rand]).isDefined
+
+  private def requiresSparkRandEvaluation(expr: Expression): Boolean = {
+    if (!expr.children.exists(containsRand)) {
+      return false
+    }
+    expr match {
+      // These native expressions evaluate only the selected rows in each branch.
+      case _: If | _: CaseWhen | _: And | _: Or => false
+      // Spark evaluates the divisor first and can skip the dividend for zero/null.
+      case _: DivModLike | _: Pmod => true
+      case e: BinaryArithmetic => e.left.nullable
+      case e: BinaryComparison => e.left.nullable
+      case e if e.children.size <= 1 => false
+      // Other scalar functions evaluate all native arguments eagerly. Keep Rand
+      // in Spark unless the remaining arguments are non-null literals.
+      case e =>
+        !e.children.tail.forall {
+          case Literal(value, _) => value != null
+          case _ => false
+        }
+    }
+  }
+
   private def buildSparkUdfWrapperExpr(
       sparkExpr: Expression,
       fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    if (containsRand(sparkExpr)) {
+      throw new NotImplementedError("rand requires Spark evaluation inside a fallback expression")
+    }
     // update subquery result if needed
     sparkExpr.foreach {
       case subquery: ExecSubqueryExpression =>
@@ -334,7 +361,12 @@ object NativeConverters extends Logging {
       throw new NotImplementedError(s"unsupported expression: (${e.getClass}) $e")
     }
 
-    if (!singleChildFallbackEnabled) {
+    if (containsRand(sparkExpr) && sparkExpr.find(requiresSparkRandEvaluation).isDefined) {
+      throw new NotImplementedError("rand requires Spark short-circuit evaluation")
+    }
+
+    // Extracting Rand into wrapper inputs would evaluate it for unselected rows.
+    if (!singleChildFallbackEnabled || containsRand(sparkExpr)) {
       return convertExprWithFallback(sparkExpr, isPruningExpr = false, fallbackToError)
     }
 
@@ -808,6 +840,7 @@ object NativeConverters extends Logging {
       // or if forceShortCircuitAndOr is enabled, always use short-circuiting
       case And(lhs, rhs)
           if SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR.get()
+            || containsRand(rhs)
             || rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
         buildExprNode {
           _.setScAndExpr(
@@ -818,6 +851,7 @@ object NativeConverters extends Logging {
         }
       case Or(lhs, rhs)
           if SparkAuronConfiguration.FORCE_SHORT_CIRCUIT_AND_OR.get()
+            || containsRand(rhs)
             || rhs.find(HiveUDFUtil.isHiveUDF).isDefined =>
         buildExprNode {
           _.setScOrExpr(
@@ -895,6 +929,23 @@ object NativeConverters extends Logging {
       case e: Hex => buildScalarFunction(pb.ScalarFunction.Hex, e.children, e.dataType)
       case e: IsNaN =>
         buildExtScalarFunction("Spark_IsNaN", e.children, e.dataType)
+      case e: Rand =>
+        val seedOpt: Option[Long] = e.child match {
+          case expr if expr.foldable =>
+            expr.eval(null) match {
+              case null => Some(0L)
+              case n: Number => Some(n.longValue())
+              case _ => None
+            }
+          case _ => None
+        }
+        seedOpt
+          .map { seed =>
+            buildExprNode {
+              _.setSparkRandExpr(pb.SparkRandExprNode.newBuilder().setSeed(seed))
+            }
+          }
+          .getOrElse(fallback(e))
       case e: Randn =>
         val seedOpt: Option[Long] = e.child match {
           case Literal(s: Long, _) => Some(s)
