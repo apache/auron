@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.iceberg.FileFormat
+import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -263,14 +264,19 @@ case class NativeIcebergTableScanExec(
     scanTasks
       .map(task => task.location -> task.fileSizeInBytes)
       .groupBy(_._1)
-      .mapValues(_.head._2)
-      .toMap
+      .map { case (location, files) => location -> files.head._2 }
   }
 
   private def postDriverMetrics(filePartitions: Array[FilePartition]): Unit = {
     val numPartitions = filePartitions.length
     metrics("numPartitions").add(numPartitions)
-    val numFiles = filePartitions.foldLeft(0L)(_ + _.files.length)
+    // Count planned snapshot files, while preserving changelog event/range counting.
+    val numFiles =
+      if (AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(basedScan.scan)) {
+        fileSizes.size.toLong
+      } else {
+        filePartitions.foldLeft(0L)(_ + _.files.length)
+      }
     metrics("numFiles").add(numFiles)
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(
