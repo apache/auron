@@ -206,7 +206,14 @@ object AuronConverters extends Logging {
         .foreach(newExec.setTagValue(requiredReservedOrderTag, _))
 
       if (!isNeverConvert(newExec)) {
-        newExec = convertSparkPlan(newExec)
+        val convertedExec = convertSparkPlan(newExec)
+        newExec = if (convertedExec.eq(newExec)) {
+          convertedExec
+        } else {
+          // A converted node is built from scratch, so Spark's logical link does not travel
+          // with it. AQE searches a query stage's subtree for a link and asserts it finds one.
+          Shims.get.setLogicalLink(convertedExec, exec)
+        }
       }
       if (exec.isInstanceOf[SortMergeJoinExec] &&
         newExec.isInstanceOf[NativeShuffledHashJoinBase]) {
