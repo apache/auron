@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, Decimal, DecimalType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType, Decimal, DecimalType, StringType, StructField, StructType}
 
 import org.apache.auron.{protobuf => pb}
 
@@ -373,7 +373,11 @@ object IcebergScanSupport extends Logging {
           logWarning(s"Failed to inspect Iceberg schema history for $scanClassName.", t)
           return None
       }
-    assert(!renameOrDrop.nested, "Nested Iceberg rename or drop is not supported.")
+    // Iceberg's required schema includes columns used only by filters.
+    // shortcut: keep complex projections on Spark until nested field-ID resolution is supported.
+    assert(
+      !renameOrDrop.nested || fileSchema.fields.forall(_.dataType.isInstanceOf[AtomicType]),
+      "Nested Iceberg rename or drop is not supported for complex projections.")
 
     val missingFieldIds =
       fileSchema.fields.filterNot(field => fieldIdsByName.contains(field.name)).map(_.name)
