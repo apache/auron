@@ -282,6 +282,7 @@ mod tests {
                     &schema,
                     &collect(join()?.execute(0, context.clone())?).await?,
                 )?;
+                let join = join()?;
                 let last = schema.fields().len() - 1;
                 for projection in [
                     vec![],
@@ -291,8 +292,7 @@ mod tests {
                     vec![last, 0, last],
                 ] {
                     let expected = full.project(&projection)?;
-                    // Each physical plan uses one projection, as in native task execution.
-                    let stream = join()?.execute_projected(0, context.clone(), &projection)?;
+                    let stream = join.execute_projected(0, context.clone(), &projection)?;
                     assert_eq!(stream.schema(), expected.schema());
                     assert_eq!(
                         concat_batches(&expected.schema(), &collect(stream).await?)?,
@@ -300,6 +300,9 @@ mod tests {
                         "join_type={join_type:?}, build_side={build_side:?}, projection={projection:?}"
                     );
                 }
+                let stream = join.execute(0, context.clone())?;
+                assert_eq!(stream.schema(), schema);
+                assert_eq!(concat_batches(&schema, &collect(stream).await?)?, full);
             }
         }
         Ok(())
