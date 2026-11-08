@@ -2000,10 +2000,15 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  // Spark 3.0/3.1 narrow seconds to decimal(8,6); later versions use decimal(16,6).
+  private def makeTimestampSecondsType: String =
+    if (AuronTestUtils.isSparkV32OrGreater) "decimal(16,6)" else "decimal(8,6)"
+
   test("make_timestamp preserves precision, nulls and time zones") {
     withSQLConf("spark.sql.ansi.enabled" -> "false") {
       withTable("t1") {
-        sql("create table t1(y int, m int, d int, h int, n int, s decimal(16,6)) using parquet")
+        sql(
+          s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
         sql("""insert into t1 values
             |  (1970, 1, 1, 0, 0, 0.123456),
             |  (1969, 12, 31, 23, 59, 59.999999),
@@ -2049,7 +2054,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   test("make_timestamp follows Spark through DST gaps and overlaps") {
     withTable("t1") {
-      sql("create table t1(y int, m int, d int, h int, n int, s decimal(16,6)) using parquet")
+      sql(
+        s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
       sql("""insert into t1 values
           |  (2024, 3, 10, 2, 30, 0.123456),
           |  (2024, 11, 3, 1, 30, 59.999999),
@@ -2068,7 +2074,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   test("make_timestamp invalid fields follow version-specific ANSI behavior") {
     withSQLConf("spark.sql.ansi.enabled" -> "false") {
       withTable("t1") {
-        sql("create table t1(y int, m int, d int, h int, n int, s decimal(16,6)) using parquet")
+        sql(
+          s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
         sql("""insert into t1 values
             |  (2023, 2, 29, 0, 0, 0),
             |  (2024, 13, 1, 0, 0, 0),
@@ -2116,8 +2123,9 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       withTable("t1") {
         sql("create table t1(y string, m string) using parquet")
         val queries = Seq(
-          "select make_timestamp(y, m, 1, 0, 0, 0, 'UTC') from t1",
-          "select make_timestamp(y, java_method('java.lang.String', 'valueOf', 1), " +
+          "select make_timestamp(cast(y as int), cast(m as int), 1, 0, 0, 0, 'UTC') from t1",
+          "select make_timestamp(cast(y as int), " +
+            "cast(java_method('java.lang.String', 'valueOf', 1) as int), " +
             "1, 0, 0, 0, 'UTC') from t1")
         for (singleChildFallback <- Seq("false", "true"); query <- queries) {
           withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> singleChildFallback) {
@@ -2152,7 +2160,9 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   }
 
   test("make_timestamp year fallback preserves invalid seconds behavior") {
-    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+    withSQLConf(
+      "spark.sql.ansi.enabled" -> "false",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true") {
       withTable("t1") {
         sql("create table t1(y int, s decimal(16,6)) using parquet")
         sql("insert into t1 values (9999, 4294.967296), (10000, 4294.967296), (2024, 0.123456)")
@@ -2167,7 +2177,8 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
   test("make_timestamp year boundaries and DST rollover match Spark") {
     withSQLConf("spark.sql.ansi.enabled" -> "false") {
       withTable("t1") {
-        sql("create table t1(y int, m int, d int, h int, n int, s decimal(16,6)) using parquet")
+        sql(
+          s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
         sql("""insert into t1 values
             | (1799, 12, 31, 23, 59, 60),
             | (1800, 1, 1, 0, 0, 0),
@@ -2205,7 +2216,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
-  test("make_timestamp invalid timezone follows ANSI mode") {
+  test("make_timestamp invalid timezone follows version-specific ANSI behavior") {
     withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
       withTable("t1") {
         sql("create table t1(y int) using parquet")
@@ -2215,10 +2226,14 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           checkSparkAnswerAndOperator(query)
         }
         withSQLConf("spark.sql.ansi.enabled" -> "true") {
-          withSQLConf("spark.auron.enable" -> "false") {
+          if (AuronTestUtils.isSparkV31OrGreater) {
+            withSQLConf("spark.auron.enable" -> "false") {
+              intercept[Exception] { sql(query).collect() }
+            }
             intercept[Exception] { sql(query).collect() }
+          } else {
+            checkSparkAnswerAndOperator(query)
           }
-          intercept[Exception] { sql(query).collect() }
         }
       }
     }

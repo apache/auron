@@ -189,6 +189,34 @@ class NativeConvertersSuite
     }
   }
 
+  test("make_timestamp keeps narrowing seconds casts inside Spark") {
+    val nativePrecision = if (AuronTestUtils.isSparkV32OrGreater) 16 else 8
+    for (ansi <- Seq("false", "true")) {
+      withSQLConf(
+        "spark.auron.enableNativeDateTimeFunctions" -> "true",
+        "spark.auron.udf.singleChildFallback.enabled" -> "true",
+        "spark.sql.ansi.enabled" -> ansi) {
+        for (precision <- Seq(nativePrecision, 18)) {
+          val expr = sql(s"select make_timestamp(y, 1, 1, 0, 0, " +
+            s"cast(s as decimal($nativePrecision,6)), 'UTC') " +
+            s"from (select 2024 as y, cast(0 as decimal($precision,6)) as s)").queryExecution.analyzed.expressions.head.children.head
+          val converted = NativeConverters.convertExpr(expr)
+          if (precision == nativePrecision) {
+            assert(converted.hasCase)
+            assert(
+              converted.getCase.getWhenThenExpr(0).getThenExpr.getScalarFunction.getName ==
+                "Spark_MakeTimestamp")
+          } else {
+            assert(converted.hasSparkUdfWrapperExpr)
+            val (bound, _) = NativeConverters.deserializeExpression[Expression, StructType](
+              converted.getSparkUdfWrapperExpr.getSerialized.toByteArray)
+            assert(Seq("Cast", "AnsiCast").contains(bound.children(5).getClass.getSimpleName))
+          }
+        }
+      }
+    }
+  }
+
   test("make_timestamp with NTZ result keeps its existing fallback") {
     if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.4") {
       withSQLConf(
