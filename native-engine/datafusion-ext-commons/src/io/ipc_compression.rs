@@ -169,10 +169,10 @@ impl<W: Write> IpcCompressionWriter<W> {
             // lz4's FrameEncoder keeps writing to the same (now-cleared) shared buffer and
             // will automatically start a new frame on next write(); zstd needs a fresh
             // zio::Writer wrapping the reused raw_encoder and the new buffer.
-            if let Some(raw_encoder) = pending_zstd_encoder {
-                if let BlockCompressor::ZSTD(slot) = &mut self.block_writer {
-                    *slot = Some(zio::Writer::new(self.shared_buf.writer(), raw_encoder));
-                }
+            if let Some(raw_encoder) = pending_zstd_encoder
+                && let BlockCompressor::ZSTD(slot) = &mut self.block_writer
+            {
+                *slot = Some(zio::Writer::new(self.shared_buf.writer(), raw_encoder));
             }
             self.block_empty = true;
         }
@@ -579,12 +579,12 @@ mod tests {
         let test_array2: ArrayRef = Arc::new(StringArray::from(vec![Some("foo"), Some("bar")]));
         let schema = Arc::new(Schema::new(vec![Field::new("", DataType::Utf8, false)]));
 
-        writer.write_batch(2, &[test_array1.clone()])?;
+        writer.write_batch(2, std::slice::from_ref(&test_array1))?;
         // force finishing the first block before writing the second batch, so that the
         // block-level compressor (lz4 FrameEncoder reused across blocks by default in
         // tests) has to start a brand new frame for the second block.
         writer.finish_current_buf()?;
-        writer.write_batch(2, &[test_array2.clone()])?;
+        writer.write_batch(2, std::slice::from_ref(&test_array2))?;
         writer.finish_current_buf()?;
 
         let mut reader = IpcCompressionReader::new(Cursor::new(buf));
@@ -644,7 +644,7 @@ mod tests {
             .collect();
 
         for array in &arrays {
-            writer.write_batch(2, &[array.clone()])?;
+            writer.write_batch(2, std::slice::from_ref(array))?;
             // force a block boundary after every batch, exercising the decompressor's
             // block-boundary reuse logic across many consecutive blocks.
             writer.finish_current_buf()?;
@@ -654,7 +654,7 @@ mod tests {
         for array in &arrays {
             let (num_rows, read_arrays) = reader.read_batch(&schema)?.expect("non-empty batch");
             assert_eq!(num_rows, 2);
-            assert_eq!(&read_arrays, &[array.clone()]);
+            assert_eq!(&read_arrays, std::slice::from_ref(array));
         }
         assert!(reader.read_batch(&schema)?.is_none());
         Ok(())

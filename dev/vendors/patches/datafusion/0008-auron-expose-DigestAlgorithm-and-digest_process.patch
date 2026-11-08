@@ -1,0 +1,22 @@
+diff --git a/datafusion/functions/src/crypto/basic.rs b/datafusion/functions/src/crypto/basic.rs
+index e848daa..e983366 100644
+--- a/datafusion/functions/src/crypto/basic.rs
++++ b/datafusion/functions/src/crypto/basic.rs
+@@ -32,7 +32,7 @@ use std::str::FromStr;
+ use std::sync::Arc;
+ 
+ #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+-pub(crate) enum DigestAlgorithm {
++pub enum DigestAlgorithm {
+     Md5,
+     Sha224,
+     Sha256,
+@@ -184,7 +184,7 @@ impl DigestAlgorithm {
+     }
+ }
+ 
+-pub(crate) fn digest_process(
++pub fn digest_process(
+     value: &ColumnarValue,
+     digest_algorithm: DigestAlgorithm,
+ ) -> Result<ColumnarValue> {

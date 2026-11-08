@@ -124,14 +124,9 @@ impl RuntimeMemManager<Mem> {
         Self::init_with_total(total);
     }
 
-    pub fn register_consumer(mut consumer: Arc<dyn MemConsumer>, spillable: bool) {
+    pub fn register_consumer(consumer: Arc<dyn MemConsumer>, spillable: bool) {
         let consumer_info = Self::register_consumer_info(consumer.name().to_owned(), spillable);
-
-        // SAFETY: callers register before sharing the consumer with other tasks.
-        unsafe {
-            let consumer_mut = Arc::get_mut_unchecked(&mut consumer);
-            consumer_mut.set_consumer_info(Arc::downgrade(&consumer_info));
-        }
+        consumer.set_consumer_info(Arc::downgrade(&consumer_info));
     }
 
     pub fn deregister_consumer(consumer: &dyn MemConsumer) {
@@ -157,9 +152,13 @@ impl RuntimeMemManager<Mem> {
 }
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait MemConsumer: Send + Sync {
     fn name(&self) -> &str;
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>);
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo>;
 
     fn consumer_info(&self) -> Arc<MemConsumerInfo> {
@@ -202,7 +201,6 @@ pub trait MemConsumer: Send + Sync {
                 let old_used = std::mem::replace(&mut consumer_status.mem_used, new_used);
                 (old_used, new_used)
             },
-            false,
             || self.spill(),
         )
         .await
@@ -226,25 +224,6 @@ pub trait MemConsumer: Send + Sync {
                 consumer_status.mem_used = new_used;
                 (old_used, new_used)
             },
-            false,
-            || self.spill(),
-        )
-        .await
-    }
-
-    async fn force_spill(&self) -> Result<()>
-    where
-        Self: Sized,
-    {
-        let consumer_info = self.consumer_info();
-        update_consumer_mem_used_with_custom_updater(
-            self.name(),
-            &consumer_info,
-            |consumer_status| {
-                let used = consumer_status.mem_used;
-                (used, used)
-            },
-            true,
             || self.spill(),
         )
         .await
@@ -288,7 +267,7 @@ mod tests {
     const MB: usize = 1 << 20;
 
     struct TestConsumer {
-        info: Weak<MemConsumerInfo>,
+        info: OnceCell<Weak<MemConsumerInfo>>,
         spills: AtomicUsize,
         release_per_spill: usize,
     }
@@ -301,7 +280,7 @@ mod tests {
         fn register_with_spillable(release_per_spill: usize, spillable: bool) -> Arc<Self> {
             MemManager::init(1_000 * MB);
             let consumer = Arc::new(Self {
-                info: Weak::new(),
+                info: OnceCell::new(),
                 spills: AtomicUsize::new(0),
                 release_per_spill,
             });
@@ -316,12 +295,12 @@ mod tests {
             "TestMemConsumer"
         }
 
-        fn set_consumer_info(&mut self, info: Weak<MemConsumerInfo>) {
-            self.info = info;
+        fn set_consumer_info(&self, info: Weak<MemConsumerInfo>) {
+            self.info.set(info).expect("consumer info already set");
         }
 
         fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-            &self.info
+            self.info.get().expect("consumer info not set")
         }
 
         async fn spill(&self) -> Result<()> {
@@ -357,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn pinning_and_forced_spills_preserve_accounting() -> Result<()> {
+    fn pinning_and_direct_spills_preserve_accounting() -> Result<()> {
         let _guard = TEST_LOCK.lock();
         let consumer = TestConsumer::register(usize::MAX);
         block_on(consumer.update_mem_used(200))?;
@@ -368,8 +347,8 @@ mod tests {
 
         consumer.set_spillable(true);
         assert_eq!(MemManager::get().status.lock().mem_spillables, 200);
-        block_on(consumer.force_spill())?;
-        block_on(consumer.force_spill())?;
+        block_on(consumer.spill())?;
+        block_on(consumer.spill())?;
         assert_eq!(consumer.spills.load(Ordering::SeqCst), 2);
         assert_eq!(MemManager::get().total_used(), 0);
         assert_eq!(MemManager::get().status.lock().mem_spillables, 0);

@@ -1,0 +1,309 @@
+diff --git a/parquet/src/arrow/array_reader/mod.rs b/parquet/src/arrow/array_reader/mod.rs
+index 347058329..e063285d4 100644
+--- a/parquet/src/arrow/array_reader/mod.rs
++++ b/parquet/src/arrow/array_reader/mod.rs
+@@ -31,7 +31,7 @@ use crate::file::metadata::ParquetMetaData;
+ use crate::file::reader::{FilePageIterator, FileReader};
+ 
+ mod builder;
+-mod byte_array;
++pub mod byte_array;
+ mod byte_array_dictionary;
+ mod byte_view_array;
+ mod cached_array_reader;
+diff --git a/parquet/src/arrow/async_reader/mod.rs b/parquet/src/arrow/async_reader/mod.rs
+index 1d276df2a..84abdbbe5 100644
+--- a/parquet/src/arrow/async_reader/mod.rs
++++ b/parquet/src/arrow/async_reader/mod.rs
+@@ -198,6 +198,12 @@ pub trait AsyncFileReader: Send {
+         &'a mut self,
+         options: Option<&'a ArrowReaderOptions>,
+     ) -> BoxFuture<'a, Result<Arc<ParquetMetaData>>>;
++
++    /// Sync version of get_bytes
++    /// this is only used by auron, for reading dictionary values for row group pruning
++    fn get_bytes_sync(&mut self, _range: Range<u64>) -> Result<Bytes> {
++        unimplemented!("auron only")
++    }
+ }
+ 
+ /// This allows Box<dyn AsyncFileReader + '_> to be used as an AsyncFileReader,
+@@ -216,6 +222,10 @@ impl AsyncFileReader for Box<dyn AsyncFileReader + '_> {
+     ) -> BoxFuture<'a, Result<Arc<ParquetMetaData>>> {
+         self.as_mut().get_metadata(options)
+     }
++
++    fn get_bytes_sync(&mut self, range: Range<u64>) -> Result<Bytes> {
++        self.as_mut().get_bytes_sync(range)
++    }
+ }
+ 
+ impl<T: AsyncFileReader + MetadataFetch + AsyncRead + AsyncSeek + Unpin> MetadataSuffixFetch for T {
+@@ -278,7 +288,7 @@ impl ArrowReaderMetadata {
+ ///
+ /// Allows sharing the same builder for different readers while keeping the same
+ /// ParquetRecordBatchStreamBuilder API
+-pub struct AsyncReader<T>(T);
++pub struct AsyncReader<T>(pub T);
+ 
+ /// A builder for reading parquet files from an `async` source as  [`ParquetRecordBatchStream`]
+ ///
+diff --git a/parquet/src/arrow/mod.rs b/parquet/src/arrow/mod.rs
+index b89db361e..17794a040 100644
+--- a/parquet/src/arrow/mod.rs
++++ b/parquet/src/arrow/mod.rs
+@@ -179,10 +179,10 @@
+ //! assert_eq!(50, record_batch.num_rows());
+ //! ```
+ 
+-experimental!(mod array_reader);
++experimental!(pub mod array_reader);
+ pub mod arrow_reader;
+ pub mod arrow_writer;
+-mod buffer;
++pub mod buffer;
+ mod decoder;
+ 
+ #[cfg(feature = "async")]
+diff --git a/parquet/src/auron.rs b/parquet/src/auron.rs
+new file mode 100644
+index 000000000..ef36bbf12
+--- /dev/null
++++ b/parquet/src/auron.rs
+@@ -0,0 +1,211 @@
++// Copyright 2022 The Auron Authors
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++use std::io::Read;
++use std::sync::{Arc, Mutex};
++
++use arrow_array::*;
++use arrow_schema::DataType;
++use bytes::Bytes;
++
++use crate::arrow::array_reader::byte_array::ByteArrayDecoderPlain;
++use crate::arrow::async_reader::AsyncFileReader;
++use crate::arrow::buffer::offset_buffer::OffsetBuffer;
++use crate::basic::{Encoding, PageType};
++use crate::column::page::{Page, PageReader};
++use crate::column::reader::{ColumnReader, get_column_reader};
++use crate::data_type::*;
++use crate::encodings::decoding::{Decoder, PlainDecoder};
++use crate::file::metadata::RowGroupMetaData;
++use crate::file::reader::{ChunkReader, Length, SerializedPageReader};
++
++pub fn get_dictionary_for_pruning<T: AsyncFileReader + Send + 'static + ?Sized>(
++    input: &mut T,
++    row_group_metadata: &RowGroupMetaData,
++    col_idx: usize,
++) -> crate::errors::Result<Option<ArrayRef>> {
++    let column_metadata = row_group_metadata.column(col_idx);
++
++    // check whether dictionary page exists
++    if column_metadata
++        .page_encoding_stats()
++        .iter()
++        .flat_map(|stats| stats.iter())
++        .all(|stat| stat.page_type != PageType::DICTIONARY_PAGE)
++    {
++        // no dictionary page
++        return Ok(None);
++    }
++
++    // check whether a data page using a non-dictionary encoding exists, if
++    // so, cannot use for pruning.
++    //
++    // auron: must only inspect `DATA_PAGE` entries here. The dictionary
++    // page's own `page_encoding_stats` entry always reports `PLAIN` (that's
++    // simply how the dictionary's values are encoded, per the parquet spec)
++    // regardless of whether the *data* pages use dictionary encoding; not
++    // filtering it out here made every dictionary-encoded column look like
++    // it had a "non-dictionary encoding" and silently disabled dictionary
++    // pruning entirely.
++    if column_metadata
++        .page_encoding_stats()
++        .iter()
++        .flat_map(|stats| stats.iter())
++        .filter(|stat| stat.page_type == PageType::DATA_PAGE)
++        .any(|stat| {
++            !matches!(
++                stat.encoding,
++                Encoding::PLAIN_DICTIONARY | Encoding::RLE_DICTIONARY
++            )
++        })
++    {
++        // at least one non-dictionary encoding is present
++        return Ok(None);
++    }
++
++    // auron: the two `page_encoding_stats`-based checks above already fully
++    // prove that every page in this column chunk is dictionary-encoded (one
++    // `DICTIONARY_PAGE`, and every page -- including this one -- uses either
++    // `PLAIN_DICTIONARY` (1.0 encoding) or `RLE_DICTIONARY` (2.0 encoding),
++    // with no `PLAIN` fallback). There used to be an additional
++    // `encodings_mask`-based check here that only trusted the legacy 1.0
++    // `PLAIN_DICTIONARY` encoding and unconditionally bailed out for 2.0's
++    // `RLE_DICTIONARY` (the encoding arrow-rs's `ArrowWriter` emits by
++    // default since at least arrow-rs 59.2.0), which made dictionary-based
++    // row-group pruning a permanent no-op for any file written with a
++    // reasonably modern parquet writer. Since `page_encoding_stats` already
++    // rules out the only case that check was guarding against (a page
++    // falling back to plain, non-dictionary encoding without updating
++    // `encodings()`), that check has been removed.
++
++    let mut page_reader: Box<dyn PageReader> = Box::new(SerializedPageReader::new(
++        Arc::new(WrappedChunkReader {
++            inner: Arc::new(Mutex::new(input)),
++            start: column_metadata.byte_range().0,
++            len: column_metadata.byte_range().1,
++        }),
++        column_metadata,
++        row_group_metadata.num_rows() as usize,
++        None,
++    )?);
++    let page_metadata = page_reader.peek_next_page()?;
++    if !page_metadata
++        .map(|metadata| metadata.is_dict)
++        .unwrap_or(false)
++    {
++        return Ok(None);
++    }
++
++    macro_rules! get_prim_dict {
++        ($r:expr, $parquet_type:ty, $array_type:ty) => {{
++            match $r.page_reader.get_next_page()? {
++                Some(Page::DictionaryPage {
++                    buf, num_values, ..
++                }) => {
++                    let mut dict_values = vec![Default::default(); num_values as usize];
++                    let mut dict_decoder = PlainDecoder::<$parquet_type>::new(
++                        column_metadata.column_descr().type_length(),
++                    );
++                    dict_decoder.set_data(buf, num_values as usize)?;
++                    dict_decoder.get(&mut dict_values)?;
++                    Ok(Some(Arc::new(<$array_type>::from_iter_values(dict_values))))
++                }
++                _ => Ok(None),
++            }
++        }};
++    }
++
++    // safety:
++    //  bypass lifetime checking.
++    //  page_reader is guarenteed not to be used outside its lifetime.
++    let unsafe_page_reader =
++        unsafe { std::mem::transmute::<Box<dyn PageReader>, Box<dyn PageReader>>(page_reader) };
++    match get_column_reader(column_metadata.column_descr_ptr(), unsafe_page_reader) {
++        ColumnReader::BoolColumnReader(_) => Ok(None),
++        ColumnReader::Int32ColumnReader(mut r) => {
++            get_prim_dict!(r, Int32Type, Int32Array)
++        }
++        ColumnReader::Int64ColumnReader(mut r) => {
++            get_prim_dict!(r, Int64Type, Int64Array)
++        }
++        ColumnReader::Int96ColumnReader(_) => Ok(None),
++        ColumnReader::FloatColumnReader(mut r) => {
++            get_prim_dict!(r, FloatType, Float32Array)
++        }
++        ColumnReader::DoubleColumnReader(mut r) => {
++            get_prim_dict!(r, DoubleType, Float64Array)
++        }
++        ColumnReader::ByteArrayColumnReader(mut r) => match r.page_reader.get_next_page()? {
++            Some(Page::DictionaryPage {
++                buf, num_values, ..
++            }) => {
++                let mut buffer = OffsetBuffer::<i32>::with_capacity(0);
++                let mut decoder = ByteArrayDecoderPlain::new(
++                    buf,
++                    num_values as usize,
++                    Some(num_values as usize),
++                    false,
++                );
++                decoder.read(&mut buffer, usize::MAX)?;
++                Ok(Some(buffer.into_array(None, DataType::Binary)))
++            }
++            _ => Ok(None),
++        },
++        ColumnReader::FixedLenByteArrayColumnReader(_) => Ok(None),
++    }
++}
++
++struct WrappedChunkReader<'a, T: AsyncFileReader + Send + 'static + ?Sized> {
++    inner: Arc<Mutex<&'a mut T>>,
++    start: u64,
++    len: u64,
++}
++unsafe impl<T: AsyncFileReader + Send + 'static + ?Sized> Sync for WrappedChunkReader<'_, T> {}
++
++impl<T: AsyncFileReader + Send + 'static + ?Sized> Read for WrappedChunkReader<'_, T> {
++    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
++        buf.copy_from_slice(self.get_bytes(self.start, buf.len())?.as_ref());
++        self.start += buf.len() as u64;
++        Ok(buf.len())
++    }
++}
++
++impl<T: AsyncFileReader + Send + 'static + ?Sized> Length for WrappedChunkReader<'_, T> {
++    fn len(&self) -> u64 {
++        self.len
++    }
++}
++impl<T: AsyncFileReader + Send + 'static + ?Sized> ChunkReader for WrappedChunkReader<'_, T> {
++    type T = Self;
++
++    fn get_read(&self, start: u64) -> crate::errors::Result<Self::T> {
++        Ok(Self {
++            inner: self.inner.clone(),
++            start,
++            len: self.len,
++        })
++    }
++
++    fn get_bytes(&self, start: u64, length: usize) -> crate::errors::Result<Bytes> {
++        // arrow-rs 59.2.0's `SerializedPageReader` passes *absolute* file
++        // offsets to both `get_read` and `get_bytes` (the Values state reads
++        // page headers via `get_read(offset)` and page bodies via
++        // `get_bytes(data_start, len)` with absolute `data_start`). Treat
++        // `start` as absolute here; `self.start` only tracks the sequential
++        // read position for the `Read` impl.
++        let end = start + length as u64;
++        let mut inner = self.inner.lock().unwrap();
++        inner.get_bytes_sync(start..end)
++    }
++}
+diff --git a/parquet/src/column/reader.rs b/parquet/src/column/reader.rs
+index 81960abbe..2374297b2 100644
+--- a/parquet/src/column/reader.rs
++++ b/parquet/src/column/reader.rs
+@@ -114,7 +114,7 @@ pub type ColumnReaderImpl<T> = GenericColumnReader<
+ pub struct GenericColumnReader<R, D, V> {
+     descr: ColumnDescPtr,
+ 
+-    page_reader: Box<dyn PageReader>,
++    pub page_reader: Box<dyn PageReader>,
+ 
+     /// The total number of values stored in the data page.
+     num_buffered_values: usize,
+diff --git a/parquet/src/lib.rs b/parquet/src/lib.rs
+index 3acdb6188..3bbd5f179 100644
+--- a/parquet/src/lib.rs
++++ b/parquet/src/lib.rs
+@@ -228,3 +228,7 @@ pub enum DecodeResult<T: Debug> {
+ #[cfg(feature = "variant_experimental")]
+ pub mod variant;
+ experimental!(pub mod geospatial);
++
++#[cfg(feature = "arrow")]
++#[cfg(feature = "async")]
++pub mod auron;

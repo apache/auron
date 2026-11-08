@@ -36,10 +36,11 @@ RUN yum install -y libzip unzip openssl-devel git
 RUN yum install -y devtoolset-11-gcc devtoolset-11-gcc-c++
 RUN echo '. /opt/rh/devtoolset-11/enable' >> ~/.bashrc
 
-# install rust nightly toolchain
+# install rust stable toolchain
 RUN curl https://sh.rustup.rs > /rustup-init
 RUN chmod +x /rustup-init
-RUN /rustup-init -y --default-toolchain nightly-2025-05-09-x86_64-unknown-linux-gnu
+RUN /rustup-init -y --default-toolchain stable-x86_64-unknown-linux-gnu \
+    --component rust-src,cargo,rustfmt,clippy
 
 # install java
 RUN yum install -y java-1.8.0-openjdk java-1.8.0-openjdk-devel

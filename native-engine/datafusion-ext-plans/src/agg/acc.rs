@@ -465,10 +465,10 @@ impl AccBytesColumn {
     fn refresh_heap_mem_used(&mut self) {
         self.heap_mem_used = 0;
         for item in &self.items {
-            if let Some(v) = item {
-                if v.spilled() {
-                    self.heap_mem_used += v.capacity();
-                }
+            if let Some(v) = item
+                && v.spilled()
+            {
+                self.heap_mem_used += v.capacity();
             }
         }
     }
@@ -545,7 +545,7 @@ impl AccColumn for AccBytesColumn {
             if array_data.is_valid(i) {
                 let offset_begin = offset_buffer[i] as usize;
                 let offset_end = offset_buffer[i + 1] as usize;
-                self.items.push(Some(AccBytes::from_slice(
+                self.items.push(Some(AccBytes::from_slice_copy(
                     &data_buffer[offset_begin..offset_end],
                 )));
             } else {
@@ -730,7 +730,7 @@ mod selection_cache_tests {
                     if initial_size > 0 {
                         boolean.set_value(0, Some(true));
                         primitive.set_value(0, Some(42));
-                        bytes.set_value(0, Some(AccBytes::from_slice(b"value")));
+                        bytes.set_value(0, Some(AccBytes::from_slice_copy(b"value")));
                         scalar.set_value(0, ScalarValue::Int64(Some(42)));
                     }
                     vec![

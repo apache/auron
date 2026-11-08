@@ -69,10 +69,6 @@ impl Hash for SparkPartitionIdExpr {
 }
 
 impl PhysicalExpr for SparkPartitionIdExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
         Ok(DataType::Int32)
     }

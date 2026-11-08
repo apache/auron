@@ -88,7 +88,7 @@ pub struct KafkaScanExec {
     data_format: i32,
     format_config_json: String,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl KafkaScanExec {
@@ -153,25 +153,30 @@ impl ExecutionPlan for KafkaScanExec {
         "KafkaScanExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 UnknownPartitioning(1),
                 EmissionType::Both,
                 Boundedness::Unbounded {
                     requires_infinite_memory: false,
                 },
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -205,10 +210,6 @@ impl ExecutionPlan for KafkaScanExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 
@@ -260,14 +261,14 @@ fn read_serialized_records_from_kafka(
         .get("restored_offsets")
         .expect("restored_offsets is not valid json");
     let mut partitions: Vec<i32> = vec![];
-    if let Some(assigned_partitions) = task_json.get("assigned_partitions") {
-        if let Some(array) = assigned_partitions.as_array() {
-            array.iter().for_each(|v| {
-                if let Some(num) = v.as_i64() {
-                    partitions.push(num as i32);
-                }
-            });
-        }
+    if let Some(assigned_partitions) = task_json.get("assigned_partitions")
+        && let Some(array) = assigned_partitions.as_array()
+    {
+        array.iter().for_each(|v| {
+            if let Some(num) = v.as_i64() {
+                partitions.push(num as i32);
+            }
+        });
     }
     if partitions.is_empty() {
         return Err(DataFusionError::Execution(format!(
@@ -458,22 +459,22 @@ fn read_serialized_records_from_kafka(
                                 .expect("offsets_to_commit is not valid json")
                                 .len(),
                         );
-                        if let Some(obj) = offsets_to_commit.as_object() {
-                            if !obj.is_empty() {
-                                for (partition, offset) in obj {
-                                    let _ = partition_list.add_partition_offset(
-                                        &kafka_topic,
-                                        partition
-                                            .parse::<i32>()
-                                            .expect("partition is not valid json"),
-                                        Offset::Offset(
-                                            offset.as_i64().expect("offset is not valid json"),
-                                        ),
-                                    );
-                                }
-                                log::info!("auron consumer to commit offset: {partition_list:?}");
-                                let _ = consumer.commit(&partition_list, CommitMode::Async);
+                        if let Some(obj) = offsets_to_commit.as_object()
+                            && !obj.is_empty()
+                        {
+                            for (partition, offset) in obj {
+                                let _ = partition_list.add_partition_offset(
+                                    &kafka_topic,
+                                    partition
+                                        .parse::<i32>()
+                                        .expect("partition is not valid json"),
+                                    Offset::Offset(
+                                        offset.as_i64().expect("offset is not valid json"),
+                                    ),
+                                );
                             }
+                            log::info!("auron consumer to commit offset: {partition_list:?}");
+                            let _ = consumer.commit(&partition_list, CommitMode::Async);
                         }
                     }
                 }
