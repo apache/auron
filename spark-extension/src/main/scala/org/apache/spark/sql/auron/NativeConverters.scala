@@ -20,11 +20,13 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
+import java.time.ZoneOffset
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.math.max
 import scala.math.min
+import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.c.CDataDictionaryProvider
@@ -49,6 +51,7 @@ import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.RightOuter
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExecSubqueryExpression
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils.ROOT_ALLOCATOR
@@ -296,6 +299,12 @@ object NativeConverters extends Logging {
     val convertedChildren = mutable.LinkedHashMap[pb.PhysicalExprNode, BoundReference]()
     val bound = sparkExpr.mapChildren(_.transformDown {
       case p: Literal => p
+      // Keep MakeTimestamp's coercions inside Spark, including ANSI errors and null short circuit.
+      case p
+          if sparkExpr.isInstanceOf[MakeTimestamp] &&
+            !p.isInstanceOf[AttributeReference] && !p.isInstanceOf[BoundReference] &&
+            !p.isInstanceOf[NativeExprWrapperBase] =>
+        p
       case p =>
         try {
           val convertedChild = convertExprWithFallback(p, isPruningExpr = false, fallback)
@@ -339,6 +348,9 @@ object NativeConverters extends Logging {
     }
 
     try {
+      if (sparkExpr.isInstanceOf[MakeTimestamp]) {
+        return convertExprWithFallback(sparkExpr, isPruningExpr = false, fallbackToError)
+      }
       // get number of inconvertible children
       var numInconvertibleChildren = 0
       sparkExpr.children.foreach { child =>
@@ -854,6 +866,8 @@ object NativeConverters extends Logging {
           "Spark_MakeDate",
           e.children :+ Literal(Shims.get.getMakeDateFailOnError(e)),
           e.dataType)
+      case e: MakeTimestamp if nativeDateTimeFunctionsEnabled && e.dataType == TimestampType =>
+        buildMakeTimestampExt(e, isPruningExpr, fallback)
       case e: Log =>
         buildScalarFunction(pb.ScalarFunction.Ln, e.children.map(nullIfNegative), e.dataType)
       case e: Log2 =>
@@ -1499,6 +1513,78 @@ object NativeConverters extends Logging {
             args.map(expr => convertExprWithFallback(expr, isPruningExpr, fallback)).asJava)
           .setReturnType(convertDataType(dataType)))
     }
+
+  private def buildMakeTimestampExt(
+      expr: MakeTimestamp,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    // Fallible input expressions must keep Spark's errors and left-to-right null short circuit.
+    def nativeInput(input: Expression): Boolean = input match {
+      case _: Literal | _: AttributeReference | _: BoundReference => true
+      case cast: Cast if Cast.canUpCast(cast.child.dataType, cast.dataType) =>
+        nativeInput(cast.child)
+      case cast if isNoOpAnsiCast(cast) => nativeInput(cast.children.head)
+      case other => other.foldable
+    }
+    if (!expr.children.take(6).forall(nativeInput)) {
+      return fallback(expr)
+    }
+    val timezone = expr.timezone.getOrElse(
+      Literal(expr.timeZoneId.getOrElse(SQLConf.get.sessionLocalTimeZone)))
+    // Resolve Java aliases once. Row-dependent and unsupported zone IDs retain Spark evaluation.
+    if (!timezone.foldable) {
+      return fallback(expr)
+    }
+    val tzArg =
+      try {
+        Option(timezone.eval()).map(_.toString) match {
+          case None => Literal.create(null, StringType)
+          case Some(value) =>
+            DateTimeUtils.getZoneId(value).normalized() match {
+              case offset: ZoneOffset => Literal(offset.getTotalSeconds)
+              case zone if zone.getId.startsWith("SystemV/") => return fallback(expr)
+              case zone => Literal(zone.getId)
+            }
+        }
+      } catch {
+        case NonFatal(_) => return fallback(expr)
+      }
+    val nativeExpr = buildExtScalarFunctionNode(
+      "Spark_MakeTimestamp",
+      expr.children.take(6) ++ Seq(tzArg, Literal(Shims.get.getMakeTimestampFailOnError(expr))),
+      expr.dataType,
+      isPruningExpr,
+      fallback)
+    if (tzArg.value == null) {
+      return nativeExpr
+    }
+    // chrono-tz expands recurring DST rules only through 2099. Preserve Spark's rules outside
+    // that range, and its extended-year behavior outside the documented range for fixed offsets.
+    val (minYear, maxYear) = if (tzArg.dataType == IntegerType) (1, 9999) else (1800, 2099)
+    if (expr.year.foldable) {
+      val year = expr.year.eval()
+      return if (year == null || (year.asInstanceOf[Int] >= minYear &&
+          year.asInstanceOf[Int] <= maxYear)) {
+        nativeExpr
+      } else {
+        fallback(expr)
+      }
+    }
+    val inRange = And(
+      GreaterThanOrEqual(expr.year, Literal(minYear)),
+      LessThanOrEqual(expr.year, Literal(maxYear)))
+    buildExprNode {
+      _.setCase(
+        pb.PhysicalCaseNode
+          .newBuilder()
+          .addWhenThenExpr(
+            pb.PhysicalWhenThen
+              .newBuilder()
+              .setWhenExpr(convertExprWithFallback(inRange, isPruningExpr, fallback))
+              .setThenExpr(nativeExpr))
+          .setElseExpr(buildSparkUdfWrapperExpr(expr, fallback)))
+    }
+  }
 
   private def buildTimePartExt(
       name: String,
