@@ -105,7 +105,7 @@ import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 import org.apache.spark.sql.execution.joins.auron.plan.NativeShuffledHashJoinExecProvider
 import org.apache.spark.sql.execution.joins.auron.plan.NativeSortMergeJoinExecProvider
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
-import org.apache.spark.sql.execution.ui.{AuronEventUtils, AuronSQLAppStatusListener, AuronSQLAppStatusStore, AuronSQLTab}
+import org.apache.spark.sql.execution.ui.{AuronEventUtils, AuronSQLAppStatusListener, AuronSQLAppStatusStore, AuronSQLTab, SQLTab}
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, StringType}
 import org.apache.spark.status.ElementTrackingStore
@@ -205,7 +205,10 @@ class ShimsImpl extends Shims with Logging {
         throw new IllegalStateException("No active spark context found that should not happen")
       }
       val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
-      val statusStore = new AuronSQLAppStatusStore(kvStore)
+      // Spark's SQL tab may be initialized after this extension, so resolve it on each read.
+      val statusStore = new AuronSQLAppStatusStore(
+        kvStore,
+        sparkContext.ui.flatMap(_.getTabs.collectFirst { case tab: SQLTab => tab.sqlStore }))
       sparkContext.ui.foreach(new AuronSQLTab(statusStore, _))
       logInfo(" onApplyingExtension add register ")
       AuronSQLAppStatusListener.register(sparkContext)
@@ -276,7 +279,8 @@ class ShimsImpl extends Shims with Logging {
       joinType: JoinType,
       condition: Option[Expression],
       broadcastSide: JoinBuildSide,
-      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase =
+      isNullAwareAntiJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeBroadcastJoinBase =
     NativeBroadcastJoinExec(
       left,
       right,
@@ -286,7 +290,8 @@ class ShimsImpl extends Shims with Logging {
       joinType,
       condition,
       broadcastSide,
-      isNullAwareAntiJoin)
+      isNullAwareAntiJoin,
+      requiredReservedOrder)
 
   override def createNativeSortMergeJoinExec(
       left: SparkPlan,
@@ -313,7 +318,8 @@ class ShimsImpl extends Shims with Logging {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): SparkPlan =
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): SparkPlan =
     NativeShuffledHashJoinExecProvider.provide(
       left,
       right,
@@ -322,7 +328,8 @@ class ShimsImpl extends Shims with Logging {
       joinType,
       condition,
       buildSide,
-      isSkewJoin)
+      isSkewJoin,
+      requiredReservedOrder)
 
   override def createNativeExpandExec(
       projections: Seq[Seq[Expression]],
@@ -684,7 +691,7 @@ class ShimsImpl extends Shims with Logging {
             .build()
         }
 
-      case e if isUnixDateConversion(e) =>
+      case e if NativeConverters.nativeDateTimeFunctionsEnabled && isUnixDateConversion(e) =>
         // Date32 and Int32 share the same epoch-day representation.
         Some(
           pb.PhysicalExprNode
@@ -810,6 +817,18 @@ class ShimsImpl extends Shims with Logging {
   override def getMakeDateFailOnError(expr: Expression): Boolean = {
     import org.apache.spark.sql.catalyst.expressions.MakeDate
     expr.asInstanceOf[MakeDate].failOnError
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3")
+  override def getRoundFailOnError(expr: Expression): Boolean = false
+
+  @sparkver("3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override def getRoundFailOnError(expr: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.{BRound, Round}
+    expr match {
+      case e: Round => e.ansiEnabled
+      case e: BRound => e.ansiEnabled
+    }
   }
 
   @sparkver("3.0 / 3.1")

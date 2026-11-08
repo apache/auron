@@ -15,7 +15,7 @@
 
 use std::io::Write;
 
-use arrow::record_batch::RecordBatch;
+use arrow::{array::AsArray, record_batch::RecordBatch};
 use auron_jni_bridge::{is_task_running, jni_call};
 use bytesize::ByteSize;
 use count_write::CountWrite;
@@ -201,7 +201,10 @@ impl BufferedData {
         Ok(())
     }
 
-    fn into_sorted_batches(self) -> Result<PartitionedBatchesIterator<'static>> {
+    pub(crate) fn into_sorted_batches(mut self) -> Result<PartitionedBatchesIterator<'static>> {
+        if !self.staging_batches.is_empty() {
+            self.flush_staging()?;
+        }
         let num_rows = self.num_rows;
         let sub_batch_size = compute_suggested_batch_size_for_output(self.mem_used(), num_rows);
         let num_partitions = self.partitioning.partition_count();
@@ -222,7 +225,7 @@ impl BufferedData {
     }
 }
 
-struct PartitionedBatchesIterator<'a> {
+pub(crate) struct PartitionedBatchesIterator<'a> {
     batch_interleaver: BatchInterleaver,
     merge_iter: OffsettedMergeIterator<'a, u32, usize>,
     batch_size: usize,
@@ -299,7 +302,7 @@ fn sort_batches_by_partition_id(
         (partition_id * 1000193 + current_num_rows) % partitioning.partition_count();
 
     // compute partition indices
-    let mut partition_indices = batches
+    let partition_indices = batches
         .iter()
         .enumerate()
         .flat_map(|(batch_idx, batch)| {
@@ -321,6 +324,9 @@ fn sort_batches_by_partition_id(
                     evaluate_range_partition_ids(&batch, sort_expr, bounds)
                         .expect("failed to evaluate range partition ids")
                 }
+                Partitioning::BucketPartitioning(bucket_col_idx, ..) => {
+                    evaluate_bucket_partition_ids(batch, *bucket_col_idx)
+                }
                 _ => unreachable!("unsupported partitioning: {:?}", partitioning),
             };
             part_ids
@@ -330,6 +336,30 @@ fn sort_batches_by_partition_id(
         })
         .collect::<Vec<_>>();
 
+    radix_sort_and_interleave(&batches, partition_indices, num_partitions)
+}
+
+fn evaluate_bucket_partition_ids(batch: &RecordBatch, bucket_col_idx: usize) -> Vec<u32> {
+    batch
+        .column(bucket_col_idx)
+        .as_primitive::<arrow::datatypes::Int32Type>()
+        .values()
+        .iter()
+        .map(|&v| v as u32)
+        .collect()
+}
+
+/// Radix-sorts a flat list of `(part_id, batch_idx, row_idx)` triples (one per
+/// row across `batches`) by `part_id` in O(n) and interleaves the rows into a
+/// single `RecordBatch` in non-decreasing partition order. This is the common
+/// tail shared by every [`Partitioning`] variant in
+/// [`sort_batches_by_partition_id`] - the only thing that differs between
+/// variants is how `part_id` is computed for each row.
+pub(crate) fn radix_sort_and_interleave(
+    batches: &[RecordBatch],
+    mut partition_indices: Vec<(u32, u32, u32)>,
+    num_partitions: usize,
+) -> Result<(Vec<u32>, RecordBatch)> {
     // sort
     let mut part_counts = vec![0; num_partitions];
     radix_sort_by_key(
@@ -348,14 +378,14 @@ fn sort_batches_by_partition_id(
     partition_offsets.push(offset);
 
     // get sorted batch
-    let batches_interleaver = create_batch_interleaver(&batches, true)?;
+    let batches_interleaver = create_batch_interleaver(batches, true)?;
     let sorted_batch = batches_interleaver(
         &partition_indices
             .into_iter()
             .map(|(_, batch_idx, row_idx)| (batch_idx as usize, row_idx as usize))
             .collect::<Vec<_>>(),
     )?;
-    return Ok((partition_offsets, sorted_batch));
+    Ok((partition_offsets, sorted_batch))
 }
 
 #[cfg(test)]
@@ -575,6 +605,44 @@ mod test {
             "+----+---+---+",
         ];
         assert_batches_eq!(expected, &vec![sorted_batch]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_bucket_partitioning() -> Result<()> {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("k", DataType::Int32, false),
+            Field::new("~BUCKET", DataType::Int32, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(Int32Array::from(vec![10, 20, 30, 40, 50, 60, 70, 80])) as ArrayRef,
+                Arc::new(Int32Array::from(vec![2, 0, 1, 0, 2, 1, 0, 2])) as ArrayRef,
+            ],
+        )?;
+        let bucket_col_idx = 1;
+        let num_buckets = 3;
+        let bucket_partitioning = Partitioning::BucketPartitioning(bucket_col_idx, num_buckets);
+        let (offsets, sorted_batch) =
+            sort_batches_by_partition_id(vec![batch], &bucket_partitioning, 0, 0)?;
+
+        // every row must land in the bucket range implied by its own ~BUCKET value
+        let bucket_col = sorted_batch
+            .column(bucket_col_idx)
+            .as_primitive::<arrow::datatypes::Int32Type>();
+        for bucket in 0..num_buckets {
+            let (start, end) = (offsets[bucket] as usize, offsets[bucket + 1] as usize);
+            for row in start..end {
+                assert_eq!(bucket_col.value(row), bucket as i32);
+            }
+        }
+        assert_eq!(offsets.len(), num_buckets + 1);
+        assert_eq!(
+            *offsets.last().expect("expected final bucket offset") as usize,
+            sorted_batch.num_rows()
+        );
+        assert_eq!(sorted_batch.num_rows(), 8);
         Ok(())
     }
 }
