@@ -840,7 +840,7 @@ object NativeConverters extends Logging {
         buildBinaryExprNode(lhs, castIfNecessary(rhs, lhs.dataType), "BitwiseShiftRight")
 
       // builtin scalar functions
-      case e: Sqrt => buildScalarFunction(pb.ScalarFunction.Sqrt, e.children, e.dataType)
+      case e: Sqrt => buildExtScalarFunction("Spark_Sqrt", e.children, e.dataType)
       case e: Sin => buildScalarFunction(pb.ScalarFunction.Sin, e.children, e.dataType)
       case e: Cos => buildScalarFunction(pb.ScalarFunction.Cos, e.children, e.dataType)
       case e: Tan => buildScalarFunction(pb.ScalarFunction.Tan, e.children, e.dataType)
