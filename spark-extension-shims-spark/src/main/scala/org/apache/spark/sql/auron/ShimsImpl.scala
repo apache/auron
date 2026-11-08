@@ -691,7 +691,7 @@ class ShimsImpl extends Shims with Logging {
             .build()
         }
 
-      case e if isUnixDateConversion(e) =>
+      case e if NativeConverters.nativeDateTimeFunctionsEnabled && isUnixDateConversion(e) =>
         // Date32 and Int32 share the same epoch-day representation.
         Some(
           pb.PhysicalExprNode
