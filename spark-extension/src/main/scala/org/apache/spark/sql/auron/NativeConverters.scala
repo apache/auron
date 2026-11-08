@@ -292,6 +292,8 @@ object NativeConverters extends Logging {
       case _: DivModLike | _: Pmod => true
       case e: BinaryArithmetic => e.left.nullable
       case e: BinaryComparison => e.left.nullable
+      // nullIfNegative duplicates the input into a condition and a selected branch.
+      case _: Log | _: Log2 | _: Log10 => true
       case e if e.children.size <= 1 => false
       // Other scalar functions evaluate all native arguments eagerly. Keep Rand
       // in Spark unless the remaining arguments are non-null literals.

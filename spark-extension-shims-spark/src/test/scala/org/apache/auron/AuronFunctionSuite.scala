@@ -1996,6 +1996,27 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("rand function preserves Spark evaluation inside logarithms") {
+    withTable("t_rand") {
+      sql("create table t_rand using parquet as select id from range(0, 97, 1, 1)")
+      for (function <- Seq("ln", "log2", "log10")) {
+        checkSparkAnswerAndOperator(
+          s"select id, $function(cast(id % 3 as double) - 1.0) from t_rand")
+        for {
+          fallbackEnabled <- Seq("false", "true")
+          expression <- Seq(s"$function(rand(42) - 0.6)", s"abs($function(rand(42) - 0.6))")
+        } {
+          withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> fallbackEnabled) {
+            val df = checkSparkAnswer(s"select id, $expression from t_rand")
+            assert(collectFirst(df.queryExecution.executedPlan) { case _: ProjectExec =>
+              true
+            }.contains(true))
+          }
+        }
+      }
+    }
+  }
+
   test("randn function with seed") {
     withTable("t1") {
       sql("CREATE TABLE t1(id INT) USING parquet")
