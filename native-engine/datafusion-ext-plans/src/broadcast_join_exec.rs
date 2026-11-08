@@ -836,8 +836,10 @@ fn augment_join_params_with_row_num(
     probe_side: JoinSide,
 ) -> (JoinParams, usize) {
     let mut augmented = join_params.clone();
-    let is_dual_block =
-        !augmented.projection.left.is_empty() && !augmented.projection.right.is_empty();
+    let is_dual_block = matches!(
+        augmented.join_type,
+        JoinType::Inner | JoinType::Left | JoinType::Right | JoinType::Full
+    );
 
     match probe_side {
         JoinSide::Left => {
@@ -1458,6 +1460,62 @@ mod fuzztest {
             }
         }
         out
+    }
+
+    #[tokio::test]
+    async fn hybrid_join_reserved_order_with_right_only_projection() -> Result<()> {
+        MemManager::init(10_000_000);
+        let left = RecordBatch::try_from_iter(vec![(
+            "lk",
+            Arc::new(Int32Array::from(vec![2, 1, 3])) as ArrayRef,
+        )])?;
+        let right = RecordBatch::try_from_iter(vec![
+            ("rk", Arc::new(Int32Array::from(vec![1, 2, 3])) as ArrayRef),
+            (
+                "rv",
+                Arc::new(Int32Array::from(vec![100, 200, 300])) as ArrayRef,
+            ),
+        ])?;
+        let schema = Arc::new(
+            build_join_schema(
+                &left.schema(),
+                &right.schema(),
+                &datafusion::common::JoinType::Inner,
+            )
+            .0,
+        );
+        let left_key = Arc::new(Column::new("lk", 0)) as PhysicalExprRef;
+        let right_key = Arc::new(Column::new("rk", 0)) as PhysicalExprRef;
+        let built = build_bucketed_groups(
+            right,
+            right_key.clone(),
+            1,
+            false,
+            &mut rand::rngs::StdRng::seed_from_u64(0),
+        )?;
+        let join: Arc<dyn ExecutionPlan> = Arc::new(
+            BroadcastJoinExec::try_new(
+                schema.clone(),
+                memory(left),
+                built,
+                vec![(left_key, right_key)],
+                JoinType::Inner,
+                JoinSide::Right,
+                true,
+                None,
+                false,
+                None,
+            )?
+            .with_required_reserved_order(true),
+        );
+        let stream = join.execute_projected(0, SessionContext::new().task_ctx(), &[2])?;
+        assert_eq!(stream.schema().as_ref(), &schema.project(&[2])?);
+        let batches = collect(stream).await?;
+        assert_eq!(
+            extract_i32_col(&batches, "rv"),
+            vec![Some(200), Some(100), Some(300)]
+        );
+        Ok(())
     }
 
     /// Verify that a forced hybrid join with `required_reserved_order` preserves
