@@ -20,6 +20,16 @@ import org.apache.spark.sql.AuronQueryTest
 
 class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
+  test("Chr uses Spark byte-range character semantics") {
+    withTable("chr_inputs") {
+      sql("CREATE TABLE chr_inputs(n BIGINT) USING parquet")
+      sql("""INSERT INTO chr_inputs VALUES
+            |(-1), (0), (65), (233), (255), (256), (321), (9223372036854775807), (NULL)
+            |""".stripMargin)
+      checkSparkAnswerAndOperator("SELECT chr(n), hex(chr(n)) FROM chr_inputs")
+    }
+  }
+
   test("preserve literal parameters during expression fallback") {
     withSQLConf(
       "spark.auron.decimal.arithOp.enabled" -> "false",

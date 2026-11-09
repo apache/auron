@@ -81,6 +81,7 @@ pub fn create_auron_ext_function(
         "Spark_MapFromArrays" => shared_function!(spark_map::map_from_arrays),
         "Spark_MapFromEntries" => shared_function!(spark_map::map_from_entries),
         "Spark_StrToMap" => shared_function!(spark_map::str_to_map),
+        "Spark_Chr" => shared_function!(spark_strings::string_chr),
         "Spark_StringSpace" => shared_function!(spark_strings::string_space),
         "Spark_StringRepeat" => shared_function!(spark_strings::string_repeat),
         "Spark_StringSplit" => shared_function!(spark_strings::string_split),
