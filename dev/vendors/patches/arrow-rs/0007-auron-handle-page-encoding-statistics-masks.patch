@@ -1,0 +1,77 @@
+--- a/parquet/src/auron.rs
++++ b/parquet/src/auron.rs
+@@ -37,57 +37,25 @@
+ ) -> crate::errors::Result<Option<ArrayRef>> {
+     let column_metadata = row_group_metadata.column(col_idx);
+ 
+-    // check whether dictionary page exists
+-    if column_metadata
+-        .page_encoding_stats()
+-        .iter()
+-        .flat_map(|stats| stats.iter())
+-        .all(|stat| stat.page_type != PageType::DICTIONARY_PAGE)
+-    {
+-        // no dictionary page
++    // Arrow 59 defaults to a mask containing only data-page encodings.
++    // Also support readers configured to retain the full encoding statistics.
++    let is_dictionary = |encoding| {
++        matches!(encoding, Encoding::PLAIN_DICTIONARY | Encoding::RLE_DICTIONARY)
++    };
++    let all_dictionary = if let Some(mask) = column_metadata.page_encoding_stats_mask() {
++        mask.as_i32() != 0 && mask.encodings().all(is_dictionary)
++    } else if let Some(stats) = column_metadata.page_encoding_stats() {
++        stats.iter().any(|stat| stat.page_type == PageType::DATA_PAGE)
++            && stats
++                .iter()
++                .filter(|stat| stat.page_type == PageType::DATA_PAGE)
++                .all(|stat| is_dictionary(stat.encoding))
++    } else {
++        false
++    };
++    if column_metadata.dictionary_page_offset().is_none() || !all_dictionary {
+         return Ok(None);
+     }
+-
+-    // check whether a data page using a non-dictionary encoding exists, if
+-    // so, cannot use for pruning.
+-    //
+-    // auron: must only inspect `DATA_PAGE` entries here. The dictionary
+-    // page's own `page_encoding_stats` entry always reports `PLAIN` (that's
+-    // simply how the dictionary's values are encoded, per the parquet spec)
+-    // regardless of whether the *data* pages use dictionary encoding; not
+-    // filtering it out here made every dictionary-encoded column look like
+-    // it had a "non-dictionary encoding" and silently disabled dictionary
+-    // pruning entirely.
+-    if column_metadata
+-        .page_encoding_stats()
+-        .iter()
+-        .flat_map(|stats| stats.iter())
+-        .filter(|stat| stat.page_type == PageType::DATA_PAGE)
+-        .any(|stat| {
+-            !matches!(
+-                stat.encoding,
+-                Encoding::PLAIN_DICTIONARY | Encoding::RLE_DICTIONARY
+-            )
+-        })
+-    {
+-        // at least one non-dictionary encoding is present
+-        return Ok(None);
+-    }
+-
+-    // auron: the two `page_encoding_stats`-based checks above already fully
+-    // prove that every page in this column chunk is dictionary-encoded (one
+-    // `DICTIONARY_PAGE`, and every page -- including this one -- uses either
+-    // `PLAIN_DICTIONARY` (1.0 encoding) or `RLE_DICTIONARY` (2.0 encoding),
+-    // with no `PLAIN` fallback). There used to be an additional
+-    // `encodings_mask`-based check here that only trusted the legacy 1.0
+-    // `PLAIN_DICTIONARY` encoding and unconditionally bailed out for 2.0's
+-    // `RLE_DICTIONARY` (the encoding arrow-rs's `ArrowWriter` emits by
+-    // default since at least arrow-rs 59.2.0), which made dictionary-based
+-    // row-group pruning a permanent no-op for any file written with a
+-    // reasonably modern parquet writer. Since `page_encoding_stats` already
+-    // rules out the only case that check was guarding against (a page
+-    // falling back to plain, non-dictionary encoding without updating
+-    // `encodings()`), that check has been removed.
+ 
+     let mut page_reader: Box<dyn PageReader> = Box::new(SerializedPageReader::new(
+         Arc::new(WrappedChunkReader {

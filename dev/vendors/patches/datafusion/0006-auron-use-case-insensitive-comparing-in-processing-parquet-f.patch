@@ -1,0 +1,13 @@
+diff --git a/datafusion/common/src/dfschema.rs b/datafusion/common/src/dfschema.rs
+index 262f1dc..369999a 100644
+--- a/datafusion/common/src/dfschema.rs
++++ b/datafusion/common/src/dfschema.rs
+@@ -596,7 +596,7 @@ impl DFSchema {
+             .fields
+             .iter()
+             .zip(arrow_schema.fields().iter())
+-            .all(|(dffield, arrowfield)| dffield.name() == arrowfield.name())
++            .all(|(dffield, arrowfield)| dffield.name().eq_ignore_ascii_case(arrowfield.name()))
+     }
+ 
+     /// Returns true if the two schemas have the same qualified named

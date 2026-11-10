@@ -23,11 +23,11 @@ use std::{
     collections::BTreeMap,
     fmt::{Debug, Formatter},
     ops::Range,
-    pin::Pin,
     sync::Arc,
 };
 
 use arrow::datatypes::SchemaRef;
+use arrow_schema::Fields;
 use arrow_schema::{DataType, TimeUnit};
 use auron_jni_bridge::{
     conf,
@@ -35,22 +35,23 @@ use auron_jni_bridge::{
     jni_call_static, jni_new_global_ref, jni_new_string,
 };
 use bytes::Bytes;
+use datafusion::parquet::arrow::async_reader::AsyncFileReader;
 use datafusion::{
-    datasource::physical_plan::{
-        FileMeta, FileOpener, FileScanConfig, FileStream, OnError, ParquetFileMetrics,
-        ParquetFileReaderFactory,
+    datasource::{
+        physical_plan::{
+            FileOpenFuture, FileOpener, FileScanConfig, ParquetFileMetrics,
+            ParquetFileReaderFactory,
+        },
+        schema_adapter::SchemaAdapterFactory,
     },
     error::{DataFusionError, Result},
     execution::context::TaskContext,
     parquet::{
-        arrow::{
-            arrow_reader::ArrowReaderOptions,
-            async_reader::{AsyncFileReader, fetch_parquet_metadata},
-        },
-        errors::ParquetError,
-        file::metadata::ParquetMetaData,
+        arrow::PARQUET_FIELD_ID_META_KEY, arrow::arrow_reader::ArrowReaderOptions,
+        errors::ParquetError, file::metadata::ParquetMetaData,
     },
     physical_expr::{EquivalenceProperties, PhysicalExprRef},
+    physical_expr_adapter::PhysicalExprAdapterFactory,
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
         SendableRecordBatchStream, Statistics,
@@ -59,9 +60,9 @@ use datafusion::{
     },
 };
 use datafusion_datasource::{PartitionedFile, file_groups::FileGroup};
-use datafusion_datasource_parquet::opener::ParquetOpener;
+use datafusion_datasource_parquet::ParquetOpener;
 use datafusion_ext_commons::{batch_size, hadoop_fs::FsProvider};
-use futures::{FutureExt, StreamExt, future::BoxFuture};
+use futures::{FutureExt, StreamExt, TryStreamExt, future::BoxFuture};
 use itertools::Itertools;
 use object_store::ObjectMeta;
 use once_cell::sync::OnceCell;
@@ -69,7 +70,10 @@ use parking_lot::Mutex;
 
 use crate::{
     common::execution_context::ExecutionContext,
-    scan::{AuronSchemaAdapterFactory, internal_file_reader::InternalFileReader},
+    scan::{
+        AuronPhysicalExprAdapterFactory, AuronSchemaAdapterFactory,
+        internal_file_reader::InternalFileReader, parallel::parallel_scan,
+    },
 };
 
 /// Execution plan for scanning one or more Parquet partitions
@@ -81,7 +85,7 @@ pub struct ParquetExec {
     projected_schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
     predicate: Option<PhysicalExprRef>,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl ParquetExec {
@@ -93,8 +97,14 @@ impl ParquetExec {
         predicate: Option<PhysicalExprRef>,
     ) -> Self {
         let metrics = ExecutionPlanMetricsSet::new();
-        let (projected_schema, _constraints, projected_statistics, _projected_output_ordering) =
-            base_config.project();
+        let projected_schema = base_config.projected_schema().unwrap_or_else(|_| {
+            base_config
+                .file_source
+                .table_schema()
+                .table_schema()
+                .clone()
+        });
+        let projected_statistics = base_config.statistics();
 
         Self {
             fs_resource_id,
@@ -169,26 +179,31 @@ impl ExecutionPlan for ParquetExec {
         "ParquetExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         Arc::clone(&self.projected_schema)
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
         vec![]
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 Partitioning::UnknownPartitioning(self.base_config.file_groups.len()),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
     }
 
@@ -213,70 +228,135 @@ impl ExecutionPlan for ParquetExec {
         let resource_id = jni_new_string!(&self.fs_resource_id)?;
         let fs = jni_call_static!(JniBridge.getResource(resource_id.as_obj()) -> JObject)?;
         let fs_provider = Arc::new(FsProvider::new(jni_new_global_ref!(fs.as_obj())?, &io_time));
+        let parquet_file_reader_factory = Arc::new(FsReaderFactory::new(fs_provider));
 
         let schema_adapter_factory = Arc::new(AuronSchemaAdapterFactory);
-        let projection = match self.base_config.file_column_projection_indices() {
-            Some(proj) => proj,
-            None => (0..self.base_config.file_schema.fields().len()).collect(),
+        let expr_adapter_factory = self
+            .base_config
+            .file_schema()
+            .fields()
+            .iter()
+            .any(|field| field.metadata().contains_key(PARQUET_FIELD_ID_META_KEY))
+            .then(|| {
+                Arc::new(AuronPhysicalExprAdapterFactory) as Arc<dyn PhysicalExprAdapterFactory>
+            });
+        let projection: Arc<[usize]> = match self.base_config.file_column_projection_indices() {
+            Some(proj) => proj.into(),
+            None => (0..self.base_config.file_schema().fields().len())
+                .collect::<Vec<_>>()
+                .into(),
         };
+
+        // auron: full (unfiltered) projection over the table schema (file
+        // columns + partition columns), used to splice partition column
+        // values back into the output batch at the correct position. See
+        // `PartitionSplicingOpener::open` below. This is necessary because,
+        // starting with datafusion 55.2.0, `FileStream`/`FileOpener` no
+        // longer splice partition column values into the output batch by
+        // themselves (that's now handled internally by the removed
+        // `ParquetMorselizer` state machine for datafusion's own parquet
+        // source); the restored legacy `ParquetOpener` below only returns
+        // the (projected) file columns.
+        let num_file_schema_fields = self.base_config.file_schema().fields().len();
+        let table_partition_cols: Fields = self.base_config.table_partition_cols().clone();
+        let full_projection: Arc<[usize]> = match self.base_config.file_source.projection() {
+            Some(proj) => proj.ordered_column_indices().into(),
+            None => (0..num_file_schema_fields + table_partition_cols.len())
+                .collect::<Vec<_>>()
+                .into(),
+        };
+        let output_schema = self.projected_schema.clone();
 
         let page_filtering_enabled = conf::PARQUET_ENABLE_PAGE_FILTERING.value()?;
         let bloom_filter_enabled = conf::PARQUET_ENABLE_BLOOM_FILTER.value()?;
+        let predicate = self.predicate.clone();
+        let metrics = self.metrics.clone();
+        let base_config = self.base_config.clone();
 
-        let opener: Arc<dyn FileOpener> = Arc::new(ParquetOpener {
-            partition_index: partition,
-            projection: Arc::from(projection),
-            batch_size: batch_size(),
-            limit: self.base_config.limit,
-            predicate: self.predicate.clone(),
-            logical_file_schema: self.base_config.file_schema.clone(),
-            partition_fields: self.base_config.table_partition_cols.to_vec(),
-            metadata_size_hint: None,
-            metrics: self.metrics.clone(),
-            parquet_file_reader_factory: Arc::new(FsReaderFactory::new(fs_provider)),
-            pushdown_filters: page_filtering_enabled,
-            reorder_filters: page_filtering_enabled,
-            enable_page_index: page_filtering_enabled,
-            enable_bloom_filter: bloom_filter_enabled,
-            schema_adapter_factory,
-            enable_row_group_stats_pruning: true,
-            coerce_int96: Some(TimeUnit::Millisecond),
-            file_decryption_properties: None,
-            expr_adapter_factory: None,
-        });
+        let create_opener_fn = move |file_scan_config: &FileScanConfig| {
+            let inner = ParquetOpener {
+                partition_index: partition,
+                projection: projection.clone(),
+                batch_size: batch_size(),
+                limit: file_scan_config.limit,
+                predicate: predicate.clone(),
+                logical_file_schema: file_scan_config.file_schema().clone(),
+                partition_fields: file_scan_config.table_partition_cols().to_vec(),
+                metadata_size_hint: None,
+                metrics: metrics.clone(),
+                parquet_file_reader_factory: parquet_file_reader_factory.clone(),
+                pushdown_filters: page_filtering_enabled,
+                reorder_filters: page_filtering_enabled,
+                enable_page_index: page_filtering_enabled,
+                enable_bloom_filter: bloom_filter_enabled,
+                schema_adapter_factory: schema_adapter_factory.clone(),
+                enable_row_group_stats_pruning: true,
+                coerce_int96: Some(TimeUnit::Millisecond),
+                file_decryption_properties: None,
+                expr_adapter_factory: expr_adapter_factory.clone(),
+            };
+            PartitionSplicingOpener {
+                inner,
+                full_projection: full_projection.clone(),
+                num_file_schema_fields,
+                output_schema: output_schema.clone(),
+            }
+        };
 
-        let mut file_stream = FileStream::new(&self.base_config, partition, opener, &self.metrics)?;
-        if conf::IGNORE_CORRUPTED_FILES.value()? {
-            file_stream = file_stream.with_on_error(OnError::Skip);
-        }
-
-        let timed_stream = execute_parquet_scan(Box::pin(file_stream), exec_ctx.clone())?;
-        Ok(exec_ctx.coalesce_with_default_batch_size(timed_stream))
+        let num_parallel_scan_files = conf::NUM_PARALLEL_SCAN_FILES.value()? as usize;
+        let scan_stream = parallel_scan(
+            exec_ctx.clone(),
+            base_config,
+            create_opener_fn,
+            num_parallel_scan_files,
+        )?;
+        Ok(exec_ctx.coalesce_with_default_batch_size(scan_stream))
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
     }
-
-    fn statistics(&self) -> Result<Statistics> {
-        Ok(self.projected_statistics.clone())
-    }
 }
 
-fn execute_parquet_scan(
-    mut stream: Pin<Box<FileStream>>,
-    exec_ctx: Arc<ExecutionContext>,
-) -> Result<SendableRecordBatchStream> {
-    Ok(exec_ctx
-        .clone()
-        .output_with_sender("ParquetScan", move |sender| async move {
-            sender.exclude_time(exec_ctx.baseline_metrics().elapsed_compute());
-            let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
-            while let Some(batch) = stream.next().await.transpose()? {
-                sender.send(batch).await;
+/// auron: wraps the restored legacy `ParquetOpener` to splice Hive-style
+/// partition column values back into the output batch, since datafusion
+/// 55.2.0 no longer does this generically in `FileStream` (that logic moved
+/// into the internal, private `ParquetMorselizer` state machine that Auron
+/// can't reuse).
+struct PartitionSplicingOpener {
+    inner: ParquetOpener,
+    full_projection: Arc<[usize]>,
+    num_file_schema_fields: usize,
+    output_schema: SchemaRef,
+}
+
+impl FileOpener for PartitionSplicingOpener {
+    fn open(&self, partitioned_file: PartitionedFile) -> Result<FileOpenFuture> {
+        let partition_values = partitioned_file.partition_values.clone();
+        let full_projection = self.full_projection.clone();
+        let num_file_schema_fields = self.num_file_schema_fields;
+        let output_schema = self.output_schema.clone();
+        let fut = self.inner.open(partitioned_file)?;
+
+        Ok(Box::pin(async move {
+            let stream = fut.await?;
+            if partition_values.is_empty() {
+                return Ok(stream);
             }
-            Ok(())
+            let adapted = stream.map(move |maybe_batch| {
+                maybe_batch.and_then(|batch| {
+                    datafusion_ext_commons::arrow::scan_util::splice_partition_columns(
+                        batch,
+                        &full_projection,
+                        num_file_schema_fields,
+                        &partition_values,
+                        output_schema.clone(),
+                    )
+                })
+            });
+            Ok(adapted.boxed())
         }))
+    }
 }
 
 #[derive(Clone)]
@@ -300,19 +380,19 @@ impl ParquetFileReaderFactory for FsReaderFactory {
     fn create_reader(
         &self,
         partition_index: usize,
-        file_meta: FileMeta,
+        partitioned_file: PartitionedFile,
         _metadata_size_hint: Option<usize>,
         metrics: &ExecutionPlanMetricsSet,
     ) -> Result<Box<dyn AsyncFileReader + Send>> {
         let internal_reader = Arc::new(InternalFileReader::try_new(
             self.fs_provider.clone(),
-            file_meta.object_meta.clone(),
+            partitioned_file.object_meta.clone(),
         )?);
         let reader = ParquetFileReaderRef(Arc::new(ParquetFileReader {
             internal_reader,
             metrics: ParquetFileMetrics::new(
                 partition_index,
-                file_meta
+                partitioned_file
                     .object_meta
                     .location
                     .filename()
@@ -458,7 +538,6 @@ impl AsyncFileReader for ParquetFileReaderRef {
 
         let inner = self.0.clone();
         let meta_size = inner.get_meta().size as usize;
-        let size_hint = None;
         let cache_slot = (move || {
             let mut metadata_cache = METADATA_CACHE.get_or_init(|| Mutex::new(Vec::new())).lock();
 
@@ -482,26 +561,55 @@ impl AsyncFileReader for ParquetFileReaderRef {
         async move {
             cache_slot
                 .get_or_try_init(move || async move {
-                    fetch_parquet_metadata(
-                        move |range| {
-                            let inner = inner.clone();
-                            inner.metrics.bytes_scanned.add(range.end - range.start);
-                            async move {
-                                tokio::task::spawn_blocking(move || {
-                                    inner
-                                        .get_internal_reader()
-                                        .read_fully(range.start as u64..range.end as u64)
-                                        .map_err(|e| ParquetError::External(Box::new(e)))
-                                })
-                                .await
-                                .expect("tokio spawn_blocking error")
-                            }
-                        },
-                        meta_size,
-                        size_hint,
-                    )
-                    .await
-                    .map(|parquet_metadata| Arc::new(parquet_metadata))
+                    struct FetchFn<F>(F);
+                    impl<F, Fut> datafusion::parquet::arrow::async_reader::MetadataFetch for FetchFn<F>
+                    where
+                        F: FnMut(Range<u64>) -> Fut + Send,
+                        Fut: std::future::Future<Output = datafusion::parquet::errors::Result<Bytes>>
+                            + Send
+                            + 'static,
+                    {
+                        fn fetch(
+                            &mut self,
+                            range: Range<u64>,
+                        ) -> BoxFuture<'_, datafusion::parquet::errors::Result<Bytes>> {
+                            (self.0)(range).boxed()
+                        }
+                    }
+
+                    datafusion::parquet::file::metadata::ParquetMetaDataReader::new()
+                        // auron: keep full page_encoding_stats (not collapsed
+                        // into a bitmask) so that dictionary-page detection
+                        // for parquet dictionary row-group pruning (auron
+                        // patch 0005, `get_dictionary_for_pruning`) keeps
+                        // working; the default mask drops the
+                        // `DICTIONARY_PAGE` markers it relies on.
+                        .with_metadata_options(Some(
+                            datafusion::parquet::file::metadata::ParquetMetaDataOptions::new()
+                                .with_encoding_stats_as_mask(false),
+                        ))
+                        .load_and_finish(
+                            FetchFn(move |range: Range<u64>| {
+                                let inner = inner.clone();
+                                inner
+                                    .metrics
+                                    .bytes_scanned
+                                    .add((range.end - range.start) as usize);
+                                async move {
+                                    tokio::task::spawn_blocking(move || {
+                                        inner
+                                            .get_internal_reader()
+                                            .read_fully(range.start..range.end)
+                                            .map_err(|e| ParquetError::External(Box::new(e)))
+                                    })
+                                    .await
+                                    .expect("tokio spawn_blocking error")
+                                }
+                            }),
+                            meta_size as u64,
+                        )
+                        .await
+                        .map(Arc::new)
                 })
                 .map(|parquet_metadata| parquet_metadata.cloned())
                 .await

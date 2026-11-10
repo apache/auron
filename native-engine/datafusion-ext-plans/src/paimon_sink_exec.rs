@@ -33,7 +33,7 @@
 //!   footer statistics of the partition columns (min == max), so no partition
 //!   values cross the JNI boundary.
 
-use std::{any::Any, collections::HashMap, fmt::Formatter, io::Write, sync::Arc};
+use std::{collections::HashMap, fmt::Formatter, io::Write, sync::Arc};
 
 use arrow::{
     array::{ArrayRef, UInt32Array},
@@ -44,7 +44,7 @@ use arrow::{
 };
 use auron_jni_bridge::{jni_call_static, jni_get_string, jni_new_global_ref, jni_new_string};
 use datafusion::{
-    common::{Result, Statistics},
+    common::Result,
     execution::context::TaskContext,
     parquet::{arrow::ArrowWriter, file::properties::WriterProperties},
     physical_expr::EquivalenceProperties,
@@ -76,7 +76,7 @@ pub struct PaimonSinkExec {
     memory_budget: usize,
     props: Vec<(String, String)>,
     metrics: ExecutionPlanMetricsSet,
-    plan_props: OnceCell<PlanProperties>,
+    plan_props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl PaimonSinkExec {
@@ -117,23 +117,28 @@ impl ExecutionPlan for PaimonSinkExec {
         "PaimonSinkExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.plan_props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -170,10 +175,6 @@ impl ExecutionPlan for PaimonSinkExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        Ok(Statistics::new_unknown(&self.schema()))
     }
 }
 

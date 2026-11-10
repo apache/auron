@@ -1,0 +1,75 @@
+diff --git a/datafusion/functions/src/core/coalesce.rs b/datafusion/functions/src/core/coalesce.rs
+index 9cf3536..b4060fc 100644
+--- a/datafusion/functions/src/core/coalesce.rs
++++ b/datafusion/functions/src/core/coalesce.rs
+@@ -15,6 +15,9 @@
+ // specific language governing permissions and limitations
+ // under the License.
+ 
++use arrow::array::{BooleanArray, new_null_array};
++use arrow::compute::kernels::zip::zip;
++use arrow::compute::{and, is_not_null, is_null};
+ use arrow::datatypes::{DataType, Field, FieldRef};
+ use datafusion_common::{Result, exec_err, internal_err, plan_err};
+ use datafusion_expr::binary::try_type_union_resolution;
+@@ -117,8 +120,58 @@ impl ScalarUDFImpl for CoalesceFunc {
+     }
+ 
+     /// coalesce evaluates to the first value which is not NULL
+-    fn invoke_with_args(&self, _args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+-        internal_err!("coalesce should have been simplified to case")
++    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
++        let args = args.args;
++        if args.is_empty() {
++            return exec_err!(
++                "coalesce was called with {} arguments. It requires at least 1.",
++                args.len()
++            );
++        }
++
++        let return_type = args[0].data_type();
++        let mut return_array = args.iter().filter_map(|x| match x {
++            ColumnarValue::Array(array) => Some(array.len()),
++            _ => None,
++        });
++
++        if let Some(size) = return_array.next() {
++            let mut current_value = new_null_array(&return_type, size);
++            let mut remainder = BooleanArray::from(vec![true; size]);
++
++            for arg in args {
++                match arg {
++                    ColumnarValue::Array(ref array) => {
++                        let to_apply = and(&remainder, &is_not_null(array.as_ref())?)?;
++                        current_value = zip(&to_apply, array, &current_value)?;
++                        remainder = and(&remainder, &is_null(array)?)?;
++                    }
++                    ColumnarValue::Scalar(value) => {
++                        if value.is_null() {
++                            continue;
++                        } else {
++                            let last_value = value.to_scalar()?;
++                            current_value = zip(&remainder, &last_value, &current_value)?;
++                            break;
++                        }
++                    }
++                }
++                if remainder.iter().all(|x| x == Some(false)) {
++                    break;
++                }
++            }
++            Ok(ColumnarValue::Array(current_value))
++        } else {
++            let result = args
++                .iter()
++                .filter_map(|x| match x {
++                    ColumnarValue::Scalar(s) if !s.is_null() => Some(x.clone()),
++                    _ => None,
++                })
++                .next()
++                .unwrap_or_else(|| args[0].clone());
++            Ok(result)
++        }
+     }
+ 
+     fn conditional_arguments<'a>(

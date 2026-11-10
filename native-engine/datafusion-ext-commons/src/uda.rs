@@ -80,7 +80,7 @@ impl UserDefinedArray {
     }
 }
 
-impl Array for UserDefinedArray {
+unsafe impl Array for UserDefinedArray {
     fn as_any(&self) -> &dyn Any {
         self
     }
