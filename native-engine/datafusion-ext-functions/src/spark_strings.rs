@@ -182,7 +182,7 @@ mod test {
             let ColumnarValue::Scalar(result) =
                 function(&[ColumnarValue::Scalar(ScalarValue::Int64(input))])?
             else {
-                panic!("expected scalar result");
+                return df_execution_err!("expected scalar result");
             };
             assert_eq!(result, ScalarValue::Utf8(expected.map(str::to_owned)));
         }
