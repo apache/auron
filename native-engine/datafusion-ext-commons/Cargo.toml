@@ -33,8 +33,10 @@ arrow-schema = { workspace = true }
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }
 bigdecimal = { workspace = true }
+branches = { workspace = true }
 byteorder = { workspace = true }
 chrono = { workspace = true }
+fearless_simd = { workspace = true }
 itertools = { workspace = true }
 jni = { workspace = true }
 log = { workspace = true }

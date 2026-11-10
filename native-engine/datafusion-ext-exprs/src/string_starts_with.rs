@@ -66,10 +66,6 @@ impl Display for StringStartsWithExpr {
 }
 
 impl PhysicalExpr for StringStartsWithExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
         Ok(DataType::Boolean)
     }

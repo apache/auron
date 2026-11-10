@@ -13,12 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(internal_features)]
-#![feature(core_intrinsics)]
-#![feature(portable_simd)]
-#![feature(slice_swap_unchecked)]
-#![feature(vec_into_raw_parts)]
-
 use auron_jni_bridge::conf::{
     BATCH_SIZE, IntConf, SUGGESTED_BATCH_MEM_SIZE, SUGGESTED_BATCH_MEM_SIZE_KWAY_MERGE,
 };
@@ -67,6 +61,20 @@ macro_rules! downcast_any {
     }};
     ($value:expr, $ty:ty) => {{
         match $value.as_any().downcast_ref::<$ty>() {
+            Some(v) => Ok(v),
+            None => $crate::df_execution_err!("error downcasting to {}", stringify!($ty)),
+        }
+    }};
+}
+
+/// Like [`downcast_any`], but for types whose trait already has `Any` as a
+/// supertrait (e.g. `dyn PhysicalExpr`, `dyn ExecutionPlan`) and therefore no
+/// longer expose an explicit `as_any()` method -- the value can be downcast
+/// directly via trait-object upcasting.
+#[macro_export]
+macro_rules! downcast_any_dyn {
+    ($value:expr, $ty:ty) => {{
+        match ($value).downcast_ref::<$ty>() {
             Some(v) => Ok(v),
             None => $crate::df_execution_err!("error downcasting to {}", stringify!($ty)),
         }
@@ -134,7 +142,7 @@ macro_rules! assume {
         // safety: use assume
         #[allow(unused_unsafe)]
         unsafe {
-            std::intrinsics::assume($e)
+            ::branches::assume($e)
         }
     }};
 }
@@ -142,34 +150,34 @@ macro_rules! assume {
 #[macro_export]
 macro_rules! prefetch_read_data {
     ($e:expr) => {{
-        // safety: use prefetch
-        let locality = 3;
+        const LOCALITY: i32 = 3;
+        // safety: $e may contain unchecked indexing used only to compute the prefetch
+        // address
         #[allow(unused_unsafe)]
-        unsafe {
-            std::intrinsics::prefetch_read_data($e, locality)
-        }
+        let __prefetch_ptr = unsafe { $e };
+        ::branches::prefetch_read_data::<_, LOCALITY>(__prefetch_ptr)
     }};
 }
 #[macro_export]
 macro_rules! prefetch_write_data {
     ($e:expr) => {{
-        // safety: use prefetch
-        let locality = 3;
+        const LOCALITY: i32 = 3;
+        // safety: $e may contain unchecked indexing used only to compute the prefetch
+        // address
         #[allow(unused_unsafe)]
-        unsafe {
-            std::intrinsics::prefetch_write_data($e, locality)
-        }
+        let __prefetch_ptr = unsafe { $e };
+        ::branches::prefetch_write_data::<_, LOCALITY>(__prefetch_ptr)
     }};
 }
 
 #[macro_export]
 macro_rules! likely {
-    ($e:expr) => {{ std::intrinsics::likely($e) }};
+    ($e:expr) => {{ ::branches::likely($e) }};
 }
 
 #[macro_export]
 macro_rules! unlikely {
-    ($e:expr) => {{ std::intrinsics::unlikely($e) }};
+    ($e:expr) => {{ ::branches::unlikely($e) }};
 }
 
 pub trait UncheckedIndexIntoInner<T> {

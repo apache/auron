@@ -26,7 +26,7 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
 };
 use datafusion::{
-    common::Result,
+    common::{Result, config::ConfigOptions},
     logical_expr::{Volatility, create_udf},
     physical_expr::{PhysicalExprRef, ScalarFunctionExpr, expressions::Column},
     physical_plan::{
@@ -146,6 +146,7 @@ async fn run_bounded(left_probed: bool, kind: usize, limit: usize, threshold: i3
             Arc::new(Column::new(filter_schema.field(bi).name(), bi)),
         ],
         &filter_schema,
+        Arc::<ConfigOptions>::default(),
     )?);
     let params = JoinParams {
         join_type: jt,
@@ -266,7 +267,7 @@ async fn duplicate_key_candidates_stay_bounded() -> Result<()> {
 
 #[tokio::test]
 async fn residual_hash_join_operator_and_spill_parity() -> Result<()> {
-    use arrow::array::{ArrayRef, new_null_array};
+    use arrow::array::ArrayRef;
     use auron_memmgr::MemManager;
     use datafusion::{
         common::{JoinSide, ScalarValue},
@@ -281,7 +282,11 @@ async fn residual_hash_join_operator_and_spill_parity() -> Result<()> {
         broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
         broadcast_join_exec::BroadcastJoinExec,
         common::column_pruning::ExecuteWithColumnPruning,
-        joins::{ColumnIndex, JoinFilter as CompactFilter, join_hash_map::join_hash_map_schema},
+        joins::{
+            ColumnIndex, JoinFilter as CompactFilter,
+            bucketed_group::{BucketGroupBuilder, append_bucket_id_column},
+            join_hash_map::join_hash_map_schema,
+        },
     };
     MemManager::init(1000000);
     let left_rows = [
@@ -406,13 +411,35 @@ async fn residual_hash_join_operator_and_spill_parity() -> Result<()> {
                         vec![key],
                     )),
                     2 => {
-                        let schema = join_hash_map_schema(&build_batch.schema());
-                        let cols = [
-                            build_batch.columns().to_vec(),
-                            vec![new_null_array(&DataType::Binary, build_batch.num_rows())],
-                        ]
-                        .concat();
-                        memory(RecordBatch::try_new(schema, cols)?)?
+                        // simulate a hybrid-join (bucketed hash join)
+                        // fallback build output: bucketed-group
+                        // hash-map-batches (data + ~TABLE, with the bucket
+                        // group id packed into ~TABLE's own metadata),
+                        // possibly split into multiple groups. Build groups
+                        // require rows to be pre-sorted ascending by
+                        // ~BUCKET (mirrors the real build-exec pipeline's
+                        // SortExec stage).
+                        let bucketed = append_bucket_id_column(
+                            build_batch.clone(),
+                            std::slice::from_ref(&key),
+                        )?;
+                        let bucket_col_idx = bucketed.num_columns() - 1;
+                        let sort_indices = arrow::compute::sort_to_indices(
+                            bucketed.column(bucket_col_idx),
+                            None,
+                            None,
+                        )?;
+                        let bucketed = arrow::compute::take_record_batch(&bucketed, &sort_indices)?;
+                        let mut group_builder =
+                            BucketGroupBuilder::new(0, vec![key], build_batch.schema());
+                        let mut group_batches = group_builder.push(bucketed)?;
+                        group_batches.extend(group_builder.finish()?);
+                        let hash_map_schema = join_hash_map_schema(&build_batch.schema());
+                        Arc::new(TestMemoryExec::try_new(
+                            &[group_batches],
+                            hash_map_schema,
+                            None,
+                        )?)
                     }
                     _ => unreachable!(),
                 };

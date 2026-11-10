@@ -195,19 +195,19 @@ fn transfer_output_schema_to_json_schema(
     let mut sub_schema_mapping: HashMap<String, Vec<Field>> = HashMap::new();
 
     for field in output_schema.fields().iter() {
-        if let Some(json_path) = nested_msg_mapping.get(field.name()) {
-            if let Some(index) = json_path.find(".") {
-                sub_nested_mapping.insert(
-                    field.name().to_string(),
-                    json_path[(index + 1)..].to_string(),
-                );
-                sub_schema_mapping
-                    .entry(json_path[..index].to_string())
-                    .and_modify(|v| {
-                        v.push(field.as_ref().clone());
-                    })
-                    .or_insert(vec![field.as_ref().clone()]);
-            }
+        if let Some(json_path) = nested_msg_mapping.get(field.name())
+            && let Some(index) = json_path.find(".")
+        {
+            sub_nested_mapping.insert(
+                field.name().to_string(),
+                json_path[(index + 1)..].to_string(),
+            );
+            sub_schema_mapping
+                .entry(json_path[..index].to_string())
+                .and_modify(|v| {
+                    v.push(field.as_ref().clone());
+                })
+                .or_insert(vec![field.as_ref().clone()]);
         }
     }
 

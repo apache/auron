@@ -166,10 +166,10 @@ impl Drop for FileSpill {
         self.1
             .disk_spill_iotime
             .add_duration(Duration::from_nanos(self.1.mem_spill_iotime.value() as u64));
-        if let Some(file_path) = &self.2 {
-            if let Err(e) = fs::remove_file(file_path) {
-                warn!("Was unable to delete spill file: {file_path}. error: {e}");
-            }
+        if let Some(file_path) = &self.2
+            && let Err(e) = fs::remove_file(file_path)
+        {
+            warn!("Was unable to delete spill file: {file_path}. error: {e}");
         }
     }
 }

@@ -38,6 +38,8 @@ pub mod join_utils;
 
 // join implementations
 pub mod bhj;
+pub mod bucket_repartitioner;
+pub mod bucketed_group;
 pub mod join_filter;
 pub mod join_hash_map;
 pub mod smj;
@@ -85,7 +87,7 @@ impl JoinFilter {
         self.expression
             .clone()
             .transform_up(|expr| {
-                let Some(column) = expr.as_any().downcast_ref::<Column>() else {
+                let Some(column) = expr.downcast_ref::<Column>() else {
                     return Ok(Transformed::no(expr));
                 };
                 let Some(source) = self.column_indices.get(column.index()) else {

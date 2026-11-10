@@ -26,8 +26,10 @@ workspace = true
 
 [dependencies]
 arrow = { workspace = true }
+bigdecimal = { workspace = true }
 auron-jni-bridge = { workspace = true }
 datafusion = { workspace = true }
+datafusion-spark = { workspace = true }
 datafusion-ext-commons = { workspace = true }
 jni = { workspace = true }
 

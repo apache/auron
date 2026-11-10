@@ -54,10 +54,6 @@ impl Display for TryCastExpr {
 }
 
 impl PhysicalExpr for TryCastExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
         Ok(self.cast_type.clone())
     }
