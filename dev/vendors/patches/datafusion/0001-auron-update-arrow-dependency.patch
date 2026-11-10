@@ -1,7 +1,7 @@
 From 0015 Mon Sep 17 00:00:00 2001
 From: auron <auron@example.com>
 Date: Mon, 27 Jul 2026 02:26:00 +0800
-Subject: [PATCH] auron: update arrow dependency to vendored v55.2.0-auron
+Subject: [PATCH] auron: update arrow dependency to vendored v59.2.0-auron
 
 ---
  Cargo.toml | 16 ++++++++++++++++
@@ -11,13 +11,13 @@ diff --git a/Cargo.toml b/Cargo.toml
 index 11cd3c637..b2fbf0df3 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -230,3 +230,19 @@ unexpected_cfgs = { level = "warn", check-cfg = [
-     "cfg(tarpaulin_include)",
+@@ -232,6 +232,22 @@ unexpected_cfgs = { level = "warn", check-cfg = [
+     "cfg(coverage_nightly)",
  ] }
  unused_qualifications = "deny"
 +
 +[patch.crates-io]
-+# arrow: vendored from v55.2.0-auron
++# arrow: vendored from v59.2.0-auron
 +arrow = { path = "../arrow-rs/arrow" }
 +arrow-arith = { path = "../arrow-rs/arrow-arith" }
 +arrow-array = { path = "../arrow-rs/arrow-array" }
@@ -31,5 +31,8 @@ index 11cd3c637..b2fbf0df3 100644
 +arrow-select = { path = "../arrow-rs/arrow-select" }
 +arrow-string = { path = "../arrow-rs/arrow-string" }
 +parquet = { path = "../arrow-rs/parquet" }
+ 
+ # --------------------
+ # Compilation Profiles
 -- 
 2.50.1

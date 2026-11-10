@@ -15,60 +15,17 @@
 
 use std::{fmt::Write, sync::Arc};
 
-use arrow::{
-    array::StringArray,
-    datatypes::{DataType, Field},
-};
+use arrow::array::StringArray;
 use datafusion::{
     common::{Result, ScalarValue, cast::as_binary_array, utils::take_function_args},
-    functions::crypto::{
-        basic::{DigestAlgorithm, digest_process},
-        sha224, sha256, sha384, sha512,
-    },
-    logical_expr::{ScalarFunctionArgs, ScalarUDF},
+    functions::crypto::basic::{DigestAlgorithm, digest_process},
     physical_plan::ColumnarValue,
 };
 use datafusion_ext_commons::df_execution_err;
 
-/// `sha224` function that simulates Spark's `sha2` expression with bit width
-/// 224
-pub fn spark_sha224(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    digest_and_wrap_as_hex(args, sha224())
-}
-
-/// `sha256` function that simulates Spark's `sha2` expression with bit width 0
-/// or 256
-pub fn spark_sha256(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    digest_and_wrap_as_hex(args, sha256())
-}
-
-/// `sha384` function that simulates Spark's `sha2` expression with bit width
-/// 384
-pub fn spark_sha384(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    digest_and_wrap_as_hex(args, sha384())
-}
-
-/// `sha512` function that simulates Spark's `sha2` expression with bit width
-/// 512
-pub fn spark_sha512(args: &[ColumnarValue]) -> Result<ColumnarValue> {
-    digest_and_wrap_as_hex(args, sha512())
-}
-
 pub fn spark_md5(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let [data] = take_function_args("md5", args)?;
     let value = digest_process(data, DigestAlgorithm::Md5)?;
-    to_hex_string(value)
-}
-
-/// Spark requires hex string as the result of sha2 and md5 functions, we have
-/// to wrap the result of digest functions as hex string
-fn digest_and_wrap_as_hex(args: &[ColumnarValue], digest: Arc<ScalarUDF>) -> Result<ColumnarValue> {
-    let value = digest.inner().invoke_with_args(ScalarFunctionArgs {
-        args: args.to_vec(),
-        arg_fields: vec![Arc::new(Field::new("arg", DataType::Binary, true))],
-        number_rows: 0,
-        return_field: Arc::new(Field::new("result", DataType::Utf8, true)),
-    })?;
     to_hex_string(value)
 }
 
@@ -112,7 +69,7 @@ mod tests {
         common::ScalarValue, error::Result as DataFusionResult, physical_plan::ColumnarValue,
     };
 
-    use crate::spark_crypto::{spark_md5, spark_sha224, spark_sha256, spark_sha384, spark_sha512};
+    use crate::spark_crypto::spark_md5;
 
     /// Helper function to run a test for a given hash function and scalar
     /// input.
@@ -137,63 +94,6 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_sha224_scalar_utf8() -> Result<(), Box<dyn Error>> {
-        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
-        let expected = "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad";
-        run_scalar_test(spark_sha224, input, expected)
-    }
-
-    #[test]
-    fn test_sha256_scalar_utf8() -> Result<(), Box<dyn Error>> {
-        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
-        let expected = "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78";
-        run_scalar_test(spark_sha256, input, expected)
-    }
-
-    #[test]
-    fn test_sha384_scalar_utf8() -> Result<(), Box<dyn Error>> {
-        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
-        let expected = "1e02dc92a41db610c9bcdc9b5935d1fb9be5639116f6c67e97bc1a3ac649753baba7ba021c813e1fe20c0480213ad371";
-        run_scalar_test(spark_sha384, input, expected)
-    }
-
-    #[test]
-    fn test_sha512_scalar_utf8() -> Result<(), Box<dyn Error>> {
-        let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
-        let expected = "397118fdac8d83ad98813c50759c85b8c47565d8268bf10da483153b747a74743a58a90e85aa9f705ce6984ffc128db567489817e4092d050d8a1cc596ddc119";
-        run_scalar_test(spark_sha512, input, expected)
-    }
-
-    #[test]
-    fn test_sha224_scalar_binary() -> Result<(), Box<dyn Error>> {
-        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
-        let expected = "4225cbc32d17010d1a440de9e34504c1fae29b8ee5e527e191ff9a82";
-        run_scalar_test(spark_sha224, input, expected)
-    }
-
-    #[test]
-    fn test_sha256_scalar_binary() -> Result<(), Box<dyn Error>> {
-        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
-        let expected = "7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89";
-        run_scalar_test(spark_sha256, input, expected)
-    }
-
-    #[test]
-    fn test_sha384_scalar_binary() -> Result<(), Box<dyn Error>> {
-        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
-        let expected = "557cfe660c753b830efa61528fc350ef384a7a4b9d3467c6230049bc59548eb8a404874baff89cb0f9bd18400829fdc2";
-        run_scalar_test(spark_sha384, input, expected)
-    }
-
-    #[test]
-    fn test_sha512_scalar_binary() -> Result<(), Box<dyn Error>> {
-        let input = ColumnarValue::Scalar(ScalarValue::Binary(Some(vec![1, 2, 3, 4, 5, 6])));
-        let expected = "178d767c364244ede054ebb3cc4af0ac2b307a86fba6a32706ce4f692642674d2ab8f51ee738ecb09bc296918aa85db48abe28fcaef7aa2da81a618cc6d891c3";
-        run_scalar_test(spark_sha512, input, expected)
-    }
-
-    #[test]
     fn test_md5_scalar_utf8() -> Result<(), Box<dyn Error>> {
         let input = ColumnarValue::Scalar(ScalarValue::Utf8(Some("ABC".to_string())));
         let expected = "902fbdd2b1df0c4f70b4a5d23525e932";

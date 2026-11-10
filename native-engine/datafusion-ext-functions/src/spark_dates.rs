@@ -640,11 +640,8 @@ pub fn spark_quarter(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         .as_any()
         .downcast_ref::<Int32Array>()
         .expect("date_part(Month) must return Int32Array");
-    let quarter = Int32Array::from_iter(
-        month_arr
-            .iter()
-            .map(|opt_m| opt_m.map(|m| ((m - 1) / 3 + 1))),
-    );
+    let quarter =
+        Int32Array::from_iter(month_arr.iter().map(|opt_m| opt_m.map(|m| (m - 1) / 3 + 1)));
 
     Ok(ColumnarValue::Array(Arc::new(quarter)))
 }

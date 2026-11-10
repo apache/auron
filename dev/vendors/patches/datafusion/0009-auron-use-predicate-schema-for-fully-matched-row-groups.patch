@@ -1,0 +1,124 @@
+diff --git a/datafusion/datasource-parquet/src/row_group_filter.rs b/datafusion/datasource-parquet/src/row_group_filter.rs
+--- a/datafusion/datasource-parquet/src/row_group_filter.rs
++++ b/datafusion/datasource-parquet/src/row_group_filter.rs
+@@ -392,7 +392,7 @@ impl RowGroupAccessPlanFilter {
+         // row groups must not have false positives.
+         let mut columns = collect_columns(predicate.orig_expr())
+             .into_iter()
+-            .filter(|column| arrow_schema.field(column.index()).is_nullable())
++            .filter(|column| predicate.schema().field(column.index()).is_nullable())
+             .collect::<Vec<_>>();
+         columns.sort_by(|a, b| {
+             a.index()
+@@ -410,7 +410,7 @@ impl RowGroupAccessPlanFilter {
+ 
+         // Simplify the inverted expression (e.g., NOT(c1 = 0) -> c1 != 0)
+         // before building the pruning predicate
+-        let simplifier = PhysicalExprSimplifier::new(arrow_schema);
++        let simplifier = PhysicalExprSimplifier::new(predicate.schema());
+         let Ok(inverted_expr) = simplifier.simplify(inverted_expr) else {
+             return;
+         };
+@@ -871,6 +871,102 @@ mod tests {
+         assert_eq!(row_groups.is_fully_matched(), &vec![false, true, false]);
+     }
+ 
++    #[test]
++    fn row_group_fully_matched_uses_predicate_schema() {
++        let table_schema = Arc::new(Schema::new(vec![
++            Field::new("c1", DataType::Boolean, false),
++            Field::new("c2", DataType::Int32, true),
++        ]));
++        let expr = logical2physical(&col("c2").gt(lit(15)), &table_schema);
++        let pruning_predicate = build_test_pruning_predicate(expr, table_schema);
++
++        for include_c1 in [false, true] {
++            let mut fields = vec![Field::new("c2", DataType::Int32, true)];
++            let mut parquet_fields =
++                vec![PrimitiveTypeField::new("c2", PhysicalType::INT32)];
++            if include_c1 {
++                fields.push(Field::new("c1", DataType::Boolean, false));
++                parquet_fields.push(PrimitiveTypeField::new("c1", PhysicalType::BOOLEAN));
++            }
++            let file_schema = Schema::new(fields);
++            let schema_descr = get_test_schema_descr(parquet_fields);
++            let groups = [Some(1), Some(0), None]
++                .into_iter()
++                .map(|null_count| {
++                    let mut statistics = vec![ParquetStatistics::int32(
++                        Some(16),
++                        Some(20),
++                        None,
++                        null_count,
++                        false,
++                    )];
++                    if include_c1 {
++                        statistics.push(ParquetStatistics::boolean(
++                            Some(false),
++                            Some(true),
++                            None,
++                            Some(0),
++                            false,
++                        ));
++                    }
++                    get_row_group_meta_data(&schema_descr, statistics)
++                })
++                .collect::<Vec<_>>();
++            let metrics = parquet_file_metrics();
++            let mut row_groups =
++                RowGroupAccessPlanFilter::new(ParquetAccessPlan::new_all(groups.len()));
++            row_groups.prune_by_statistics(
++                &file_schema,
++                &schema_descr,
++                &groups,
++                &pruning_predicate,
++                &metrics,
++                None,
++            );
++
++            assert_eq!(row_groups.access_plan.row_group_indexes(), vec![0, 1, 2]);
++            assert_eq!(row_groups.is_fully_matched(), &vec![false, true, false]);
++        }
++    }
++
++    #[test]
++    fn row_group_fully_matched_missing_predicate_column() {
++        let table_schema = Arc::new(Schema::new(vec![
++            Field::new("c1", DataType::Int32, false),
++            Field::new("c2", DataType::Int32, true),
++        ]));
++        let expr = logical2physical(&col("c2").gt(lit(15)), &table_schema);
++        let pruning_predicate = build_test_pruning_predicate(expr, table_schema);
++        let file_schema = Schema::new(vec![Field::new("c1", DataType::Int32, false)]);
++        let schema_descr = get_test_schema_descr(vec![PrimitiveTypeField::new(
++            "c1",
++            PhysicalType::INT32,
++        )]);
++        let group = get_row_group_meta_data(
++            &schema_descr,
++            vec![ParquetStatistics::int32(
++                Some(16),
++                Some(20),
++                None,
++                Some(0),
++                false,
++            )],
++        );
++        let metrics = parquet_file_metrics();
++        let mut row_groups = RowGroupAccessPlanFilter::new(ParquetAccessPlan::new_all(1));
++        row_groups.prune_by_statistics(
++            &file_schema,
++            &schema_descr,
++            &[group],
++            &pruning_predicate,
++            &metrics,
++            None,
++        );
++
++        assert_eq!(row_groups.access_plan.row_group_indexes(), vec![0]);
++        assert_eq!(row_groups.is_fully_matched(), &vec![false]);
++    }
++
+     #[test]
+     fn prune_by_limit_preserves_row_selection() {
+         let field = PrimitiveTypeField::new("c1", PhysicalType::INT32);
