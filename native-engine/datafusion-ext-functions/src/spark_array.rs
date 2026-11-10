@@ -1246,7 +1246,7 @@ mod test {
             &DataType::Utf8,
             true,
         )));
-        assert!(arrays_overlap(&[ints.clone()]).is_err());
+        assert!(arrays_overlap(std::slice::from_ref(&ints)).is_err());
         assert!(arrays_overlap(&[ints.clone(), strings]).is_err());
         assert!(
             arrays_overlap(&[
