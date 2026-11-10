@@ -36,7 +36,10 @@ use datafusion::{
     physical_expr_common::physical_expr::DynEq,
     physical_plan::PhysicalExpr,
 };
-use datafusion_ext_commons::{arrow::cast::cast, df_execution_err};
+use datafusion_ext_commons::{
+    arrow::{cast::cast, ffi::export_ffi_array},
+    df_execution_err,
+};
 use jni::objects::GlobalRef;
 use once_cell::sync::OnceCell;
 
@@ -200,7 +203,7 @@ fn invoke_udf(
 ) -> Result<ArrayRef> {
     // evaluate via context
     let struct_array = StructArray::from(params_batch);
-    let mut export_ffi_array = FFI_ArrowArray::new(&struct_array.to_data());
+    let mut export_ffi_array = export_ffi_array(&struct_array);
     let mut import_ffi_array = FFI_ArrowArray::empty();
     jni_call!(SparkAuronUDFWrapperContext(jcontext.as_obj()).eval(
         &mut export_ffi_array as *mut FFI_ArrowArray as i64,

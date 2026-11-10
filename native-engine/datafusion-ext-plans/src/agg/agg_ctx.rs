@@ -656,7 +656,15 @@ mod tests {
         array::{AsArray, Float64Array, Int64Array},
         datatypes::{DataType, Float64Type, Int64Type},
     };
-    use datafusion::physical_expr::expressions::Column;
+    use datafusion::{
+        common::{ScalarValue, config::ConfigOptions},
+        logical_expr::{Operator, Volatility},
+        physical_expr::{
+            ScalarFunctionExpr,
+            expressions::{BinaryExpr, CaseExpr, Column, IsNullExpr, Literal},
+        },
+        prelude::create_udf,
+    };
 
     use super::*;
     use crate::agg::{AggFunction, agg::create_agg, count::AggCount, sum::AggSum};
@@ -718,6 +726,95 @@ mod tests {
             false,
             false,
         )
+    }
+
+    #[test]
+    fn multi_column_count_placeholders_through_partial_merge_and_final() -> Result<()> {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("sum", DataType::Int64, true),
+            Field::new("avg_sum", DataType::Float64, true),
+            Field::new("avg_count", DataType::Int64, true),
+            Field::new("count", DataType::Int64, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int64Array::from(vec![10, 20])),
+                Arc::new(Float64Array::from(vec![40., 60.])),
+                Arc::new(Int64Array::from(vec![2, 3])),
+                Arc::new(Int64Array::from(vec![3, 4])),
+            ],
+        )?;
+        let udf = Arc::new(create_udf(
+            "spark_ext_function_Placeholder",
+            vec![],
+            DataType::Int64,
+            Volatility::Volatile,
+            datafusion_ext_functions::create_auron_ext_function("Placeholder", 0)?,
+        ));
+        let placeholder: PhysicalExprRef = Arc::new(ScalarFunctionExpr::new(
+            udf.name(),
+            udf.clone(),
+            vec![],
+            Arc::new(Field::new("placeholder", DataType::Int64, true)),
+            Arc::new(ConfigOptions::default()),
+        ));
+        for nullable_columns in [1, 2] {
+            let is_null: PhysicalExprRef = Arc::new(IsNullExpr::new(placeholder.clone()));
+            let predicate = if nullable_columns == 1 {
+                is_null
+            } else {
+                Arc::new(BinaryExpr::new(is_null.clone(), Operator::Or, is_null))
+            };
+            let count_expr: PhysicalExprRef = Arc::new(CaseExpr::try_new(
+                None,
+                vec![(predicate, Arc::new(Literal::new(ScalarValue::Int32(None))))],
+                Some(Arc::new(Literal::new(ScalarValue::Int32(Some(1))))),
+            )?);
+            assert!(count_expr.nullable(&schema)?);
+            for exec_mode in [AggExecMode::HashAgg, AggExecMode::SortAgg] {
+                for mode in [AggMode::PartialMerge, AggMode::Final] {
+                    let aggs = [
+                        (AggFunction::Sum, placeholder.clone(), DataType::Int64),
+                        (AggFunction::Avg, placeholder.clone(), DataType::Float64),
+                        (AggFunction::Count, count_expr.clone(), DataType::Int64),
+                    ]
+                    .into_iter()
+                    .map(|(function, expr, return_type)| {
+                        Ok(AggExpr {
+                            field_name: format!("{function:?}"),
+                            mode,
+                            agg: create_agg(function, &[expr], &schema, return_type)?,
+                            filter: None,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                    let ctx = context(exec_mode, schema.clone(), mode, &aggs)?;
+                    let mut table = ctx.create_acc_table(0);
+                    ctx.update_batch_slice_to_acc_table(
+                        &batch,
+                        0,
+                        batch.num_rows(),
+                        &mut table,
+                        IdxSelection::Single(0),
+                        &mut None,
+                    )?;
+                    let results = ctx.build_agg_columns(&mut table, IdxSelection::Single(0))?;
+                    assert_eq!(results[0].as_ref(), &Int64Array::from(vec![30]));
+                    if mode == AggMode::Final {
+                        assert_eq!(results.len(), 3);
+                        assert_eq!(results[1].as_ref(), &Float64Array::from(vec![20.]));
+                        assert_eq!(results[2].as_ref(), &Int64Array::from(vec![7]));
+                    } else {
+                        assert_eq!(results.len(), 4);
+                        assert_eq!(results[1].as_ref(), &Float64Array::from(vec![100.]));
+                        assert_eq!(results[2].as_ref(), &Int64Array::from(vec![5]));
+                        assert_eq!(results[3].as_ref(), &Int64Array::from(vec![7]));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]

@@ -577,6 +577,13 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription("Enable decimal arithmetic operations conversion to native Auron implementations.")
             .withDefaultValue(false);
 
+    public static final ConfigOption<Boolean> ENABLE_NATIVE_DATETIME_FUNCTIONS = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enableNativeDateTimeFunctions")
+            .withCategory("Expression/Function Supports")
+            .withDescription("Enable datetime function conversion to native Auron implementations. "
+                    + "Defaults to falling back to Spark.")
+            .withDefaultValue(false);
+
     public static final ConfigOption<Boolean> DATETIME_EXTRACT_ENABLED = new SQLConfOption<>(Boolean.class)
             .withKey("auron.datetime.extract.enabled")
             .withCategory("Expression/Function Supports")

@@ -15,9 +15,13 @@
 
 use std::sync::{Arc, OnceLock};
 
-use datafusion::{common::Result, logical_expr::ScalarFunctionImplementation};
-use datafusion_ext_commons::df_unimplemented_err;
+use datafusion::{
+    common::Result,
+    logical_expr::{ScalarFunctionImplementation, ScalarUDF, Volatility},
+};
+use datafusion_ext_commons::{df_execution_err, df_unimplemented_err};
 
+mod adapters;
 mod brickhouse;
 mod flink_datetime;
 mod spark_array;
@@ -28,14 +32,16 @@ pub mod spark_get_json_object;
 mod spark_hash;
 mod spark_initcap;
 mod spark_isnan;
-mod spark_make_array;
 mod spark_make_decimal;
 mod spark_map;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
 pub mod spark_round;
+mod spark_sqrt;
 mod spark_strings;
 mod spark_unscaled_value;
+#[cfg(test)]
+mod udf_tests;
 
 macro_rules! shared_function {
     ($function:expr) => {{
@@ -44,7 +50,6 @@ macro_rules! shared_function {
     }};
 }
 
-#[allow(clippy::panic)] // Temporarily allow panic to refactor to Result later
 pub fn create_auron_ext_function(
     name: &str,
     #[allow(unused_variables)] spark_partition_id: usize,
@@ -53,44 +58,36 @@ pub fn create_auron_ext_function(
     // if used for flink should be start with 'Flink_',
     // same to other engines.
     Ok(match name {
-        "Placeholder" => shared_function!(|_| panic!("placeholder() should never be called")),
+        "Placeholder" => {
+            shared_function!(|_| df_execution_err!("placeholder() should never be called"))
+        }
         "Spark_NullIf" => shared_function!(spark_null_if::spark_null_if),
         "Spark_NullIfZero" => shared_function!(spark_null_if::spark_null_if_zero),
         "Spark_UnscaledValue" => shared_function!(spark_unscaled_value::spark_unscaled_value),
         "Spark_MakeDecimal" => shared_function!(spark_make_decimal::spark_make_decimal),
         "Spark_CheckOverflow" => shared_function!(spark_check_overflow::spark_check_overflow),
         "Spark_Murmur3Hash" => shared_function!(spark_hash::spark_murmur3_hash),
-        "Spark_XxHash64" => shared_function!(spark_hash::spark_xxhash64),
-        "Spark_Sha224" => shared_function!(spark_crypto::spark_sha224),
-        "Spark_Sha256" => shared_function!(spark_crypto::spark_sha256),
-        "Spark_Sha384" => shared_function!(spark_crypto::spark_sha384),
-        "Spark_Sha512" => shared_function!(spark_crypto::spark_sha512),
         "Spark_MD5" => shared_function!(spark_crypto::spark_md5),
         "Spark_GetJsonObject" => shared_function!(spark_get_json_object::spark_get_json_object),
         "Spark_GetParsedJsonObject" => {
             shared_function!(spark_get_json_object::spark_get_parsed_json_object)
         }
-        "Spark_ParseJson" => shared_function!(spark_get_json_object::spark_parse_json),
         "Spark_ArrayDistinct" => shared_function!(spark_array::array_distinct),
         "Spark_ArrayUnion" => shared_function!(spark_array::array_union),
         "Spark_ArrayContains" => shared_function!(spark_array::array_contains),
+        "Spark_ArraysOverlap" => shared_function!(spark_array::arrays_overlap),
         "Spark_ArrayReverse" => shared_function!(spark_array::array_reverse),
         "Spark_ArrayFlatten" => shared_function!(spark_array::array_flatten),
-        "Spark_MakeArray" => shared_function!(spark_make_array::array),
         "Spark_MapConcat" => shared_function!(spark_map::map_concat),
+        "Spark_StringRepeat" => shared_function!(spark_strings::string_repeat),
+        "Spark_StringSplit" => shared_function!(spark_strings::string_split),
+        "Spark_StringLower" => shared_function!(spark_strings::string_lower),
+        "Spark_StringUpper" => shared_function!(spark_strings::string_upper),
+        "Spark_InitCap" => shared_function!(spark_initcap::string_initcap),
         "Spark_MapFromArrays" => shared_function!(spark_map::map_from_arrays),
         "Spark_MapFromEntries" => shared_function!(spark_map::map_from_entries),
         "Spark_StrToMap" => shared_function!(spark_map::str_to_map),
         "Spark_Chr" => shared_function!(spark_strings::string_chr),
-        "Spark_StringSpace" => shared_function!(spark_strings::string_space),
-        "Spark_StringRepeat" => shared_function!(spark_strings::string_repeat),
-        "Spark_StringSplit" => shared_function!(spark_strings::string_split),
-        "Spark_StringConcat" => shared_function!(spark_strings::string_concat),
-        "Spark_StringConcatWs" => shared_function!(spark_strings::string_concat_ws),
-        "Spark_StringLower" => shared_function!(spark_strings::string_lower),
-        "Spark_StringUpper" => shared_function!(spark_strings::string_upper),
-        "Spark_Substring" => shared_function!(spark_strings::spark_substring),
-        "Spark_InitCap" => shared_function!(spark_initcap::string_initcap),
         "Spark_Year" => shared_function!(spark_dates::spark_year),
         "Spark_Month" => shared_function!(spark_dates::spark_month),
         "Spark_Day" => shared_function!(spark_dates::spark_day),
@@ -105,20 +102,139 @@ pub fn create_auron_ext_function(
         "Spark_DateAdd" => shared_function!(spark_dates::spark_date_add),
         "Spark_DateSub" => shared_function!(spark_dates::spark_date_sub),
         "Spark_AddMonths" => shared_function!(spark_dates::spark_add_months),
-        "Spark_MakeDate" => shared_function!(spark_dates::spark_make_date),
         "Spark_Hour" => shared_function!(spark_dates::spark_hour),
         "Spark_Minute" => shared_function!(spark_dates::spark_minute),
         "Spark_Second" => shared_function!(spark_dates::spark_second),
+        "Spark_MakeDate" => shared_function!(spark_dates::spark_make_date),
         "Spark_MonthsBetween" => shared_function!(spark_dates::spark_months_between),
         "Spark_BrickhouseArrayUnion" => shared_function!(brickhouse::array_union::array_union),
         "Spark_NormalizeNanAndZero" => {
             shared_function!(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
+        "Spark_Sqrt" => shared_function!(spark_sqrt::spark_sqrt),
         "Spark_IsNaN" => shared_function!(spark_isnan::spark_isnan),
         "Flink_UnixTimestamp" => shared_function!(flink_datetime::flink_unix_timestamp),
         "Flink_UnixTimestampNow" => shared_function!(flink_datetime::flink_unix_timestamp_now),
         _ => df_unimplemented_err!("auron ext function not implemented: {name}")?,
     })
+}
+
+/// Wraps a `ScalarUDFImpl` adapter as an `Arc<ScalarUDF>`.
+fn adapted<T: datafusion::logical_expr::ScalarUDFImpl>(impl_: T) -> Arc<ScalarUDF> {
+    Arc::new(ScalarUDF::new_from_impl(impl_))
+}
+
+/// Creates the UDF for an auron ext function, preferring a
+/// `datafusion-spark` implementation where one exists.
+///
+/// `arg_types` / `return_type` are the plan-level types from the protobuf
+/// node; adapters use them to preserve Spark's types where DataFusion's
+/// logical type coercion is bypassed.
+pub fn create_auron_ext_udf(
+    name: &str,
+    spark_partition_id: usize,
+    arg_types: Vec<datafusion::arrow::datatypes::DataType>,
+    return_type: datafusion::arrow::datatypes::DataType,
+) -> Result<Arc<ScalarUDF>> {
+    use adapters::*;
+    use datafusion_spark::function as spark_fn;
+
+    let ret = return_type.clone();
+
+    // Keep Spark-specific ROUND, ANSI next_day, add_months overflow and
+    // map null-key validation and Java-regex str_to_map in their existing implementations.
+    // The remaining functions can delegate without changing their calling convention.
+    let direct: Option<Arc<ScalarUDF>> = match name {
+        "Spark_StringSpace" => Some(spark_fn::string::space()),
+        "Spark_Substring" => Some(spark_fn::string::substring()),
+        "Spark_StringConcat" => Some(spark_fn::string::concat()),
+        "Spark_StringConcatWs" => Some(spark_fn::string::concat_ws()),
+        "Spark_DateAdd" => Some(spark_fn::datetime::date_add()),
+        "Spark_DateSub" => Some(spark_fn::datetime::date_sub()),
+        "Spark_LastDay" => Some(spark_fn::datetime::last_day()),
+        "Spark_XxHash64" => Some(spark_fn::hash::xxhash64()),
+        _ => None,
+    };
+    if let Some(udf) = direct {
+        return Ok(udf);
+    }
+
+    // --- datafusion-spark behind a thin calling-convention adapter ---
+    let adapted: Option<Arc<ScalarUDF>> = match name {
+        "Spark_MakeArray" => Some(adapted(MakeArrayUdf::new(ret))),
+        "Spark_Sha224" => Some(adapted(Sha2BitsUdf::new(224, ret))),
+        "Spark_Sha256" => Some(adapted(Sha2BitsUdf::new(256, ret))),
+        "Spark_Sha384" => Some(adapted(Sha2BitsUdf::new(384, ret))),
+        "Spark_Sha512" => Some(adapted(Sha2BitsUdf::new(512, ret))),
+        // session timezone arrives as a trailing literal argument
+        "Spark_Hour" => Some(adapted(TzExtractUdf::new(
+            spark_fn::datetime::hour(),
+            "Spark_Hour",
+            ret,
+        ))),
+        "Spark_Minute" => Some(adapted(TzExtractUdf::new(
+            spark_fn::datetime::minute(),
+            "Spark_Minute",
+            ret,
+        ))),
+        "Spark_Second" => Some(adapted(TzExtractUdf::new(
+            spark_fn::datetime::second(),
+            "Spark_Second",
+            ret,
+        ))),
+        "Spark_Year" => Some(adapted(DatePartTzUdf::new(
+            "year",
+            false,
+            "Spark_Year",
+            ret,
+        ))),
+        "Spark_Month" => Some(adapted(DatePartTzUdf::new(
+            "month",
+            false,
+            "Spark_Month",
+            ret,
+        ))),
+        "Spark_Day" => Some(adapted(DatePartTzUdf::new("day", false, "Spark_Day", ret))),
+        "Spark_DayOfYear" => Some(adapted(DatePartTzUdf::new(
+            "doy",
+            false,
+            "Spark_DayOfYear",
+            ret,
+        ))),
+        // Spark's dayofweek is 1..=7 (Sun=1); core `dow` is 0..=6
+        "Spark_DayOfWeek" => Some(adapted(DatePartTzUdf::new(
+            "dow",
+            true,
+            "Spark_DayOfWeek",
+            ret,
+        ))),
+        "Spark_WeekOfYear" => Some(adapted(DatePartTzUdf::new(
+            "week",
+            false,
+            "Spark_WeekOfYear",
+            ret,
+        ))),
+        "Spark_Quarter" => Some(adapted(DatePartTzUdf::new(
+            "quarter",
+            false,
+            "Spark_Quarter",
+            ret,
+        ))),
+        _ => None,
+    };
+    if let Some(udf) = adapted {
+        return Ok(udf);
+    }
+
+    // --- legacy ext implementation (no datafusion-spark counterpart) ---
+    let fun = create_auron_ext_function(name, spark_partition_id)?;
+    Ok(Arc::new(datafusion::prelude::create_udf(
+        &format!("spark_ext_function_{name}"),
+        arg_types,
+        return_type,
+        Volatility::Volatile,
+        fun,
+    )))
 }
 
 #[cfg(test)]
@@ -141,6 +257,59 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn placeholder_returns_error() -> Result<()> {
+        let placeholder = create_auron_ext_function("Placeholder", 0)?;
+        assert!(matches!(
+            placeholder(&[]),
+            Err(datafusion::common::DataFusionError::Execution(message))
+                if message == "placeholder() should never be called"
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn multi_column_count_placeholder_nullability() -> Result<()> {
+        let schema = Schema::empty();
+        let udf = Arc::new(create_udf(
+            "spark_ext_function_Placeholder",
+            vec![],
+            DataType::Int64,
+            Volatility::Volatile,
+            create_auron_ext_function("Placeholder", 0)?,
+        ));
+        let placeholder: PhysicalExprRef = Arc::new(ScalarFunctionExpr::new(
+            udf.name(),
+            udf.clone(),
+            vec![],
+            Arc::new(Field::new("placeholder", DataType::Int64, true)),
+            Arc::new(ConfigOptions::default()),
+        ));
+        assert_eq!(placeholder.data_type(&schema)?, DataType::Int64);
+        assert!(placeholder.nullable(&schema)?);
+        for nullable_columns in [1, 2] {
+            let is_null: PhysicalExprRef = Arc::new(IsNullExpr::new(placeholder.clone()));
+            let predicate = if nullable_columns == 1 {
+                is_null
+            } else {
+                Arc::new(BinaryExpr::new(is_null.clone(), Operator::Or, is_null))
+            };
+            let count_expr = CaseExpr::try_new(
+                None,
+                vec![(predicate, Arc::new(Literal::new(ScalarValue::Int32(None))))],
+                Some(Arc::new(Literal::new(ScalarValue::Int32(Some(1))))),
+            )?;
+            assert_eq!(count_expr.data_type(&schema)?, DataType::Int32);
+            assert!(count_expr.nullable(&schema)?);
+            assert!(
+                count_expr
+                    .evaluate(&RecordBatch::new_empty(Arc::new(schema.clone())))
+                    .is_err()
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn case_nullability_does_not_evaluate_aggregate_placeholders() -> Result<()> {
@@ -494,7 +663,7 @@ mod tests {
     fn reuses_function_implementation() -> Result<()> {
         let first = create_auron_ext_function("Spark_GetJsonObject", 0)?;
         let second = create_auron_ext_function("Spark_GetJsonObject", 0)?;
-        let other = create_auron_ext_function("Spark_ParseJson", 0)?;
+        let other = create_auron_ext_function("Spark_GetParsedJsonObject", 0)?;
 
         assert!(Arc::ptr_eq(&first, &second));
         assert!(!Arc::ptr_eq(&first, &other));

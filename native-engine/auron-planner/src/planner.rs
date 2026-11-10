@@ -35,7 +35,7 @@ use datafusion::{
         physical_plan::{FileGroup, FileOpener, FileScanConfig, FileScanConfigBuilder, FileSource},
         table_schema::TableSchema,
     },
-    logical_expr::{Operator, ScalarUDF, Volatility},
+    logical_expr::{Operator, ScalarUDF},
     physical_expr::{
         PhysicalExprRef, ScalarFunctionExpr,
         expressions::{LikeExpr, SCAndExpr, SCOrExpr, in_list},
@@ -48,7 +48,6 @@ use datafusion::{
         },
         metrics::ExecutionPlanMetricsSet,
     },
-    prelude::create_udf,
 };
 use datafusion_ext_exprs::{
     bloom_filter_might_contain::BloomFilterMightContainExpr, cast::TryCastExpr,
@@ -1020,21 +1019,22 @@ impl PhysicalPlanner {
                             e.name == "Spark_BRound",
                         ),
                     ))
+                } else if scalar_function == protobuf::ScalarFunction::AuronExtFunctions
+                    && e.name == "Spark_ParseJson"
+                {
+                    Arc::new(ScalarUDF::from(
+                        datafusion_ext_functions::spark_get_json_object::SparkParseJson::default(),
+                    ))
                 } else if scalar_function == protobuf::ScalarFunction::AuronExtFunctions {
                     let fun_name = &e.name;
-                    let fun = datafusion_ext_functions::create_auron_ext_function(
+                    datafusion_ext_functions::create_auron_ext_udf(
                         fun_name,
                         self.partition_id,
-                    )?;
-                    Arc::new(create_udf(
-                        &format!("spark_ext_function_{fun_name}"),
                         args.iter()
                             .map(|e| e.data_type(input_schema))
                             .collect::<Result<Vec<_>, _>>()?,
                         convert_required!(e.return_type)?,
-                        Volatility::Volatile,
-                        fun,
-                    ))
+                    )?
                 } else {
                     let scalar_udf: Arc<ScalarUDF> = scalar_function.into();
                     scalar_udf
