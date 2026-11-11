@@ -1127,18 +1127,24 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("NOT IN subquery with NULL values") {
-    val row = identity[(java.lang.Integer, java.lang.Integer)] _
-    Seq(row((1, 1)), row((2, 2)), row((3, null)))
-      .toDF("a", "b")
-      .createOrReplaceTempView("tbl")
-    val df = checkSparkAnswer("select * from tbl where a not in (select b from tbl)")
+    withSparkConf(
+      "spark.auron.hybrid.join.enable" -> "true",
+      "spark.auron.hybrid.join.rows.threshold" -> "0",
+      "spark.auron.hybrid.join.group.mem.threshold" -> "1") {
+      val row = identity[(java.lang.Integer, java.lang.Integer)] _
+      Seq(row((1, 1)), row((2, 2)), row((3, null)))
+        .toDF("a", "b")
+        .createOrReplaceTempView("tbl")
+      val df = checkSparkAnswer("select * from tbl where a not in (select b from tbl)")
 
-    // Spark 3.0: NOT IN subquery is converted to BroadcastNestedLoopJoinExec, and falls back due to unsupported join condition
-    if (AuronTestUtils.isSparkV31OrGreater) {
-      assert(collectFirst(df.queryExecution.executedPlan) { case bhj: NativeBroadcastJoinExec =>
-        assert(bhj.isNullAwareAntiJoin)
-        bhj
-      }.isDefined)
+      // Spark 3.0: NOT IN uses BroadcastNestedLoopJoinExec and falls back.
+      if (AuronTestUtils.isSparkV31OrGreater) {
+        assert(collectFirst(df.queryExecution.executedPlan) { case bhj: NativeBroadcastJoinExec =>
+          assert(bhj.isNullAwareAntiJoin)
+          assert(bhj.metrics("hybrid_join_time").value > 0)
+          bhj
+        }.isDefined)
+      }
     }
   }
 
