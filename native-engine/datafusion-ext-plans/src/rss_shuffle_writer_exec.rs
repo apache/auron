@@ -36,7 +36,10 @@ use datafusion::{
 use once_cell::sync::OnceCell;
 
 use crate::{
-    common::execution_context::ExecutionContext,
+    common::{
+        execution_context::ExecutionContext,
+        optimized_batch::{ExecuteOptimizedProps, into_lazy_stream},
+    },
     shuffle::{
         Partitioning, ShuffleRepartitioner,
         rss_single_repartitioner::RssSingleShuffleRepartitioner,
@@ -175,7 +178,10 @@ impl ExecutionPlan for RssShuffleWriterExec {
             }
             p => unreachable!("unsupported partitioning: {:?}", p),
         };
-        let input = exec_ctx.execute_with_input_stats(&input)?;
+        let input = into_lazy_stream(exec_ctx.execute_optimized(
+            &input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         repartitioner.execute(exec_ctx, input)
     }
 

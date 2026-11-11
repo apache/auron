@@ -34,7 +34,10 @@ use datafusion_ext_commons::{arrow::cast::cast, df_execution_err};
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug, Clone)]
 pub struct ExpandExec {
@@ -135,7 +138,10 @@ impl ExecutionPlan for ExpandExec {
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         let output = execute_expand(input, self.projections.clone(), exec_ctx)?;
         Ok(output)
     }

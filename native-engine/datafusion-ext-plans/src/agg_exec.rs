@@ -49,7 +49,11 @@ use crate::{
         agg_table::{AggTable, OwnedKey},
         spark_udaf_wrapper::SparkUDAFWrapper,
     },
-    common::{execution_context::ExecutionContext, timer_helper::TimerHelper},
+    common::{
+        execution_context::ExecutionContext,
+        optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+        timer_helper::TimerHelper,
+    },
     expand_exec::ExpandExec,
     project_exec::ProjectExec,
     sort_exec::create_default_ascending_sort_exec,
@@ -170,7 +174,10 @@ fn execute_agg(
     agg_ctx: Arc<AggContext>,
 ) -> Result<SendableRecordBatchStream> {
     if agg_ctx.groupings.is_empty() {
-        let input = exec_ctx.execute_with_input_stats(&input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         return execute_agg_no_grouping(input, exec_ctx, agg_ctx);
     }
 
@@ -195,15 +202,25 @@ fn execute_agg(
                     Some(exec_ctx.execution_plan_metrics().clone()),
                     false, // do not record output metric
                 );
-                let input_sorted = exec_ctx.clone().execute(&input_sort_exec)?;
+                let input_sorted = materialize_optimized_stream(
+                    exec_ctx
+                        .clone()
+                        .execute_optimized(&input_sort_exec, &ExecuteOptimizedProps::default())?,
+                );
                 execute_agg_sorted(input_sorted, exec_ctx.clone(), agg_ctx)?
             } else {
-                let input = exec_ctx.execute_with_input_stats(&input)?;
+                let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+                    &input,
+                    &ExecuteOptimizedProps::default().with_input_stats(true),
+                )?);
                 execute_agg_with_grouping_hash(input, exec_ctx, agg_ctx)?
             }
         }
         AggExecMode::SortAgg => {
-            let input = exec_ctx.execute_with_input_stats(&input)?;
+            let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+                &input,
+                &ExecuteOptimizedProps::default().with_input_stats(true),
+            )?);
             execute_agg_sorted(input, exec_ctx, agg_ctx)?
         }
     })

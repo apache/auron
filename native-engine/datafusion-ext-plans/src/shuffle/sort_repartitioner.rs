@@ -18,7 +18,6 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
 use auron_memmgr::{
     MemConsumer, MemConsumerInfo, MemManager,
@@ -29,13 +28,14 @@ use datafusion::{
     common::{DataFusionError, Result},
     physical_plan::metrics::Time,
 };
-use datafusion_ext_commons::{arrow::array_size::BatchSize, df_execution_err};
+use datafusion_ext_commons::df_execution_err;
 use futures::lock::Mutex;
 use once_cell::sync::OnceCell;
 
 use crate::{
     common::{
         execution_context::ExecutionContext,
+        lazy::LazyBatchRef,
         offsetted::{Offsetted, OffsettedMergeIterator},
         timer_helper::TimerHelper,
     },
@@ -122,9 +122,10 @@ impl Drop for SortShuffleRepartitioner {
 
 #[async_trait]
 impl ShuffleRepartitioner for SortShuffleRepartitioner {
-    async fn insert_batch(&self, input: RecordBatch) -> Result<()> {
+    async fn insert_batch(&self, input: LazyBatchRef) -> Result<()> {
         // update memory usage before adding to buffered data
-        let mem_used = self.data.lock().await.mem_used() + input.get_batch_mem_size() * 2;
+        let mem_used =
+            self.data.lock().await.mem_used() + input.get_estimated_materialized_mem_size() * 2;
         self.update_mem_used(mem_used).await?;
 
         // add batch to buffered data

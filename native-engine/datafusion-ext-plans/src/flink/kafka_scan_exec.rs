@@ -38,6 +38,7 @@ use datafusion::{
         DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties, SendableRecordBatchStream,
         execution_plan::{Boundedness, EmissionType},
         metrics::{ExecutionPlanMetricsSet, MetricsSet},
+        stream::RecordBatchStreamAdapter,
     },
 };
 use futures::StreamExt;
@@ -51,7 +52,7 @@ use rdkafka::{
 use sonic_rs::{JsonContainerTrait, JsonValueTrait};
 
 use crate::{
-    common::{column_pruning::ExecuteWithColumnPruning, execution_context::ExecutionContext},
+    common::execution_context::ExecutionContext,
     flink::serde::{
         flink_deserializer::FlinkDeserializer, json_deserializer::JsonDeserializer,
         pb_deserializer::PbDeserializer,
@@ -114,6 +115,23 @@ impl KafkaScanExec {
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
         }
+    }
+
+    pub fn execute_optimized(
+        &self,
+        partition: usize,
+        context: Arc<TaskContext>,
+        projection: Option<Vec<usize>>,
+    ) -> Result<SendableRecordBatchStream> {
+        let (parsing_schema, output_projection) =
+            normalize_projection(&self.schema, projection.as_deref())?;
+        let output_schema = Arc::new(parsing_schema.project(&output_projection)?);
+        let exec_ctx = ExecutionContext::new(context, partition, parsing_schema, &self.metrics);
+        let stream = self.execute_with_ctx(exec_ctx)?;
+        Ok(Box::pin(RecordBatchStreamAdapter::new(
+            output_schema,
+            stream.map(move |batch| batch.and_then(|batch| Ok(batch.project(&output_projection)?))),
+        )))
     }
 
     fn execute_with_ctx(
@@ -204,8 +222,7 @@ impl ExecutionPlan for KafkaScanExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
-        let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
-        self.execute_with_ctx(exec_ctx)
+        self.execute_optimized(partition, context, None)
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
@@ -213,18 +230,39 @@ impl ExecutionPlan for KafkaScanExec {
     }
 }
 
-impl ExecuteWithColumnPruning for KafkaScanExec {
-    fn execute_projected(
-        &self,
-        partition: usize,
-        context: Arc<TaskContext>,
-        projection: &[usize],
-    ) -> Result<SendableRecordBatchStream> {
-        let projected_schema = Arc::new(self.schema().project(projection)?);
-        let exec_ctx =
-            ExecutionContext::new(context, partition, projected_schema.clone(), &self.metrics);
-        self.execute_with_ctx(exec_ctx)
-    }
+fn normalize_projection(
+    schema: &Schema,
+    projection: Option<&[usize]>,
+) -> Result<(SchemaRef, Vec<usize>)> {
+    let projection = projection
+        .map(<[usize]>::to_vec)
+        .unwrap_or_else(|| (0..schema.fields().len()).collect());
+    schema.project(&projection)?;
+
+    let mut parsing_projection = vec![
+        schema.index_of("serialized_kafka_records_partition")?,
+        schema.index_of("serialized_kafka_records_offset")?,
+        schema.index_of("serialized_kafka_records_timestamp")?,
+    ];
+    let mut positions: HashMap<usize, usize> = parsing_projection
+        .iter()
+        .enumerate()
+        .map(|(position, &index)| (index, position))
+        .collect();
+    let output_projection = projection
+        .iter()
+        .map(|&index| {
+            *positions.entry(index).or_insert_with(|| {
+                let position = parsing_projection.len();
+                parsing_projection.push(index);
+                position
+            })
+        })
+        .collect();
+    Ok((
+        Arc::new(schema.project(&parsing_projection)?),
+        output_projection,
+    ))
 }
 
 // A type alias with your custom consumer can be created for convenience.
@@ -576,4 +614,238 @@ fn parse_records(
             Ok(())
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use arrow::array::{ArrayRef, StringArray};
+    use prost::Message as ProstMessage;
+    use prost_reflect::prost_types::{
+        DescriptorProto, FieldDescriptorProto, FileDescriptorProto, FileDescriptorSet,
+        field_descriptor_proto::{Label, Type},
+    };
+
+    use super::*;
+
+    fn test_schema() -> SchemaRef {
+        Arc::new(Schema::new_with_metadata(
+            vec![
+                Field::new("name", DataType::Utf8, true)
+                    .with_metadata([("field".to_owned(), "name".to_owned())].into()),
+                Field::new("serialized_kafka_records_timestamp", DataType::Int64, true),
+                Field::new("id", DataType::Int32, true),
+                Field::new("serialized_kafka_records_partition", DataType::Int32, false),
+                Field::new("serialized_kafka_records_offset", DataType::Int64, false),
+            ],
+            [("source".to_owned(), "kafka-test".to_owned())].into(),
+        ))
+    }
+
+    fn parse_json(schema: SchemaRef) -> Result<RecordBatch> {
+        let mut parser = JsonDeserializer::new(schema, &HashMap::new())?;
+        let messages = BinaryArray::from_vec(vec![
+            br#"{"id":1,"name":"Alice","unused":"not-an-integer"}"#,
+            br#"{"id":2,"name":"Bob","unused":"not-an-integer"}"#,
+        ]);
+        parser.parse_messages_with_kafka_meta(
+            &messages,
+            &Int32Array::from(vec![3, 4]),
+            &Int64Array::from(vec![100, 101]),
+            &Int64Array::from(vec![Some(1000), None]),
+        )
+    }
+
+    fn expected_batch(schema: SchemaRef) -> Result<RecordBatch> {
+        Ok(RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(StringArray::from(vec!["Alice", "Bob"])),
+                Arc::new(Int64Array::from(vec![Some(1000), None])),
+                Arc::new(Int32Array::from(vec![1, 2])),
+                Arc::new(Int32Array::from(vec![3, 4])),
+                Arc::new(Int64Array::from(vec![100, 101])),
+            ],
+        )?)
+    }
+
+    #[test]
+    fn test_json_projection() -> Result<()> {
+        let schema = test_schema();
+        let expected = expected_batch(schema.clone())?;
+        for projection in [
+            None,
+            Some(vec![2]),
+            Some(vec![2, 0, 2]),
+            Some(vec![1, 4, 3, 1, 0, 4]),
+            Some(vec![]),
+            Some(vec![4, 1, 3, 4]),
+        ] {
+            let (parsing_schema, output_projection) =
+                normalize_projection(&schema, projection.as_deref())?;
+            let requested = projection
+                .clone()
+                .unwrap_or_else(|| (0..schema.fields().len()).collect());
+            let mut parsing_projection = vec![3, 4, 1];
+            for &index in &requested {
+                if !parsing_projection.contains(&index) {
+                    parsing_projection.push(index);
+                }
+            }
+            assert_eq!(
+                parsing_schema.as_ref(),
+                &schema.project(&parsing_projection)?
+            );
+            assert_eq!(parsing_schema.metadata(), schema.metadata());
+            let parsed = parse_json(parsing_schema)?;
+            let output = parsed.project(&output_projection)?;
+            assert_eq!(output, expected.project(&requested)?);
+            assert_eq!(output.num_rows(), 2);
+            assert_eq!(output.num_columns(), requested.len());
+            assert_eq!(output.schema().metadata(), schema.metadata());
+            for (position, &index) in requested.iter().enumerate() {
+                assert_eq!(
+                    output.schema().field(position).metadata(),
+                    schema.field(index).metadata()
+                );
+            }
+            if let Some(first) = requested.first() {
+                for (position, index) in requested.iter().enumerate().skip(1) {
+                    if index == first {
+                        assert!(Arc::ptr_eq(output.column(0), output.column(position)));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_projection() -> Result<()> {
+        let schema = test_schema();
+        for projection in [vec![5], vec![2, usize::MAX], vec![0, 5, 0]] {
+            assert!(normalize_projection(&schema, Some(&projection)).is_err());
+            let scan = KafkaScanExec::new(
+                String::new(),
+                String::new(),
+                schema.clone(),
+                2,
+                0,
+                String::new(),
+                0,
+                String::new(),
+            );
+            assert!(
+                scan.execute_optimized(0, Arc::new(TaskContext::default()), Some(projection))
+                    .is_err()
+            );
+        }
+        let missing_meta = schema.project(&[0, 1, 2, 3])?;
+        assert!(normalize_projection(&missing_meta, Some(&[])).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_json_projection_skips_unselected_builders() -> Result<()> {
+        let schema = test_schema();
+        let mut fields = schema.fields().to_vec();
+        fields.push(Arc::new(Field::new(
+            "unused",
+            DataType::Decimal128(10, 2),
+            true,
+        )));
+        let schema = Schema::new_with_metadata(fields, schema.metadata().clone());
+        let (full_schema, _) = normalize_projection(&schema, None)?;
+        assert!(JsonDeserializer::new(full_schema, &HashMap::new()).is_err());
+        let (parsing_schema, output_projection) = normalize_projection(&schema, Some(&[2]))?;
+        assert_eq!(parsing_schema.fields().len(), 4);
+        assert!(parsing_schema.index_of("unused").is_err());
+        let output = parse_json(parsing_schema)?.project(&output_projection)?;
+        assert_eq!(output.num_rows(), 2);
+        assert_eq!(
+            output
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .expect("expected Int32Array"),
+            &Int32Array::from(vec![1, 2])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_pb_projection_skips_unselected_decoding() -> Result<()> {
+        let descriptor = FileDescriptorSet {
+            file: vec![FileDescriptorProto {
+                name: Some("projection.proto".to_owned()),
+                syntax: Some("proto3".to_owned()),
+                message_type: vec![DescriptorProto {
+                    name: Some("ProjectionMessage".to_owned()),
+                    field: vec![
+                        FieldDescriptorProto {
+                            name: Some("id".to_owned()),
+                            number: Some(1),
+                            label: Some(Label::Optional as i32),
+                            r#type: Some(Type::Int32 as i32),
+                            ..Default::default()
+                        },
+                        FieldDescriptorProto {
+                            name: Some("name".to_owned()),
+                            number: Some(2),
+                            label: Some(Label::Optional as i32),
+                            r#type: Some(Type::String as i32),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        }
+        .encode_to_vec();
+        let messages = BinaryArray::from_vec(vec![&[0x08, 0x07, 0x12, 0x01, 0xff]]);
+        let partitions = Int32Array::from(vec![3]);
+        let offsets = Int64Array::from(vec![100]);
+        let timestamps = Int64Array::from(vec![1000]);
+        let schema = test_schema();
+        let (full_schema, _) = normalize_projection(&schema, None)?;
+        let mut parser = PbDeserializer::new(
+            &descriptor,
+            "ProjectionMessage",
+            full_schema,
+            &HashMap::new(),
+            &[],
+        )?;
+        let error = parser
+            .parse_messages_with_kafka_meta(&messages, &partitions, &offsets, &timestamps)
+            .expect_err("selected invalid UTF-8 field must fail");
+        assert!(error.to_string().contains("invalid UTF-8"));
+        for projection in [vec![2, 2], vec![4, 1, 3, 4], vec![]] {
+            let (parsing_schema, output_projection) =
+                normalize_projection(&schema, Some(&projection))?;
+            assert!(parsing_schema.index_of("name").is_err());
+            let mut parser = PbDeserializer::new(
+                &descriptor,
+                "ProjectionMessage",
+                parsing_schema,
+                &HashMap::new(),
+                &[],
+            )?;
+            let output = parser
+                .parse_messages_with_kafka_meta(&messages, &partitions, &offsets, &timestamps)?
+                .project(&output_projection)?;
+            let expected = RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(StringArray::from(vec!["unused"])) as ArrayRef,
+                    Arc::new(timestamps.clone()),
+                    Arc::new(Int32Array::from(vec![7])),
+                    Arc::new(partitions.clone()),
+                    Arc::new(offsets.clone()),
+                ],
+            )?;
+            assert_eq!(output, expected.project(&projection)?);
+            assert_eq!(output.num_rows(), 1);
+        }
+        Ok(())
+    }
 }

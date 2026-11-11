@@ -26,7 +26,6 @@ use std::{
 
 use arrow::{
     array::{Array, ArrayRef, Int32Array},
-    record_batch::RecordBatch,
     row::{Row, RowConverter, Rows, SortField},
 };
 use async_trait::async_trait;
@@ -37,11 +36,14 @@ use datafusion::{
     physical_expr::{PhysicalExprRef, PhysicalSortExpr},
     physical_plan::SendableRecordBatchStream,
 };
-use datafusion_ext_commons::{arrow::array_size::BatchSize, df_execution_err};
+use datafusion_ext_commons::df_execution_err;
 use futures::StreamExt;
 use parking_lot::Mutex as SyncMutex;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    lazy::{LazyBatch, LazyBatchRef, SendableLazyBatchStream, evaluate_columns},
+};
 
 pub mod single_repartitioner;
 pub mod sort_repartitioner;
@@ -57,7 +59,7 @@ pub mod rss_sort_repartitioner;
     reason = "async_trait adds #[must_use] to methods returning futures"
 )]
 pub trait ShuffleRepartitioner: Send + Sync {
-    async fn insert_batch(&self, input: RecordBatch) -> Result<()>;
+    async fn insert_batch(&self, input: LazyBatchRef) -> Result<()>;
     async fn shuffle_write(&self) -> Result<()>;
 }
 
@@ -65,10 +67,10 @@ impl dyn ShuffleRepartitioner {
     pub fn execute(
         self: Arc<Self>,
         exec_ctx: Arc<ExecutionContext>,
-        input: SendableRecordBatchStream,
+        input: SendableLazyBatchStream,
     ) -> Result<SendableRecordBatchStream> {
         let data_size_counter = exec_ctx.register_counter_metric("data_size");
-        let mut coalesced = exec_ctx.coalesce_with_default_batch_size(input);
+        let mut coalesced = input;
 
         // process all input batches
         Ok(exec_ctx
@@ -79,7 +81,7 @@ impl dyn ShuffleRepartitioner {
                 while let Some(batch) = coalesced.next().await.transpose()? {
                     let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
                     let batch_num_rows = batch.num_rows();
-                    let batch_mem_size = batch.get_batch_mem_size();
+                    let batch_mem_size = batch.get_estimated_materialized_mem_size();
                     if batches_num_rows.load(SeqCst) == 0 {
                         log::info!(
                             "start shuffle writing, first batch num_rows={}, mem_size={}",
@@ -172,10 +174,10 @@ impl fmt::Display for Partitioning {
 
 fn evaluate_partition_ids(
     expr: &PhysicalExprRef,
-    batch: &RecordBatch,
+    batch: &dyn LazyBatch,
     num_partitions: usize,
 ) -> Result<Vec<u32>> {
-    let array = expr.evaluate(batch)?.into_array(batch.num_rows())?;
+    let array = evaluate_columns(batch, std::slice::from_ref(expr))?.remove(0);
     let ids = array
         .as_any()
         .downcast_ref::<Int32Array>()
@@ -198,7 +200,7 @@ fn evaluate_partition_ids(
 
 fn evaluate_robin_partition_ids(
     partitioning: &Partitioning,
-    batch: &RecordBatch,
+    batch: &dyn LazyBatch,
     start_rows: usize,
 ) -> Vec<u32> {
     let partition_num = partitioning.partition_count();
@@ -211,7 +213,7 @@ fn evaluate_robin_partition_ids(
 }
 
 fn evaluate_range_partition_ids(
-    batch: &RecordBatch,
+    batch: &dyn LazyBatch,
     sort_expr: &Vec<PhysicalSortExpr>,
     bound_rows: &Arc<Rows>,
 ) -> Result<Vec<u32>> {
@@ -229,14 +231,13 @@ fn evaluate_range_partition_ids(
             .collect::<Result<Vec<SortField>>>()?,
     )?));
 
-    let key_cols: Vec<ArrayRef> = sort_expr
-        .iter()
-        .map(|expr| {
-            expr.expr
-                .evaluate(&batch)
-                .and_then(|cv| cv.into_array(batch.num_rows()))
-        })
-        .collect::<Result<_>>()?;
+    let key_cols: Vec<ArrayRef> = evaluate_columns(
+        batch,
+        &sort_expr
+            .iter()
+            .map(|expr| expr.expr.clone())
+            .collect::<Vec<_>>(),
+    )?;
     let key_rows = sort_row_converter.lock().convert_columns(&key_cols)?;
     let mut vec_u32 = Vec::with_capacity(num_rows);
     for key_row in key_rows.iter() {

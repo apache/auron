@@ -36,6 +36,7 @@ use parking_lot::Mutex;
 
 use crate::{
     common::{
+        lazy::{LazyBatch, LazyBatchRef},
         offsetted::{Offsetted, OffsettedMergeIterator},
         timer_helper::TimerHelper,
     },
@@ -48,7 +49,7 @@ use crate::{
 pub struct BufferedData {
     partition_id: usize,
     partitioning: Partitioning,
-    staging_batches: Vec<RecordBatch>,
+    staging_batches: Vec<LazyBatchRef>,
     staging_num_rows: usize,
     staging_mem_used: usize,
     sorted_batches: Vec<RecordBatch>,
@@ -85,11 +86,11 @@ impl BufferedData {
         )
     }
 
-    pub fn add_batch(&mut self, batch: RecordBatch) -> Result<()> {
+    pub fn add_batch(&mut self, batch: LazyBatchRef) -> Result<()> {
         // first add to staging, mem used is doubled for later sorting
         self.num_rows += batch.num_rows();
         self.staging_num_rows += batch.num_rows();
-        self.staging_mem_used += batch.get_batch_mem_size() * 2;
+        self.staging_mem_used += batch.get_estimated_materialized_mem_size() * 2;
         self.staging_batches.push(batch);
 
         let suggested_batch_size =
@@ -292,7 +293,7 @@ impl<'a> PartitionedBatchesIterator<'a> {
 }
 
 fn sort_batches_by_partition_id(
-    batches: Vec<RecordBatch>,
+    batches: Vec<LazyBatchRef>,
     partitioning: &Partitioning,
     current_num_rows: usize,
     partition_id: usize,
@@ -309,12 +310,12 @@ fn sort_batches_by_partition_id(
             .try_fold(Vec::new(), |mut indices, (batch_idx, batch)| {
                 let part_ids = match partitioning {
                     Partitioning::HashPartitioning(expr, num_partitions) => {
-                        evaluate_partition_ids(expr, batch, *num_partitions)?
+                        evaluate_partition_ids(expr, batch.as_ref(), *num_partitions)?
                     }
                     Partitioning::RoundRobinPartitioning(..) => {
                         let part_ids = evaluate_robin_partition_ids(
                             partitioning,
-                            &batch,
+                            batch.as_ref(),
                             round_robin_start_rows,
                         );
                         round_robin_start_rows += batch.num_rows();
@@ -322,11 +323,11 @@ fn sort_batches_by_partition_id(
                         part_ids
                     }
                     Partitioning::RangePartitioning(sort_expr, _, bounds) => {
-                        evaluate_range_partition_ids(&batch, sort_expr, bounds)
+                        evaluate_range_partition_ids(batch.as_ref(), sort_expr, bounds)
                             .expect("failed to evaluate range partition ids")
                     }
                     Partitioning::BucketPartitioning(bucket_col_idx, ..) => {
-                        evaluate_bucket_partition_ids(batch, *bucket_col_idx)
+                        evaluate_bucket_partition_ids(batch.as_ref(), *bucket_col_idx)?
                     }
                     _ => unreachable!("unsupported partitioning: {:?}", partitioning),
                 };
@@ -342,14 +343,15 @@ fn sort_batches_by_partition_id(
     radix_sort_and_interleave(&batches, partition_indices, num_partitions)
 }
 
-fn evaluate_bucket_partition_ids(batch: &RecordBatch, bucket_col_idx: usize) -> Vec<u32> {
-    batch
-        .column(bucket_col_idx)
+fn evaluate_bucket_partition_ids(batch: &dyn LazyBatch, bucket_col_idx: usize) -> Result<Vec<u32>> {
+    Ok(batch
+        .get_column(bucket_col_idx)?
+        .materialize()?
         .as_primitive::<arrow::datatypes::Int32Type>()
         .values()
         .iter()
         .map(|&v| v as u32)
-        .collect()
+        .collect())
 }
 
 /// Radix-sorts a flat list of `(part_id, batch_idx, row_idx)` triples (one per
@@ -359,7 +361,7 @@ fn evaluate_bucket_partition_ids(batch: &RecordBatch, bucket_col_idx: usize) -> 
 /// [`sort_batches_by_partition_id`] - the only thing that differs between
 /// variants is how `part_id` is computed for each row.
 pub(crate) fn radix_sort_and_interleave(
-    batches: &[RecordBatch],
+    batches: &[LazyBatchRef],
     mut partition_indices: Vec<(u32, u32, u32)>,
     num_partitions: usize,
 ) -> Result<(Vec<u32>, RecordBatch)> {
@@ -381,7 +383,11 @@ pub(crate) fn radix_sort_and_interleave(
     partition_offsets.push(offset);
 
     // get sorted batch
-    let batches_interleaver = create_batch_interleaver(batches, true)?;
+    let batches = batches
+        .iter()
+        .map(|batch| batch.materialize())
+        .collect::<Result<Vec<_>>>()?;
+    let batches_interleaver = create_batch_interleaver(&batches, true)?;
     let sorted_batch = batches_interleaver(
         &partition_indices
             .into_iter()
@@ -409,6 +415,143 @@ mod test {
     };
 
     use super::*;
+    use crate::common::lazy::{ColumnBatch, column, concat_batches};
+
+    #[test]
+    fn test_lazy_grouping_matches_raw_batches() -> Result<()> {
+        use arrow::array::StringArray;
+        use datafusion::{common::ScalarValue, physical_expr::expressions::Literal};
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("key", DataType::Int32, true),
+            Field::new("payload", DataType::Utf8, true),
+            Field::new("null", DataType::Null, true),
+        ]));
+        let raw = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int32Array::from(vec![Some(1), Some(0), None, Some(1)])),
+                Arc::new(StringArray::from(vec![
+                    Some("a"),
+                    None,
+                    Some("ccc"),
+                    Some("d"),
+                ])),
+                Arc::new(arrow::array::NullArray::new(4)),
+            ],
+        )?;
+        let selected = LazyBatch::take(
+            &raw,
+            None,
+            &Int32Array::from(vec![Some(3), None, Some(1), Some(0)]),
+        )?;
+        let composite = concat_batches(schema.clone(), &[selected.clone(), selected.clone()])?;
+        let converter = RowConverter::new(vec![SortField::new(DataType::Int32)])?;
+        let bounds = Arc::new(converter.convert_columns(&[Arc::new(Int32Array::from(vec![0]))])?);
+        let partitionings = vec![
+            Partitioning::HashPartitioning(Arc::new(Literal::new(ScalarValue::Int32(Some(1)))), 3),
+            Partitioning::RoundRobinPartitioning(3),
+            Partitioning::RangePartitioning(
+                vec![PhysicalSortExpr {
+                    expr: Arc::new(Column::new("key", 0)),
+                    options: SortOptions::default(),
+                }],
+                2,
+                bounds,
+            ),
+        ];
+        for input in [Arc::new(raw.clone()) as LazyBatchRef, selected, composite] {
+            for mixed in [false, true] {
+                let mut batches = vec![input.clone(), input.clone()];
+                if mixed {
+                    batches.insert(1, Arc::new(raw.clone()));
+                    batches.push(Arc::new(RecordBatch::new_empty(schema.clone())));
+                }
+                let eager = batches
+                    .iter()
+                    .map(|batch| {
+                        batch
+                            .materialize()
+                            .map(|batch| Arc::new(batch) as LazyBatchRef)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                for partitioning in &partitionings {
+                    let (expected_offsets, expected) =
+                        sort_batches_by_partition_id(eager.clone(), partitioning, 5, 2)?;
+                    let (offsets, actual) =
+                        sort_batches_by_partition_id(batches.clone(), partitioning, 5, 2)?;
+                    assert_eq!(offsets, expected_offsets);
+                    assert_eq!(actual, expected);
+                    for partition in 0..partitioning.partition_count() {
+                        let start = offsets[partition] as usize;
+                        let len = (offsets[partition + 1] - offsets[partition]) as usize;
+                        assert_eq!(actual.slice(start, len), expected.slice(start, len));
+                    }
+                }
+            }
+        }
+        let empty: LazyBatchRef = Arc::new(RecordBatch::new_empty(schema));
+        let (offsets, output) =
+            sort_batches_by_partition_id(vec![empty.clone(), empty], &partitionings[0], 0, 0)?;
+        assert_eq!(offsets, vec![0, 0, 0, 0]);
+        assert_eq!(output.num_rows(), 0);
+        let zero_columns: LazyBatchRef = Arc::new(RecordBatch::try_new_with_options(
+            Arc::new(Schema::empty()),
+            vec![],
+            &arrow::record_batch::RecordBatchOptions::new().with_row_count(Some(4)),
+        )?);
+        for zero_columns in [zero_columns.clone(), zero_columns.project(&[])?] {
+            let (offsets, output) = sort_batches_by_partition_id(
+                vec![zero_columns.clone(), zero_columns],
+                &partitionings[0],
+                0,
+                0,
+            )?;
+            // constant hash key -> all rows land in a single partition
+            assert_eq!(offsets.first(), Some(&0));
+            assert_eq!(offsets.last(), Some(&8));
+            assert_eq!(offsets.windows(2).filter(|w| w[0] != w[1]).count(), 1);
+            assert_eq!(output.num_rows(), 8);
+            assert_eq!(output.num_columns(), 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_lazy_drain_releases_staging_and_preserves_partitions() -> Result<()> {
+        let source: ArrayRef = Arc::new(Int32Array::from(vec![1, 0, 1, 0]));
+        let weak = Arc::downgrade(&source);
+        let schema = Arc::new(Schema::new(vec![Field::new("key", DataType::Int32, false)]));
+        let input = ColumnBatch::try_new(schema, vec![column(source)], 4)?
+            .take(None, &Int32Array::from(vec![3, 2, 1, 0]))?;
+        let mut data = BufferedData::new(
+            Partitioning::HashPartitioning(Arc::new(Column::new("key", 0)), 3),
+            0,
+            Time::new(),
+        );
+        data.add_batch(input)?;
+        assert!(weak.upgrade().is_some());
+        let mut drained = data.drain();
+        assert!(data.is_empty());
+        assert_eq!(data.mem_used(), 0);
+        drained.flush_staging()?;
+        assert!(weak.upgrade().is_none());
+        assert_eq!(
+            drained.mem_used(),
+            drained.sorted_batches[0].get_batch_mem_size() + 16
+        );
+        let mut iter = drained.into_sorted_batches()?;
+        let mut counts = vec![0; 3];
+        while let Some((partition, batches)) = iter.next_partition_chunk() {
+            for batch in batches {
+                counts[partition] += batch.num_rows();
+            }
+        }
+        // equal keys hash into the same partition: two rows per key group
+        assert_eq!(counts.iter().sum::<usize>(), 4);
+        assert!(counts.iter().all(|&count| count % 2 == 0));
+        Ok(())
+    }
 
     fn build_table_i32(
         a: (&str, &Vec<i32>),
@@ -436,7 +579,7 @@ mod test {
     fn test_add_batch_flushes_by_row_count() -> Result<()> {
         let values = (0..1000).collect::<Vec<_>>();
         let record_batch = build_table_i32(("a", &values), ("b", &values), ("c", &values))?;
-        let batch_mem_used = record_batch.get_batch_mem_size() * 2;
+        let batch_mem_used = record_batch.get_estimated_materialized_mem_size() * 2;
         let suggested_batch_size =
             compute_suggested_batch_size_for_output(batch_mem_used, record_batch.num_rows());
 
@@ -449,11 +592,11 @@ mod test {
             BufferedData::new(Partitioning::RoundRobinPartitioning(4), 0, Time::new());
 
         for _ in 1..num_batches {
-            buffered_data.add_batch(record_batch.clone())?;
+            buffered_data.add_batch(Arc::new(record_batch.clone()))?;
         }
         assert!(buffered_data.sorted_batches.is_empty());
 
-        buffered_data.add_batch(record_batch)?;
+        buffered_data.add_batch(Arc::new(record_batch))?;
         assert_eq!(buffered_data.sorted_batches.len(), 1);
         assert_eq!(
             buffered_data.sorted_batches[0].num_rows(),
@@ -482,8 +625,12 @@ mod test {
             Arc::new(Literal::new(ScalarValue::Int32(Some(1)))),
         ));
         let partitioning = Partitioning::HashPartitioning(expr, 3);
-        let (offsets, sorted) =
-            sort_batches_by_partition_id(vec![batch.clone(), batch], &partitioning, 0, 0)?;
+        let (offsets, sorted) = sort_batches_by_partition_id(
+            vec![Arc::new(batch.clone()), Arc::new(batch)],
+            &partitioning,
+            0,
+            0,
+        )?;
         assert_eq!(offsets, vec![0, 0, 4, 8]);
         let ids = sorted
             .column(1)
@@ -508,7 +655,7 @@ mod test {
         let partitioning =
             Partitioning::HashPartitioning(Arc::new(Literal::new(ScalarValue::Int32(Some(2)))), 4);
         let (offsets, sorted) =
-            sort_batches_by_partition_id(vec![batch.clone()], &partitioning, 0, 0)?;
+            sort_batches_by_partition_id(vec![Arc::new(batch.clone())], &partitioning, 0, 0)?;
         assert_eq!(offsets, vec![0, 0, 0, 3, 3]);
         assert_eq!(sorted.num_rows(), batch.num_rows());
         for value in [
@@ -519,7 +666,8 @@ mod test {
         ] {
             let partitioning = Partitioning::HashPartitioning(Arc::new(Literal::new(value)), 4);
             assert!(
-                sort_batches_by_partition_id(vec![batch.clone()], &partitioning, 0, 0).is_err()
+                sort_batches_by_partition_id(vec![Arc::new(batch.clone())], &partitioning, 0, 0)
+                    .is_err()
             );
         }
         Ok(())
@@ -534,8 +682,12 @@ mod test {
         )?;
 
         let round_robin_partitioning = Partitioning::RoundRobinPartitioning(4);
-        let (_parts, sorted_batch) =
-            sort_batches_by_partition_id(vec![record_batch], &round_robin_partitioning, 3, 0)?;
+        let (_parts, sorted_batch) = sort_batches_by_partition_id(
+            vec![Arc::new(record_batch)],
+            &round_robin_partitioning,
+            3,
+            0,
+        )?;
 
         let expected = vec![
             "+----+---+---+",
@@ -588,8 +740,12 @@ mod test {
 
         let range_repartitioning =
             Partitioning::RangePartitioning(sort_exprs, partition_num, Arc::from(rows));
-        let (_parts, sorted_batch) =
-            sort_batches_by_partition_id(vec![record_batch], &range_repartitioning, 0, 0)?;
+        let (_parts, sorted_batch) = sort_batches_by_partition_id(
+            vec![Arc::new(record_batch)],
+            &range_repartitioning,
+            0,
+            0,
+        )?;
 
         let expected = vec![
             "+----+---+---+",
@@ -650,8 +806,12 @@ mod test {
 
         let range_repartitioning =
             Partitioning::RangePartitioning(sort_exprs, partition_num, Arc::from(rows));
-        let (_parts, sorted_batch) =
-            sort_batches_by_partition_id(vec![record_batch], &range_repartitioning, 0, 0)?;
+        let (_parts, sorted_batch) = sort_batches_by_partition_id(
+            vec![Arc::new(record_batch)],
+            &range_repartitioning,
+            0,
+            0,
+        )?;
 
         let expected = vec![
             "+----+---+---+",
@@ -690,7 +850,7 @@ mod test {
         let num_buckets = 3;
         let bucket_partitioning = Partitioning::BucketPartitioning(bucket_col_idx, num_buckets);
         let (offsets, sorted_batch) =
-            sort_batches_by_partition_id(vec![batch], &bucket_partitioning, 0, 0)?;
+            sort_batches_by_partition_id(vec![Arc::new(batch)], &bucket_partitioning, 0, 0)?;
 
         // every row must land in the bucket range implied by its own ~BUCKET value
         let bucket_col = sorted_batch

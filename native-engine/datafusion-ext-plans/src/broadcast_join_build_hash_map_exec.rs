@@ -41,7 +41,11 @@ use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    common::{execution_context::ExecutionContext, timer_helper::TimerHelper},
+    common::{
+        execution_context::ExecutionContext,
+        optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+        timer_helper::TimerHelper,
+    },
     joins::{
         bucket_repartitioner::BucketRepartitioner,
         bucketed_group::{BucketGroupBuilder, NUM_BUCKETS, append_bucket_id_column, bucket_schema},
@@ -127,7 +131,9 @@ impl ExecutionPlan for BroadcastJoinBuildHashMapExec {
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
-        let input = exec_ctx.execute(&self.input)?;
+        let input = materialize_optimized_stream(
+            exec_ctx.execute_optimized(&self.input, &ExecuteOptimizedProps::default())?,
+        );
         let build_time = exec_ctx.register_timer_metric("build_time");
         execute_build_hash_map(input, self.keys.clone(), exec_ctx, build_time)
     }
@@ -269,7 +275,6 @@ mod tests {
     use super::*;
     use crate::{
         broadcast_join_exec::BroadcastJoinExec,
-        common::column_pruning::ExecuteWithColumnPruning,
         joins::{
             ColumnIndex, JoinFilter,
             bucketed_group::{BucketGroupBuilder, append_bucket_id_column},
@@ -565,7 +570,7 @@ mod tests {
                     batches[1].schema().field(0).clone(),
                 ])),
             };
-            let join = BroadcastJoinExec::try_new(
+            let join: Arc<dyn ExecutionPlan> = Arc::new(BroadcastJoinExec::try_new(
                 schema.clone(),
                 left,
                 right,
@@ -580,13 +585,23 @@ mod tests {
                 None,
                 false,
                 Some(filter),
-            )?;
+            )?);
             for projection in [
                 (0..schema.fields().len()).collect::<Vec<_>>(),
                 vec![schema.fields().len() - 1],
                 vec![],
             ] {
-                let output = collect(join.execute_projected(0, ctx.clone(), &projection)?).await?;
+                let exec_ctx = ExecutionContext::new(
+                    ctx.clone(),
+                    0,
+                    Arc::new(join.schema().project(&projection)?),
+                    &ExecutionPlanMetricsSet::new(),
+                );
+                let output = collect(materialize_optimized_stream(exec_ctx.execute_optimized(
+                    &join,
+                    &ExecuteOptimizedProps::default().with_projection(projection.clone()),
+                )?))
+                .await?;
                 let mut actual = vec![];
                 for batch in output {
                     for row in 0..batch.num_rows() {

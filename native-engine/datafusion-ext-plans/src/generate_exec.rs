@@ -42,7 +42,11 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
 use crate::{
-    common::{execution_context::ExecutionContext, timer_helper::TimerHelper},
+    common::{
+        execution_context::ExecutionContext,
+        optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+        timer_helper::TimerHelper,
+    },
     generate::Generator,
 };
 
@@ -172,7 +176,10 @@ impl ExecutionPlan for GenerateExec {
         let generator_output_schema = self.generator_output_schema.clone();
         let outer = self.outer;
         let child_output_cols = self.required_child_output_cols.clone();
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         let output = execute_generate(
             input,
             exec_ctx.clone(),

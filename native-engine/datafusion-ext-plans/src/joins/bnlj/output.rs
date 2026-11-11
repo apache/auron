@@ -27,7 +27,7 @@ use datafusion_ext_commons::{
 
 use super::gather::{BuildChunk, gather_ranges};
 use crate::{
-    common::{execution_context::WrappedRecordBatchSender, timer_helper::TimerHelper},
+    common::{execution_context::WrappedLazyBatchSender, timer_helper::TimerHelper},
     joins::{
         JoinParams, join_filter::JoinFilter, join_hash_map::JoinBuildRows, join_utils::JoinType,
     },
@@ -139,7 +139,7 @@ fn repeat_limit(span: usize, rows: usize) -> usize {
 
 async fn send(
     params: &JoinParams,
-    sender: &WrappedRecordBatchSender,
+    sender: &WrappedLazyBatchSender,
     cols: Vec<ArrayRef>,
     rows: usize,
     build_output_time: &Time,
@@ -150,7 +150,7 @@ async fn send(
         &RecordBatchOptions::new().with_row_count(Some(rows)),
     )?;
     build_output_time
-        .exclude_timer_async(sender.send(batch))
+        .exclude_timer_async(sender.send(Arc::new(batch)))
         .await;
     Ok(())
 }
@@ -160,7 +160,7 @@ pub(super) async fn emit_singleton(
     params: &JoinParams,
     probe_left: bool,
     build_rows: &JoinBuildRows,
-    sender: &WrappedRecordBatchSender,
+    sender: &WrappedLazyBatchSender,
     probe: &RecordBatch,
     timer: &Time,
 ) -> Result<()> {
@@ -216,7 +216,7 @@ pub(super) async fn emit_pairs(
     params: &JoinParams,
     probe_left: bool,
     build_rows: BuildChunk<'_>,
-    sender: &WrappedRecordBatchSender,
+    sender: &WrappedLazyBatchSender,
     probe: &RecordBatch,
     probe_indices: Vec<u32>,
     build_indices: UInt32Array,
@@ -264,7 +264,7 @@ pub(super) async fn emit_selected(
     side_left: bool,
     data: &RecordBatch,
     matched: &BitSlice,
-    sender: &WrappedRecordBatchSender,
+    sender: &WrappedLazyBatchSender,
     build_output_time: &Time,
 ) -> Result<usize> {
     let limit = params.batch_size.max(1);

@@ -108,7 +108,7 @@ impl BucketRepartitioner {
         // add batch to buffered data
         let mem_used = {
             let mut data = self.data.lock().await;
-            data.add_batch(input)?;
+            data.add_batch(Arc::new(input))?;
             data.mem_used()
         };
         self.update_mem_used(mem_used).await?;

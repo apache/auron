@@ -48,7 +48,10 @@ use once_cell::sync::OnceCell;
 use orc_rust::ArrowWriterBuilder;
 use tokio::sync::oneshot;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug)]
 pub struct OrcSinkExec {
@@ -151,7 +154,10 @@ impl ExecutionPlan for OrcSinkExec {
             &self.props,
         )?);
 
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         execute_orc_sink(orc_sink_context, input, exec_ctx)
     }
 

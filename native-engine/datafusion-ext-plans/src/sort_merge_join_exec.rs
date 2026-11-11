@@ -28,16 +28,17 @@ use datafusion::{
         execution_plan::{Boundedness, EmissionType},
         joins::utils::JoinOn,
         metrics::{ExecutionPlanMetricsSet, MetricsSet, Time},
+        stream::RecordBatchStreamAdapter,
     },
 };
 use datafusion_ext_commons::{batch_size, df_execution_err};
-use futures::FutureExt;
+use futures::{FutureExt, StreamExt};
 use once_cell::sync::OnceCell;
 
 use crate::{
     common::{
-        column_pruning::ExecuteWithColumnPruning,
         execution_context::{ExecutionContext, WrappedRecordBatchSender},
+        optimized_batch::ExecuteOptimizedProps,
         timer_helper::TimerHelper,
     },
     cur_forward,
@@ -62,7 +63,6 @@ pub struct SortMergeJoinExec {
     join_type: JoinType,
     sort_options: Vec<SortOptions>,
     join_filter: Option<JoinFilter>,
-    join_params: OnceCell<JoinParams>,
     schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
     props: OnceCell<Arc<PlanProperties>>,
@@ -86,7 +86,6 @@ impl SortMergeJoinExec {
             join_type,
             sort_options,
             join_filter,
-            join_params: OnceCell::new(),
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
         })
@@ -145,16 +144,29 @@ impl SortMergeJoinExec {
         })
     }
 
-    fn execute_with_projection(
+    pub fn execute_optimized(
         &self,
         partition: usize,
         context: Arc<TaskContext>,
-        projection: Vec<usize>,
+        projection: Option<Vec<usize>>,
     ) -> Result<SendableRecordBatchStream> {
-        let mut join_params = self
-            .join_params
-            .get_or_try_init(|| self.create_join_params(&projection))?
-            .clone();
+        let projection = projection.unwrap_or_else(|| (0..self.schema.fields().len()).collect());
+        let output_schema = Arc::new(self.schema.project(&projection)?);
+        let left_columns = self.left.schema().fields().len();
+        let mut join_projection = projection.clone();
+        if matches!(self.join_type, Inner | Left | Right | Full | Existence) {
+            join_projection.sort_by_key(|&index| index >= left_columns);
+        }
+        let output_projection = projection
+            .iter()
+            .map(|index| {
+                join_projection
+                    .iter()
+                    .position(|candidate| candidate == index)
+                    .expect("requested column missing from join projection")
+            })
+            .collect::<Vec<_>>();
+        let mut join_params = self.create_join_params(&join_projection)?;
         let exec_ctx = ExecutionContext::new(
             context,
             partition,
@@ -174,30 +186,40 @@ impl SortMergeJoinExec {
         }
         join_params.output_time = exec_ctx.register_timer_metric("output_time");
         let poll_time = Time::new();
-        let left = exec_ctx.execute_projected_with_key_rows_output(
+        let left = exec_ctx.execute_optimized(
             &self.left,
-            &join_params
-                .left_keys
-                .iter()
-                .zip(&join_params.sort_options)
-                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), *s))
-                .collect::<Vec<_>>(),
-            &join_params.projection.left_read,
+            &ExecuteOptimizedProps::default()
+                .with_projection(join_params.projection.left_read.clone())
+                .with_key_rows(
+                    join_params
+                        .left_keys
+                        .iter()
+                        .zip(&join_params.sort_options)
+                        .map(|(k, s)| PhysicalSortExpr::new(k.clone(), *s))
+                        .collect(),
+                ),
         )?;
-        let right = exec_ctx.execute_projected_with_key_rows_output(
+        let right = exec_ctx.execute_optimized(
             &self.right,
-            &join_params
-                .right_keys
-                .iter()
-                .zip(&join_params.sort_options)
-                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), *s))
-                .collect::<Vec<_>>(),
-            &join_params.projection.right_read,
+            &ExecuteOptimizedProps::default()
+                .with_projection(join_params.projection.right_read.clone())
+                .with_key_rows(
+                    join_params
+                        .right_keys
+                        .iter()
+                        .zip(&join_params.sort_options)
+                        .map(|(k, s)| PhysicalSortExpr::new(k.clone(), *s))
+                        .collect(),
+                ),
         )?;
 
         let left = StreamCursor::try_new(left, poll_time.clone(), &join_params.key_data_types)?;
         let right = StreamCursor::try_new(right, poll_time.clone(), &join_params.key_data_types)?;
-        self.output_with_streams(exec_ctx, join_params, left, right, poll_time)
+        let stream = self.output_with_streams(exec_ctx, join_params, left, right, poll_time)?;
+        Ok(Box::pin(RecordBatchStreamAdapter::new(
+            output_schema,
+            stream.map(move |batch| batch.and_then(|batch| Ok(batch.project(&output_projection)?))),
+        )))
     }
 
     fn output_with_streams(
@@ -241,17 +263,6 @@ impl DisplayAs for SortMergeJoinExec {
             "SortMergeJoin: join_type={:?}, on={:?}, schema={:?}",
             self.join_type, self.on, self.schema,
         )
-    }
-}
-
-impl ExecuteWithColumnPruning for SortMergeJoinExec {
-    fn execute_projected(
-        &self,
-        partition: usize,
-        context: Arc<TaskContext>,
-        projection: &[usize],
-    ) -> Result<SendableRecordBatchStream> {
-        self.execute_with_projection(partition, context, projection.to_vec())
     }
 }
 
@@ -308,8 +319,7 @@ impl ExecutionPlan for SortMergeJoinExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
-        let projection = (0..self.schema.fields().len()).collect();
-        self.execute_with_projection(partition, context, projection)
+        self.execute_optimized(partition, context, None)
     }
 
     fn metrics(&self) -> Option<MetricsSet> {

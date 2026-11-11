@@ -374,7 +374,7 @@ async fn keyless_join_respects_nested_offsets() -> Result<()> {
         physical_expr::expressions::{BinaryExpr, Literal, is_not_null},
     };
 
-    use crate::{common::column_pruning::ExecuteWithColumnPruning, joins::ColumnIndex};
+    use crate::joins::ColumnIndex;
 
     let probe =
         RecordBatch::try_from_iter([("id", Arc::new(Int32Array::from(vec![7, 9])) as ArrayRef)])?;
@@ -468,15 +468,20 @@ async fn keyless_join_respects_nested_offsets() -> Result<()> {
                 super::output::filter_one_probe(&prepared, false, &build, 0, &probe, 0, 2)?,
                 [1]
             );
-            let join = keyless_broadcast_join(
+            let join: Arc<dyn ExecutionPlan> = Arc::new(keyless_broadcast_join(
                 &probe,
                 &build,
                 JoinType::Right,
                 JoinSide::Left,
                 condition.clone(),
-            )?;
-            let output =
-                collect(join.execute_projected(0, SessionContext::new().task_ctx(), &[0])?).await?;
+            )?);
+            let output = collect(crate::joins::test::execute_projected(
+                &join,
+                0,
+                SessionContext::new().task_ctx(),
+                &[0],
+            )?)
+            .await?;
             assert_eq!(output.len(), 1);
             assert_eq!(output[0].num_columns(), 1);
             assert_eq!(output[0].column(0), &probe.column(0).slice(1, 1));
@@ -521,7 +526,7 @@ async fn conditional_join_preserves_matches_and_order_across_chunks() -> Result<
     use super::broadcast_nest_loop_join_exec::BnljJoiner;
     use crate::{
         broadcast_join_exec::Joiner,
-        common::execution_context::{ExecutionContext, WrappedRecordBatchSender},
+        common::execution_context::{ExecutionContext, WrappedLazyBatchSender},
         joins::{
             JoinParams, JoinProjection,
             join_filter::JoinFilter,
@@ -603,8 +608,9 @@ async fn conditional_join_preserves_matches_and_order_across_chunks() -> Result<
                 vec![build.slice(0, 1), build.slice(1, 2)],
                 &[],
             )?);
-            let rows: &JoinBuildRows = map.as_ref().borrow();
+            let rows = map.materialized_build_rows()?;
             assert_eq!(rows.data_batches().len(), 2);
+            let rows = Arc::new(rows);
             let ctx = ExecutionContext::new(
                 SessionContext::new().task_ctx(),
                 0,
@@ -613,20 +619,20 @@ async fn conditional_join_preserves_matches_and_order_across_chunks() -> Result<
             );
             let (tx, mut rx) = tokio::sync::mpsc::channel(32);
             {
-                let sender = WrappedRecordBatchSender::new(ctx, tx);
-                let mut joiner = pin!(BnljJoiner::new(side, params, map, sender));
+                let sender = WrappedLazyBatchSender::new(ctx, tx);
+                let mut joiner = pin!(BnljJoiner::new(side, params, rows, sender));
                 let time = Time::new();
                 for batch in [probe.slice(0, 2), probe.slice(2, 1)] {
                     joiner
                         .as_mut()
-                        .join(batch, &time, &time, &time, &time)
+                        .join(Arc::new(batch), &time, &time, &time, &time)
                         .await?;
                 }
                 joiner.as_mut().finish(&time).await?;
             }
             let mut rows = vec![];
             while let Some(batch) = rx.recv().await {
-                let batch = batch?;
+                let batch = batch?.materialize()?;
                 for row in 0..batch.num_rows() {
                     let values = batch
                         .columns()

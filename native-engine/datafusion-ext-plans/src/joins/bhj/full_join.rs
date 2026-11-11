@@ -23,27 +23,32 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, ArrayRef, RecordBatch, RecordBatchOptions, UInt32Array, new_null_array},
+    array::{Array, ArrayRef, Int32Array, UInt32Array, new_null_array},
     buffer::NullBuffer,
 };
 use async_trait::async_trait;
 use bitvec::{bitvec, prelude::BitVec};
 use datafusion::{common::Result, physical_plan::metrics::Time};
-use datafusion_ext_commons::{
-    arrow::{eq_comparator::EqComparator, selection::take_cols},
-    likely,
-};
+use datafusion_ext_commons::{arrow::eq_comparator::EqComparator, likely};
 
 use crate::{
     broadcast_join_exec::Joiner,
-    common::{execution_context::WrappedRecordBatchSender, timer_helper::TimerHelper},
+    common::{
+        execution_context::WrappedLazyBatchSender,
+        lazy::{
+            CACHE, ColumnBatch, LazyBatch, LazyBatchRef, LazyColumnRef, column, evaluate_columns,
+            take_lazy_columns,
+        },
+        timer_helper::TimerHelper,
+    },
     joins::{
         JoinParams,
         bhj::{
             ProbeSide, filter_cols,
             full_join::ProbeSide::{L, R},
+            reuse_candidate_columns,
         },
-        join_hash_map::{JoinHashMap, join_create_hashes},
+        join_hash_map::{JoinHashMap, i32_row_indices, join_create_hashes},
     },
 };
 
@@ -103,7 +108,7 @@ const fn get_joiner(p: i32) -> JoinerParams {
 
 pub struct FullJoiner<const P: i32> {
     join_params: JoinParams,
-    output_sender: Arc<WrappedRecordBatchSender>,
+    output_sender: Arc<WrappedLazyBatchSender>,
     map: Arc<JoinHashMap>,
     map_joined: BitVec,
     output_rows: AtomicUsize,
@@ -113,7 +118,7 @@ impl<const P: i32> FullJoiner<P> {
     pub fn new(
         join_params: JoinParams,
         map: Arc<JoinHashMap>,
-        output_sender: Arc<WrappedRecordBatchSender>,
+        output_sender: Arc<WrappedLazyBatchSender>,
     ) -> Self {
         let map_joined = bitvec![0; map.num_rows()];
         Self {
@@ -125,35 +130,27 @@ impl<const P: i32> FullJoiner<P> {
         }
     }
 
-    fn create_probed_key_columns(&self, probed_batch: &RecordBatch) -> Result<Vec<ArrayRef>> {
+    fn create_probed_key_columns(&self, probed_batch: &dyn LazyBatch) -> Result<Vec<ArrayRef>> {
         let probed_key_exprs = match get_joiner(P).probe_side {
             L => &self.join_params.left_keys,
             R => &self.join_params.right_keys,
         };
-        let probed_key_columns: Vec<ArrayRef> = probed_key_exprs
-            .iter()
-            .map(|expr| {
-                Ok(expr
-                    .evaluate(probed_batch)?
-                    .into_array(probed_batch.num_rows())?)
-            })
-            .collect::<Result<_>>()?;
-        Ok(probed_key_columns)
+        evaluate_columns(probed_batch, probed_key_exprs)
     }
 
     async fn flush(
         &self,
-        probe_cols: Vec<ArrayRef>,
-        build_cols: Vec<ArrayRef>,
+        probe_cols: Vec<LazyColumnRef>,
+        build_cols: Vec<LazyColumnRef>,
         num_rows: usize,
     ) -> Result<()> {
-        let output_batch = RecordBatch::try_new_with_options(
+        let output_batch = ColumnBatch::try_new(
             self.join_params.projection.schema.clone(),
             match get_joiner(P).probe_side {
                 L => [probe_cols, build_cols].concat(),
                 R => [build_cols, probe_cols].concat(),
             },
-            &RecordBatchOptions::new().with_row_count(Some(num_rows)),
+            num_rows,
         )?;
         self.output_rows.fetch_add(output_batch.num_rows(), Relaxed);
         self.output_sender.send(output_batch).await;
@@ -165,7 +162,7 @@ impl<const P: i32> FullJoiner<P> {
     /// only for completed rows.
     async fn flush_hash_joined(
         mut self: Pin<&mut Self>,
-        probed_batch: &RecordBatch,
+        probed_batch: &dyn LazyBatch,
         probe_rows: Range<usize>,
         probed_joined: &mut BitVec,
         probe_indices: Vec<u32>,
@@ -173,101 +170,135 @@ impl<const P: i32> FullJoiner<P> {
         build_output_time: &Time,
     ) -> Result<()> {
         let _build_output_timer = build_output_time.timer();
-
-        // Filter before null extension: equality matches can all fail the condition.
-        let (probe_indices, build_indices) = match &self.join_params.residual_filter {
-            Some(filter) if !probe_indices.is_empty() => {
-                let cols = filter_cols(
-                    filter,
-                    get_joiner(P).probe_side,
-                    probed_batch,
-                    &self.map,
-                    &probe_indices,
-                    &build_indices,
-                )?;
-                let survived = filter.apply_rows(cols, probe_indices.len())?;
-                (
-                    survived
-                        .iter()
-                        .map(|&i| probe_indices[i as usize])
-                        .collect::<Vec<_>>(),
-                    survived
-                        .iter()
-                        .map(|&i| build_indices[i as usize])
-                        .collect::<Vec<_>>(),
-                )
-            }
-            _ => (probe_indices, build_indices),
-        };
-
-        let (probe_indices, build_indices): (Vec<u32>, UInt32Array) =
-            if get_joiner(P).probe_side_outer {
-                for &row_idx in &probe_indices {
-                    probed_joined.set(row_idx as usize, true);
-                }
-                let mut probes = Vec::with_capacity(probe_indices.len() + probe_rows.len());
-                let mut builds: Vec<Option<u32>> = Vec::with_capacity(probes.capacity());
-                let mut i = 0;
-                for row_idx in probe_rows.map(|row_idx| row_idx as u32) {
-                    while probe_indices.get(i) == Some(&row_idx) {
-                        probes.push(row_idx);
-                        builds.push(Some(build_indices[i]));
-                        i += 1;
-                    }
-                    if !probed_joined[row_idx as usize] {
-                        probes.push(row_idx);
-                        builds.push(None);
-                    }
-                }
-                // A large duplicate-key range can end this chunk mid-row.
-                probes.extend_from_slice(&probe_indices[i..]);
-                builds.extend(build_indices[i..].iter().copied().map(Some));
-                (probes, builds.into())
-            } else {
-                (probe_indices, build_indices.into())
-            };
-        let num_rows = probe_indices.len();
-
-        assert_eq!(probe_indices.len(), build_indices.len());
-
-        let pprojected = match get_joiner(P).probe_side {
-            L => self
-                .join_params
-                .projection
-                .project_left(probed_batch.columns()),
-            R => self
-                .join_params
-                .projection
-                .project_right(probed_batch.columns()),
-        };
-        let bcol_indices = match get_joiner(P).probe_side {
-            L => self.join_params.projection.right.clone(),
-            R => self.join_params.projection.left.clone(),
-        };
-
-        // fast path for the case where every probed records have 1-to-1 joined
-        let pcols = if probe_indices.len() == probed_batch.num_rows()
-            && probe_indices
-                .iter()
-                .zip(0..probed_batch.num_rows() as u32)
-                .all(|(&idx, i)| idx == i)
-        {
-            pprojected
-        } else {
-            take_cols(&pprojected, probe_indices)?
-        };
-
-        if get_joiner(P).build_side_outer {
-            for idx in build_indices.iter().flatten() {
-                self.map_joined.set(idx as usize, true);
-            }
-        }
-        let bcols = self.map.gather_columns(&bcol_indices, build_indices)?;
-
+        let (pcols, bcols, num_rows) = self.as_mut().build_hash_joined_output(
+            probed_batch,
+            probe_rows,
+            probed_joined,
+            probe_indices,
+            build_indices,
+        )?;
         build_output_time
             .exclude_timer_async(self.flush(pcols, bcols, num_rows))
             .await?;
         Ok(())
+    }
+
+    /// Gather the output columns for the matched candidates. The residual
+    /// filter's candidate-level takes and the output takes share one lazy
+    /// cache scope, and output columns reading the filter's source columns
+    /// reuse those takes instead of gathering the source again.
+    fn build_hash_joined_output(
+        mut self: Pin<&mut Self>,
+        probed_batch: &dyn LazyBatch,
+        probe_rows: Range<usize>,
+        probed_joined: &mut BitVec,
+        probe_indices: Vec<u32>,
+        build_indices: Vec<u32>,
+    ) -> Result<(Vec<LazyColumnRef>, Vec<LazyColumnRef>, usize)> {
+        CACHE.with_scope(|| {
+            // Filter before null extension: equality matches can all fail the
+            // condition.
+            let mut candidate_takes = None;
+            let (probe_indices, build_indices) = match &self.join_params.residual_filter {
+                Some(filter) if !probe_indices.is_empty() => {
+                    let (cols, taken) = filter_cols(
+                        filter,
+                        get_joiner(P).probe_side,
+                        probed_batch,
+                        &self.map,
+                        &probe_indices,
+                        &build_indices,
+                    )?;
+                    let survived = filter.apply_rows(cols, probe_indices.len())?;
+                    let positions = survived.iter().map(|&i| i as i32).collect::<Int32Array>();
+                    if !get_joiner(P).probe_side_outer {
+                        candidate_takes = Some((taken, positions));
+                    }
+                    (
+                        survived
+                            .iter()
+                            .map(|&i| probe_indices[i as usize])
+                            .collect::<Vec<_>>(),
+                        survived
+                            .iter()
+                            .map(|&i| build_indices[i as usize])
+                            .collect::<Vec<_>>(),
+                    )
+                }
+                _ => (probe_indices, build_indices),
+            };
+
+            let (probe_indices, build_indices): (Vec<u32>, UInt32Array) =
+                if get_joiner(P).probe_side_outer {
+                    for &row_idx in &probe_indices {
+                        probed_joined.set(row_idx as usize, true);
+                    }
+                    let mut probes = Vec::with_capacity(probe_indices.len() + probe_rows.len());
+                    let mut builds: Vec<Option<u32>> = Vec::with_capacity(probes.capacity());
+                    let mut i = 0;
+                    for row_idx in probe_rows.map(|row_idx| row_idx as u32) {
+                        while probe_indices.get(i) == Some(&row_idx) {
+                            probes.push(row_idx);
+                            builds.push(Some(build_indices[i]));
+                            i += 1;
+                        }
+                        if !probed_joined[row_idx as usize] {
+                            probes.push(row_idx);
+                            builds.push(None);
+                        }
+                    }
+                    // A large duplicate-key range can end this chunk mid-row.
+                    probes.extend_from_slice(&probe_indices[i..]);
+                    builds.extend(build_indices[i..].iter().copied().map(Some));
+                    (probes, builds.into())
+                } else {
+                    (probe_indices, build_indices.into())
+                };
+            let num_rows = probe_indices.len();
+
+            assert_eq!(probe_indices.len(), build_indices.len());
+
+            let pprojection = match get_joiner(P).probe_side {
+                L => &self.join_params.projection.left,
+                R => &self.join_params.projection.right,
+            };
+            let pprojected = pprojection
+                .iter()
+                .map(|&i| probed_batch.get_column(i))
+                .collect::<Result<Vec<_>>>()?;
+            let bcol_indices = match get_joiner(P).probe_side {
+                L => self.join_params.projection.right.clone(),
+                R => self.join_params.projection.left.clone(),
+            };
+
+            // fast path for the case where every probed records have 1-to-1 joined
+            let pcols = if probe_indices.len() == probed_batch.num_rows()
+                && probe_indices
+                    .iter()
+                    .zip(0..probed_batch.num_rows() as u32)
+                    .all(|(&idx, i)| idx == i)
+            {
+                pprojected
+            } else {
+                let indices = i32_row_indices(&UInt32Array::from(probe_indices));
+                let mut pcols = take_lazy_columns(&pprojected, &indices)?;
+                if let Some((taken, positions)) = &candidate_takes {
+                    reuse_candidate_columns(&mut pcols, pprojection, &taken.probe, positions)?;
+                }
+                pcols
+            };
+
+            if get_joiner(P).build_side_outer {
+                for idx in build_indices.iter().flatten() {
+                    self.map_joined.set(idx as usize, true);
+                }
+            }
+            let mut bcols = self.map.gather_lazy_columns(&bcol_indices, build_indices)?;
+            if let Some((taken, positions)) = &candidate_takes {
+                reuse_candidate_columns(&mut bcols, &bcol_indices, &taken.build, positions)?;
+            }
+            Ok((pcols, bcols, num_rows))
+        })
     }
 }
 
@@ -275,7 +306,7 @@ impl<const P: i32> FullJoiner<P> {
 impl<const P: i32> Joiner for FullJoiner<P> {
     async fn join(
         mut self: Pin<&mut Self>,
-        probed_batch: RecordBatch,
+        probed_batch: LazyBatchRef,
         probed_side_hash_time: &Time,
         probed_side_search_time: &Time,
         probed_side_compare_time: &Time,
@@ -288,7 +319,7 @@ impl<const P: i32> Joiner for FullJoiner<P> {
         let batch_size = self.join_params.batch_size.max(1);
         let mut probed_joined =
             bitvec![0; if get_joiner(P).probe_side_outer { probed_batch.num_rows() } else { 0 }];
-        let probed_key_columns = self.create_probed_key_columns(&probed_batch)?;
+        let probed_key_columns = self.create_probed_key_columns(probed_batch.as_ref())?;
         let probed_hashes = probed_side_hash_time
             .with_timer(|| join_create_hashes(probed_batch.num_rows(), &probed_key_columns));
 
@@ -342,7 +373,7 @@ impl<const P: i32> Joiner for FullJoiner<P> {
                     if probe_indices.len() >= batch_size {
                         probed_side_compare_time
                             .exclude_timer_async(self.as_mut().flush_hash_joined(
-                                &probed_batch,
+                                probed_batch.as_ref(),
                                 chunk_start..row_idx,
                                 &mut probed_joined,
                                 std::mem::take(&mut probe_indices),
@@ -359,7 +390,7 @@ impl<const P: i32> Joiner for FullJoiner<P> {
             if get_joiner(P).probe_side_outer && row_idx + 1 - chunk_start >= batch_size {
                 probed_side_compare_time
                     .exclude_timer_async(self.as_mut().flush_hash_joined(
-                        &probed_batch,
+                        probed_batch.as_ref(),
                         chunk_start..row_idx + 1,
                         &mut probed_joined,
                         std::mem::take(&mut probe_indices),
@@ -376,7 +407,7 @@ impl<const P: i32> Joiner for FullJoiner<P> {
         if !probe_indices.is_empty() || (get_joiner(P).probe_side_outer && chunk_start < num_rows) {
             probed_side_compare_time
                 .exclude_timer_async(self.as_mut().flush_hash_joined(
-                    &probed_batch,
+                    probed_batch.as_ref(),
                     chunk_start..num_rows,
                     &mut probed_joined,
                     probe_indices,
@@ -417,11 +448,11 @@ impl<const P: i32> Joiner for FullJoiner<P> {
             };
             let pcols = pprojection
                 .iter()
-                .map(|&i| new_null_array(pschema.field(i).data_type(), num_rows))
+                .map(|&i| column(new_null_array(pschema.field(i).data_type(), num_rows)))
                 .collect::<Vec<_>>();
             let bcols = self
                 .map
-                .gather_columns(bcol_indices, map_unjoined_indices)?;
+                .gather_lazy_columns(bcol_indices, map_unjoined_indices)?;
             build_output_time
                 .exclude_timer_async(self.as_mut().flush(pcols, bcols, num_rows))
                 .await?;

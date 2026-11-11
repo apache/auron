@@ -14,6 +14,32 @@
 // limitations under the License.
 
 #[cfg(test)]
+pub(super) fn execute_projected(
+    plan: &std::sync::Arc<dyn datafusion::physical_plan::ExecutionPlan>,
+    partition: usize,
+    task_ctx: std::sync::Arc<datafusion::execution::TaskContext>,
+    projection: &[usize],
+) -> datafusion::common::Result<datafusion::execution::SendableRecordBatchStream> {
+    use datafusion::physical_plan::metrics::ExecutionPlanMetricsSet;
+
+    use crate::common::{
+        execution_context::ExecutionContext,
+        optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+    };
+
+    let exec_ctx = ExecutionContext::new(
+        task_ctx,
+        partition,
+        std::sync::Arc::new(plan.schema().project(projection)?),
+        &ExecutionPlanMetricsSet::new(),
+    );
+    Ok(materialize_optimized_stream(exec_ctx.execute_optimized(
+        plan,
+        &ExecuteOptimizedProps::default().with_projection(projection.to_vec()),
+    )?))
+}
+
+#[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
@@ -41,7 +67,6 @@ mod tests {
     use crate::{
         broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
         broadcast_join_exec::BroadcastJoinExec,
-        common::column_pruning::ExecuteWithColumnPruning,
         joins::{
             ColumnIndex, JoinFilter,
             join_utils::{JoinType, JoinType::*},
@@ -524,7 +549,7 @@ mod tests {
             0,
         ));
         let schema = build_join_schema_for_test(&left.schema(), &right.schema(), Inner)?;
-        let join = SortMergeJoinExec::try_new(
+        let join: Arc<dyn ExecutionPlan> = Arc::new(SortMergeJoinExec::try_new(
             schema,
             left,
             right,
@@ -532,9 +557,9 @@ mod tests {
             Inner,
             None,
             vec![SortOptions::default()],
-        )?;
+        )?);
 
-        let stream = join.execute_projected(0, task_ctx, &[2, 1, 0, 5, 4, 3])?;
+        let stream = super::execute_projected(&join, 0, task_ctx, &[2, 1, 0, 5, 4, 3])?;
         let batches = common::collect(stream).await?;
         let expected = vec![
             "+------------+-------------+----------+-------------+--------------+-----------+",

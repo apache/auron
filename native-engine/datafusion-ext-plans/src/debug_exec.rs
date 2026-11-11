@@ -31,7 +31,10 @@ use datafusion::{
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug)]
 pub struct DebugExec {
@@ -110,7 +113,9 @@ impl ExecutionPlan for DebugExec {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
         let debug_id = self.debug_id.clone();
 
-        let mut input = exec_ctx.execute(&self.input)?;
+        let mut input = materialize_optimized_stream(
+            exec_ctx.execute_optimized(&self.input, &ExecuteOptimizedProps::default())?,
+        );
         Ok(
             exec_ctx.output_with_sender("Debug", move |sender| async move {
                 while let Some(batch) = input.next().await.transpose()? {

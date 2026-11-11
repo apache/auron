@@ -363,7 +363,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        common::key_rows_output::{RecordBatchWithKeyRows, RecordBatchWithKeyRowsStreamAdapter},
+        common::optimized_batch::{KeyRows, OptimizedBatch, OptimizedBatchStreamAdapter},
         joins::ranges_iter,
     };
 
@@ -381,34 +381,35 @@ mod tests {
         )])
         .expect("valid test sort fields");
 
-        let converter = Arc::new(parking_lot::Mutex::new(converter));
+        let converter = Arc::new(converter);
         let batches = batches
             .into_iter()
             .map(|values| {
                 let col = Arc::new(Int32Array::from(values)) as ArrayRef;
                 let key_rows = Arc::new(
                     converter
-                        .lock()
                         .convert_columns(std::slice::from_ref(&col))
                         .expect("valid test key columns"),
                 );
                 let batch =
                     RecordBatch::try_new(schema.clone(), vec![col]).expect("valid test batch");
-                Ok(RecordBatchWithKeyRows::new(
-                    batch,
-                    key_rows,
-                    converter.clone(),
+                Ok(OptimizedBatch::new(
+                    Arc::new(batch),
+                    Some(KeyRows {
+                        rows: key_rows,
+                        rows_converter: converter.clone(),
+                    }),
                 ))
             })
             .collect::<Vec<_>>();
 
-        let stream = RecordBatchWithKeyRowsStreamAdapter::new(
+        let stream = OptimizedBatchStreamAdapter::new(
             futures::stream::iter(batches),
             schema,
-            vec![PhysicalSortExpr::new(
+            Some(vec![PhysicalSortExpr::new(
                 Arc::new(Column::new("k", 0)),
                 sort_options,
-            )],
+            )]),
         );
         StreamCursor::try_new(Box::pin(stream), Time::default(), &[DataType::Int32])
             .expect("valid test cursor")
@@ -544,25 +545,26 @@ mod tests {
                 arrow::row::SortField::new(DataType::Int32),
             ])
             .expect("valid test sort fields");
-            let converter = Arc::new(parking_lot::Mutex::new(converter));
+            let converter = Arc::new(converter);
             let rows = Arc::new(
                 converter
-                    .lock()
                     .convert_columns(&columns)
                     .expect("valid test key columns"),
             );
             let batch = RecordBatch::try_new(schema.clone(), columns).expect("valid test batch");
-            let stream = RecordBatchWithKeyRowsStreamAdapter::new(
-                futures::stream::iter(vec![Ok(RecordBatchWithKeyRows::new(
-                    batch,
-                    rows,
-                    converter.clone(),
+            let stream = OptimizedBatchStreamAdapter::new(
+                futures::stream::iter(vec![Ok(OptimizedBatch::new(
+                    Arc::new(batch),
+                    Some(KeyRows {
+                        rows,
+                        rows_converter: converter.clone(),
+                    }),
                 ))]),
                 schema,
-                vec![
+                Some(vec![
                     PhysicalSortExpr::new(Arc::new(Column::new("k1", 0)), SortOptions::default()),
                     PhysicalSortExpr::new(Arc::new(Column::new("k2", 1)), SortOptions::default()),
-                ],
+                ]),
             );
             StreamCursor::try_new(
                 Box::pin(stream),

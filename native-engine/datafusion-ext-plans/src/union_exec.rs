@@ -33,7 +33,10 @@ use datafusion_ext_commons::arrow::cast::cast;
 use futures_util::StreamExt;
 use once_cell::sync::OnceCell;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug)]
 pub struct UnionExec {
@@ -147,7 +150,12 @@ impl ExecutionPlan for UnionExec {
                     input.schema(),
                     &self.metrics,
                 );
-                in_exec_ctx.execute_with_input_stats(input)
+                Ok(materialize_optimized_stream(
+                    in_exec_ctx.execute_optimized(
+                        input,
+                        &ExecuteOptimizedProps::default().with_input_stats(true),
+                    )?,
+                ))
             })
             .collect::<Result<Vec<_>>>()?;
 

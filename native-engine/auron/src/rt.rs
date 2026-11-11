@@ -46,7 +46,10 @@ use datafusion_ext_commons::{
     arrow::ffi::export_ffi_array, df_execution_err, downcast_any, downcast_any_dyn,
 };
 use datafusion_ext_plans::{
-    common::execution_context::{ExecutionContext, cancel_all_tasks},
+    common::{
+        execution_context::{ExecutionContext, cancel_all_tasks},
+        optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+    },
     ipc_writer_exec::IpcWriterExec,
     orc_sink_exec::OrcSinkExec,
     parquet_sink_exec::ParquetSinkExec,
@@ -155,7 +158,10 @@ impl NativeExecutionRuntime {
                 .indent(true)
                 .to_string();
             log::info!("start executing plan:\n{displayable}");
-            let mut stream = exec_ctx_cloned.execute(&execution_plan_cloned)?;
+            let mut stream = materialize_optimized_stream(
+                exec_ctx_cloned
+                    .execute_optimized(&execution_plan_cloned, &ExecuteOptimizedProps::default())?,
+            );
 
             // coalesce output stream if necessary
             if downcast_any_dyn!(execution_plan_cloned, EmptyExec).is_err()

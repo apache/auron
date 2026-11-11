@@ -15,7 +15,6 @@
 
 use std::sync::Weak;
 
-use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
 use auron_jni_bridge::{
     conf,
@@ -23,12 +22,14 @@ use auron_jni_bridge::{
 };
 use auron_memmgr::{MemConsumer, MemConsumerInfo, MemManager};
 use datafusion::{common::Result, physical_plan::metrics::Time};
-use datafusion_ext_commons::arrow::array_size::BatchSize;
 use futures::lock::Mutex;
 use jni::objects::GlobalRef;
 use once_cell::sync::OnceCell;
 
-use crate::shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData};
+use crate::{
+    common::lazy::LazyBatchRef,
+    shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData},
+};
 
 pub struct RssSortShuffleRepartitioner {
     mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
@@ -91,9 +92,10 @@ impl Drop for RssSortShuffleRepartitioner {
 
 #[async_trait]
 impl ShuffleRepartitioner for RssSortShuffleRepartitioner {
-    async fn insert_batch(&self, input: RecordBatch) -> Result<()> {
+    async fn insert_batch(&self, input: LazyBatchRef) -> Result<()> {
         // update memory usage before adding to buffered data
-        let mem_used = self.data.lock().await.mem_used() + input.get_batch_mem_size() * 2;
+        let mem_used =
+            self.data.lock().await.mem_used() + input.get_estimated_materialized_mem_size() * 2;
         self.update_mem_used(mem_used).await?;
 
         // add batch to buffered data
