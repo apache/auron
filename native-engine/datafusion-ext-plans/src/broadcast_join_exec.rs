@@ -1392,16 +1392,24 @@ mod fuzztest {
             (vec![], vec![Some(1), None, Some(2), Some(3)]),
         ] {
             let build = batch(values.clone())?;
-            for hybrid in [false, true] {
-                let built = if hybrid {
-                    let groups = build_bucketed_group_batches(build.clone(), key.clone(), 1)?;
+            for path in ["direct", "hash map", "hybrid"] {
+                let built = if path == "direct" {
+                    memory(build.clone())
+                } else {
+                    let groups = if path == "hybrid" {
+                        build_bucketed_group_batches(build.clone(), key.clone(), 1)?
+                    } else {
+                        JoinHashMap::create_from_data_batch(
+                            build.clone(),
+                            std::slice::from_ref(&key),
+                        )?
+                        .into_hash_map_batches(None)?
+                    };
                     Arc::new(TestMemoryExec::try_new(
                         &[groups],
                         join_hash_map_schema(&schema),
                         None,
                     )?) as Arc<dyn ExecutionPlan>
-                } else {
-                    memory(build.clone())
                 };
                 let join = BroadcastJoinExec::try_new(
                     schema.clone(),
@@ -1410,7 +1418,7 @@ mod fuzztest {
                     vec![(key.clone(), key.clone())],
                     JoinType::LeftAnti,
                     JoinSide::Right,
-                    hybrid,
+                    path != "direct",
                     None,
                     true,
                     None,
@@ -1419,7 +1427,7 @@ mod fuzztest {
                 assert_eq!(
                     to_sorted_rows(output),
                     to_sorted_rows(vec![batch(expected.clone())?]),
-                    "build={values:?}, hybrid={hybrid}",
+                    "build={values:?}, path={path}",
                 );
             }
         }

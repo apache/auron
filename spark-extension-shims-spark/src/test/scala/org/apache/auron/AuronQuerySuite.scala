@@ -1148,6 +1148,32 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("NOT IN subquery with runtime empty build retains NULL probe rows") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempPath { path =>
+        withTempView("not_in_empty_build") {
+          Seq[java.lang.Integer](null, 1, 2).toDF("k").write.parquet(path.getCanonicalPath)
+          spark.read
+            .parquet(path.getCanonicalPath)
+            .createOrReplaceTempView("not_in_empty_build")
+
+          val df = checkSparkAnswer("""
+              |SELECT k FROM not_in_empty_build
+              |WHERE k NOT IN (SELECT k FROM not_in_empty_build WHERE k < 0)
+              |""".stripMargin)
+          checkAnswer(df, Seq(Row(null), Row(1), Row(2)))
+
+          // Spark 3.0 uses BroadcastNestedLoopJoinExec and falls back.
+          if (AuronTestUtils.isSparkV31OrGreater) {
+            assert(collectFirst(df.queryExecution.executedPlan) {
+              case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+            }.isDefined)
+          }
+        }
+      }
+    }
+  }
+
   test("aggregate with filter clause") {
     withTable("t_filter_agg_2289") {
       sql("""
