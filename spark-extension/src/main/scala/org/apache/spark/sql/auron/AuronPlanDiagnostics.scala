@@ -35,6 +35,14 @@ import org.apache.auron.spark.ui.{AuronFallbackReason, AuronPlanDiagnosticEvent,
 
 /** Diagnostics must neither mutate Spark's operator IDs nor prevent query execution. */
 object AuronPlanDiagnostics extends Logging {
+  @org.apache.auron.sparkver("3.0 / 3.1")
+  private def isAdaptiveShuffleReader(plan: SparkPlan): Boolean =
+    plan.isInstanceOf[org.apache.spark.sql.execution.adaptive.CustomShuffleReaderExec]
+
+  @org.apache.auron.sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  private def isAdaptiveShuffleReader(plan: SparkPlan): Boolean =
+    plan.isInstanceOf[org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec]
+
   private val configurationKeys = Seq(
     "spark.auron.enabled",
     "spark.auron.enable",
@@ -70,6 +78,7 @@ object AuronPlanDiagnostics extends Logging {
         case _: AdaptiveSparkPlanExec | _: QueryStageExec | _: ReusedExchangeExec |
             _: ReusedSubqueryExec | _: InputAdapter | _: WholeStageCodegenExec =>
           "Wrapper"
+        case _ if isAdaptiveShuffleReader(p) => "Wrapper"
         case _ if reason.nonEmpty => "Fallback"
         case _ => "Spark (no reason recorded)"
       }

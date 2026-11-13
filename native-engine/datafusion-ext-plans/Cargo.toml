@@ -48,6 +48,7 @@ datafusion-datasource-parquet = { workspace = true }
 datafusion-ext-commons = { workspace = true }
 datafusion-ext-exprs = { workspace = true }
 datafusion-ext-functions = { workspace = true }
+datafusion-pruning = { workspace = true }
 orc-rust = { workspace = true }
 
 async-trait = { workspace = true }

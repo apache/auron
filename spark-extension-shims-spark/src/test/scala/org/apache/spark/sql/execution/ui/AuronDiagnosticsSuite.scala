@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.auron.{AuronConvertStrategy, AuronPlanDiagnostics, ForceNativeExecutionWrapper}
-import org.apache.spark.sql.execution.{LocalTableScanExec, UnionExec}
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, LocalTableScanExec, SparkPlan, UnionExec}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.JsonProtocol
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -49,6 +49,21 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
   @sparkver("4.0 / 4.1 / 4.2")
   private def emptyScan(): LocalTableScanExec = LocalTableScanExec(Nil, Nil, None)
 
+  @sparkver("3.0")
+  private def shuffleReader(child: SparkPlan): SparkPlan =
+    org.apache.spark.sql.execution.adaptive
+      .CustomShuffleReaderExec(child, Seq(CoalescedPartitionSpec(0, 1)), "test")
+
+  @sparkver("3.1")
+  private def shuffleReader(child: SparkPlan): SparkPlan =
+    org.apache.spark.sql.execution.adaptive
+      .CustomShuffleReaderExec(child, Seq(CoalescedPartitionSpec(0, 1)))
+
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  private def shuffleReader(child: SparkPlan): SparkPlan =
+    org.apache.spark.sql.execution.adaptive
+      .AQEShuffleReadExec(child, Seq(CoalescedPartitionSpec(0, 1)))
+
   private def snapshot(id: Long, index: Int = 0): AuronPlanDiagnosticEvent =
     AuronPlanDiagnosticEvent(
       id,
@@ -56,6 +71,16 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
       s"plan $index",
       Seq(AuronPlanDiagnosticNode(1, "Project", "Fallback", "unsupported expression")),
       Map("spark.sql.session.timeZone" -> "UTC"))
+
+  test("adaptive shuffle readers are wrappers even when they carry a fallback tag") {
+    val child = emptyScan()
+    val reader = shuffleReader(child)
+    reader.setTagValue(AuronConvertStrategy.neverConvertReasonTag, "not an operator failure")
+    val nodes = AuronPlanDiagnostics.collect(reader)
+    assert(nodes.head.status == "Wrapper")
+    assert(nodes.head.reason.isEmpty)
+    assert(nodes.count(_.name == child.nodeName) == 1)
+  }
 
   test("diagnostic events survive JSON replay and out-of-order lifecycle events") {
     val conf = new SparkConf(false)
@@ -96,6 +121,35 @@ class AuronDiagnosticsSuite extends SparkFunSuite {
       assert(store.executions(1, 2).map(_.executionId) == Seq(4L, 3L))
       assert(store.execution(99).isEmpty)
       assert(store.metrics(99).isEmpty)
+    } finally kv.close()
+  }
+
+  test("execution metrics use the live SQL store when available") {
+    val conf = new SparkConf(false)
+      .set("spark.appStateStore.asyncTracking.enable", "false")
+    val kv = new ElementTrackingStore(new InMemoryStore, conf)
+    try {
+      var liveStore = Option.empty[SQLAppStatusStore]
+      val store = new AuronSQLAppStatusStore(kv, liveStore)
+      val listener = new SQLAppStatusListener(conf, kv, live = true)
+      listener.onOtherEvent(readEvent("""{
+        "Event":"org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
+        "executionId":7,"description":"query","details":"","physicalPlanDescription":"Scan",
+        "sparkPlanInfo":{"nodeName":"Scan","simpleString":"Scan","children":[],
+          "metadata":{},"metrics":[
+            {"name":"number of output rows","accumulatorId":1,"metricType":"sum"}]},
+        "time":100,"modifiedConfigs":{},"jobTags":[]
+      }"""))
+      listener.onOtherEvent(SparkListenerDriverAccumUpdates(7, Seq(1L -> 42L)))
+      assert(store.metrics(7).head._3 == "Not available yet")
+
+      // Spark's live store may become available after Auron's first metrics read.
+      liveStore = Some(new SQLAppStatusStore(kv, Some(listener)))
+      assert(store.metrics(7) == Seq(("0: Scan", "number of output rows", "42")))
+
+      listener.onOtherEvent(SparkListenerSQLExecutionEnd(7, 200))
+      assert(store.metrics(7).head._3 == "42")
+      assert(new AuronSQLAppStatusStore(kv).metrics(7).head._3 == "42")
     } finally kv.close()
   }
 

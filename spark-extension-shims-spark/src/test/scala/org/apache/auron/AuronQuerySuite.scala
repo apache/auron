@@ -163,7 +163,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test select multiple spark ext functions with the same signature") {
-    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+    withSQLConf(
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t1") {
         sql("create table t1 using parquet as select '2024-12-18' as event_time")
         checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
@@ -345,12 +347,20 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
           SparkAuronConfiguration.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
-            Seq[(Integer, Integer, Integer)]((1, 2, 1), (3, 4, 2), (5, 6, 3), (null, null, 4))
+            Seq[(Integer, Integer, Integer)](
+              (1, 2, 1),
+              (3, 4, 2),
+              (5, 6, 3),
+              (null, null, 4),
+              (7, 8, null))
               .toDF("c1", "c2", "p")
               .write
               .partitionBy("p")
               .orc(path)
             checkSparkAnswerAndOperator(() => spark.read.orc(path))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).select("p", "c2", "c1"))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).select("p"))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).selectExpr("count(*)"))
 
             withTable("t") {
               sql(s"""
@@ -361,6 +371,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                      |""".stripMargin)
               sql("MSCK REPAIR TABLE t")
               checkSparkAnswerAndOperator(() => spark.table("t"))
+              checkSparkAnswerAndOperator(() => spark.table("t").select("p", "c2", "c3"))
             }
           }
         }
@@ -475,7 +486,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with hour function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_hour") {
         sql("""
               |create table t_hour using parquet as
@@ -497,7 +510,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with minute function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_minute") {
         sql("""
               |create table t_minute using parquet as
@@ -518,7 +533,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with second function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_second") {
         sql("""
               |create table t_second using parquet as
@@ -540,7 +557,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
   // For Date input: hour/minute/second should all be 0
   test("timeparts on Date input return zeros") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_date_parts") {
         sql(
           "create table t_date_parts using parquet as select date'2024-12-18' as d union all select date'2024-12-19'")
@@ -557,7 +576,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("hour/minute/second respect timezone via from_utc_timestamp") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_tz") {
         // Construct: UTC 1970-01-01 00:00:00 → Asia/Shanghai => local 08:00:00
         sql("""
@@ -574,7 +595,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("minute/second with non-whole-hour offsets") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_tz2") {
         sql("""
               |create table t_tz2 using parquet as

@@ -30,6 +30,28 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
               |(123.45, 7.00), (-123.45, 7.00), (1.00, 8.00), (NULL, 7.00), (1.00, NULL)
               |""".stripMargin)
         checkSparkAnswerAndOperator("SELECT round(a / b, 2) FROM literal_fallback")
+        checkSparkAnswerAndOperator(
+          "SELECT round(a, 4), round(a, 0), round(a, 2) FROM literal_fallback")
+        // Spark 3.0-3.2 require legacy mode for a negative decimal result scale.
+        withSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal" -> "true") {
+          checkSparkAnswerAndOperator("SELECT round(a, -1) FROM literal_fallback")
+        }
+      }
+    }
+  }
+
+  test("sqrt returns NaN for negative inputs") {
+    withTable("sqrt_inputs") {
+      sql("CREATE TABLE sqrt_inputs(x DOUBLE) USING parquet")
+      sql("""INSERT INTO sqrt_inputs VALUES
+            |(-1.0D), (4.0D), (0.0D), (-0.0D), (NULL),
+            |(CAST('NaN' AS DOUBLE)), (CAST('Infinity' AS DOUBLE)),
+            |(CAST('-Infinity' AS DOUBLE))
+            |""".stripMargin)
+      Seq("false", "true").foreach { ansi =>
+        withSQLConf("spark.sql.ansi.enabled" -> ansi) {
+          checkSparkAnswerAndOperator("SELECT sqrt(x) FROM sqrt_inputs")
+        }
       }
     }
   }

@@ -31,6 +31,7 @@ exclude = [
     "dev/vendors/packages/datafusion",
     "dev/vendors/packages/arrow-rs",
     "dev/vendors/packages/serde_json",
+    "dev/vendors/packages/orc-rust",
 ]
 
 [workspace.package]
@@ -134,20 +135,21 @@ datafusion-ext-functions = { path = "./native-engine/datafusion-ext-functions" }
 datafusion-ext-plans = { path = "./native-engine/datafusion-ext-plans" }
 
 # datafusion
-datafusion = { version = "49.0.0" }
-datafusion-datasource = { version = "49.0.0" }
-datafusion-datasource-parquet = { version = "49.0.0" }
-datafusion-spark = { version = "49.0.0" }
+datafusion = { version = "55.2.0" }
+datafusion-datasource = { version = "55.2.0" }
+datafusion-datasource-parquet = { version = "55.2.0" }
+datafusion-pruning = { version = "55.2.0" }
+datafusion-spark = { version = "55.2.0" }
 
 # orc
 orc-rust = { version = "0.7.0" }
 
 # arrow
-arrow = { version = "55.2.0", features = ["ffi"]}
-arrow-schema = { version = "55.2.0", features = ["serde"] }
+arrow = { version = "59.2.0", features = ["ffi"]}
+arrow-schema = { version = "59.2.0", features = ["serde"] }
 
 # parquet
-parquet = { version = "55.2.0" }
+parquet = { version = "59.2.0" }
 
 # json
 serde_json = { version = "1.0.96" }
@@ -173,7 +175,7 @@ jni = "0.20.0"
 log = "0.4.32"
 lz4_flex = "0.14.0"
 num = "0.4.2"
-object_store = "0.12.4"
+object_store = "0.13.2"
 once_cell = "1.21.4"
 panic-message = "0.3.0"
 parking_lot = "0.12.5"
@@ -194,19 +196,20 @@ zstd = "0.13.3"
 rdkafka = { version = "0.36.0", features = ["tokio"] }
 
 [patch.crates-io]
-# datafusion: branch=v49.0.0-auron
+# datafusion: branch=v55.2.0-auron
 datafusion = { path = "./dev/vendors/packages/datafusion/datafusion/core"}
 datafusion-common = { path = "./dev/vendors/packages/datafusion/datafusion/common"}
 datafusion-expr = { path = "./dev/vendors/packages/datafusion/datafusion/expr"}
 datafusion-datasource = { path = "./dev/vendors/packages/datafusion/datafusion/datasource"}
 datafusion-datasource-parquet = { path = "./dev/vendors/packages/datafusion/datafusion/datasource-parquet"}
 datafusion-execution = { path = "./dev/vendors/packages/datafusion/datafusion/execution"}
+datafusion-pruning = { path = "./dev/vendors/packages/datafusion/datafusion/pruning"}
 datafusion-optimizer = { path = "./dev/vendors/packages/datafusion/datafusion/optimizer"}
 datafusion-physical-expr = { path = "./dev/vendors/packages/datafusion/datafusion/physical-expr"}
 datafusion-spark = { path = "./dev/vendors/packages/datafusion/datafusion/spark"}
 orc-rust = { path = "./dev/vendors/packages/orc-rust"}
 
-# arrow: branch=v55.2.0-auron
+# arrow: branch=v59.2.0-auron
 arrow = { path = "./dev/vendors/packages/arrow-rs/arrow"}
 arrow-arith = { path = "./dev/vendors/packages/arrow-rs/arrow-arith"}
 arrow-array = { path = "./dev/vendors/packages/arrow-rs/arrow-array"}

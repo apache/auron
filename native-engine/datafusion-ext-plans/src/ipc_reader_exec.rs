@@ -18,14 +18,11 @@ use std::{
     fmt::{Debug, Formatter},
     fs::File,
     io::{BufReader, Cursor, Read, Seek, SeekFrom},
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering::SeqCst},
-    },
+    sync::Arc,
 };
 
 use arrow::{
-    array::{Array, ArrayRef, RecordBatch, RecordBatchOptions},
+    array::{RecordBatch, RecordBatchOptions},
     datatypes::SchemaRef,
 };
 use async_trait::async_trait;
@@ -47,17 +44,12 @@ use datafusion::{
     },
 };
 use datafusion_ext_commons::{
-    arrow::{
-        array_size::{ArraySize, BatchSize},
-        coalesce::coalesce_arrays_unchecked,
-    },
-    batch_size, df_execution_err,
+    arrow::{array_size::BatchSize, coalesce::BatchCoalescer},
+    df_execution_err,
     io::ipc_compression::IpcCompressionReader,
-    suggested_batch_mem_size,
 };
 use jni::objects::{GlobalRef, JObject};
 use once_cell::sync::OnceCell;
-use parking_lot::Mutex;
 
 use crate::common::execution_context::ExecutionContext;
 
@@ -67,7 +59,7 @@ pub struct IpcReaderExec {
     pub ipc_provider_resource_id: String,
     pub schema: SchemaRef,
     pub metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 impl IpcReaderExec {
     pub fn new(
@@ -97,23 +89,28 @@ impl ExecutionPlan for IpcReaderExec {
         "IpcReaderExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 UnknownPartitioning(self.num_partitions),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -157,10 +154,6 @@ impl ExecutionPlan for IpcReaderExec {
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
     }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
-    }
 }
 
 fn read_ipc(
@@ -176,10 +169,18 @@ fn read_ipc(
             log::info!("start ipc reading");
 
             let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
-            let batch_size = batch_size();
-            let staging_cols: Arc<Mutex<Vec<Vec<ArrayRef>>>> = Arc::new(Mutex::new(vec![]));
-            let staging_num_rows = AtomicUsize::new(0);
-            let staging_mem_size = AtomicUsize::new(0);
+            let mut coalescer =
+                BatchCoalescer::new_with_default_batch_size(exec_ctx.output_schema());
+
+            macro_rules! flush_completed_batches {
+                () => {
+                    while let Some(batch) = coalescer.next_completed_batch() {
+                        size_counter.add(batch.get_batch_mem_size());
+                        exec_ctx.baseline_metrics().record_output(batch.num_rows());
+                        sender.send(batch).await;
+                    }
+                };
+            }
 
             while let Some(block) = {
                 let blocks = blocks.clone();
@@ -218,57 +219,18 @@ fn read_ipc(
                         Ok::<_, DataFusionError>(None)
                     })?
                 {
-                    let (cur_staging_num_rows, cur_staging_mem_size) = {
-                        let staging_cols_cloned = staging_cols.clone();
-                        let mut staging_cols = staging_cols_cloned.lock();
-                        let mut cols_mem_size = 0;
-                        staging_cols.resize_with(cols.len(), || vec![]);
-                        for (col_idx, col) in cols.into_iter().enumerate() {
-                            cols_mem_size += col.get_array_mem_size();
-                            staging_cols[col_idx].push(col);
-                        }
-                        drop(staging_cols);
-                        staging_num_rows.fetch_add(num_rows, SeqCst);
-                        staging_mem_size.fetch_add(cols_mem_size, SeqCst);
-                        (staging_num_rows.load(SeqCst), staging_mem_size.load(SeqCst))
-                    };
-
-                    if cur_staging_num_rows >= batch_size
-                        || cur_staging_mem_size >= suggested_batch_mem_size()
-                    {
-                        let coalesced_cols = std::mem::take(&mut *staging_cols.clone().lock())
-                            .into_iter()
-                            .map(|cols| coalesce_arrays_unchecked(cols[0].data_type(), &cols))
-                            .collect::<Vec<_>>();
-                        let batch = RecordBatch::try_new_with_options(
-                            exec_ctx.output_schema(),
-                            coalesced_cols,
-                            &RecordBatchOptions::new().with_row_count(Some(cur_staging_num_rows)),
-                        )?;
-                        staging_num_rows.store(0, SeqCst);
-                        staging_mem_size.store(0, SeqCst);
-                        size_counter.add(batch.get_batch_mem_size());
-                        exec_ctx.baseline_metrics().record_output(batch.num_rows());
-                        sender.send(batch).await;
-                    }
+                    let batch = RecordBatch::try_new_with_options(
+                        exec_ctx.output_schema(),
+                        cols,
+                        &RecordBatchOptions::new().with_row_count(Some(num_rows)),
+                    )?;
+                    coalescer.push_batch(batch)?;
+                    flush_completed_batches!();
                 }
             }
 
-            let cur_staging_num_rows = staging_num_rows.load(SeqCst);
-            if cur_staging_num_rows > 0 {
-                let coalesced_cols = std::mem::take(&mut *staging_cols.clone().lock())
-                    .into_iter()
-                    .map(|cols| coalesce_arrays_unchecked(cols[0].data_type(), &cols))
-                    .collect::<Vec<_>>();
-                let batch = RecordBatch::try_new_with_options(
-                    exec_ctx.output_schema(),
-                    coalesced_cols,
-                    &RecordBatchOptions::new().with_row_count(Some(cur_staging_num_rows)),
-                )?;
-                size_counter.add(batch.get_batch_mem_size());
-                exec_ctx.baseline_metrics().record_output(batch.num_rows());
-                sender.send(batch).await;
-            }
+            coalescer.finish_buffered_batch()?;
+            flush_completed_batches!();
             Ok(())
         }))
 }

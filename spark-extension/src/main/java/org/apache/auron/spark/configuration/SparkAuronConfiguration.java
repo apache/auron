@@ -113,7 +113,7 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withDescription(
                     "Enable automatic trimming of whitespace from string inputs before casting to numeric or boolean types. "
                             + "This helps prevent casting errors due to leading/trailing whitespace.")
-            .withDefaultValue(true);
+            .withDefaultValue(false);
 
     public static final ConfigOption<Boolean> IGNORE_CORRUPTED_FILES = new ConfigOption<>(Boolean.class)
             .withKey("auron.files.ignoreCorruptFiles")
@@ -575,6 +575,13 @@ public class SparkAuronConfiguration extends AuronConfiguration {
             .withKey("auron.decimal.arithOp.enabled")
             .withCategory("Expression/Function Supports")
             .withDescription("Enable decimal arithmetic operations conversion to native Auron implementations.")
+            .withDefaultValue(false);
+
+    public static final ConfigOption<Boolean> ENABLE_NATIVE_DATETIME_FUNCTIONS = new SQLConfOption<>(Boolean.class)
+            .withKey("auron.enableNativeDateTimeFunctions")
+            .withCategory("Expression/Function Supports")
+            .withDescription("Enable datetime function conversion to native Auron implementations. "
+                    + "Defaults to falling back to Spark.")
             .withDefaultValue(false);
 
     public static final ConfigOption<Boolean> DATETIME_EXTRACT_ENABLED = new SQLConfOption<>(Boolean.class)

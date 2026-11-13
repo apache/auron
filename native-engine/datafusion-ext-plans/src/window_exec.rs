@@ -32,7 +32,7 @@ use datafusion::{
         metrics::{ExecutionPlanMetricsSet, MetricsSet, Time},
     },
 };
-use datafusion_ext_commons::{arrow::cast::cast, downcast_any};
+use datafusion_ext_commons::{arrow::cast::cast, downcast_any, downcast_any_dyn};
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
@@ -46,7 +46,7 @@ pub struct WindowExec {
     input: Arc<dyn ExecutionPlan>,
     context: Arc<WindowContext>,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl WindowExec {
@@ -122,23 +122,28 @@ impl ExecutionPlan for WindowExec {
         "WindowExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.context.output_schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -165,7 +170,7 @@ impl ExecutionPlan for WindowExec {
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
         // Combining group limit filtering requires exactly one rank-like output column.
-        if let Ok(window_group_limit) = downcast_any!(&self.input, WindowExec)
+        if let Ok(window_group_limit) = downcast_any_dyn!(&self.input, WindowExec)
             && window_group_limit.window_context().group_limit.is_some()
             && self.context.window_exprs.len() == 1
             && self.context.window_exprs[0].is_rank_like()
@@ -198,10 +203,6 @@ impl ExecutionPlan for WindowExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 

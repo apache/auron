@@ -1,0 +1,25 @@
+diff --git a/datafusion/physical-expr/src/expressions/case.rs b/datafusion/physical-expr/src/expressions/case.rs
+index 17288a9..6254f3d 100644
+--- a/datafusion/physical-expr/src/expressions/case.rs
++++ b/datafusion/physical-expr/src/expressions/case.rs
+@@ -45,6 +45,7 @@ use crate::expressions::case::literal_lookup_table::LiteralLookupTable;
+ use arrow::compute::kernels::merge::{MergeIndex, merge, merge_n};
+ use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+ use datafusion_physical_expr_common::datum::compare_with_eq;
++use datafusion_physical_expr_common::physical_expr::is_volatile;
+ use datafusion_physical_expr_common::utils::scatter;
+ use itertools::Itertools;
+ use std::fmt::{Debug, Formatter};
+@@ -1275,6 +1276,12 @@ impl PhysicalExpr for CaseExpr {
+                     return Some(Ok(()));
+                 }
+
++                // Volatile expressions cannot be evaluated during planning or assumed
++                // to produce the same value in the WHEN and THEN expressions.
++                if is_volatile(w) || is_volatile(t) {
++                    return Some(Ok(()));
++                }
++
+                 // For branches with a nullable 'then' expression, try to determine
+                 // if the 'then' expression is ever reachable in the situation where
+                 // it would evaluate to null.

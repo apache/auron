@@ -26,7 +26,7 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
 };
 use datafusion::{
-    common::Result,
+    common::{Result, config::ConfigOptions},
     logical_expr::{Volatility, create_udf},
     physical_expr::{PhysicalExprRef, ScalarFunctionExpr, expressions::Column},
     physical_plan::{
@@ -146,6 +146,7 @@ async fn run_bounded(left_probed: bool, kind: usize, limit: usize, threshold: i3
             Arc::new(Column::new(filter_schema.field(bi).name(), bi)),
         ],
         &filter_schema,
+        Arc::<ConfigOptions>::default(),
     )?);
     let params = JoinParams {
         join_type: jt,
