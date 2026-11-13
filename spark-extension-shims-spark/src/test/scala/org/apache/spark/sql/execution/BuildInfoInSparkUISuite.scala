@@ -23,11 +23,13 @@ import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.{AuronConverters, AuronConvertStrategy, AuronPlanDiagnostics}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.{AuronSQLAppStatusListener, AuronSQLAppStatusStore}
 import org.apache.spark.util.Utils
 
 import org.apache.auron.{AuronSQLTestHelper, BaseAuronSQLSuite}
+import org.apache.auron.spark.ui.AuronFallbackReason
 import org.apache.auron.sparkver
 
 class BuildInfoInSparkUISuite
@@ -135,6 +137,25 @@ class BuildInfoInSparkUISuite
       project
         .getTagValue(AuronConvertStrategy.neverConvertReasonTag)
         .contains("No native conversion strategy was selected for ProjectExec."))
+  }
+
+  test("aggregate pruning replaces trial JVM conversion diagnostics") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false", "spark.auron.enable.scan" -> "false") {
+      withTable("auron_ui_pruned_aggregate") {
+        sql("create table auron_ui_pruned_aggregate (value int) using parquet")
+        spark.udf.register("auron_ui_pruned_result", (value: Int) => value)
+        val plan = sql(
+          "select auron_ui_pruned_result(cast(sum(value) as int)) from auron_ui_pruned_aggregate").queryExecution.executedPlan
+        val aggregate = plan.collectFirst {
+          case a: HashAggregateExec if a.requiredChildDistributionExpressions.isDefined => a
+        }.get
+        val node = AuronPlanDiagnostics.collect(aggregate).head
+        assert(node.status == "Fallback")
+        assert(node.reason == AuronFallbackReason.inputsOnJVM(Seq("ShuffleExchangeExec")))
+        assert(aggregate.getTagValue(AuronConvertStrategy.convertToNonNativeTag).isEmpty)
+        assert(aggregate.getTagValue(AuronConvertStrategy.convertToNonNativeReasonTag).isEmpty)
+      }
+    }
   }
 
   test("forced hash-join rewrites preserve the rejected condition reason through conversion") {

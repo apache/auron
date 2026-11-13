@@ -234,6 +234,8 @@ object AuronConvertStrategy extends Logging {
         if (condition) {
           exec.setTagValue(convertStrategyTag, NeverConvert)
           exec.setTagValue(neverConvertReasonTag, neverConvertReason)
+          exec.unsetTagValue(convertToNonNativeTag)
+          exec.unsetTagValue(convertToNonNativeReasonTag)
           finished = false
         }
       }
