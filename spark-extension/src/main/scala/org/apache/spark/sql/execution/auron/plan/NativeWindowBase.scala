@@ -26,6 +26,7 @@ import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
+import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.CumeDist
@@ -40,7 +41,9 @@ import org.apache.spark.sql.catalyst.expressions.Rank
 import org.apache.spark.sql.catalyst.expressions.RowNumber
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.expressions.WindowExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.Average
+import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.expressions.aggregate.Max
 import org.apache.spark.sql.catalyst.expressions.aggregate.Min
@@ -131,7 +134,22 @@ abstract class NativeWindowBase(
 
     named.children.head match {
       case WindowExpression(function, spec) =>
-        function match {
+        val nativeFunction = function match {
+          case e: AggregateExpression =>
+            e.aggregateFunction match {
+              case _: Min | _: Max | _: Count =>
+                // TODO: Support DISTINCT, FILTER, and non-Complete aggregate modes.
+                assert(
+                  !e.isDistinct && Shims.get.getAggregateExpressionFilter(e).isEmpty &&
+                    e.mode == Complete,
+                  s"window aggregate not supported: $e")
+                e.aggregateFunction
+              case other =>
+                throw new NotImplementedError(s"window aggregate not supported: $other")
+            }
+          case other => other
+        }
+        nativeFunction match {
           case e @ RowNumber() =>
             assert(
               spec.frameSpecification == e.frame,
@@ -228,13 +246,13 @@ abstract class NativeWindowBase(
             windowExprBuilder.setAggFunc(pb.AggFunction.MIN)
             windowExprBuilder.addChildren(NativeConverters.convertExpr(e.child))
 
-          case Count(child :: Nil) =>
+          case e: Count if e.children.size == 1 =>
             assert(
               spec.frameSpecification == RowNumber().frame, // only supports RowFrame(Unbounded, CurrentRow)
               s"window frame not supported: ${spec.frameSpecification}")
             windowExprBuilder.setFuncType(pb.WindowFunctionType.Agg)
             windowExprBuilder.setAggFunc(pb.AggFunction.COUNT)
-            windowExprBuilder.addChildren(NativeConverters.convertExpr(child))
+            windowExprBuilder.addChildren(NativeConverters.convertExpr(e.children.head))
 
           case other =>
             throw new NotImplementedError(s"window function not supported: $other")
