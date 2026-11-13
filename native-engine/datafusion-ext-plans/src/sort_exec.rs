@@ -91,7 +91,7 @@ pub struct SortExec {
     offset: usize,
     metrics: ExecutionPlanMetricsSet,
     record_output: bool,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl SortExec {
@@ -167,23 +167,28 @@ impl ExecutionPlan for SortExec {
         "SortExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -214,16 +219,6 @@ impl ExecutionPlan for SortExec {
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
     }
-
-    fn statistics(&self) -> Result<Statistics> {
-        Statistics::with_fetch(
-            self.input.partition_statistics(None)?,
-            self.schema(),
-            self.limit,
-            self.offset,
-            1,
-        )
-    }
 }
 
 impl SortExec {
@@ -237,10 +232,10 @@ impl SortExec {
             projection,
             &self.exprs,
         )?);
-        let mut sorter = Arc::new(ExternalSorter {
+        let sorter = Arc::new_cyclic(|weak| ExternalSorter {
             exec_ctx,
-            mem_consumer_info: None,
-            weak: Weak::new(),
+            mem_consumer_info: OnceCell::new(),
+            weak: weak.clone(),
             prune_sort_keys_from_batch: prune_sort_keys_from_batch.clone(),
             skip: self.offset,
             limit: self.limit.unwrap_or(usize::MAX),
@@ -251,13 +246,6 @@ impl SortExec {
             mem_total_size: Default::default(),
         });
         MemManager::register_consumer(sorter.clone(), true);
-
-        unsafe {
-            // safety: set weak reference to sorter
-            let weak = Arc::downgrade(&sorter);
-            let sorter_mut = Arc::get_mut_unchecked(&mut sorter);
-            sorter_mut.weak = weak;
-        }
         Ok(sorter)
     }
 
@@ -355,7 +343,7 @@ struct LevelSpill {
 
 struct ExternalSorter {
     exec_ctx: Arc<ExecutionContext>,
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     weak: Weak<Self>,
     prune_sort_keys_from_batch: Arc<PruneSortKeysFromBatch>,
     skip: usize,
@@ -387,14 +375,14 @@ impl MemConsumer for ExternalSorter {
         "ExternalSorter"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {
@@ -755,7 +743,7 @@ impl ExternalSorter {
                 self.name(),
                 ByteSize(self.mem_used() as u64),
             );
-            self.force_spill().await?;
+            self.spill().await?;
         }
         self.set_spillable(false);
 
@@ -1158,7 +1146,7 @@ impl PrimitiveSortKey {
         }
         let expr = &exprs[0];
         // must be a direct column reference
-        expr.expr.as_any().downcast_ref::<Column>()?;
+        expr.expr.downcast_ref::<Column>()?;
         let data_type = expr.expr.data_type(input_schema).ok()?;
         if !matches!(
             data_type,
@@ -1220,7 +1208,7 @@ impl PruneSortKeysFromBatch {
 
         let mut relation = vec![];
         for (expr_idx, expr) in exprs.iter().enumerate() {
-            if let Some(col) = expr.expr.as_any().downcast_ref::<Column>() {
+            if let Some(col) = expr.expr.downcast_ref::<Column>() {
                 // Relation indices are consumed against the projected schema below.
                 relation.extend(input_projection.iter().enumerate().filter_map(
                     |(projected_idx, &input_idx)| {
@@ -2431,7 +2419,7 @@ mod fuzztest {
         let sort = Arc::new(SortExec::new(input, sort_exprs.clone(), None, 0));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
         let a = concat_batches(&schema, &output)?;
-        let a_row_count = sort.clone().statistics()?.num_rows;
+        let a_row_count = sort.clone().partition_statistics(None)?.num_rows;
 
         let input = Arc::new(TestMemoryExec::try_new(
             &[batches.clone()],
@@ -2444,11 +2432,11 @@ mod fuzztest {
         ));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
         let b = concat_batches(&schema, &output)?;
-        let b_row_count = sort.clone().statistics()?.num_rows;
+        let b_row_count = sort.clone().partition_statistics(None)?.num_rows;
 
         assert_eq!(a.num_rows(), b.num_rows());
         assert_eq!(a_row_count, b_row_count);
-        assert_eq!(a_row_count, Precision::Exact(n));
+        assert_eq!(a.num_rows(), n);
         assert!(a == b);
         Ok(())
     }

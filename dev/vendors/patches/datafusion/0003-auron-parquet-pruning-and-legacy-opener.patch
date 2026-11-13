@@ -1,0 +1,2615 @@
+diff --git a/datafusion/pruning/Cargo.toml b/datafusion/pruning/Cargo.toml
+index e6f4bb6f2..ebef38850 100644
+--- a/datafusion/pruning/Cargo.toml
++++ b/datafusion/pruning/Cargo.toml
+@@ -20,13 +20,14 @@ arrow = { workspace = true }
+ datafusion-common = { workspace = true, default-features = true }
+ datafusion-datasource = { workspace = true }
+ datafusion-expr-common = { workspace = true, default-features = true }
++datafusion-functions = { workspace = true }
+ datafusion-physical-expr = { workspace = true }
+ datafusion-physical-expr-common = { workspace = true }
+ datafusion-physical-plan = { workspace = true }
++datafusion-expr = { workspace = true }
++datafusion-functions-nested = { workspace = true }
+ log = { workspace = true }
+ 
+ [dev-dependencies]
+-datafusion-expr = { workspace = true }
+-datafusion-functions-nested = { workspace = true }
+ insta = { workspace = true }
+ itertools = { workspace = true }
+diff --git a/datafusion/pruning/src/pruning_predicate.rs b/datafusion/pruning/src/pruning_predicate.rs
+index 3a6345149..2b4aa81b6 100644
+--- a/datafusion/pruning/src/pruning_predicate.rs
++++ b/datafusion/pruning/src/pruning_predicate.rs
+@@ -23,12 +23,14 @@ use std::collections::HashSet;
+ use std::sync::Arc;
+ 
+ use arrow::array::AsArray;
++use arrow::array::types::{Float32Type, Float64Type};
+ use arrow::{
+-    array::{ArrayRef, BooleanArray, new_null_array},
++    array::{ArrayRef, ArrowNativeTypeOp, BooleanArray, new_null_array},
+     datatypes::{DataType, Field, Schema, SchemaRef},
+     record_batch::{RecordBatch, RecordBatchOptions},
+ };
+ // pub use for backwards compatibility
++use datafusion_common::cast::{as_float32_array, as_float64_array};
+ pub use datafusion_common::pruning::PruningStatistics;
+ use datafusion_physical_expr::simplifier::PhysicalExprSimplifier;
+ use datafusion_physical_plan::metrics::Count;
+@@ -46,9 +48,15 @@ use datafusion_common::{
+ use datafusion_expr_common::casts::try_cast_literal_to_type;
+ use datafusion_expr_common::operator::Operator;
+ use datafusion_physical_expr::utils::{Guarantee, LiteralGuarantee};
+-use datafusion_physical_expr::{PhysicalExprRef, expressions as phys_expr};
++use datafusion_physical_expr::{
++    PhysicalExprRef, ScalarFunctionExpr, expressions as phys_expr,
++};
+ use datafusion_physical_expr_common::physical_expr::snapshot_physical_expr_opt;
+ use datafusion_physical_plan::{ColumnarValue, PhysicalExpr};
++// auron: supports parquet dictionary filtering (patch 0005)
++use datafusion_common::config::ConfigOptions;
++use datafusion_expr::ScalarUDF;
++use datafusion_functions_nested::array_has::ArrayHas;
+ 
+ /// Used to prove that arbitrary predicates (boolean expression) can not
+ /// possibly evaluate to `true` given information about a column provided by
+@@ -922,6 +930,7 @@ impl RequiredColumns {
+             StatisticsType::Max => format!("{column_name}_max"),
+             StatisticsType::NullCount => format!("{column_name}_null_count"),
+             StatisticsType::RowCount => "row_count".to_string(),
++            StatisticsType::Dictionary => format!("{column_name}_dict"),
+         };
+ 
+         let stat_column = phys_expr::Column::new(&stat_column_name, idx);
+@@ -976,6 +985,26 @@ impl RequiredColumns {
+     ) -> Result<Arc<dyn PhysicalExpr>> {
+         self.stat_column_expr(column, column_expr, field, StatisticsType::RowCount)
+     }
++
++    /// auron: rewrite col --> col_dict (dictionary values as ListArray)
++    fn dict_column_expr(
++        &mut self,
++        column: &phys_expr::Column,
++        column_expr: &Arc<dyn PhysicalExpr>,
++        field: &Field,
++    ) -> Result<Arc<dyn PhysicalExpr>> {
++        let list_type = DataType::List(Arc::new(Field::new(
++            "item",
++            field.data_type().clone(),
++            true,
++        )));
++        self.stat_column_expr(
++            column,
++            column_expr,
++            &field.clone().with_data_type(list_type),
++            StatisticsType::Dictionary,
++        )
++    }
+ }
+ 
+ impl From<Vec<(phys_expr::Column, StatisticsType, Field)>> for RequiredColumns {
+@@ -1026,7 +1055,161 @@ fn build_statistics_record_batch<S: PruningStatistics + ?Sized>(
+             StatisticsType::Max => statistics.max_values(&column),
+             StatisticsType::NullCount => statistics.null_counts(&column),
+             StatisticsType::RowCount => statistics.row_counts(),
++            StatisticsType::Dictionary => statistics.dictionary_values(&column),
+         };
++
++        // auron: handle special cases when pruning float column with NaN values
++        let array = array.and_then(|array| -> Option<ArrayRef> {
++            if array.data_type().is_floating() {
++                let min_values = statistics.min_values(&column);
++                let max_values = statistics.max_values(&column);
++
++                let min_is_nan = match &min_values {
++                    Some(array) => match array.data_type() {
++                        DataType::Float32 => as_float32_array(&array)
++                            .ok()?
++                            .iter()
++                            .flatten()
++                            .any(|v| v.is_nan()),
++                        DataType::Float64 => as_float64_array(&array)
++                            .ok()?
++                            .iter()
++                            .flatten()
++                            .any(|v| v.is_nan()),
++                        _ => false,
++                    },
++                    None => false,
++                };
++                let max_is_nan = match &max_values {
++                    Some(array) => match array.data_type() {
++                        DataType::Float32 => as_float32_array(&array)
++                            .ok()?
++                            .iter()
++                            .flatten()
++                            .any(|v| v.is_nan()),
++                        DataType::Float64 => as_float64_array(&array)
++                            .ok()?
++                            .iter()
++                            .flatten()
++                            .any(|v| v.is_nan()),
++                        _ => false,
++                    },
++                    None => false,
++                };
++                if min_is_nan || max_is_nan {
++                    return None;
++                }
++
++                let min_is_positive_0 = match &min_values {
++                    Some(array) => match array.data_type() {
++                        DataType::Float32 => as_float32_array(&array)
++                            .ok()?
++                            .iter()
++                            .flatten()
++                            .any(|v| v.is_sign_positive() && v.is_zero()),
++                        DataType::Float64 => as_float64_array(&array)
++                            .ok()?
++                            .iter()
++                            .flatten()
++                            .any(|v| v.is_sign_positive() && v.is_zero()),
++                        _ => false,
++                    },
++                    _ => false,
++                };
++                let max_is_negative_0 = match &max_values {
++                    Some(array) => match array.data_type() {
++                        DataType::Float32 => as_float32_array(&array)
++                            .ok()?
++                            .iter()
++                            .flatten()
++                            .any(|v| v.is_sign_negative() && v.is_zero()),
++                        DataType::Float64 => as_float64_array(&array)
++                            .ok()?
++                            .iter()
++                            .flatten()
++                            .any(|v| v.is_sign_negative() && v.is_zero()),
++                        _ => false,
++                    },
++                    _ => false,
++                };
++
++                if min_is_positive_0 && *statistics_type == StatisticsType::Min {
++                    match array.data_type() {
++                        DataType::Float32 => {
++                            return Some(Arc::new(arrow::compute::unary::<
++                                _,
++                                _,
++                                Float32Type,
++                            >(
++                                as_float32_array(&array).ok()?,
++                                |v| {
++                                    if v.is_sign_positive() && v.is_zero() {
++                                        0.0f32
++                                    } else {
++                                        v
++                                    }
++                                },
++                            )));
++                        }
++                        DataType::Float64 => {
++                            return Some(Arc::new(arrow::compute::unary::<
++                                _,
++                                _,
++                                Float64Type,
++                            >(
++                                as_float64_array(&array).ok()?,
++                                |v| {
++                                    if v.is_sign_positive() && v.is_zero() {
++                                        0.0f64
++                                    } else {
++                                        v
++                                    }
++                                },
++                            )));
++                        }
++                        _ => return None,
++                    };
++                }
++                if max_is_negative_0 && *statistics_type == StatisticsType::Max {
++                    match array.data_type() {
++                        DataType::Float32 => {
++                            return Some(Arc::new(arrow::compute::unary::<
++                                _,
++                                _,
++                                Float32Type,
++                            >(
++                                as_float32_array(&array).ok()?,
++                                |v| {
++                                    if v.is_sign_negative() && v.is_zero() {
++                                        0.0f32
++                                    } else {
++                                        v
++                                    }
++                                },
++                            )));
++                        }
++                        DataType::Float64 => {
++                            return Some(Arc::new(arrow::compute::unary::<
++                                _,
++                                _,
++                                Float64Type,
++                            >(
++                                as_float64_array(&array).ok()?,
++                                |v| {
++                                    if v.is_sign_negative() && v.is_zero() {
++                                        0.0f64
++                                    } else {
++                                        v
++                                    }
++                                },
++                            )));
++                        }
++                        _ => return None,
++                    };
++                }
++            }
++            Some(array)
++        });
+         let array = array.unwrap_or_else(|| new_null_array(data_type, num_containers));
+ 
+         assert_eq_or_internal_err!(
+@@ -1186,6 +1369,37 @@ impl<'a> PruningExpressionBuilder<'a> {
+             row_count_field,
+         )
+     }
++
++    /// auron: rewrite col --> col_dict
++    fn dict_column_expr(&mut self) -> Result<Arc<dyn PhysicalExpr>> {
++        self.required_columns.dict_column_expr(
++            &self.column,
++            &self.column_expr,
++            self.field,
++        )
++    }
++
++    /// auron: whether the compared expression is a plain (unwrapped) column
++    /// reference. Dictionary pruning is only applied in that case: for
++    /// cast-wrapped expressions (e.g. `cast(c1 as decimal) = lit(..)`) the
++    /// cast would have to be applied to the List-typed dictionary column,
++    /// which cannot be evaluated and would break statistics pruning as well.
++    fn column_is_plain(&self) -> bool {
++        self.column_expr
++            .downcast_ref::<phys_expr::Column>()
++            .is_some()
++    }
++
++    /// auron: array_has(col_dict, literal)
++    fn dict_column_contains_expr(&mut self) -> Result<Arc<dyn PhysicalExpr>> {
++        Ok(Arc::new(ScalarFunctionExpr::new(
++            "array_has",
++            Arc::new(ScalarUDF::from(ArrayHas::new())),
++            vec![self.dict_column_expr()?, Arc::clone(self.scalar_expr())],
++            Arc::new(Field::new("result", DataType::Boolean, true)),
++            Arc::new(ConfigOptions::default()),
++        )))
++    }
+ }
+ 
+ /// This function is designed to rewrite the column_expr to
+@@ -1420,6 +1634,9 @@ fn build_is_null_column_expr(
+ ) -> Option<Arc<dyn PhysicalExpr>> {
+     if let Some(col) = expr.downcast_ref::<phys_expr::Column>() {
+         let field = schema.field_with_name(col.name()).ok()?;
++        if field.data_type().is_nested() {
++            return None;
++        }
+ 
+         let null_count_field = &Field::new(field.name(), DataType::UInt64, true);
+         if with_not {
+@@ -1458,6 +1675,60 @@ fn build_is_null_column_expr(
+     }
+ }
+ 
++/// auron: build a pruning predicate for `starts_with(col, prefix)` by
++/// comparing the prefix of the column's min/max statistics against the
++/// literal prefix: `substr(col_min, 1, len) <= prefix && prefix <= substr(col_max, 1, len)`.
++fn build_starts_with_expr(
++    expr: &Arc<dyn PhysicalExpr>,
++    prefix: &str,
++    schema: &Schema,
++    required_columns: &mut RequiredColumns,
++) -> Option<Arc<dyn PhysicalExpr>> {
++    if let Some(col) = expr.downcast_ref::<phys_expr::Column>() {
++        let field = schema.field_with_name(col.name()).ok()?;
++
++        let min_field = &Field::new(field.name(), DataType::Utf8, true);
++        let min_column_expr = required_columns
++            .min_column_expr(col, expr, min_field)
++            .ok()?;
++
++        let max_field = &min_field.clone();
++        let max_column_expr = required_columns
++            .max_column_expr(col, expr, max_field)
++            .ok()?;
++
++        let lit_prefix = phys_expr::lit(prefix.to_owned());
++        let lit_1 = phys_expr::lit(1i64);
++        let lit_len = phys_expr::lit(prefix.len() as i64);
++        let config_options = Arc::new(ConfigOptions::default());
++
++        let min_prefix = Arc::new(ScalarFunctionExpr::new(
++            "substr",
++            datafusion_functions::unicode::substr(),
++            vec![min_column_expr, lit_1.clone(), lit_len.clone()],
++            Arc::new(Field::new("substr", DataType::Utf8, true)),
++            config_options.clone(),
++        ));
++        let max_prefix = Arc::new(ScalarFunctionExpr::new(
++            "substr",
++            datafusion_functions::unicode::substr(),
++            vec![max_column_expr, lit_1.clone(), lit_len.clone()],
++            Arc::new(Field::new("substr", DataType::Utf8, true)),
++            config_options,
++        ));
++
++        Some(Arc::new(phys_expr::BinaryExpr::new(
++            phys_expr::binary(min_prefix, Operator::LtEq, lit_prefix.clone(), schema)
++                .ok()?,
++            Operator::And,
++            phys_expr::binary(max_prefix, Operator::GtEq, lit_prefix.clone(), schema)
++                .ok()?,
++        )))
++    } else {
++        None
++    }
++}
++
+ /// Default maximum number of entries in an `IN (...)` list that will be
+ /// rewritten into a chain of per-value min/max checks by
+ /// `build_predicate_expression`. Callers threading a [`PredicateRewriter`]
+@@ -1622,6 +1893,26 @@ fn build_predicate_expression(
+         }
+     }
+ 
++    // auron: supports pruning with starts_with(col, 'prefix literal')
++    if let Some(scalar_fn) = expr.downcast_ref::<ScalarFunctionExpr>() {
++        if scalar_fn.name() == "starts_with" {
++            let arg1 = &scalar_fn.args()[0];
++            let arg2 = &scalar_fn.args()[1];
++            if let Some(literal) = arg2.downcast_ref::<phys_expr::Literal>() {
++                if let ScalarValue::Utf8(Some(prefix)) = literal.value() {
++                    return build_starts_with_expr(
++                        arg1,
++                        prefix,
++                        schema,
++                        required_columns,
++                    )
++                    .unwrap_or_else(|| unhandled_hook.handle(expr));
++                }
++            }
++        }
++        return unhandled_hook.handle(expr);
++    }
++
+     let (left, op, right) = {
+         if let Some(bin_expr) = expr.downcast_ref::<phys_expr::BinaryExpr>() {
+             (
+@@ -1843,7 +2134,7 @@ fn build_eq_statistics_expr(
+ ) -> Result<Arc<dyn PhysicalExpr>> {
+     let min_column_expr = expr_builder.min_column_expr()?;
+     let max_column_expr = expr_builder.max_column_expr()?;
+-    Ok(and_expr(
++    let stat_pred_expr = and_expr(
+         binary_expr(
+             min_column_expr,
+             Operator::LtEq,
+@@ -1854,7 +2145,29 @@ fn build_eq_statistics_expr(
+             Operator::LtEq,
+             max_column_expr,
+         ),
+-    ))
++    );
++
++    // auron: append dict_pred expr (stat && dictionary_contains(column)).
++    // The min/max statistics may be missing (null) for a container; in that
++    // case the statistics predicate is treated as "unknown" (null) and the
++    // row group is kept. The dictionary predicate keeps a row group only if
++    // the literal is present in the column's dictionary values.
++    // Dictionary pruning only applies to plain column comparisons; for
++    // cast-wrapped expressions fall back to plain statistics pruning (see
++    // `PruningExpressionBuilder::column_is_plain`).
++    if expr_builder.column_is_plain() {
++        let dict = expr_builder.dict_column_expr()?;
++        let has_no_stat_pred =
++            Arc::new(phys_expr::IsNullExpr::new(Arc::clone(&stat_pred_expr)));
++        let has_no_dict = Arc::new(phys_expr::IsNullExpr::new(Arc::clone(&dict)));
++        let dict_contained = expr_builder.dict_column_contains_expr()?;
++        Ok(and_expr(
++            or_expr(has_no_stat_pred, stat_pred_expr),
++            or_expr(has_no_dict, dict_contained),
++        ))
++    } else {
++        Ok(stat_pred_expr)
++    }
+ }
+ 
+ fn build_ne_statistics_expr(
+@@ -2172,6 +2485,7 @@ pub(crate) enum StatisticsType {
+     Max,
+     NullCount,
+     RowCount,
++    Dictionary,
+ }
+ 
+ #[cfg(test)]
+@@ -2594,7 +2908,7 @@ mod tests {
+             .unwrap();
+         // note pruning expression refers to row_count twice
+         assert_eq!(
+-            "c1_null_count@2 != row_count@3 AND c1_min@0 <= 100 AND 100 <= c1_max@1 AND c2_null_count@6 != row_count@3 AND c2_min@4 <= 200 AND 200 <= c2_max@5",
++            "c1_null_count@3 != row_count@4 AND (c1_min@0 <= 100 AND 100 <= c1_max@1 IS NULL OR c1_min@0 <= 100 AND 100 <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, 100)) AND c2_null_count@8 != row_count@4 AND (c2_min@5 <= 200 AND 200 <= c2_max@6 IS NULL OR c2_min@5 <= 200 AND 200 <= c2_max@6) AND (c2_dict@7 IS NULL OR array_has(c2_dict@7, 200))",
+             p.predicate_expr.to_string()
+         );
+ 
+@@ -2891,8 +3205,7 @@ mod tests {
+     #[test]
+     fn row_group_predicate_eq() -> Result<()> {
+         let schema = Schema::new(vec![Field::new("c1", DataType::Int32, false)]);
+-        let expected_expr =
+-            "c1_null_count@2 != row_count@3 AND c1_min@0 <= 1 AND 1 <= c1_max@1";
++        let expected_expr = "c1_null_count@3 != row_count@4 AND (c1_min@0 <= 1 AND 1 <= c1_max@1 IS NULL OR c1_min@0 <= 1 AND 1 <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, 1))";
+ 
+         // test column on the left
+         let expr = col("c1").eq(lit(1));
+@@ -3265,7 +3578,7 @@ mod tests {
+         let expr = col("c1")
+             .lt(lit(1))
+             .and(col("c2").eq(lit(2)).or(col("c2").eq(lit(3))));
+-        let expected_expr = "c1_null_count@1 != row_count@2 AND c1_min@0 < 1 AND (c2_null_count@5 != row_count@2 AND c2_min@3 <= 2 AND 2 <= c2_max@4 OR c2_null_count@5 != row_count@2 AND c2_min@3 <= 3 AND 3 <= c2_max@4)";
++        let expected_expr = "c1_null_count@1 != row_count@2 AND c1_min@0 < 1 AND (c2_null_count@6 != row_count@2 AND (c2_min@3 <= 2 AND 2 <= c2_max@4 IS NULL OR c2_min@3 <= 2 AND 2 <= c2_max@4) AND (c2_dict@5 IS NULL OR array_has(c2_dict@5, 2)) OR c2_null_count@6 != row_count@2 AND (c2_min@3 <= 3 AND 3 <= c2_max@4 IS NULL OR c2_min@3 <= 3 AND 3 <= c2_max@4) AND (c2_dict@5 IS NULL OR array_has(c2_dict@5, 3)))";
+         let predicate_expr =
+             test_build_predicate_expression(&expr, &schema, &mut required_columns);
+         assert_eq!(predicate_expr.to_string(), expected_expr);
+@@ -3319,10 +3632,24 @@ mod tests {
+                 c2_max_field.with_nullable(true) // could be nullable if stats are not present
+             )
+         );
++        // auron: c2 = 2 should add the c2 dictionary column
++        let c2_dict_field = Field::new(
++            "c2_dict",
++            DataType::List(Arc::new(Field::new("item", DataType::Int32, true))),
++            false,
++        );
++        assert_eq!(
++            required_columns.columns[5],
++            (
++                phys_expr::Column::new("c2", 1),
++                StatisticsType::Dictionary,
++                c2_dict_field.with_nullable(true) // could be nullable if dictionary is not present
++            )
++        );
+         // c2 = 2 should add c2_null_count
+         let c2_null_count_field = Field::new("c2_null_count", DataType::UInt64, false);
+         assert_eq!(
+-            required_columns.columns[5],
++            required_columns.columns[6],
+             (
+                 phys_expr::Column::new("c2", 1),
+                 StatisticsType::NullCount,
+@@ -3340,7 +3667,7 @@ mod tests {
+             )
+         );
+         // c2 = 3 shouldn't add any new statistics fields
+-        assert_eq!(required_columns.columns.len(), 6);
++        assert_eq!(required_columns.columns.len(), 7);
+ 
+         Ok(())
+     }
+@@ -3357,7 +3684,7 @@ mod tests {
+             vec![lit(1), lit(2), lit(3)],
+             false,
+         ));
+-        let expected_expr = "c1_null_count@2 != row_count@3 AND c1_min@0 <= 1 AND 1 <= c1_max@1 OR c1_null_count@2 != row_count@3 AND c1_min@0 <= 2 AND 2 <= c1_max@1 OR c1_null_count@2 != row_count@3 AND c1_min@0 <= 3 AND 3 <= c1_max@1";
++        let expected_expr = "c1_null_count@3 != row_count@4 AND (c1_min@0 <= 1 AND 1 <= c1_max@1 IS NULL OR c1_min@0 <= 1 AND 1 <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, 1)) OR c1_null_count@3 != row_count@4 AND (c1_min@0 <= 2 AND 2 <= c1_max@1 IS NULL OR c1_min@0 <= 2 AND 2 <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, 2)) OR c1_null_count@3 != row_count@4 AND (c1_min@0 <= 3 AND 3 <= c1_max@1 IS NULL OR c1_min@0 <= 3 AND 3 <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, 3))";
+         let predicate_expr =
+             test_build_predicate_expression(&expr, &schema, &mut RequiredColumns::new());
+         assert_eq!(predicate_expr.to_string(), expected_expr);
+@@ -3439,7 +3766,7 @@ mod tests {
+         // test c1 in(1, 2) and c2 BETWEEN 4 AND 5
+         let expr3 = expr1.and(expr2);
+ 
+-        let expected_expr = "(c1_null_count@2 != row_count@3 AND c1_min@0 <= 1 AND 1 <= c1_max@1 OR c1_null_count@2 != row_count@3 AND c1_min@0 <= 2 AND 2 <= c1_max@1) AND c2_null_count@5 != row_count@3 AND c2_max@4 >= 4 AND c2_null_count@5 != row_count@3 AND c2_min@6 <= 5";
++        let expected_expr = "(c1_null_count@3 != row_count@4 AND (c1_min@0 <= 1 AND 1 <= c1_max@1 IS NULL OR c1_min@0 <= 1 AND 1 <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, 1)) OR c1_null_count@3 != row_count@4 AND (c1_min@0 <= 2 AND 2 <= c1_max@1 IS NULL OR c1_min@0 <= 2 AND 2 <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, 2))) AND c2_null_count@6 != row_count@4 AND c2_max@5 >= 4 AND c2_null_count@6 != row_count@4 AND c2_min@7 <= 5";
+         let predicate_expr =
+             test_build_predicate_expression(&expr3, &schema, &mut RequiredColumns::new());
+         assert_eq!(predicate_expr.to_string(), expected_expr);
+@@ -3772,8 +4099,7 @@ mod tests {
+         let expr = col("c1").eq(lit(ScalarValue::Utf8(Some("test".to_string()))));
+         let predicate_expr =
+             test_build_predicate_expression(&expr, &schema, &mut RequiredColumns::new());
+-        let expected_expr =
+-            "c1_null_count@2 != row_count@3 AND c1_min@0 <= test AND test <= c1_max@1";
++        let expected_expr = "c1_null_count@3 != row_count@4 AND (c1_min@0 <= test AND test <= c1_max@1 IS NULL OR c1_min@0 <= test AND test <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, test))";
+         assert_eq!(predicate_expr.to_string(), expected_expr);
+ 
+         // Test with column cast to a dictionary with different key type
+@@ -3824,8 +4150,7 @@ mod tests {
+             ),
+             false,
+         )]);
+-        let expected_expr =
+-            "c1_null_count@2 != row_count@3 AND c1_min@0 <= test AND test <= c1_max@1";
++        let expected_expr = "c1_null_count@3 != row_count@4 AND (c1_min@0 <= test AND test <= c1_max@1 IS NULL OR c1_min@0 <= test AND test <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, test))";
+ 
+         // Test with a simple literal
+         let expr = col("c1").eq(lit(ScalarValue::Utf8(Some("test".to_string()))));
+@@ -6057,8 +6382,7 @@ mod tests {
+             &schema,
+             &mut RequiredColumns::new(),
+         );
+-        let expected =
+-            "c1_null_count@2 != row_count@3 AND c1_min@0 <= a AND a <= c1_max@1";
++        let expected = "c1_null_count@3 != row_count@4 AND (c1_min@0 <= a AND a <= c1_max@1 IS NULL OR c1_min@0 <= a AND a <= c1_max@1) AND (c1_dict@2 IS NULL OR array_has(c1_dict@2, a))";
+         assert_eq!(res.to_string(), expected);
+     }
+ }
+diff --git a/datafusion/common/src/pruning.rs b/datafusion/common/src/pruning.rs
+index a36ac9f79..a37e7ca06 100644
+--- a/datafusion/common/src/pruning.rs
++++ b/datafusion/common/src/pruning.rs
+@@ -129,6 +129,14 @@ pub trait PruningStatistics {
+         column: &Column,
+         values: &HashSet<ScalarValue>,
+     ) -> Option<BooleanArray>;
++
++    /// Returns dictionary values for the named column as a `ListArray`, one
++    /// list per container, if known. Used by auron's dictionary-filtering
++    /// pruning pass; the default implementation returns `None` (no
++    /// dictionary-based pruning).
++    fn dictionary_values(&self, _column: &Column) -> Option<ArrayRef> {
++        None
++    }
+ }
+ 
+ /// Prune files based on their partition values.
+diff --git a/datafusion/datasource-parquet/src/opener/mod.rs b/datafusion/datasource-parquet/src/opener/mod.rs
+index 693e9bd2c..134f7be35 100644
+--- a/datafusion/datasource-parquet/src/opener/mod.rs
++++ b/datafusion/datasource-parquet/src/opener/mod.rs
+@@ -20,6 +20,9 @@
+ mod early_stop;
+ mod encryption;
+ 
++// auron: restored legacy public-fields opener (removed upstream in 55.2.0)
++pub mod legacy;
++
+ use self::early_stop::EarlyStoppingStream;
+ #[cfg(feature = "parquet_encryption")]
+ use self::encryption::EncryptionContext;
+@@ -1111,6 +1114,7 @@ impl FiltersPreparedParquetOpen {
+                     rg_metadata,
+                     predicate,
+                     &prepared.file_metrics,
++                    None,
+                 );
+             } else {
+                 // Update metrics: statistics unavailable, so all row groups are
+diff --git a/datafusion/datasource-parquet/src/mod.rs b/datafusion/datasource-parquet/src/mod.rs
+index 35f831230..1cea684e8 100644
+--- a/datafusion/datasource-parquet/src/mod.rs
++++ b/datafusion/datasource-parquet/src/mod.rs
+@@ -52,6 +52,8 @@ pub use access_plan::{ParquetAccessPlan, ParquetRowSelection, RowGroupAccess};
+ pub use bloom_filter::BloomFilterStatistics;
+ pub use file_format::*;
+ pub use metrics::ParquetFileMetrics;
++// auron: re-export the restored legacy opener
++pub use opener::legacy::ParquetOpener;
+ pub use page_filter::PagePruningAccessPlanFilter;
+ pub use reader::*; // Expose so downstream crates can use it
+ pub use row_filter::build_row_filter;
+diff --git a/datafusion/datasource-parquet/src/opener/legacy.rs b/datafusion/datasource-parquet/src/opener/legacy.rs
+new file mode 100644
+index 000000000..04553fd41
+--- /dev/null
++++ b/datafusion/datasource-parquet/src/opener/legacy.rs
+@@ -0,0 +1,1651 @@
++// Licensed to the Apache Software Foundation (ASF) under one
++// or more contributor license agreements.  See the NOTICE file
++// distributed with this work for additional information
++// regarding copyright ownership.  The ASF licenses this file
++// to you under the Apache License, Version 2.0 (the
++// "License"); you may not use this file except in compliance
++// with the License.  You may obtain a copy of the License at
++//
++//   http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing,
++// software distributed under the License is distributed on an
++// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++// KIND, either express or implied.  See the License for the
++// specific language governing permissions and limitations
++// under the License.
++
++//! Legacy [`ParquetOpener`] restored for Auron (auron patch).
++//!
++//! Upstream datafusion 55.2.0 replaced the struct-based public
++//! `ParquetOpener` with an internal `ParquetMorselizer` state machine.
++//! Auron's native scan depends on the old public-fields opener, so this
++//! module restores it (adapted from datafusion 49.0.0) on top of the
++//! 55.2.0 public APIs.
++
++use std::sync::Arc;
++
++use crate::nested_schema_pruning::{clip_for_cast, count_leaves};
++use crate::page_filter::PagePruningAccessPlanFilter;
++use crate::row_group_filter::RowGroupAccessPlanFilter;
++use crate::{
++    BloomFilterStatistics, ParquetAccessPlan, ParquetFileMetrics,
++    ParquetFileReaderFactory, apply_file_schema_type_coercions,
++    coerce_int96_to_resolution, row_filter,
++};
++
++use arrow::datatypes::{FieldRef, Schema, SchemaRef, TimeUnit};
++use arrow::error::ArrowError;
++use datafusion_common::encryption::FileDecryptionProperties;
++use datafusion_common::{DataFusionError, Result, exec_err};
++use datafusion_datasource::PartitionedFile;
++use datafusion_datasource::file_stream::{FileOpenFuture, FileOpener};
++use datafusion_datasource::schema_adapter::SchemaAdapterFactory;
++use datafusion_physical_expr::simplifier::PhysicalExprSimplifier;
++use datafusion_physical_expr_adapter::PhysicalExprAdapterFactory;
++use datafusion_physical_expr_common::physical_expr::{
++    PhysicalExpr, is_dynamic_physical_expr,
++};
++use datafusion_physical_plan::metrics::{Count, ExecutionPlanMetricsSet, MetricBuilder};
++use datafusion_pruning::{FilePruner, PruningPredicate, build_pruning_predicate};
++
++use bytes::Bytes;
++use futures::{StreamExt, TryStreamExt, future::BoxFuture};
++use log::debug;
++use parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
++use parquet::arrow::async_reader::AsyncFileReader;
++use parquet::arrow::{ParquetRecordBatchStreamBuilder, ProjectionMask};
++use parquet::file::metadata::ParquetMetaData;
++use parquet::file::metadata::{PageIndexPolicy, ParquetMetaDataReader};
++
++/// auron: `Box<dyn AsyncFileReader + Send>` does not itself implement
++/// `AsyncFileReader` (the blanket impl only covers `Box<dyn AsyncFileReader>`),
++/// and the generic arrow-rs async reader APIs require a `Sized` reader. These
++/// thin adapters keep the original `+ Send` box intact -- it must be handed to
++/// `RowGroupAccessPlanFilter::prune_by_statistics`'s `dict_reader` parameter
++/// (auron dictionary pruning, patch 0005) and later moved into the stream
++/// builder -- while still allowing the `Sized` generic call sites.
++struct ReaderBorrow<'a>(&'a mut (dyn AsyncFileReader + Send));
++
++impl AsyncFileReader for ReaderBorrow<'_> {
++    fn get_bytes(
++        &mut self,
++        range: std::ops::Range<u64>,
++    ) -> BoxFuture<'_, parquet::errors::Result<Bytes>> {
++        self.0.get_bytes(range)
++    }
++
++    fn get_byte_ranges(
++        &mut self,
++        ranges: Vec<std::ops::Range<u64>>,
++    ) -> BoxFuture<'_, parquet::errors::Result<Vec<Bytes>>> {
++        self.0.get_byte_ranges(ranges)
++    }
++
++    fn get_metadata<'a>(
++        &'a mut self,
++        options: Option<&'a ArrowReaderOptions>,
++    ) -> BoxFuture<'a, parquet::errors::Result<Arc<ParquetMetaData>>> {
++        self.0.get_metadata(options)
++    }
++
++    fn get_bytes_sync(
++        &mut self,
++        range: std::ops::Range<u64>,
++    ) -> parquet::errors::Result<Bytes> {
++        self.0.get_bytes_sync(range)
++    }
++}
++
++struct OwnedSendReader(Box<dyn AsyncFileReader + Send>);
++
++impl AsyncFileReader for OwnedSendReader {
++    fn get_bytes(
++        &mut self,
++        range: std::ops::Range<u64>,
++    ) -> BoxFuture<'_, parquet::errors::Result<Bytes>> {
++        (&mut *self.0).get_bytes(range)
++    }
++
++    fn get_byte_ranges(
++        &mut self,
++        ranges: Vec<std::ops::Range<u64>>,
++    ) -> BoxFuture<'_, parquet::errors::Result<Vec<Bytes>>> {
++        (&mut *self.0).get_byte_ranges(ranges)
++    }
++
++    fn get_metadata<'a>(
++        &'a mut self,
++        options: Option<&'a ArrowReaderOptions>,
++    ) -> BoxFuture<'a, parquet::errors::Result<Arc<ParquetMetaData>>> {
++        (&mut *self.0).get_metadata(options)
++    }
++
++    fn get_bytes_sync(
++        &mut self,
++        range: std::ops::Range<u64>,
++    ) -> parquet::errors::Result<Bytes> {
++        (&mut *self.0).get_bytes_sync(range)
++    }
++}
++
++/// Implements [`FileOpener`] for a parquet file
++///
++/// auron: restored legacy opener with public fields, equivalent to the
++/// `ParquetOpener` removed by datafusion 55.2.0's migration to the
++/// `ParquetMorselizer` state machine.
++pub struct ParquetOpener {
++    /// Execution partition index
++    pub partition_index: usize,
++    /// Column indexes in `table_schema` needed by the query
++    pub projection: Arc<[usize]>,
++    /// Target number of rows in each output RecordBatch
++    pub batch_size: usize,
++    /// Optional limit on the number of rows to read
++    pub limit: Option<usize>,
++    /// Optional predicate to apply during the scan
++    pub predicate: Option<Arc<dyn PhysicalExpr>>,
++    /// Schema of the output table without partition columns.
++    /// This is the schema we coerce the physical file schema into.
++    pub logical_file_schema: SchemaRef,
++    /// Partition columns
++    pub partition_fields: Vec<FieldRef>,
++    /// Optional hint for how large the initial request to read parquet metadata
++    /// should be
++    pub metadata_size_hint: Option<usize>,
++    /// Metrics for reporting
++    pub metrics: ExecutionPlanMetricsSet,
++    /// Factory for instantiating parquet reader
++    pub parquet_file_reader_factory: Arc<dyn ParquetFileReaderFactory>,
++    /// Should the filters be evaluated during the parquet scan using
++    /// [`DatafusionArrowPredicate`](row_filter::DatafusionArrowPredicate)?
++    pub pushdown_filters: bool,
++    /// Should the filters be reordered to optimize the scan?
++    pub reorder_filters: bool,
++    /// Should the page index be read from parquet files, if present, to skip
++    /// data pages
++    pub enable_page_index: bool,
++    /// Should the bloom filter be read from parquet, if present, to skip row
++    /// groups
++    pub enable_bloom_filter: bool,
++    /// Schema adapter factory
++    pub schema_adapter_factory: Arc<dyn SchemaAdapterFactory>,
++    /// Should row group pruning be applied
++    pub enable_row_group_stats_pruning: bool,
++    /// Coerce INT96 timestamps to specific TimeUnit
++    pub coerce_int96: Option<TimeUnit>,
++    /// Optional parquet FileDecryptionProperties
++    pub file_decryption_properties: Option<Arc<FileDecryptionProperties>>,
++    /// Rewrite expressions in the context of the file schema
++    pub expr_adapter_factory: Option<Arc<dyn PhysicalExprAdapterFactory>>,
++}
++
++impl FileOpener for ParquetOpener {
++    fn open(&self, partitioned_file: PartitionedFile) -> Result<FileOpenFuture> {
++        let file_range = partitioned_file.range.clone();
++        let extensions = partitioned_file.extensions.clone();
++        let file_name = partitioned_file.object_meta.location.to_string();
++        let file_metrics =
++            ParquetFileMetrics::new(self.partition_index, &file_name, &self.metrics);
++
++        let metadata_size_hint = partitioned_file
++            .metadata_size_hint
++            .or(self.metadata_size_hint);
++
++        let mut async_file_reader: Box<dyn AsyncFileReader + Send> =
++            self.parquet_file_reader_factory.create_reader(
++                self.partition_index,
++                partitioned_file.clone(),
++                metadata_size_hint,
++                &self.metrics,
++            )?;
++
++        let batch_size = self.batch_size;
++
++        let projected_schema =
++            SchemaRef::from(self.logical_file_schema.project(&self.projection)?);
++        let schema_adapter = self.schema_adapter_factory.create(
++            Arc::clone(&projected_schema),
++            Arc::clone(&self.logical_file_schema),
++        );
++        let mut predicate = self.predicate.clone();
++        let logical_file_schema = Arc::clone(&self.logical_file_schema);
++        let partition_fields = self.partition_fields.clone();
++        let reorder_predicates = self.reorder_filters;
++        let pushdown_filters = self.pushdown_filters;
++        let coerce_int96 = self.coerce_int96;
++        let enable_bloom_filter = self.enable_bloom_filter;
++        let enable_row_group_stats_pruning = self.enable_row_group_stats_pruning;
++        let limit = self.limit;
++
++        let predicate_creation_errors = MetricBuilder::new(&self.metrics)
++            .global_counter("num_predicate_creation_errors");
++
++        let expr_adapter_factory = self.expr_adapter_factory.clone();
++        let mut predicate_file_schema = Arc::clone(&self.logical_file_schema);
++
++        let mut enable_page_index = self.enable_page_index;
++        let file_decryption_properties = self.file_decryption_properties.clone();
++
++        // For now, page index does not work with encrypted files. See:
++        // https://github.com/apache/arrow-rs/issues/7629
++        if file_decryption_properties.is_some() {
++            enable_page_index = false;
++        }
++
++        Ok(Box::pin(async move {
++            // Prune this file using the file level statistics and partition values.
++            // Since dynamic filters may have been updated since planning it is possible that we are able
++            // to prune files now that we couldn't prune at planning time.
++            // It is assumed that there is no point in doing pruning here if the predicate is not dynamic,
++            // as it would have been done at planning time.
++            // We'll also check this after every record batch we read,
++            // and if at some point we are able to prove we can prune the file using just the file level statistics
++            // we can end the stream early.
++            let mut file_pruner = predicate
++                .as_ref()
++                .map(|p| {
++                    Ok::<_, DataFusionError>(
++                        (is_dynamic_physical_expr(p)
++                            | partitioned_file.statistics.is_some())
++                        .then(|| {
++                            FilePruner::new(
++                                Arc::clone(p),
++                                &logical_file_schema,
++                                partition_fields.clone(),
++                                partitioned_file.clone(),
++                                predicate_creation_errors.clone(),
++                            )
++                        })
++                        .transpose()?,
++                    )
++                })
++                .transpose()?
++                .flatten();
++
++            if let Some(file_pruner) = &mut file_pruner {
++                if file_pruner.should_prune()? {
++                    // Return an empty stream immediately to skip the work of setting up the actual stream
++                    file_metrics.files_ranges_pruned_statistics.add_pruned(1);
++                    return Ok(futures::stream::empty().boxed());
++                }
++            }
++
++            // Don't load the page index yet. Since it is not stored inline in
++            // the footer, loading the page index if it is not needed will do
++            // unecessary I/O. We decide later if it is needed to evaluate the
++            // pruning predicates. Thus default to not requesting if from the
++            // underlying reader.
++            //
++            // auron: `ParquetMetaDataOptions` defaults to collapsing
++            // `page_encoding_stats` into a bitmask
++            // (`encoding_stats_as_mask == true`), which drops the
++            // `DICTIONARY_PAGE` entries that `get_dictionary_for_pruning`
++            // (auron patch 0005) relies on to locate dictionary pages for
++            // row-group dictionary pruning. Without disabling the mask here,
++            // dictionary pruning silently becomes a no-op at runtime (even
++            // though it's covered by unit tests that construct metadata
++            // directly with the mask disabled).
++            let mut options = ArrowReaderOptions::new()
++                .with_page_index(false)
++                .with_encoding_stats_as_mask(false);
++            #[cfg(feature = "parquet_encryption")]
++            if let Some(fd_val) = file_decryption_properties {
++                options = options.with_file_decryption_properties((*fd_val).clone());
++            }
++            let mut metadata_timer = file_metrics.metadata_load_time.timer();
++
++            // Begin by loading the metadata from the underlying reader (note
++            // the returned metadata may actually include page indexes as some
++            // readers may return page indexes even when not requested -- for
++            // example when they are cached)
++            //
++            // auron: `Box<dyn AsyncFileReader + Send>` does not itself
++            // implement `AsyncFileReader` (the blanket impl only covers
++            // `Box<dyn AsyncFileReader>`), and the generic arrow-rs APIs need
++            // a Sized reader. Borrow through the `ReaderBorrow` adapter; the
++            // box itself is kept as-is so it can later be handed to
++            // `prune_by_statistics` (dictionary pruning, auron patch 0005)
++            // and wrapped into the stream builder.
++            let mut reader_borrow = ReaderBorrow(&mut *async_file_reader);
++            let mut reader_metadata =
++                ArrowReaderMetadata::load_async(&mut reader_borrow, options.clone())
++                    .await?;
++            drop(reader_borrow);
++
++            // Note about schemas: we are actually dealing with **3 different schemas** here:
++            // - The table schema as defined by the TableProvider.
++            //   This is what the user sees, what they get when they `SELECT * FROM table`, etc.
++            // - The logical file schema: this is the table schema minus any hive partition columns and projections.
++            //   This is what the physicalfile schema is coerced to.
++            // - The physical file schema: this is the schema as defined by the parquet file. This is what the parquet file actually contains.
++            let mut physical_file_schema = Arc::clone(reader_metadata.schema());
++
++            // The schema loaded from the file may not be the same as the
++            // desired schema (for example if we want to instruct the parquet
++            // reader to read strings using Utf8View instead). Update if necessary
++            if let Some(merged) = apply_file_schema_type_coercions(
++                &logical_file_schema,
++                &physical_file_schema,
++            ) {
++                physical_file_schema = Arc::new(merged);
++                options = options.with_schema(Arc::clone(&physical_file_schema));
++                reader_metadata = ArrowReaderMetadata::try_new(
++                    Arc::clone(reader_metadata.metadata()),
++                    options.clone(),
++                )?;
++            }
++
++            if coerce_int96.is_some() {
++                if let Some(merged) = coerce_int96_to_resolution(
++                    reader_metadata.parquet_schema(),
++                    &physical_file_schema,
++                    &(coerce_int96.unwrap()),
++                ) {
++                    physical_file_schema = Arc::new(merged);
++                    options = options.with_schema(Arc::clone(&physical_file_schema));
++                    reader_metadata = ArrowReaderMetadata::try_new(
++                        Arc::clone(reader_metadata.metadata()),
++                        options.clone(),
++                    )?;
++                }
++            }
++
++            // Adapt the predicate to the physical file schema.
++            // This evaluates missing columns and inserts any necessary casts.
++            if let Some(expr_adapter_factory) = expr_adapter_factory {
++                predicate = predicate
++                    .map(|p| {
++                        let expr = expr_adapter_factory
++                            .create(
++                                Arc::clone(&logical_file_schema),
++                                Arc::clone(&physical_file_schema),
++                            )?
++                            .rewrite(p)?;
++                        // After rewriting to the file schema, further simplifications may be possible.
++                        // For example, if `'a' = col_that_is_missing` becomes `'a' = NULL` that can then be simplified to `FALSE`
++                        // and we can avoid doing any more work on the file (bloom filters, loading the page index, etc.).
++                        PhysicalExprSimplifier::new(&physical_file_schema).simplify(expr)
++                    })
++                    .transpose()?;
++                predicate_file_schema = Arc::clone(&physical_file_schema);
++            }
++
++            // Build predicates for this specific file
++            let (pruning_predicate, page_pruning_predicate) = build_pruning_predicates(
++                predicate.as_ref(),
++                &predicate_file_schema,
++                &predicate_creation_errors,
++            );
++
++            // The page index is not stored inline in the parquet footer so the
++            // code above may not have read the page index structures yet. If we
++            // need them for reading and they aren't yet loaded, we need to load them now.
++            if should_enable_page_index(enable_page_index, &page_pruning_predicate) {
++                let mut reader_borrow = ReaderBorrow(&mut *async_file_reader);
++                reader_metadata = load_page_index(
++                    reader_metadata,
++                    &mut reader_borrow,
++                    // Since we're manually loading the page index the option here should not matter but we pass it in for consistency
++                    options.with_page_index(true),
++                )
++                .await?;
++            }
++
++            metadata_timer.stop();
++
++            // Determine which row groups to actually read. The idea is to skip
++            // as many row groups as possible based on the metadata and query.
++            // The builder is created only AFTER statistics/dictionary pruning
++            // below, because auron's dictionary pruning (patch 0005) needs the
++            // reader to fetch dictionary pages on demand.
++            let file_metadata = Arc::clone(reader_metadata.metadata());
++            let rg_metadata = file_metadata.row_groups();
++            let parquet_schema = file_metadata.file_metadata().schema_descr();
++
++            let (schema_mapping, adapted_projections) =
++                schema_adapter.map_schema(&physical_file_schema)?;
++
++            let mask = nested_projection_mask(
++                parquet_schema,
++                &physical_file_schema,
++                &projected_schema,
++                schema_adapter.as_ref(),
++                &adapted_projections,
++            );
++
++            // track which row groups to actually read
++            let access_plan =
++                create_initial_plan(&file_name, extensions, rg_metadata.len())?;
++            let mut row_groups = RowGroupAccessPlanFilter::new(access_plan);
++            // if there is a range restricting what parts of the file to read
++            if let Some(range) = file_range.as_ref() {
++                row_groups.prune_by_range(rg_metadata, range);
++            }
++            // If there is a predicate that can be evaluated against the metadata
++            if let Some(pruning_predicate) = pruning_predicate.as_ref() {
++                let pruning_predicate = pruning_predicate.as_ref();
++                if enable_row_group_stats_pruning {
++                    row_groups.prune_by_statistics(
++                        &physical_file_schema,
++                        parquet_schema,
++                        rg_metadata,
++                        pruning_predicate,
++                        &file_metrics,
++                        // auron: pass the reader so dictionary-based pruning
++                        // (auron patch 0005) can fetch dictionary pages on
++                        // demand. The reader is moved into the stream builder
++                        // right after this call.
++                        Some(&mut async_file_reader),
++                    );
++                }
++            }
++
++            let mut builder = ParquetRecordBatchStreamBuilder::new_with_metadata(
++                OwnedSendReader(async_file_reader),
++                reader_metadata,
++            );
++
++            // Filter pushdown: evaluate predicates during scan
++            if let Some(predicate) = pushdown_filters.then_some(predicate).flatten() {
++                let row_filter = row_filter::build_row_filter(
++                    &predicate,
++                    &physical_file_schema,
++                    builder.metadata(),
++                    reorder_predicates,
++                    &file_metrics,
++                );
++
++                match row_filter {
++                    Ok(Some(filter)) => {
++                        builder = builder.with_row_filter(filter);
++                    }
++                    Ok(None) => {}
++                    Err(e) => {
++                        debug!(
++                            "Ignoring error building row filter for '{predicate:?}': {e}"
++                        );
++                    }
++                };
++            };
++
++            if let Some(pruning_predicate) = pruning_predicate.as_ref() {
++                let pruning_predicate = pruning_predicate.as_ref();
++                if enable_bloom_filter && !row_groups.is_empty() {
++                    // auron: 55.2.0 moved bloom-filter fetching to the caller;
++                    // fetch the bloom filters for the predicate's literal
++                    // columns per row group (mirrors upstream behavior).
++                    let literal_columns = pruning_predicate.literal_columns();
++                    let parquet_columns: Vec<_> = literal_columns
++                        .into_iter()
++                        .filter_map(|column_name| {
++                            let (column_idx, _) = parquet::arrow::parquet_column(
++                                parquet_schema,
++                                pruning_predicate.schema(),
++                                &column_name,
++                            )?;
++                            Some((
++                                column_name,
++                                column_idx,
++                                parquet_schema.column(column_idx).physical_type(),
++                                parquet_schema.column(column_idx).type_length(),
++                            ))
++                        })
++                        .collect::<Vec<_>>();
++                    let mut row_group_bloom_filters =
++                        Vec::with_capacity(rg_metadata.len());
++                    row_group_bloom_filters
++                        .resize_with(rg_metadata.len(), BloomFilterStatistics::new);
++                    for idx in row_groups.row_group_indexes() {
++                        let mut bloom_filters =
++                            BloomFilterStatistics::with_capacity(parquet_columns.len());
++                        for (column_name, column_idx, physical_type, type_length) in
++                            &parquet_columns
++                        {
++                            let bf = match builder
++                                .get_row_group_column_bloom_filter(idx, *column_idx)
++                                .await
++                            {
++                                Ok(Some(bf)) => bf,
++                                Ok(None) => continue,
++                                Err(e) => {
++                                    log::debug!(
++                                        "Ignoring error reading bloom filter: {e}"
++                                    );
++                                    file_metrics.predicate_evaluation_errors.add(1);
++                                    continue;
++                                }
++                            };
++                            bloom_filters.insert(
++                                column_name.clone(),
++                                bf,
++                                *physical_type,
++                                *type_length,
++                            );
++                        }
++                        row_group_bloom_filters[idx] = bloom_filters;
++                    }
++                    row_groups.prune_by_bloom_filters(
++                        pruning_predicate,
++                        &file_metrics,
++                        &row_group_bloom_filters,
++                    );
++                }
++            }
++
++            let mut access_plan = row_groups.build();
++
++            // page index pruning: if all data on individual pages can
++            // be ruled using page metadata, rows from other columns
++            // with that range can be skipped as well
++            if enable_page_index && !access_plan.is_empty() {
++                if let Some(p) = page_pruning_predicate {
++                    access_plan = p.prune_plan_with_page_index(
++                        access_plan,
++                        &physical_file_schema,
++                        builder.parquet_schema(),
++                        file_metadata.as_ref(),
++                        &file_metrics,
++                    );
++                }
++            }
++
++            let row_group_indexes = access_plan.row_group_indexes();
++            if let Some(row_selection) =
++                access_plan.into_overall_row_selection(rg_metadata)?
++            {
++                builder = builder.with_row_selection(row_selection);
++            }
++
++            if let Some(limit) = limit {
++                builder = builder.with_limit(limit)
++            }
++
++            let adaptive_mem_size = 1048576;
++            let total_uncompressed_size = rg_metadata
++                .iter()
++                .map(|rg| {
++                    rg.columns()
++                        .iter()
++                        .enumerate()
++                        .filter(|(idx, _)| mask.leaf_included(*idx))
++                        .map(|(_, col)| col.uncompressed_size())
++                        .sum::<i64>()
++                })
++                .sum::<i64>();
++            let total_num_rows = rg_metadata.iter().map(|rg| rg.num_rows()).sum::<i64>();
++            let adaptive_batch_size = batch_size
++                .min(
++                    (adaptive_mem_size * total_num_rows / total_uncompressed_size.max(1))
++                        as usize,
++                )
++                .max(1);
++            log::info!(
++                "executing parquet scan with adaptive batch size: {adaptive_batch_size}"
++            );
++            let batch_size = adaptive_batch_size;
++
++            let stream = builder
++                .with_projection(mask)
++                .with_batch_size(batch_size)
++                .with_row_groups(row_group_indexes)
++                .build()?;
++
++            let adapted = stream
++                .map_err(|e| {
++                    DataFusionError::ArrowError(
++                        Box::new(ArrowError::ExternalError(Box::new(e))),
++                        None,
++                    )
++                })
++                .map(move |maybe_batch| {
++                    maybe_batch.and_then(|b| {
++                        schema_mapping.map_batch(b).map_err(|e| {
++                            DataFusionError::ArrowError(
++                                Box::new(ArrowError::ExternalError(Box::new(e))),
++                                None,
++                            )
++                        })
++                    })
++                });
++
++            Ok(adapted.boxed())
++        }))
++    }
++}
++
++fn nested_projection_mask(
++    parquet_schema: &parquet::schema::types::SchemaDescriptor,
++    physical_schema: &Schema,
++    projected_schema: &Schema,
++    schema_adapter: &dyn datafusion_datasource::schema_adapter::SchemaAdapter,
++    roots: &[usize],
++) -> ProjectionMask {
++    let root_mask = ProjectionMask::roots(parquet_schema, roots.iter().copied());
++    if physical_schema.fields().len() != parquet_schema.root_schema().get_fields().len() {
++        return root_mask;
++    }
++    let mut leaves_by_root = vec![Vec::new(); physical_schema.fields().len()];
++    for leaf in 0..parquet_schema.num_columns() {
++        leaves_by_root[parquet_schema.get_column_root_idx(leaf)].push(leaf);
++    }
++    let mut targets = vec![Vec::new(); physical_schema.fields().len()];
++    for (index, field) in projected_schema.fields().iter().enumerate() {
++        if let Some(root) = schema_adapter.map_column_index(index, physical_schema) {
++            if let Some(fields) = targets.get_mut(root) {
++                fields.push(field.data_type());
++            }
++        }
++    }
++    let mut leaves = Vec::new();
++    for (root, physical) in physical_schema.fields().iter().enumerate() {
++        let root_leaves = &leaves_by_root[root];
++        if !root_leaves
++            .iter()
++            .any(|&leaf| root_mask.leaf_included(leaf))
++        {
++            continue;
++        }
++        let clipped = match targets[root].as_slice() {
++            [target] if count_leaves(physical.data_type()) == root_leaves.len() => {
++                clip_for_cast(physical.data_type(), target)
++            }
++            _ => None,
++        };
++        if let Some((kept, _)) = clipped {
++            leaves.extend(kept.into_iter().map(|offset| root_leaves[offset]));
++        } else {
++            leaves.extend_from_slice(root_leaves);
++        }
++    }
++    ProjectionMask::leaves(parquet_schema, leaves)
++}
++
++/// Return the initial [`ParquetAccessPlan`]
++///
++/// If the user has supplied one as an extension, use that
++/// otherwise return a plan that scans all row groups
++///
++/// Returns an error if an invalid `ParquetAccessPlan` is provided
++///
++/// Note: file_name is only used for error messages
++fn create_initial_plan(
++    file_name: &str,
++    extensions: datafusion_common::extensions::Extensions,
++    row_group_count: usize,
++) -> Result<ParquetAccessPlan> {
++    if let Some(access_plan) = extensions.get::<ParquetAccessPlan>() {
++        let plan_len = access_plan.len();
++        if plan_len != row_group_count {
++            return exec_err!(
++                "Invalid ParquetAccessPlan for {file_name}. Specified {plan_len} row groups, but file has {row_group_count}"
++            );
++        }
++
++        // check row group count matches the plan
++        return Ok(access_plan.clone());
++    } else {
++        debug!("DataSourceExec Ignoring unknown extension specified for {file_name}");
++    }
++
++    // default to scanning all row groups
++    Ok(ParquetAccessPlan::new_all(row_group_count))
++}
++
++/// Build a page pruning predicate from an optional predicate expression.
++/// If the predicate is None or the predicate cannot be converted to a page pruning
++/// predicate, return None.
++fn build_page_pruning_predicate(
++    predicate: &Arc<dyn PhysicalExpr>,
++    file_schema: &SchemaRef,
++) -> Arc<PagePruningAccessPlanFilter> {
++    Arc::new(PagePruningAccessPlanFilter::new(
++        predicate,
++        Arc::clone(file_schema),
++    ))
++}
++
++fn build_pruning_predicates(
++    predicate: Option<&Arc<dyn PhysicalExpr>>,
++    file_schema: &SchemaRef,
++    predicate_creation_errors: &Count,
++) -> (
++    Option<Arc<PruningPredicate>>,
++    Option<Arc<PagePruningAccessPlanFilter>>,
++) {
++    let Some(predicate) = predicate.as_ref() else {
++        return (None, None);
++    };
++    let pruning_predicate = build_pruning_predicate(
++        Arc::clone(predicate),
++        file_schema,
++        predicate_creation_errors,
++    );
++    let page_pruning_predicate = build_page_pruning_predicate(predicate, file_schema);
++    (pruning_predicate, Some(page_pruning_predicate))
++}
++
++/// Returns a `ArrowReaderMetadata` with the page index loaded, loading
++/// it from the underlying `AsyncFileReader` if necessary.
++async fn load_page_index<T: AsyncFileReader>(
++    reader_metadata: ArrowReaderMetadata,
++    input: &mut T,
++    options: ArrowReaderOptions,
++) -> Result<ArrowReaderMetadata> {
++    let parquet_metadata = reader_metadata.metadata();
++    let missing_column_index = parquet_metadata.column_index().is_none();
++    let missing_offset_index = parquet_metadata.offset_index().is_none();
++    // You may ask yourself: why are we even checking if the page index is already loaded here?
++    // Didn't we explicitly *not* load it above?
++    // Well it's possible that a custom implementation of `AsyncFileReader` gives you
++    // the page index even if you didn't ask for it (e.g. because it's cached)
++    // so it's important to check that here to avoid extra work.
++    if missing_column_index || missing_offset_index {
++        let m = Arc::try_unwrap(Arc::clone(parquet_metadata))
++            .unwrap_or_else(|e| e.as_ref().clone());
++        let mut reader = ParquetMetaDataReader::new_with_metadata(m)
++            .with_page_index_policy(PageIndexPolicy::Required);
++        reader.load_page_index(input).await?;
++        let new_parquet_metadata = reader.finish()?;
++        let new_arrow_reader =
++            ArrowReaderMetadata::try_new(Arc::new(new_parquet_metadata), options)?;
++        Ok(new_arrow_reader)
++    } else {
++        // No need to load the page index again, just return the existing metadata
++        Ok(reader_metadata)
++    }
++}
++
++fn should_enable_page_index(
++    enable_page_index: bool,
++    page_pruning_predicate: &Option<Arc<PagePruningAccessPlanFilter>>,
++) -> bool {
++    enable_page_index
++        && page_pruning_predicate.is_some()
++        && page_pruning_predicate
++            .as_ref()
++            .map(|p| p.filter_number() > 0)
++            .unwrap_or(false)
++}
++
++#[cfg(test)]
++mod test {
++    use std::sync::Arc;
++
++    use crate::ParquetFileReaderFactory;
++    use arrow::{
++        datatypes::{DataType, Field, Schema, SchemaRef},
++        record_batch::RecordBatch,
++    };
++    use bytes::{BufMut, BytesMut};
++    use datafusion_common::{
++        ColumnStatistics, ScalarValue, Statistics, stats::Precision,
++    };
++    use datafusion_datasource::PartitionedFile;
++    use datafusion_datasource::file_stream::FileOpener;
++    use datafusion_datasource::schema_adapter::{
++        SchemaAdapter, SchemaAdapterFactory, SchemaMapper,
++    };
++    use datafusion_expr::{col, lit};
++    use datafusion_physical_expr::{PhysicalExpr, planner::logical2physical};
++    use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
++    use futures::{Stream, StreamExt};
++    use object_store::{
++        ObjectMeta, ObjectStore, ObjectStoreExt, memory::InMemory, path::Path,
++    };
++    use parquet::arrow::ArrowWriter;
++
++    use crate::DefaultParquetFileReaderFactory;
++
++    use super::ParquetOpener;
++
++    async fn count_batches_and_rows(
++        mut stream: std::pin::Pin<
++            Box<dyn Stream<Item = datafusion_common::Result<RecordBatch>> + Send>,
++        >,
++    ) -> (usize, usize) {
++        let mut num_batches = 0;
++        let mut num_rows = 0;
++        while let Some(Ok(batch)) = stream.next().await {
++            num_rows += batch.num_rows();
++            num_batches += 1;
++        }
++        (num_batches, num_rows)
++    }
++
++    async fn write_parquet(
++        store: Arc<dyn ObjectStore>,
++        filename: &str,
++        batch: RecordBatch,
++    ) -> usize {
++        let mut out = BytesMut::new().writer();
++        {
++            let mut writer =
++                ArrowWriter::try_new(&mut out, batch.schema(), None).unwrap();
++            writer.write(&batch).unwrap();
++            writer.finish().unwrap();
++        }
++        let data = out.into_inner().freeze();
++        let data_len = data.len();
++        store.put(&Path::from(filename), data.into()).await.unwrap();
++        data_len
++    }
++
++    fn make_partitioned_file(data_size: usize, filename: &str) -> PartitionedFile {
++        PartitionedFile::new(filename.to_string(), u64::try_from(data_size).unwrap())
++    }
++
++    /// auron: a minimal [`AsyncFileReader`]/[`ParquetFileReaderFactory`] pair
++    /// that mirrors Auron's own `FsReaderFactory`/`ParquetFileReaderRef`
++    /// (`native-engine/datafusion-ext-plans/src/parquet_exec.rs`): unlike
++    /// upstream's `DefaultParquetFileReaderFactory`
++    /// (`datafusion_datasource_parquet::reader::ParquetFileReader`), whose
++    /// `get_metadata` silently drops everything from the caller-supplied
++    /// `ArrowReaderOptions` except the page-index policy and decryption
++    /// properties -- in particular `encoding_stats_as_mask` -- this always
++    /// loads metadata with `encoding_stats_as_mask(false)`, which dictionary
++    /// row-group pruning (auron patch 0005 / `get_dictionary_for_pruning`)
++    /// depends on. Used by [`test_dictionary_pruning_end_to_end`] to
++    /// exercise the *real* `ParquetOpener::open` path the way Auron's own
++    /// reader factory actually behaves, as opposed to upstream's default
++    /// (which would make the test fail for a reason unrelated to the
++    /// `ParquetOpener`/pruning-predicate logic this test targets).
++    #[derive(Clone)]
++    struct MaskAwareReader(bytes::Bytes);
++
++    impl parquet::arrow::async_reader::AsyncFileReader for MaskAwareReader {
++        fn get_bytes(
++            &mut self,
++            range: std::ops::Range<u64>,
++        ) -> futures::future::BoxFuture<'_, parquet::errors::Result<bytes::Bytes>>
++        {
++            let data = self.0.clone();
++            Box::pin(
++                async move { Ok(data.slice(range.start as usize..range.end as usize)) },
++            )
++        }
++
++        fn get_metadata<'a>(
++            &'a mut self,
++            _options: Option<&'a parquet::arrow::arrow_reader::ArrowReaderOptions>,
++        ) -> futures::future::BoxFuture<
++            'a,
++            parquet::errors::Result<Arc<parquet::file::metadata::ParquetMetaData>>,
++        > {
++            let data = self.0.clone();
++            Box::pin(async move {
++                let options = parquet::file::metadata::ParquetMetaDataOptions::new()
++                    .with_encoding_stats_as_mask(false);
++                parquet::file::metadata::ParquetMetaDataReader::new()
++                    .with_metadata_options(Some(options))
++                    .parse_and_finish(&data)
++                    .map(Arc::new)
++            })
++        }
++
++        fn get_bytes_sync(
++            &mut self,
++            range: std::ops::Range<u64>,
++        ) -> parquet::errors::Result<bytes::Bytes> {
++            Ok(self.0.slice(range.start as usize..range.end as usize))
++        }
++    }
++
++    #[derive(Debug)]
++    struct MaskAwareReaderFactory(bytes::Bytes);
++
++    impl ParquetFileReaderFactory for MaskAwareReaderFactory {
++        fn create_reader(
++            &self,
++            _partition_index: usize,
++            _partitioned_file: PartitionedFile,
++            _metadata_size_hint: Option<usize>,
++            _metrics: &ExecutionPlanMetricsSet,
++        ) -> datafusion_common::Result<
++            Box<dyn parquet::arrow::async_reader::AsyncFileReader + Send>,
++        > {
++            Ok(Box::new(MaskAwareReader(self.0.clone())))
++        }
++    }
++
++    fn make_opener(
++        store: &Arc<dyn ObjectStore>,
++        predicate: Option<Arc<dyn PhysicalExpr>>,
++        schema: SchemaRef,
++        projection: Arc<[usize]>,
++    ) -> ParquetOpener {
++        ParquetOpener {
++            partition_index: 0,
++            projection,
++            batch_size: 1024,
++            limit: None,
++            predicate,
++            logical_file_schema: schema.clone(),
++            partition_fields: vec![],
++            metadata_size_hint: None,
++            metrics: ExecutionPlanMetricsSet::new(),
++            parquet_file_reader_factory: Arc::new(DefaultParquetFileReaderFactory::new(
++                Arc::clone(store),
++            )),
++            pushdown_filters: false,
++            reorder_filters: false,
++            enable_page_index: false,
++            enable_bloom_filter: false,
++            schema_adapter_factory: Arc::new(TestSchemaAdapterFactory),
++            enable_row_group_stats_pruning: true,
++            coerce_int96: None,
++            file_decryption_properties: None,
++            expr_adapter_factory: None,
++        }
++    }
++
++    #[tokio::test]
++    async fn test_nested_projection_skips_unused_column_chunks() {
++        use futures::TryStreamExt;
++
++        use super::{
++            ArrowReaderOptions, AsyncFileReader, BoxFuture, Bytes, ParquetMetaData,
++        };
++        use arrow::array::{ArrayRef, Int32Array, StructArray};
++        use arrow::buffer::NullBuffer;
++        use parquet::file::metadata::ParquetMetaDataReader;
++
++        #[derive(Debug)]
++        struct ReaderFactory {
++            data: Bytes,
++            forbidden: Vec<std::ops::Range<u64>>,
++        }
++
++        struct Reader {
++            inner: MaskAwareReader,
++            forbidden: Vec<std::ops::Range<u64>>,
++        }
++
++        impl AsyncFileReader for Reader {
++            fn get_bytes(
++                &mut self,
++                range: std::ops::Range<u64>,
++            ) -> BoxFuture<'_, parquet::errors::Result<Bytes>> {
++                for forbidden in &self.forbidden {
++                    assert!(range.end <= forbidden.start || range.start >= forbidden.end);
++                }
++                self.inner.get_bytes(range)
++            }
++
++            fn get_metadata<'a>(
++                &'a mut self,
++                options: Option<&'a ArrowReaderOptions>,
++            ) -> BoxFuture<'a, parquet::errors::Result<Arc<ParquetMetaData>>>
++            {
++                self.inner.get_metadata(options)
++            }
++        }
++
++        impl ParquetFileReaderFactory for ReaderFactory {
++            fn create_reader(
++                &self,
++                _partition_index: usize,
++                _partitioned_file: PartitionedFile,
++                _metadata_size_hint: Option<usize>,
++                _metrics: &ExecutionPlanMetricsSet,
++            ) -> datafusion_common::Result<Box<dyn AsyncFileReader + Send>> {
++                Ok(Box::new(Reader {
++                    inner: MaskAwareReader(self.data.clone()),
++                    forbidden: self.forbidden.clone(),
++                }))
++            }
++        }
++
++        let store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
++        let value: ArrayRef = Arc::new(Int32Array::from(vec![Some(1), None, Some(3)]));
++        let nulls = Some(NullBuffer::from(vec![true, false, true]));
++        let inner_fields = vec![
++            Arc::new(Field::new("unused", DataType::Int32, true)),
++            Arc::new(Field::new("value", DataType::Int32, true)),
++        ];
++        let inner: ArrayRef = Arc::new(StructArray::new(
++            inner_fields.clone().into(),
++            vec![value.clone(), value.clone()],
++            nulls.clone(),
++        ));
++        let outer_fields = vec![
++            Arc::new(Field::new("unused", DataType::Int32, true)),
++            Arc::new(Field::new("inner", inner.data_type().clone(), true)),
++        ];
++        let outer: ArrayRef = Arc::new(StructArray::new(
++            outer_fields.into(),
++            vec![value.clone(), inner],
++            nulls.clone(),
++        ));
++        let schema = Arc::new(Schema::new(vec![
++            Field::new("id", DataType::Int32, true),
++            Field::new("s", outer.data_type().clone(), true),
++        ]));
++        let batch = RecordBatch::try_new(schema, vec![value.clone(), outer]).unwrap();
++        let data_size = write_parquet(store.clone(), "nested.parquet", batch).await;
++        let data = store
++            .get(&Path::from("nested.parquet"))
++            .await
++            .unwrap()
++            .bytes()
++            .await
++            .unwrap();
++        let metadata = ParquetMetaDataReader::new()
++            .parse_and_finish(&data)
++            .unwrap();
++        let forbidden = [1, 2]
++            .into_iter()
++            .map(|leaf| {
++                let (start, len) = metadata.row_group(0).column(leaf).byte_range();
++                start..start + len
++            })
++            .collect();
++        let inner: ArrayRef = Arc::new(StructArray::new(
++            vec![inner_fields[1].clone()].into(),
++            vec![value.clone()],
++            nulls.clone(),
++        ));
++        let outer: ArrayRef = Arc::new(StructArray::new(
++            vec![Arc::new(Field::new(
++                "inner",
++                inner.data_type().clone(),
++                true,
++            ))]
++            .into(),
++            vec![inner],
++            nulls,
++        ));
++        let schema = Arc::new(Schema::new(vec![
++            Field::new("id", DataType::Int32, true),
++            Field::new("s", outer.data_type().clone(), true),
++        ]));
++        let expected = RecordBatch::try_new(schema.clone(), vec![value, outer]).unwrap();
++        let mut opener = make_opener(&store, None, schema, Arc::new([0, 1]));
++        opener.parquet_file_reader_factory = Arc::new(ReaderFactory { data, forbidden });
++        let stream = opener
++            .open(make_partitioned_file(data_size, "nested.parquet"))
++            .unwrap()
++            .await
++            .unwrap();
++        let batches = stream.try_collect::<Vec<_>>().await.unwrap();
++        assert_eq!(batches, vec![expected]);
++    }
++
++    #[tokio::test]
++    async fn test_adaptive_batch_size() {
++        use arrow::array::{Int32Array, StringArray};
++        use parquet::file::metadata::ParquetMetaDataReader;
++
++        for (num_rows, width) in [(1024, 4096), (4, 2 * 1048576)] {
++            let store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
++            let schema = Arc::new(Schema::new(vec![
++                Field::new("id", DataType::Int32, false),
++                Field::new("payload", DataType::Utf8, false),
++            ]));
++            let padding = "x".repeat(width);
++            let batch = RecordBatch::try_new(
++                schema.clone(),
++                vec![
++                    Arc::new(Int32Array::from_iter_values(0..num_rows as i32)),
++                    Arc::new(StringArray::from_iter_values(
++                        (0..num_rows).map(|i| format!("{i}:{padding}")),
++                    )),
++                ],
++            )
++            .unwrap();
++            let data_size =
++                write_parquet(store.clone(), "test.parquet", batch.clone()).await;
++            let data = store
++                .get(&Path::from("test.parquet"))
++                .await
++                .unwrap()
++                .bytes()
++                .await
++                .unwrap();
++            let metadata = ParquetMetaDataReader::new()
++                .parse_and_finish(&data)
++                .unwrap();
++            assert_eq!(metadata.num_row_groups(), 1);
++            let row_group = metadata.row_group(0);
++
++            for projection in [vec![0, 1], vec![0], vec![]] {
++                let uncompressed_size = projection
++                    .iter()
++                    .map(|&idx| row_group.column(idx).uncompressed_size())
++                    .sum::<i64>();
++                let adaptive_size =
++                    (1048576 * num_rows as i64 / uncompressed_size.max(1)) as usize;
++                if projection.len() == 2 {
++                    assert!(adaptive_size < num_rows);
++                    if width > 1048576 {
++                        assert_eq!(adaptive_size, 0);
++                    }
++                } else {
++                    assert!(adaptive_size >= num_rows);
++                }
++
++                for batch_size in [num_rows, 1] {
++                    let expected_size = batch_size.min(adaptive_size).max(1);
++                    let expected = batch.project(&projection).unwrap();
++                    let mut opener = make_opener(
++                        &store,
++                        None,
++                        schema.clone(),
++                        Arc::from(projection.clone()),
++                    );
++                    opener.batch_size = batch_size;
++                    let file = make_partitioned_file(data_size, "test.parquet");
++                    let mut stream = opener.open(file).unwrap().await.unwrap();
++                    let mut offset = 0;
++                    while let Some(result) = stream.next().await {
++                        let output = result.unwrap();
++                        let expected_rows = expected_size.min(num_rows - offset);
++                        assert_eq!(output.num_rows(), expected_rows);
++                        assert_eq!(output, expected.slice(offset, expected_rows));
++                        offset += expected_rows;
++                    }
++                    assert_eq!(offset, num_rows);
++                }
++            }
++        }
++    }
++
++    #[tokio::test]
++    async fn test_prune_on_statistics() {
++        let store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
++
++        let batch = datafusion_common::record_batch!(
++            ("a", Int32, vec![Some(1), Some(2), Some(2)]),
++            ("b", Float32, vec![Some(1.0), Some(2.0), None])
++        )
++        .unwrap();
++
++        let data_size =
++            write_parquet(Arc::clone(&store), "test.parquet", batch.clone()).await;
++
++        let schema = batch.schema();
++        let mut file = make_partitioned_file(data_size, "test.parquet");
++        file.statistics = Some(Arc::new(
++            Statistics::new_unknown(&schema)
++                .add_column_statistics(ColumnStatistics::new_unknown())
++                .add_column_statistics(
++                    ColumnStatistics::new_unknown()
++                        .with_min_value(Precision::Exact(ScalarValue::Float32(Some(1.0))))
++                        .with_max_value(Precision::Exact(ScalarValue::Float32(Some(2.0))))
++                        .with_null_count(Precision::Exact(1)),
++                ),
++        ));
++
++        // A filter on "a" should not exclude any rows even if it matches the data
++        let expr = col("a").eq(lit(1));
++        let predicate = logical2physical(&expr, &schema);
++        let opener =
++            make_opener(&store, Some(predicate), schema.clone(), Arc::new([0, 1]));
++        let stream = opener.open(file.clone()).unwrap().await.unwrap();
++        let (num_batches, num_rows) = count_batches_and_rows(stream).await;
++        assert_eq!(num_batches, 1);
++        assert_eq!(num_rows, 3);
++
++        // A filter on `b = 5.0` should exclude all rows
++        let expr = col("b").eq(lit(ScalarValue::Float32(Some(5.0))));
++        let predicate = logical2physical(&expr, &schema);
++        let opener =
++            make_opener(&store, Some(predicate), schema.clone(), Arc::new([0, 1]));
++        let stream = opener.open(file).unwrap().await.unwrap();
++        let (num_batches, num_rows) = count_batches_and_rows(stream).await;
++        assert_eq!(num_batches, 0);
++        assert_eq!(num_rows, 0);
++    }
++
++    #[tokio::test]
++    async fn test_partition_and_data_values_read_back() {
++        let store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
++
++        // Note: number 3 is missing!
++        let batch = datafusion_common::record_batch!((
++            "a",
++            Int32,
++            vec![Some(1), Some(2), Some(4)]
++        ))
++        .unwrap();
++
++        let data_size =
++            write_parquet(Arc::clone(&store), "part=1/file.parquet", batch.clone()).await;
++
++        let file_schema = batch.schema();
++        let mut file = make_partitioned_file(data_size, "part=1/file.parquet");
++        file.partition_values = vec![ScalarValue::Int32(Some(1))];
++
++        // Filter matching the partition value but not the data value should
++        // still read all rows back when pushdown is disabled
++        let expr = col("part").eq(lit(1)).or(col("a").eq(lit(3)));
++        let table_schema = Arc::new(Schema::new(vec![
++            Field::new("part", DataType::Int32, false),
++            Field::new("a", DataType::Int32, false),
++        ]));
++        let predicate = logical2physical(&expr, &table_schema);
++
++        let mut opener =
++            make_opener(&store, Some(predicate), file_schema.clone(), Arc::new([0]));
++        opener.partition_fields =
++            vec![Arc::new(Field::new("part", DataType::Int32, false))];
++        let stream = opener.open(file).unwrap().await.unwrap();
++        let (num_batches, num_rows) = count_batches_and_rows(stream).await;
++        assert_eq!(num_batches, 1);
++        assert_eq!(num_rows, 3);
++    }
++
++    /// auron: end-to-end regression test for dictionary-based row-group
++    /// pruning (patch 0005), going through the *real* `ParquetOpener::open`
++    /// path (a real file written by `ArrowWriter`, real metadata loaded
++    /// asynchronously via `AsyncFileReader`/`ArrowReaderMetadata::load_async`),
++    /// as opposed to the existing `test_dictionary_pruning_predicate` /
++    /// `test_get_dictionary_for_pruning_with_spark_like_metadata` tests,
++    /// which exercise the pruning-predicate / dictionary-fetch logic in
++    /// isolation against manually-crafted `ParquetMetaData`.
++    ///
++    /// This guards against two regressions that made dictionary pruning a
++    /// silent no-op even though the isolated unit tests above kept passing:
++    ///
++    /// 1. `ParquetMetaDataOptions` defaults to collapsing
++    ///    `page_encoding_stats` into a bitmask (the arrow-rs 59.2.0
++    ///    default), which drops the `DICTIONARY_PAGE` entries that
++    ///    `get_dictionary_for_pruning` needs. `ParquetOpener::open` now sets
++    ///    `with_encoding_stats_as_mask(false)` on the `ArrowReaderOptions` it
++    ///    loads metadata with, and Auron's own reader factory
++    ///    (`native-engine/.../parquet_exec.rs::ParquetFileReaderRef::get_metadata`)
++    ///    always loads metadata with that option, too (this test uses
++    ///    `MaskAwareReaderFactory` to mirror that behavior, since upstream's
++    ///    `DefaultParquetFileReaderFactory` silently drops it).
++    /// 2. `get_dictionary_for_pruning` itself used to unconditionally bail
++    ///    out for columns using the 2.0 `RLE_DICTIONARY` encoding -- the
++    ///    encoding `ArrowWriter` emits by default -- even when
++    ///    `page_encoding_stats` already proved there was no non-dictionary
++    ///    fallback page.
++    #[tokio::test]
++    async fn test_dictionary_pruning_end_to_end() {
++        let store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
++
++        // min='a', max='c', but the literal "b" is not actually present in
++        // the dictionary: plain min/max statistics pruning can NOT skip this
++        // row group (min <= 'b' <= max), only dictionary-aware pruning can.
++        let batch = datafusion_common::record_batch!((
++            "s",
++            Utf8,
++            vec![Some("a"), Some("c"), Some("a"), Some("c")]
++        ))
++        .unwrap();
++        let data_size =
++            write_parquet(Arc::clone(&store), "test.parquet", batch.clone()).await;
++        let file_bytes = store
++            .get(&Path::from("test.parquet"))
++            .await
++            .unwrap()
++            .bytes()
++            .await
++            .unwrap();
++
++        let schema = batch.schema();
++        let file = make_partitioned_file(data_size, "test.parquet");
++
++        let expr = col("s").eq(lit("b"));
++        let predicate = logical2physical(&expr, &schema);
++        let mut opener =
++            make_opener(&store, Some(predicate), schema.clone(), Arc::new([0]));
++        opener.parquet_file_reader_factory = Arc::new(MaskAwareReaderFactory(file_bytes));
++
++        let stream = opener.open(file).unwrap().await.unwrap();
++        let (num_batches, num_rows) = count_batches_and_rows(stream).await;
++        assert_eq!(
++            (num_batches, num_rows),
++            (0, 0),
++            "row group should have been pruned by real (non-mocked) dictionary pruning"
++        );
++    }
++
++    #[derive(Debug)]
++    struct TestSchemaAdapterFactory;
++
++    impl SchemaAdapterFactory for TestSchemaAdapterFactory {
++        fn create(
++            &self,
++            projected_table_schema: SchemaRef,
++            _table_schema: SchemaRef,
++        ) -> Box<dyn SchemaAdapter> {
++            Box::new(TestSchemaAdapter {
++                projected_table_schema,
++            })
++        }
++    }
++
++    struct TestSchemaAdapter {
++        projected_table_schema: SchemaRef,
++    }
++
++    impl SchemaAdapter for TestSchemaAdapter {
++        fn map_column_index(&self, index: usize, file_schema: &Schema) -> Option<usize> {
++            if index < file_schema.fields().len() {
++                Some(index)
++            } else {
++                None
++            }
++        }
++
++        fn map_schema(
++            &self,
++            _file_schema: &Schema,
++        ) -> datafusion_common::Result<(Arc<dyn SchemaMapper>, Vec<usize>)> {
++            let n = self.projected_table_schema.fields().len();
++            Ok((
++                Arc::new(TestSchemaMapper {
++                    schema: Arc::clone(&self.projected_table_schema),
++                }),
++                (0..n).collect(),
++            ))
++        }
++    }
++
++    #[derive(Debug)]
++    struct TestSchemaMapper {
++        schema: SchemaRef,
++    }
++
++    impl SchemaMapper for TestSchemaMapper {
++        fn map_batch(
++            &self,
++            batch: RecordBatch,
++        ) -> datafusion_common::Result<RecordBatch> {
++            if batch.schema() == self.schema {
++                return Ok(batch);
++            }
++            Ok(RecordBatch::try_new(
++                Arc::clone(&self.schema),
++                batch.columns().to_vec(),
++            )?)
++        }
++
++        fn map_column_statistics(
++            &self,
++            file_col_statistics: &[ColumnStatistics],
++        ) -> datafusion_common::Result<Vec<ColumnStatistics>> {
++            Ok(file_col_statistics.to_vec())
++        }
++    }
++
++    /// auron: dictionary-aware pruning predicate (patch 0018). `col = 'b'`
++    /// where min/max statistics are ['a', 'c'] (plain statistics pruning
++    /// keeps the row group) but the dictionary values are {a, c}: the
++    /// dictionary-aware predicate must prune the row group.
++    #[test]
++    fn test_dictionary_pruning_predicate() {
++        use arrow::array::{ArrayRef, ListArray, StringArray};
++        use arrow::buffer::{OffsetBuffer, ScalarBuffer};
++        use datafusion_common::Column;
++        use datafusion_common::pruning::PruningStatistics;
++        use datafusion_pruning::PruningPredicateBuilder;
++
++        let schema = Arc::new(Schema::new(vec![Field::new("s", DataType::Utf8, true)]));
++
++        // 'b' is within [min='a', max='c'] but absent from the dictionary {a, c}
++        let expr = col("s").eq(lit("b"));
++        let physical = logical2physical(&expr, &schema);
++        let predicate = PruningPredicateBuilder::new()
++            .with_file_schema(Arc::clone(&schema))
++            .build(physical)
++            .expect("predicate should build");
++
++        struct MockDictStats;
++        impl PruningStatistics for MockDictStats {
++            fn min_values(&self, _column: &Column) -> Option<ArrayRef> {
++                Some(Arc::new(StringArray::from(vec![Some("a")])))
++            }
++            fn max_values(&self, _column: &Column) -> Option<ArrayRef> {
++                Some(Arc::new(StringArray::from(vec![Some("c")])))
++            }
++            fn num_containers(&self) -> usize {
++                1
++            }
++            fn null_counts(&self, _column: &Column) -> Option<ArrayRef> {
++                Some(Arc::new(arrow::array::UInt64Array::from(vec![0])))
++            }
++            fn row_counts(&self) -> Option<ArrayRef> {
++                Some(Arc::new(arrow::array::UInt64Array::from(vec![2])))
++            }
++            fn contained(
++                &self,
++                _column: &Column,
++                _values: &std::collections::HashSet<ScalarValue>,
++            ) -> Option<arrow::array::BooleanArray> {
++                None
++            }
++            // dictionary values as ListArray: [[a, c]]
++            fn dictionary_values(&self, _column: &Column) -> Option<ArrayRef> {
++                let values = Arc::new(StringArray::from(vec![Some("a"), Some("c")]));
++                let offsets = OffsetBuffer::new(ScalarBuffer::from(vec![0, 2]));
++                let field = Arc::new(Field::new("item", DataType::Utf8, true));
++                Some(Arc::new(
++                    ListArray::try_new(field, offsets, values, None).unwrap(),
++                ))
++            }
++        }
++
++        let pruned = predicate
++            .prune(&MockDictStats)
++            .expect("prune should succeed");
++        assert!(!pruned[0], "row group must be pruned by dictionary");
++
++        // sanity: a value present in the dictionary must NOT be pruned
++        let expr = col("s").eq(lit("a"));
++        let physical = logical2physical(&expr, &schema);
++        let predicate = PruningPredicateBuilder::new()
++            .with_file_schema(Arc::clone(&schema))
++            .build(physical)
++            .expect("predicate should build");
++        let pruned = predicate
++            .prune(&MockDictStats)
++            .expect("prune should succeed");
++        assert!(pruned[0], "row group must be kept");
++    }
++
++    /// auron: verify that reading footer metadata with
++    /// `ParquetMetaDataOptions::with_encoding_stats_as_mask(false)` keeps the
++    /// full page encoding stats (including the DICTIONARY_PAGE entry), which
++    /// is the prerequisite for dictionary-based row group pruning. With the
++    /// default options (`encoding_stats_as_mask == true`) the stats are
++    /// reduced to a bitmask and `page_encoding_stats()` returns `None`,
++    /// silently disabling dictionary pruning.
++    #[tokio::test]
++    async fn test_page_encoding_stats_kept_with_mask_disabled() {
++        use futures::TryFutureExt;
++        use parquet::file::metadata::ParquetMetaDataOptions;
++
++        let store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
++        let batch =
++            datafusion_common::record_batch!(("s", Utf8, vec![Some("a"), Some("c")]))
++                .unwrap();
++        let data_size =
++            write_parquet(Arc::clone(&store), "test.parquet", batch.clone()).await;
++
++        let buf = store
++            .get(&Path::from("test.parquet"))
++            .await
++            .unwrap()
++            .bytes()
++            .await
++            .unwrap();
++
++        struct BufFetch(bytes::Bytes);
++        impl parquet::arrow::async_reader::MetadataFetch for BufFetch {
++            fn fetch(
++                &mut self,
++                range: std::ops::Range<u64>,
++            ) -> futures::future::BoxFuture<'_, parquet::errors::Result<bytes::Bytes>>
++            {
++                Box::pin(async move {
++                    Ok(self.0.slice(range.start as usize..range.end as usize))
++                })
++            }
++        }
++        let options = ParquetMetaDataOptions::new().with_encoding_stats_as_mask(false);
++        let meta = parquet::file::metadata::ParquetMetaDataReader::new()
++            .with_metadata_options(Some(options))
++            .load_and_finish(BufFetch(buf), data_size as u64)
++            .await
++            .unwrap();
++
++        let has_dict_page =
++            meta.row_groups()
++                .iter()
++                .flat_map(|rg| rg.columns())
++                .any(|c| {
++                    c.page_encoding_stats()
++                        .map(|stats| {
++                            stats.iter().any(|stat| {
++                                stat.page_type
++                                    == parquet::basic::PageType::DICTIONARY_PAGE
++                            })
++                        })
++                        .unwrap_or(false)
++                });
++        assert!(
++            has_dict_page,
++            "page encoding stats must be kept when encoding_stats_as_mask is disabled"
++        );
++    }
++
++    struct BufFetch(bytes::Bytes);
++    impl parquet::arrow::async_reader::MetadataFetch for BufFetch {
++        fn fetch(
++            &mut self,
++            range: std::ops::Range<u64>,
++        ) -> futures::future::BoxFuture<'_, parquet::errors::Result<bytes::Bytes>>
++        {
++            Box::pin(
++                async move { Ok(self.0.slice(range.start as usize..range.end as usize)) },
++            )
++        }
++    }
++
++    /// auron: E2E dictionary fetch with Spark-like column chunk metadata.
++    /// The file is written by arrow-rs (dictionary pages encoded with
++    /// RLE_DICTIONARY), so the column chunk metadata is re-synthesized the
++    /// way Spark/parquet-mr writes it (PLAIN_DICTIONARY v1 encoding stats)
++    /// while pointing at the real page offsets. This exercises the full
++    /// `get_dictionary_for_pruning` path against the vendored arrow 59.2.0
++    /// page reader APIs.
++    #[tokio::test]
++    async fn test_get_dictionary_for_pruning_with_spark_like_metadata() {
++        use arrow::array::BinaryArray;
++        use parquet::basic::{Encoding, PageType};
++        use parquet::file::metadata::{
++            ColumnChunkMetaData, PageEncodingStats, ParquetMetaDataOptions,
++            RowGroupMetaData,
++        };
++
++        let store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
++        let batch =
++            datafusion_common::record_batch!(("s", Utf8, vec![Some("a"), Some("c")]))
++                .unwrap();
++        let data_size =
++            write_parquet(Arc::clone(&store), "test.parquet", batch.clone()).await;
++        let buf = store
++            .get(&Path::from("test.parquet"))
++            .await
++            .unwrap()
++            .bytes()
++            .await
++            .unwrap();
++
++        // read the real metadata with full page encoding stats
++        let options = ParquetMetaDataOptions::new().with_encoding_stats_as_mask(false);
++        let meta = parquet::file::metadata::ParquetMetaDataReader::new()
++            .with_metadata_options(Some(options))
++            .load_and_finish(BufFetch(buf.clone()), data_size as u64)
++            .await
++            .unwrap();
++        let real_rg = &meta.row_groups()[0];
++        let real_col = real_rg.column(0);
++
++        // synthesize Spark-like (parquet-mr v1) column chunk metadata
++        let col_meta = ColumnChunkMetaData::builder(real_col.column_descr_ptr())
++            .set_num_values(real_col.num_values())
++            .set_compression(real_col.compression())
++            .set_total_compressed_size(real_col.compressed_size())
++            .set_total_uncompressed_size(real_col.uncompressed_size())
++            .set_data_page_offset(real_col.data_page_offset())
++            .set_dictionary_page_offset(real_col.dictionary_page_offset())
++            .set_encodings(vec![Encoding::PLAIN_DICTIONARY, Encoding::RLE])
++            .set_encodings_mask(parquet::basic::EncodingMask::new_from_encodings(
++                [Encoding::PLAIN_DICTIONARY, Encoding::RLE].iter(),
++            ))
++            .set_page_encoding_stats(vec![
++                PageEncodingStats {
++                    page_type: PageType::DICTIONARY_PAGE,
++                    encoding: Encoding::PLAIN_DICTIONARY,
++                    count: 1,
++                },
++                PageEncodingStats {
++                    page_type: PageType::DATA_PAGE,
++                    encoding: Encoding::PLAIN_DICTIONARY,
++                    count: 1,
++                },
++            ])
++            .build()
++            .unwrap();
++        let rg = RowGroupMetaData::builder(meta.file_metadata().schema_descr_ptr())
++            .set_num_rows(real_rg.num_rows())
++            .set_total_byte_size(real_rg.total_byte_size())
++            .add_column_metadata(col_meta)
++            .build()
++            .unwrap();
++
++        // a reader over the file bytes implementing get_bytes_sync
++        struct SyncFileReader {
++            data: bytes::Bytes,
++        }
++        impl parquet::arrow::async_reader::AsyncFileReader for SyncFileReader {
++            fn get_bytes(
++                &mut self,
++                range: std::ops::Range<u64>,
++            ) -> futures::future::BoxFuture<'_, parquet::errors::Result<bytes::Bytes>>
++            {
++                Box::pin(async move {
++                    Ok(self.data.slice(range.start as usize..range.end as usize))
++                })
++            }
++            fn get_metadata<'a>(
++                &'a mut self,
++                _options: Option<&'a parquet::arrow::arrow_reader::ArrowReaderOptions>,
++            ) -> futures::future::BoxFuture<
++                'a,
++                parquet::errors::Result<Arc<parquet::file::metadata::ParquetMetaData>>,
++            > {
++                Box::pin(async move {
++                    Err(parquet::errors::ParquetError::General(
++                        "not needed".to_string(),
++                    ))
++                })
++            }
++            fn get_bytes_sync(
++                &mut self,
++                range: std::ops::Range<u64>,
++            ) -> parquet::errors::Result<bytes::Bytes> {
++                Ok(self.data.slice(range.start as usize..range.end as usize))
++            }
++        }
++
++        let mut reader = SyncFileReader { data: buf };
++        let dict = parquet::auron::get_dictionary_for_pruning(&mut reader, &rg, 0)
++            .expect("dictionary fetch must not error");
++        let dict = dict.expect("dictionary must be retrieved");
++        let values = dict
++            .as_any()
++            .downcast_ref::<BinaryArray>()
++            .expect("dictionary values should be a BinaryArray");
++        let collected: Vec<&[u8]> = values.iter().flatten().collect();
++        assert!(
++            collected.contains(&b"a".as_slice()) && collected.contains(&b"c".as_slice()),
++            "dictionary must contain a and c, got {collected:?}"
++        );
++    }
++}
+diff --git a/datafusion/datasource-parquet/src/push_decoder.rs b/datafusion/datasource-parquet/src/push_decoder.rs
+index 74d899719..15e93fc0c 100644
+--- a/datafusion/datasource-parquet/src/push_decoder.rs
++++ b/datafusion/datasource-parquet/src/push_decoder.rs
+@@ -218,6 +218,9 @@ impl RowGroupPruner {
+             // sound for runtime pruning because the predicate only needs to
+             // prove a row group *cannot* contain matching rows.
+             missing_null_counts_as_zero: true,
++            use_dictionary_filtering: false,
++            cached_dictionaries: std::sync::Mutex::new(vec![]),
++            dict_reader: std::cell::Cell::new(None),
+         };
+ 
+         match pp.prune(&stats) {
+diff --git a/datafusion/datasource-parquet/src/row_group_filter.rs b/datafusion/datasource-parquet/src/row_group_filter.rs
+index ddf71bb7e..380c58bb7 100644
+--- a/datafusion/datasource-parquet/src/row_group_filter.rs
++++ b/datafusion/datasource-parquet/src/row_group_filter.rs
+@@ -20,8 +20,9 @@ use std::sync::Arc;
+ 
+ use super::{ParquetAccessPlan, ParquetFileMetrics, RowGroupAccess};
+ use crate::bloom_filter::BloomFilterStatistics;
+-use arrow::array::{ArrayRef, BooleanArray, UInt64Array};
+-use arrow::datatypes::Schema;
++use arrow::array::{Array, ArrayRef, BooleanArray, ListArray, UInt64Array};
++use arrow::buffer::{OffsetBuffer, ScalarBuffer};
++use arrow::datatypes::{Field, Schema};
+ use datafusion_common::pruning::PruningStatistics;
+ use datafusion_common::{Column, Result, ScalarValue};
+ use datafusion_datasource::FileRange;
+@@ -31,6 +32,7 @@ use datafusion_physical_expr::utils::collect_columns;
+ use datafusion_physical_expr::{PhysicalExpr, PhysicalExprSimplifier};
+ use datafusion_pruning::{PruningPredicate, PruningPredicateBuilder};
+ use parquet::arrow::arrow_reader::statistics::StatisticsConverter;
++use parquet::arrow::async_reader::AsyncFileReader;
+ use parquet::file::metadata::RowGroupMetaData;
+ use parquet::schema::types::SchemaDescriptor;
+ 
+@@ -264,6 +266,10 @@ impl RowGroupAccessPlanFilter {
+         groups: &[RowGroupMetaData],
+         predicate: &PruningPredicate,
+         metrics: &ParquetFileMetrics,
++        // auron: supports parquet dictionary filtering; pass Some(reader) to
++        // allow fetching dictionary pages on demand for IN-list/equality
++        // pruning. Pass None to skip dictionary-based pruning.
++        mut dict_reader: Option<&mut Box<dyn AsyncFileReader + Send>>,
+     ) {
+         // scoped timer updates on drop
+         let _timer_guard = metrics.statistics_eval_time.timer();
+@@ -285,6 +291,9 @@ impl RowGroupAccessPlanFilter {
+             // StatisticsConverter default for older parquet-rs files where a
+             // missing null count can mean there are zero nulls.
+             missing_null_counts_as_zero: true,
++            use_dictionary_filtering: false,
++            cached_dictionaries: std::sync::Mutex::new(vec![]),
++            dict_reader: std::cell::Cell::new(None),
+         };
+ 
+         // try to prune the row groups in a single call
+@@ -301,6 +310,39 @@ impl RowGroupAccessPlanFilter {
+                     }
+                 }
+ 
++                // auron: supports parquet dictionary filtering. Row groups
++                // that survived plain statistics pruning get a second,
++                // dictionary-aware pass (more expensive, so only run it on
++                // the candidates remaining).
++                if let Some(dict_reader) = dict_reader.as_deref_mut() {
++                    for &rg_idx in &fully_contained_candidates_original_idx {
++                        let dict_pruning_stats = RowGroupPruningStatistics {
++                            parquet_schema,
++                            row_group_metadatas: vec![&groups[rg_idx]],
++                            arrow_schema,
++                            missing_null_counts_as_zero: true,
++                            use_dictionary_filtering: true,
++                            cached_dictionaries: std::sync::Mutex::new(vec![]),
++                            dict_reader: std::cell::Cell::new(Some(
++                                &mut **dict_reader as *mut (dyn AsyncFileReader + Send),
++                            )),
++                        };
++                        match predicate.prune(&dict_pruning_stats) {
++                            Ok(values) if !values[0] => {
++                                self.access_plan.skip(rg_idx);
++                                metrics.row_groups_pruned_statistics.add_pruned(1);
++                            }
++                            Err(e) => {
++                                log::debug!(
++                                    "Error evaluating row group predicate values with dictionary {e}"
++                                );
++                                metrics.predicate_evaluation_errors.add(1);
++                            }
++                            _ => {}
++                        }
++                    }
++                }
++
+                 // Check if any of the matched row groups are fully contained by the predicate
+                 self.identify_fully_matched_row_groups(
+                     &fully_contained_candidates_original_idx,
+@@ -392,6 +434,9 @@ impl RowGroupAccessPlanFilter {
+             // treating them as zero can incorrectly mark nullable row groups as
+             // fully matched and make limit pruning unsound.
+             missing_null_counts_as_zero: false,
++            use_dictionary_filtering: false,
++            cached_dictionaries: std::sync::Mutex::new(vec![]),
++            dict_reader: std::cell::Cell::new(None),
+         };
+ 
+         let Ok(inverted_values) = inverted_predicate.prune(&inverted_pruning_stats)
+@@ -466,6 +511,17 @@ pub(crate) struct RowGroupPruningStatistics<'a> {
+     pub(crate) row_group_metadatas: Vec<&'a RowGroupMetaData>,
+     pub(crate) arrow_schema: &'a Schema,
+     pub(crate) missing_null_counts_as_zero: bool,
++    // auron: supports parquet dictionary filtering
++    pub(crate) use_dictionary_filtering: bool,
++    pub(crate) cached_dictionaries: std::sync::Mutex<Vec<std::cell::OnceCell<Option<ArrayRef>>>>,
++    // auron: stored as a raw pointer (rather than `&'a mut dyn Trait`) so that
++    // this field does not force `RowGroupPruningStatistics<'a>` to become
++    // invariant over `'a`, which would otherwise break lifetime inference at
++    // call sites that only need a covariant borrow (e.g. `min_values`).
++    // Safety: the pointer is only ever dereferenced synchronously within the
++    // lifetime of the `&mut` reference originally supplied by the caller of
++    // `fill_row_group_access_plan`/construction of this struct.
++    pub(crate) dict_reader: std::cell::Cell<Option<*mut (dyn AsyncFileReader + Send)>>,
+ }
+ 
+ impl<'a> RowGroupPruningStatistics<'a> {
+@@ -487,17 +543,58 @@ impl<'a> RowGroupPruningStatistics<'a> {
+     }
+ }
+ 
++// auron: use deprecated min/max values only when min == max
++fn is_min_max_deprecated(stats: &RowGroupPruningStatistics<'_>, column: &Column) -> bool {
++    stats.row_group_metadatas.iter().any(|row_group_metadata| {
++        row_group_metadata
++            .columns()
++            .iter()
++            .find(|c| {
++                c.column_path()
++                    .string()
++                    .eq_ignore_ascii_case(&column.flat_name())
++            })
++            .and_then(|c| c.statistics())
++            .map(|stat| stat.is_min_max_deprecated())
++            .unwrap_or(false)
++    })
++}
++
+ impl PruningStatistics for RowGroupPruningStatistics<'_> {
+     fn min_values(&self, column: &Column) -> Option<ArrayRef> {
+-        self.statistics_converter(column)
++        let min_values = self
++            .statistics_converter(column)
+             .and_then(|c| Ok(c.row_group_mins(self.metadata_iter())?))
+-            .ok()
++            .ok();
++        // auron: use deprecated min/max values only when min == max
++        if is_min_max_deprecated(self, column) {
++            let max_values = self
++                .statistics_converter(column)
++                .and_then(|c| Ok(c.row_group_maxes(self.metadata_iter())?))
++                .ok();
++            if min_values != max_values {
++                return None;
++            }
++        }
++        min_values
+     }
+ 
+     fn max_values(&self, column: &Column) -> Option<ArrayRef> {
+-        self.statistics_converter(column)
++        let max_values = self
++            .statistics_converter(column)
+             .and_then(|c| Ok(c.row_group_maxes(self.metadata_iter())?))
+-            .ok()
++            .ok();
++        // auron: use deprecated min/max values only when min == max
++        if is_min_max_deprecated(self, column) {
++            let min_values = self
++                .statistics_converter(column)
++                .and_then(|c| Ok(c.row_group_mins(self.metadata_iter())?))
++                .ok();
++            if min_values != max_values {
++                return None;
++            }
++        }
++        max_values
+     }
+ 
+     fn num_containers(&self) -> usize {
+@@ -527,6 +624,59 @@ impl PruningStatistics for RowGroupPruningStatistics<'_> {
+     ) -> Option<BooleanArray> {
+         None
+     }
++
++    // auron: supports parquet dictionary filtering
++    fn dictionary_values(&self, column: &Column) -> Option<ArrayRef> {
++        if !self.use_dictionary_filtering {
++            return None;
++        }
++
++        let col_idx = self
++            .row_group_metadatas
++            .first()?
++            .columns()
++            .iter()
++            .position(|c| {
++                c.column_path()
++                    .string()
++                    .eq_ignore_ascii_case(&column.flat_name())
++            })?;
++
++        let mut cached_dictionaries = self.cached_dictionaries.lock().unwrap();
++        if cached_dictionaries.len() <= col_idx {
++            cached_dictionaries.resize_with(col_idx + 1, Default::default);
++        }
++        cached_dictionaries[col_idx]
++            .get_or_init(|| {
++                let ptr = self.dict_reader.get()?;
++                // Safety: see the comment on the `dict_reader` field above.
++                let dict_reader: &mut (dyn AsyncFileReader + Send) = unsafe { &mut *ptr };
++                let mut values = vec![];
++                for row_group_metadata in self.metadata_iter() {
++                    let dict_values = parquet::auron::get_dictionary_for_pruning(
++                        dict_reader,
++                        row_group_metadata,
++                        col_idx,
++                    )
++                    .ok()
++                    .flatten()?;
++
++                    let dict_array = ListArray::try_new(
++                        Arc::new(Field::new("item", dict_values.data_type().clone(), true)),
++                        OffsetBuffer::new(ScalarBuffer::from(vec![0, dict_values.len() as i32])),
++                        dict_values,
++                        None,
++                    )
++                    .ok()?;
++                    values.push(dict_array);
++                }
++                arrow::compute::concat(
++                    &values.iter().map(|c| c as &dyn Array).collect::<Vec<_>>(),
++                )
++                .ok()
++            })
++            .clone()
++    }
+ }
+ 
+ #[cfg(test)]
+@@ -656,6 +806,7 @@ mod tests {
+             &[rgm1, rgm2],
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![1]))
+     }
+@@ -713,6 +864,7 @@ mod tests {
+             &[rg_with_null, rg_without_null, rg_unknown_null_count],
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+ 
+         assert_eq!(row_groups.access_plan.row_group_indexes(), vec![0, 1, 2]);
+@@ -820,6 +972,7 @@ mod tests {
+             &[rgm1, rgm2],
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::None);
+     }
+@@ -867,6 +1020,7 @@ mod tests {
+             groups,
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![1]));
+ 
+@@ -885,6 +1039,7 @@ mod tests {
+             groups,
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::None);
+     }
+@@ -941,6 +1096,7 @@ mod tests {
+             groups,
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![0]));
+     }
+@@ -990,6 +1146,7 @@ mod tests {
+             &groups,
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![1]));
+     }
+@@ -1023,6 +1180,7 @@ mod tests {
+             &groups,
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![1]));
+     }
+@@ -1089,6 +1247,7 @@ mod tests {
+             &[rgm1, rgm2, rgm3],
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![0, 2]));
+     }
+@@ -1183,6 +1342,7 @@ mod tests {
+             &[rgm1, rgm2, rgm3, rgm4, rgm5],
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![0, 1, 4]));
+     }
+@@ -1237,6 +1397,7 @@ mod tests {
+             &[rgm1, rgm2, rgm3],
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![1, 2]));
+     }
+@@ -1312,6 +1473,7 @@ mod tests {
+             &[rgm1, rgm2, rgm3],
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![1, 2]));
+     }
+@@ -1378,6 +1540,7 @@ mod tests {
+             &[rgm1, rgm2, rgm3],
+             &pruning_predicate,
+             &metrics,
++        None,
+         );
+         assert_pruned(row_groups, ExpectedPruning::Some(vec![1, 2]));
+     }
