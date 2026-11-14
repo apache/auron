@@ -24,11 +24,30 @@ use arrow::{
 use datafusion::{
     common::{
         Result, ScalarValue,
-        cast::{as_binary_array, as_int32_array, as_list_array, as_string_array},
+        cast::{as_binary_array, as_int32_array, as_int64_array, as_list_array, as_string_array},
     },
     physical_plan::ColumnarValue,
 };
 use datafusion_ext_commons::df_execution_err;
+
+pub fn string_chr(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let chr = |n: i64| {
+        if n < 0 {
+            String::new()
+        } else {
+            char::from(n as u8).to_string()
+        }
+    };
+    match &args[0] {
+        ColumnarValue::Array(array) => Ok(ColumnarValue::Array(Arc::new(StringArray::from_iter(
+            as_int64_array(array)?.iter().map(|n| n.map(chr)),
+        )))),
+        ColumnarValue::Scalar(ScalarValue::Int64(n)) => {
+            Ok(ColumnarValue::Scalar(ScalarValue::Utf8(n.map(chr))))
+        }
+        _ => df_execution_err!("chr only supports int64"),
+    }
+}
 
 pub fn string_lower(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     match &args[0] {
@@ -110,7 +129,9 @@ pub fn string_split(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 mod test {
     use std::sync::Arc;
 
-    use arrow::array::{BinaryArray, Int32Array, ListBuilder, StringArray, StringBuilder};
+    use arrow::array::{
+        BinaryArray, Int32Array, Int64Array, ListBuilder, StringArray, StringBuilder,
+    };
     use datafusion::{
         common::{
             Result, ScalarValue,
@@ -121,6 +142,52 @@ mod test {
     use datafusion_ext_commons::df_execution_err;
 
     use crate::spark_strings::{string_lower, string_repeat, string_split, string_upper};
+
+    #[test]
+    fn test_string_chr() -> Result<()> {
+        let function = crate::create_auron_ext_function("Spark_Chr", 0)?;
+        let inputs = [
+            Some(i64::MIN),
+            Some(-1),
+            Some(0),
+            Some(65),
+            Some(233),
+            Some(255),
+            Some(256),
+            Some(321),
+            Some(i64::MAX),
+            None,
+        ];
+        let expected = [
+            Some(""),
+            Some(""),
+            Some("\0"),
+            Some("A"),
+            Some("é"),
+            Some("ÿ"),
+            Some("\0"),
+            Some("A"),
+            Some("ÿ"),
+            None,
+        ];
+        let result = function(&[ColumnarValue::Array(Arc::new(Int64Array::from(
+            inputs.to_vec(),
+        )))])?
+        .into_array(inputs.len())?;
+        assert_eq!(
+            as_string_array(&result)?,
+            &StringArray::from(expected.to_vec())
+        );
+        for (input, expected) in inputs.into_iter().zip(expected) {
+            let ColumnarValue::Scalar(result) =
+                function(&[ColumnarValue::Scalar(ScalarValue::Int64(input))])?
+            else {
+                return df_execution_err!("expected scalar result");
+            };
+            assert_eq!(result, ScalarValue::Utf8(expected.map(str::to_owned)));
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_string_upper() -> Result<()> {

@@ -87,6 +87,7 @@ pub fn create_auron_ext_function(
         "Spark_MapFromArrays" => shared_function!(spark_map::map_from_arrays),
         "Spark_MapFromEntries" => shared_function!(spark_map::map_from_entries),
         "Spark_StrToMap" => shared_function!(spark_map::str_to_map),
+        "Spark_Chr" => shared_function!(spark_strings::string_chr),
         "Spark_Year" => shared_function!(spark_dates::spark_year),
         "Spark_Month" => shared_function!(spark_dates::spark_month),
         "Spark_Day" => shared_function!(spark_dates::spark_day),
