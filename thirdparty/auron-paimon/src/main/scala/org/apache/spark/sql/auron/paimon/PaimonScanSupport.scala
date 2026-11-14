@@ -201,7 +201,7 @@ object PaimonScanSupport extends Logging {
         val rawFilePath = dataFile
           .externalPath()
           .orElse(s"${split.bucketPath()}/${dataFile.fileName()}")
-        val metadataFilePath = new Path(rawFilePath).toUri.toString
+        val metadataFilePath = PaimonUtil.metadataFilePath(new Path(rawFilePath))
         val partitionValues = if (partitionSchema.isEmpty) {
           InternalRow.empty
         } else {
