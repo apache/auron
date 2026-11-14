@@ -283,7 +283,8 @@ object NativeConverters extends Logging {
 
   private def buildSparkUdfWrapperExpr(
       sparkExpr: Expression,
-      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+      fallback: Expression => pb.PhysicalExprNode,
+      bindOnlyReferences: Boolean = false): pb.PhysicalExprNode = {
     // update subquery result if needed
     sparkExpr.foreach {
       case subquery: ExecSubqueryExpression =>
@@ -292,11 +293,13 @@ object NativeConverters extends Logging {
     }
     val exprString = sparkExpr.toString()
 
-    // bind all convertible children
+    // Bind only input references when Spark must preserve child evaluation order.
     val convertedChildren = mutable.LinkedHashMap[pb.PhysicalExprNode, BoundReference]()
     val bound = sparkExpr.mapChildren(_.transformDown {
       case p: Literal => p
-      case p =>
+      case p
+          if !bindOnlyReferences || p.isInstanceOf[AttributeReference] ||
+            p.isInstanceOf[BoundReference] =>
         try {
           val convertedChild = convertExprWithFallback(p, isPruningExpr = false, fallback)
           val nextBindIndex = convertedChildren.size
@@ -332,6 +335,16 @@ object NativeConverters extends Logging {
   def convertExpr(sparkExpr: Expression): pb.PhysicalExprNode = {
     def fallbackToError: Expression => pb.PhysicalExprNode = { e =>
       throw new NotImplementedError(s"unsupported expression: (${e.getClass}) $e")
+    }
+
+    if (singleChildFallbackEnabled && sparkExpr.isInstanceOf[ArrayIntersect]) {
+      // Extracting individual children could evaluate the right input before the null check.
+      try {
+        return convertExprWithFallback(sparkExpr, isPruningExpr = false, fallbackToError)
+      } catch {
+        case _: NotImplementedError =>
+          return buildSparkUdfWrapperExpr(sparkExpr, fallbackToError, bindOnlyReferences = true)
+      }
     }
 
     if (!singleChildFallbackEnabled) {
@@ -1179,7 +1192,21 @@ object NativeConverters extends Logging {
           if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
         buildExtScalarFunction("Spark_NormalizeNanAndZero", e.children, e.dataType)
 
-      case e @ (_: ArrayDistinct | _: ArrayUnion) if (e.dataType match {
+      case e: ArrayIntersect if !e.left.deterministic || e.find {
+            case c: Cast => !isArrayIntersectCastSupported(c.child.dataType, c.dataType)
+            case c if c.getClass.getSimpleName == "AnsiCast" =>
+              !isArrayIntersectCastSupported(c.children.head.dataType, c.dataType)
+            case _ => false
+          }.isDefined =>
+        // Keep unsafe casts and non-deterministic left inputs in Spark.
+        // Keep the full expression in Spark so a null left array still skips the right input.
+        if (singleChildFallbackEnabled) {
+          buildSparkUdfWrapperExpr(e, fallback, bindOnlyReferences = true)
+        } else {
+          fallback(e)
+        }
+
+      case e @ (_: ArrayDistinct | _: ArrayUnion | _: ArrayIntersect) if (e.dataType match {
             // Spark 3.0 has different NaN deduplication behavior.
             case ArrayType(FloatType | DoubleType, _) =>
               SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
@@ -1188,10 +1215,30 @@ object NativeConverters extends Logging {
             case ArrayType(NullType, _) => true
             case _ => false
           }) =>
-        buildExtScalarFunction(
-          if (e.isInstanceOf[ArrayUnion]) "Spark_ArrayUnion" else "Spark_ArrayDistinct",
-          e.children,
-          e.dataType)
+        val function = e match {
+          case _: ArrayDistinct => "Spark_ArrayDistinct"
+          case _: ArrayUnion => "Spark_ArrayUnion"
+          case _: ArrayIntersect => "Spark_ArrayIntersect"
+        }
+        val converted = buildExtScalarFunction(function, e.children, e.dataType)
+        e match {
+          case i: ArrayIntersect
+              if i.left.nullable && !i.right.isInstanceOf[AttributeReference] &&
+                !i.right.isInstanceOf[BoundReference] && !i.right.isInstanceOf[Literal] =>
+            // Scalar functions evaluate all arguments eagerly. CASE evaluates the right
+            // input only for rows with a non-null left array, as Spark's binary eval does.
+            buildExprNode(
+              _.setCase(
+                pb.PhysicalCaseNode
+                  .newBuilder()
+                  .addWhenThenExpr(
+                    pb.PhysicalWhenThen
+                      .newBuilder()
+                      .setWhenExpr(
+                        convertExprWithFallback(IsNotNull(i.left), isPruningExpr, fallback))
+                      .setThenExpr(converted))))
+          case _ => converted
+        }
       case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
       case e: ArrayContains
           if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
@@ -1551,6 +1598,16 @@ object NativeConverters extends Logging {
     expr.getClass.getSimpleName == "AnsiCast" &&
       expr.children.size == 1 &&
       expr.children.head.dataType == expr.dataType
+
+  private def isArrayIntersectCastSupported(from: DataType, to: DataType): Boolean =
+    (from, to) match {
+      case _ if from == to || from == NullType => true
+      case (ArrayType(left, _), ArrayType(right, _)) =>
+        isArrayIntersectCastSupported(left, right)
+      case (FloatType | DoubleType, FloatType | DoubleType) => true
+      case (_: NumericType, _: NumericType) => Cast.canUpCast(from, to)
+      case _ => false
+    }
 
   def unpackBinaryTypeCast(expr: Expression): Expression =
     expr match {

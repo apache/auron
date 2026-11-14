@@ -774,6 +774,215 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("array_intersect function") {
+    withTable("t1") {
+      sql("create table t1(id int, a array<int>, b array<int>) using parquet")
+      sql("""insert into t1 values
+          |  (0, array(3, 1, 3, 2), array(2, 3, 2)),
+          |  (1, array(1, null, null), array(null, 2)),
+          |  (2, array(1, null), array(1, 2)),
+          |  (3, array(1), array(2, null)),
+          |  (4, array(), array(1)),
+          |  (5, array(1), array()),
+          |  (6, array(), array()),
+          |  (7, null, array(1)),
+          |  (8, array(1), null),
+          |  (9, null, null)
+          |""".stripMargin)
+      for (ansi <- Seq("false", "true")) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          val query = "select id, array_intersect(a, b) from t1"
+          checkSparkAnswerAndOperator(query)
+          checkAnswer(
+            sql(query),
+            Seq(
+              Row(0, Seq(3, 2)),
+              Row(1, Seq(null)),
+              Row(2, Seq(1)),
+              Row(3, Seq.empty[Int]),
+              Row(4, Seq.empty[Int]),
+              Row(5, Seq.empty[Int]),
+              Row(6, Seq.empty[Int]),
+              Row(7, null),
+              Row(8, null),
+              Row(9, null)))
+          checkSparkAnswerAndOperator("""select
+              |  array_intersect(b, a),
+              |  array_intersect(a, array(2, 3, null)),
+              |  array_intersect(array(2, 3, null), b),
+              |  array_intersect(a, cast(array() as array<int>)),
+              |  array_intersect(cast(null as array<int>), b)
+              |from t1
+              |""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("array_intersect preserves casts and null short-circuiting") {
+    withTable("t1") {
+      sql("""create table t1(a array<string>, b array<int>, n bigint,
+          |dates array<date>, m int) using parquet""".stripMargin)
+      sql("""insert into t1 select /*+ COALESCE(1) */ * from values
+          |  (array('1', 'bad', null), null, 2147483648L, null, 13),
+          |  (array('1'), null, 1L, array(date'2024-02-01'), 2)
+          |""".stripMargin)
+      val query = "select array_intersect(cast(a as array<int>), array(1, null)) from t1"
+      val overflow = "select array_intersect(array(cast(n as int)), array(-2147483648)) from t1"
+      for (fallbackEnabled <- Seq("false", "true")) {
+        withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> fallbackEnabled) {
+          val randomQuery =
+            "select array_intersect(array(rand(0)), array(rand(0), cast(m as double))) from t1"
+          val randomDf = checkSparkAnswer(randomQuery)
+          if (fallbackEnabled == "true") {
+            val expr = randomDf.queryExecution.analyzed.expressions.collectFirst {
+              case Alias(child, _) => child
+            }.get
+            assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+            assertPlanIsNative(randomDf)
+          }
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+            for (sqlText <- Seq(query, overflow)) {
+              val df = checkSparkAnswer(sqlText)
+              if (fallbackEnabled == "true") {
+                assertPlanIsNative(df)
+                val expr = df.queryExecution.analyzed.expressions.collectFirst {
+                  case Alias(child, _) => child
+                }.get
+                assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+              } else {
+                assert(collectFirst(df.queryExecution.executedPlan) { case _: ProjectExec =>
+                  true
+                }.contains(true))
+              }
+            }
+          }
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+            for (enabled <- Seq("false", "true")) {
+              withSQLConf("spark.auron.enable" -> enabled) {
+                assert(intercept[Exception](sql(query).collect()).toString.contains("bad"))
+                assert(
+                  intercept[Exception](sql(overflow).collect()).toString.contains("2147483648"))
+              }
+            }
+            for ((nullQuery, expected, requireNative) <- Seq(
+                (
+                  "select array_intersect(b, cast(a as array<int>)) from t1",
+                  Seq(Row(null), Row(null)),
+                  fallbackEnabled == "true"),
+                (
+                  "select array_intersect(dates, array(make_date(2024, m, 1))) from t1",
+                  Seq(Row(null), Row(Seq(java.sql.Date.valueOf("2024-02-01")))),
+                  true))) {
+              val df = checkSparkAnswer(nullQuery)
+              checkAnswer(sql(nullQuery), expected)
+              if (requireNative) {
+                assertPlanIsNative(df)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("array_intersect function with atomic element types") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array('b', 'a', 'b', null) as strings,
+          |  array(true, false, true, null) as bools,
+          |  array(cast(2 as tinyint), cast(1 as tinyint)) as bytes,
+          |  array(cast(2 as smallint), cast(1 as smallint)) as shorts,
+          |  array(2, 1, 2) as ints,
+          |  array(date'2024-02-29', null) as dates,
+          |  array(timestamp'2024-02-29 12:34:56', null) as timestamps,
+          |  array(cast(2.5 as decimal(10, 2)), null) as decimals,
+          |  array(cast('b' as binary), cast('a' as binary), null) as binaries
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""select
+          |  array_intersect(strings, array('a', 'b', null)),
+          |  array_intersect(bools, array(false, null)),
+          |  array_intersect(bytes, bytes), array_intersect(shorts, shorts),
+          |  array_intersect(ints, array(1L, 3L)),
+          |  array_intersect(dates, array(date'1970-01-01', date'2024-02-29')),
+          |  array_intersect(timestamps, array(timestamp'2024-02-29 12:34:56')),
+          |  array_intersect(decimals, array(cast(2.5 as decimal(10, 2)))),
+          |  array_intersect(binaries, array(cast('a' as binary), cast('b' as binary)))
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_intersect function with floating point elements") {
+    if (AuronTestUtils.isSparkV31OrGreater) {
+      withTable("t1") {
+        sql("create table t1(id int, a array<double>, b array<double>) using parquet")
+        sql("""insert into t1 values
+            |  (0, array(-0.0D, 0.0D, -0.0D), array(0.0D, -0.0D)),
+            |  (1, array(-0.0D), array(0.0D)),
+            |  (2, array(double('NaN'), null, double('NaN')),
+            |      array(double('NaN'), double('NaN'), null)),
+            |  (3, array(double('NaN')), array(1.0D)),
+            |  (4, array(double('Infinity'), double('-Infinity')), array(double('Infinity'))),
+            |  (5, array(), array(0.0D)),
+            |  (6, null, array(0.0D))
+            |""".stripMargin)
+        val query = """select id, array_intersect(a, b),
+            |  array_intersect(cast(a as array<float>), cast(b as array<float>)) from t1
+            |""".stripMargin
+        for (codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+          withSQLConf("spark.sql.codegen.factoryMode" -> codegen) {
+            checkSparkAnswerAndOperator(query)
+            val first = sql(query).collect().find(_.getInt(0) == 0).get
+            val expectedZero = if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "4.2") 0.0 else -0.0
+            assert(
+              java.lang.Double.doubleToRawLongBits(first.getSeq[Double](1).head) ==
+                java.lang.Double.doubleToRawLongBits(expectedZero))
+            assert(
+              java.lang.Float.floatToRawIntBits(first.getSeq[Float](2).head) ==
+                java.lang.Float.floatToRawIntBits(expectedZero.toFloat))
+          }
+        }
+        checkSparkAnswerAndOperator("""select
+            |  array_intersect(a, array(-0.0D, double('NaN'))),
+            |  array_intersect(array(0.0D, double('NaN')), b)
+            |from t1
+            |""".stripMargin)
+      }
+    }
+  }
+
+  test("array_intersect function with unsupported elements falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array(array(1, null), array(2)) as nested,
+          |  array(named_struct('v', 1), named_struct('v', 2)) as structs,
+          |  array(double('NaN'), -0.0D, 0.0D) as doubles
+          |""".stripMargin)
+      val columns = Seq("nested", "structs") ++
+        (if (AuronTestUtils.isSparkV31OrGreater) Nil else Seq("doubles"))
+      for (fallbackEnabled <- Seq("false", "true")) {
+        withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> fallbackEnabled) {
+          for (column <- columns) {
+            val query = s"select array_intersect($column, $column) from t1"
+            val df = checkSparkAnswer(query)
+            if (fallbackEnabled == "true") {
+              val expr = df.queryExecution.analyzed.expressions.collectFirst {
+                case Alias(child, _) => child
+              }.get
+              assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+              assertPlanIsNative(df)
+            } else {
+              assert(collectFirst(df.queryExecution.executedPlan) { case _: ProjectExec =>
+                true
+              }.contains(true))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("hex function") {
     withTable("t1") {
       sql("create table t1(c1 int, c2 string) using parquet")
