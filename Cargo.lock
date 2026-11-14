@@ -339,7 +339,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auron"
-version = "8.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "auron-jni-bridge"
-version = "8.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "datafusion",
  "jni",
@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "auron-memmgr"
-version = "8.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "async-trait",
  "auron-jni-bridge",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "auron-planner"
-version = "8.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "base64 0.23.1",
@@ -1191,7 +1191,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-ext-commons"
-version = "8.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "arrow-schema",
@@ -1209,7 +1209,7 @@ dependencies = [
  "num",
  "once_cell",
  "paste",
- "rand 0.9.5",
+ "rand 0.10.3",
  "smallvec 2.0.0-beta.2",
  "tokio",
  "unchecked-index",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-ext-exprs"
-version = "8.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
@@ -1229,13 +1229,13 @@ dependencies = [
  "log",
  "once_cell",
  "parking_lot",
- "rand 0.9.5",
+ "rand 0.10.3",
  "rand_distr",
 ]
 
 [[package]]
 name = "datafusion-ext-functions"
-version = "8.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
@@ -1257,7 +1257,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-ext-plans"
-version = "8.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "arrow-schema",
@@ -1297,7 +1297,7 @@ dependencies = [
  "prost 0.14.4",
  "prost-reflect",
  "prost-types 0.14.4",
- "rand 0.9.5",
+ "rand 0.10.3",
  "rdkafka",
  "smallvec 2.0.0-beta.2",
  "sonic-rs",
@@ -3518,12 +3518,12 @@ checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "rand_distr"
-version = "0.5.1"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8615d50dcf34fa31f7ab52692afec947c4dd0ab803cc87cb3b0b4570ff7463"
+checksum = "4d431c2703ccf129de4d45253c03f49ebb22b97d6ad79ee3ecfc7e3f4862c1d8"
 dependencies = [
  "num-traits",
- "rand 0.9.5",
+ "rand 0.10.3",
 ]
 
 [[package]]

@@ -37,6 +37,7 @@ mod spark_map;
 mod spark_normalize_nan_and_zero;
 mod spark_null_if;
 pub mod spark_round;
+mod spark_sqrt;
 mod spark_strings;
 mod spark_unscaled_value;
 #[cfg(test)]
@@ -71,10 +72,10 @@ pub fn create_auron_ext_function(
         "Spark_GetParsedJsonObject" => {
             shared_function!(spark_get_json_object::spark_get_parsed_json_object)
         }
-        "Spark_ParseJson" => shared_function!(spark_get_json_object::spark_parse_json),
         "Spark_ArrayDistinct" => shared_function!(spark_array::array_distinct),
         "Spark_ArrayUnion" => shared_function!(spark_array::array_union),
         "Spark_ArrayContains" => shared_function!(spark_array::array_contains),
+        "Spark_ArraysOverlap" => shared_function!(spark_array::arrays_overlap),
         "Spark_ArrayReverse" => shared_function!(spark_array::array_reverse),
         "Spark_ArrayFlatten" => shared_function!(spark_array::array_flatten),
         "Spark_MapConcat" => shared_function!(spark_map::map_concat),
@@ -86,6 +87,7 @@ pub fn create_auron_ext_function(
         "Spark_MapFromArrays" => shared_function!(spark_map::map_from_arrays),
         "Spark_MapFromEntries" => shared_function!(spark_map::map_from_entries),
         "Spark_StrToMap" => shared_function!(spark_map::str_to_map),
+        "Spark_Chr" => shared_function!(spark_strings::string_chr),
         "Spark_Year" => shared_function!(spark_dates::spark_year),
         "Spark_Month" => shared_function!(spark_dates::spark_month),
         "Spark_Day" => shared_function!(spark_dates::spark_day),
@@ -110,6 +112,7 @@ pub fn create_auron_ext_function(
         "Spark_NormalizeNanAndZero" => {
             shared_function!(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
         }
+        "Spark_Sqrt" => shared_function!(spark_sqrt::spark_sqrt),
         "Spark_IsNaN" => shared_function!(spark_isnan::spark_isnan),
         "Flink_UnixTimestamp" => shared_function!(flink_datetime::flink_unix_timestamp),
         "Flink_UnixTimestampNow" => shared_function!(flink_datetime::flink_unix_timestamp_now),
@@ -661,7 +664,7 @@ mod tests {
     fn reuses_function_implementation() -> Result<()> {
         let first = create_auron_ext_function("Spark_GetJsonObject", 0)?;
         let second = create_auron_ext_function("Spark_GetJsonObject", 0)?;
-        let other = create_auron_ext_function("Spark_ParseJson", 0)?;
+        let other = create_auron_ext_function("Spark_GetParsedJsonObject", 0)?;
 
         assert!(Arc::ptr_eq(&first, &second));
         assert!(!Arc::ptr_eq(&first, &other));

@@ -852,7 +852,7 @@ object NativeConverters extends Logging {
         buildBinaryExprNode(lhs, castIfNecessary(rhs, lhs.dataType), "BitwiseShiftRight")
 
       // builtin scalar functions
-      case e: Sqrt => buildScalarFunction(pb.ScalarFunction.Sqrt, e.children, e.dataType)
+      case e: Sqrt => buildExtScalarFunction("Spark_Sqrt", e.children, e.dataType)
       case e: Sin => buildScalarFunction(pb.ScalarFunction.Sin, e.children, e.dataType)
       case e: Cos => buildScalarFunction(pb.ScalarFunction.Cos, e.children, e.dataType)
       case e: Tan => buildScalarFunction(pb.ScalarFunction.Tan, e.children, e.dataType)
@@ -946,7 +946,7 @@ object NativeConverters extends Logging {
       case e: Ascii => buildScalarFunction(pb.ScalarFunction.Ascii, e.children, e.dataType)
       case e: BitLength =>
         buildScalarFunction(pb.ScalarFunction.BitLength, e.children, e.dataType)
-      case e: Chr => buildScalarFunction(pb.ScalarFunction.Chr, e.children, e.dataType)
+      case e: Chr => buildExtScalarFunction("Spark_Chr", e.children, e.dataType)
       case e: StringTranslate =>
         buildScalarFunction(pb.ScalarFunction.Translate, e.children, e.dataType)
       case e: StringReplace =>
@@ -1210,6 +1210,14 @@ object NativeConverters extends Logging {
       case e: ArrayContains
           if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
         buildExtScalarFunction("Spark_ArrayContains", e.children, e.dataType)
+      case e: ArraysOverlap if isTypeSupported(e.left.dataType) && (e.left.dataType match {
+            // Spark 3.0's interpreted and code-generated paths compare floats differently.
+            case ArrayType(FloatType | DoubleType, _) =>
+              SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
+            case ArrayType(_: AtomicType, _) => true
+            case _ => false
+          }) =>
+        buildExtScalarFunction("Spark_ArraysOverlap", e.children, e.dataType)
       case e: Flatten => buildExtScalarFunction("Spark_ArrayFlatten", e.children, e.dataType)
       case e: MapFromEntries =>
         buildExtScalarFunction(

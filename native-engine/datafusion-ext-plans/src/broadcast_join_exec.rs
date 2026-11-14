@@ -1124,7 +1124,7 @@ mod fuzztest {
         prelude::SessionContext,
     };
     use datafusion_ext_commons::arrow::coalesce::coalesce_batches_unchecked;
-    use rand::{Rng, SeedableRng};
+    use rand::{Rng, RngExt, SeedableRng};
 
     use super::*;
     use crate::joins::bucketed_group::{BucketGroupBuilder, append_bucket_id_column};

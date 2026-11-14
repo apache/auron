@@ -20,6 +20,16 @@ import org.apache.spark.sql.AuronQueryTest
 
 class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
+  test("Chr uses Spark byte-range character semantics") {
+    withTable("chr_inputs") {
+      sql("CREATE TABLE chr_inputs(n BIGINT) USING parquet")
+      sql("""INSERT INTO chr_inputs VALUES
+            |(-1), (0), (65), (233), (255), (256), (321), (9223372036854775807), (NULL)
+            |""".stripMargin)
+      checkSparkAnswerAndOperator("SELECT chr(n), hex(chr(n)) FROM chr_inputs")
+    }
+  }
+
   test("preserve literal parameters during expression fallback") {
     withSQLConf(
       "spark.auron.decimal.arithOp.enabled" -> "false",
@@ -35,6 +45,22 @@ class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         // Spark 3.0-3.2 require legacy mode for a negative decimal result scale.
         withSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal" -> "true") {
           checkSparkAnswerAndOperator("SELECT round(a, -1) FROM literal_fallback")
+        }
+      }
+    }
+  }
+
+  test("sqrt returns NaN for negative inputs") {
+    withTable("sqrt_inputs") {
+      sql("CREATE TABLE sqrt_inputs(x DOUBLE) USING parquet")
+      sql("""INSERT INTO sqrt_inputs VALUES
+            |(-1.0D), (4.0D), (0.0D), (-0.0D), (NULL),
+            |(CAST('NaN' AS DOUBLE)), (CAST('Infinity' AS DOUBLE)),
+            |(CAST('-Infinity' AS DOUBLE))
+            |""".stripMargin)
+      Seq("false", "true").foreach { ansi =>
+        withSQLConf("spark.sql.ansi.enabled" -> ansi) {
+          checkSparkAnswerAndOperator("SELECT sqrt(x) FROM sqrt_inputs")
         }
       }
     }
