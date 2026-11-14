@@ -20,6 +20,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
+import java.time.Instant
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -854,6 +855,8 @@ object NativeConverters extends Logging {
           "Spark_MakeDate",
           e.children :+ Literal(Shims.get.getMakeDateFailOnError(e)),
           e.dataType)
+      case e: ToUnixTimestamp if nativeDateTimeFunctionsEnabled =>
+        buildToUnixTimestampExt(e, isPruningExpr, fallback)
       case e: Log =>
         buildScalarFunction(pb.ScalarFunction.Ln, e.children.map(nullIfNegative), e.dataType)
       case e: Log2 =>
@@ -1507,6 +1510,60 @@ object NativeConverters extends Logging {
             args.map(expr => convertExprWithFallback(expr, isPruningExpr, fallback)).asJava)
           .setReturnType(convertDataType(dataType)))
     }
+
+  private def buildToUnixTimestampExt(
+      expr: ToUnixTimestamp,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    def build(args: Seq[Expression]): pb.PhysicalExprNode =
+      buildExtScalarFunctionNode("Spark_ToUnixTimestamp", args, LongType, isPruningExpr, fallback)
+
+    // DATE/TIMESTAMP ignore the format, including null and non-foldable expressions.
+    if (expr.timeExp.dataType == TimestampType) {
+      return build(Seq(expr.timeExp))
+    }
+    if (expr.timeExp.dataType != DateType && expr.timeExp.dataType != StringType) {
+      return fallback(expr)
+    }
+    val rules = expr.zoneId.getRules
+    if (!rules.isFixedOffset) {
+      return fallback(expr)
+    }
+    val offset = Literal(rules.getOffset(Instant.EPOCH).getTotalSeconds)
+    if (expr.timeExp.dataType == DateType) {
+      return build(Seq(expr.timeExp, offset))
+    }
+
+    // Spark 3.0/3.1 accept special timestamp strings and handle overflow differently.
+    if (SparkVersionUtil.SPARK_RUNTIME_VERSION < "3.2") {
+      return fallback(expr)
+    }
+
+    // shortcut: Other parser policies and patterns retain Spark's parser until implemented.
+    if (SQLConf.get.getConf(SQLConf.LEGACY_TIME_PARSER_POLICY).toString != "CORRECTED" ||
+      !expr.format.foldable) {
+      return fallback(expr)
+    }
+    val format = Option(expr.format.eval()).map(_.toString)
+    val supported = format.forall { pattern =>
+      pattern == "yyyy-MM-dd" ||
+      Seq("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss").exists { base =>
+        pattern == base || (pattern.startsWith(base + ".") && {
+          val fraction = pattern.substring(base.length + 1)
+          fraction.nonEmpty && fraction.length <= 9 && fraction.forall(_ == 'S')
+        })
+      }
+    }
+    if (!supported) {
+      return fallback(expr)
+    }
+    build(
+      Seq(
+        expr.timeExp,
+        Literal.create(format.orNull, StringType),
+        offset,
+        Literal(Shims.get.getToUnixTimestampFailOnError(expr))))
+  }
 
   private def buildTimePartExt(
       name: String,

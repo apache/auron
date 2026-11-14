@@ -39,6 +39,7 @@ mod spark_null_if;
 pub mod spark_round;
 mod spark_sqrt;
 mod spark_strings;
+mod spark_to_unix_timestamp;
 mod spark_unscaled_value;
 #[cfg(test)]
 mod udf_tests;
@@ -106,6 +107,9 @@ pub fn create_auron_ext_function(
         "Spark_Second" => shared_function!(spark_dates::spark_second),
         "Spark_MakeDate" => shared_function!(spark_dates::spark_make_date),
         "Spark_MonthsBetween" => shared_function!(spark_dates::spark_months_between),
+        "Spark_ToUnixTimestamp" => {
+            shared_function!(spark_to_unix_timestamp::spark_to_unix_timestamp)
+        }
         "Spark_BrickhouseArrayUnion" => shared_function!(brickhouse::array_union::array_union),
         "Spark_NormalizeNanAndZero" => {
             shared_function!(spark_normalize_nan_and_zero::spark_normalize_nan_and_zero)
