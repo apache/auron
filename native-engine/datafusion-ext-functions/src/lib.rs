@@ -106,6 +106,7 @@ pub fn create_auron_ext_function(
         "Spark_Minute" => shared_function!(spark_dates::spark_minute),
         "Spark_Second" => shared_function!(spark_dates::spark_second),
         "Spark_MakeDate" => shared_function!(spark_dates::spark_make_date),
+        "Spark_MakeTimestamp" => shared_function!(spark_dates::spark_make_timestamp),
         "Spark_MonthsBetween" => shared_function!(spark_dates::spark_months_between),
         "Spark_BrickhouseArrayUnion" => shared_function!(brickhouse::array_union::array_union),
         "Spark_NormalizeNanAndZero" => {

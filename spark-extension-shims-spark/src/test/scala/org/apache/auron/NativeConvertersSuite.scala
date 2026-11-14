@@ -20,11 +20,11 @@ import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GreaterThan, Literal}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, StringType, StructType}
 
 import org.apache.auron.protobuf.ScalarFunction
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
-import org.apache.auron.util.AuronTestUtils
+import org.apache.auron.util.{AuronTestUtils, SparkVersionUtil}
 
 class NativeConvertersSuite
     extends AuronQueryTest
@@ -51,7 +51,9 @@ class NativeConvertersSuite
       "add_months(date'2024-03-15', 1)",
       "months_between(timestamp'2024-03-15 14:30:45', timestamp'2024-02-15 14:30:45')",
       "date_trunc('day', timestamp'2024-03-15 14:30:45')") ++
-      (if (AuronTestUtils.isSparkV30OrGreater) Seq("make_date(2024, 3, 15)") else Nil) ++
+      (if (AuronTestUtils.isSparkV30OrGreater) {
+         Seq("make_date(2024, 3, 15)", "make_timestamp(2024, 3, 15, 12, 30, 45.123456)")
+       } else Nil) ++
       (if (AuronTestUtils.isSparkV31OrGreater) {
          Seq("unix_date(date'2024-03-15')", "date_from_unix_date(1)")
        } else Nil)
@@ -114,6 +116,124 @@ class NativeConvertersSuite
         .foreach { expr =>
           assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
         }
+    }
+  }
+
+  test("make_timestamp converts session and explicit time zones natively") {
+    for (ansi <- Seq("false", "true")) {
+      withSQLConf(
+        "spark.auron.enableNativeDateTimeFunctions" -> "true",
+        "spark.sql.ansi.enabled" -> ansi,
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        for (timezone <- Seq("", ", 'PST'", ", 'GMT+05:30:15'", ", cast(null as string)")) {
+          val expr = sql(
+            s"select make_timestamp(2024, 3, 15, 12, 30, 45.123456$timezone)").queryExecution.analyzed.expressions.head.children.head
+          val converted = NativeConverters.convertExpr(expr)
+          assert(converted.hasScalarFunction)
+          assert(converted.getScalarFunction.getName == "Spark_MakeTimestamp")
+          assert(converted.getScalarFunction.getArgsCount == 8)
+        }
+      }
+    }
+  }
+
+  test("make_timestamp keeps unsupported time zones on the fallback path") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      for (timezone <- Seq("cast(id as string)", "'SystemV/PST8PDT'", "'invalid/zone'")) {
+        val expr = sql(
+          s"select make_timestamp(2024, 3, 15, 12, 30, 0, $timezone) from range(1)").queryExecution.analyzed.expressions.head.children.head
+        assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+      }
+    }
+  }
+
+  test("make_timestamp guards years outside the native timezone range") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      val expr = sql(
+        "select make_timestamp(y, 7, 1, 12, 0, 0, 'PST') from (select 2024 as y)").queryExecution.analyzed.expressions.head.children.head
+      val converted = NativeConverters.convertExpr(expr)
+      assert(converted.hasCase)
+      assert(
+        converted.getCase
+          .getWhenThenExpr(0)
+          .getThenExpr
+          .getScalarFunction
+          .getName == "Spark_MakeTimestamp")
+      assert(converted.getCase.getElseExpr.hasSparkUdfWrapperExpr)
+      val future = sql(
+        "select make_timestamp(9999, 7, 1, 12, 0, 0, 'PST')").queryExecution.analyzed.expressions.head.children.head
+      assert(NativeConverters.convertExpr(future).hasSparkUdfWrapperExpr)
+    }
+  }
+
+  test("make_timestamp leaves narrowing casts inside its Spark fallback") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      for (month <- Seq("7", "java_method('java.lang.String', 'valueOf', 1)")) {
+        val expr = sql(
+          s"select make_timestamp(cast(id as int), $month, 1, 12, 0, 0, 'UTC') from range(1)").queryExecution.analyzed.expressions.head.children.head
+        val converted = NativeConverters.convertExpr(expr)
+        assert(converted.hasSparkUdfWrapperExpr)
+        val (bound, _) = NativeConverters.deserializeExpression[Expression, StructType](
+          converted.getSparkUdfWrapperExpr.getSerialized.toByteArray)
+        assert(Seq("Cast", "AnsiCast").contains(bound.children.head.getClass.getSimpleName))
+        assert(converted.getSparkUdfWrapperExpr.getParamsList.toArray.forall { param =>
+          !param.asInstanceOf[org.apache.auron.protobuf.PhysicalExprNode].hasTryCast
+        })
+      }
+    }
+  }
+
+  test("make_timestamp keeps narrowing seconds casts inside Spark") {
+    val nativePrecision = if (AuronTestUtils.isSparkV32OrGreater) 16 else 8
+    for (ansi <- Seq("false", "true")) {
+      withSQLConf(
+        "spark.auron.enableNativeDateTimeFunctions" -> "true",
+        "spark.auron.udf.singleChildFallback.enabled" -> "true",
+        "spark.sql.ansi.enabled" -> ansi) {
+        for (precision <- Seq(nativePrecision, 18)) {
+          val expr = sql(s"select make_timestamp(y, 1, 1, 0, 0, " +
+            s"cast(s as decimal($nativePrecision,6)), 'UTC') " +
+            s"from (select 2024 as y, cast(0 as decimal($precision,6)) as s)").queryExecution.analyzed.expressions.head.children.head
+          val converted = NativeConverters.convertExpr(expr)
+          if (precision == nativePrecision) {
+            assert(converted.hasCase)
+            assert(
+              converted.getCase.getWhenThenExpr(0).getThenExpr.getScalarFunction.getName ==
+                "Spark_MakeTimestamp")
+          } else {
+            assert(converted.hasSparkUdfWrapperExpr)
+            val (bound, _) = NativeConverters.deserializeExpression[Expression, StructType](
+              converted.getSparkUdfWrapperExpr.getSerialized.toByteArray)
+            assert(Seq("Cast", "AnsiCast").contains(bound.children(5).getClass.getSimpleName))
+          }
+        }
+      }
+    }
+  }
+
+  test("make_timestamp with NTZ result keeps its existing fallback") {
+    if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.4") {
+      withSQLConf(
+        "spark.auron.enableNativeDateTimeFunctions" -> "true",
+        "spark.sql.timestampType" -> "TIMESTAMP_NTZ") {
+        val expr = sql(
+          "select make_timestamp(2024, 3, 15, 12, 30, 0)").queryExecution.analyzed.expressions.head.children.head
+        var fallbackCalled = false
+        NativeConverters.convertExprWithFallback(
+          expr,
+          isPruningExpr = false,
+          _ => {
+            fallbackCalled = true
+            org.apache.auron.protobuf.PhysicalExprNode.getDefaultInstance
+          })
+        assert(fallbackCalled)
+      }
     }
   }
 

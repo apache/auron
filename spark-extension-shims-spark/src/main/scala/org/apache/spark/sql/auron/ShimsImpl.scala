@@ -819,6 +819,15 @@ class ShimsImpl extends Shims with Logging {
     expr.asInstanceOf[MakeDate].failOnError
   }
 
+  @sparkver("3.0")
+  override def getMakeTimestampFailOnError(expr: Expression): Boolean = false
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override def getMakeTimestampFailOnError(expr: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.MakeTimestamp
+    expr.asInstanceOf[MakeTimestamp].failOnError
+  }
+
   @sparkver("3.0 / 3.1 / 3.2 / 3.3")
   override def getRoundFailOnError(expr: Expression): Boolean = false
 
