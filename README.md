@@ -104,6 +104,13 @@ controls native ORC decoding; downstream operators may coalesce these batches.
 Smaller batches reduce the risk of offset overflow but cannot accommodate an
 individual value that exceeds Arrow's offset limit.
 
+Iceberg tables with `schema.name-mapping.default` use Iceberg's reader instead of
+the native scan, so imported files without field IDs retain their mapped column
+identities and historical aliases. This conservative fallback also applies when
+the table's files already contain field IDs. The reason is recorded in
+`auron.never.convert.reason`; tables without name mapping remain eligible for
+native scans.
+
 ## Native conversion diagnostics in the Spark UI
 
 After configuring Auron as described above, enable the Spark UI and Auron tab

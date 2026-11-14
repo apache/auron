@@ -25,9 +25,10 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
-import org.apache.iceberg.{AddedRowsScanTask, ChangelogScanTask, DataFiles, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, PartitionData, ScanTask}
+import org.apache.iceberg.{AddedRowsScanTask, ChangelogScanTask, DataFiles, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, PartitionData, ScanTask, Table, TableProperties}
 import org.apache.iceberg.data.{GenericAppenderFactory, GenericRecord, Record}
 import org.apache.iceberg.deletes.PositionDelete
+import org.apache.iceberg.mapping.{MappingUtil, NameMappingParser}
 import org.apache.iceberg.spark.Spark3Util
 import org.apache.parquet.column.ParquetProperties.WriterVersion
 import org.apache.parquet.example.data.simple.SimpleGroupFactory
@@ -53,6 +54,138 @@ import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 class AuronIcebergIntegrationSuite
     extends org.apache.spark.sql.QueryTest
     with BaseAuronIcebergSuite {
+
+  private val mappingProperty = TableProperties.DEFAULT_NAME_MAPPING
+  private val nameMappingFallbackReason =
+    "Iceberg name mapping (schema.name-mapping.default) is not supported by native scans."
+
+  test("imported parquet without field IDs remains readable with name mapping") {
+    withImportedParquet("local.db.t_mapping_import") { _ =>
+      checkNameMappingFallback(
+        "select id, value from local.db.t_mapping_import",
+        Seq(Row(1, "old")))
+      checkNameMappingFallback(
+        "select id from local.db.t_mapping_import where value = 'old'",
+        Seq(Row(1)))
+    }
+  }
+
+  for (changelog <- Seq(false, true)) {
+    test(s"imported parquet name mapping preserves renamed aliases: changelog=$changelog") {
+      val tableName = s"local.db.t_mapping_rename_$changelog"
+      withImportedParquet(tableName) { table =>
+        val fieldId = table.schema().findField("value").fieldId()
+        sql(s"alter table $tableName rename column value to renamed")
+        table.refresh()
+        val mapping = NameMappingParser.fromJson(table.properties().get(mappingProperty))
+        assert(mapping.find("value").id().intValue() == fieldId)
+        assert(mapping.find("renamed").id().intValue() == fieldId)
+        sql(s"insert into $tableName values (2, 'new')")
+
+        val source = if (changelog) s"$tableName.changes" else tableName
+        val scan = sql(s"select id, renamed from $source").queryExecution.sparkPlan.collectFirst {
+          case scan: BatchScanExec => scan
+        }.get
+        assert(IcebergScanSupport.plan(scan).isEmpty)
+        val copied = IcebergScanSupport.withRuntimeFilters(scan, Seq(Literal(true)))
+        assert(copied.runtimeFilters.nonEmpty)
+        assert(IcebergScanSupport.plan(copied, useRuntimeFilters = true).isEmpty)
+        assert(IcebergScanSupport.fallbackReason(copied).contains(nameMappingFallbackReason))
+
+        checkNameMappingFallback(
+          s"select id, renamed from $source",
+          Seq(Row(1, "old"), Row(2, "new")))
+        checkNameMappingFallback(s"select id from $source where renamed = 'old'", Seq(Row(1)))
+        checkNameMappingFallback(s"select id from $source where renamed is null", Seq.empty)
+        if (changelog) {
+          checkNameMappingFallback(
+            s"select id, _change_type from $source",
+            Seq(Row(1, "INSERT"), Row(2, "INSERT")))
+        }
+      }
+    }
+
+    test(s"imported parquet name mapping isolates a re-added column: changelog=$changelog") {
+      val tableName = s"local.db.t_mapping_drop_add_$changelog"
+      withImportedParquet(tableName) { table =>
+        val idFieldId = table.schema().findField("id").fieldId()
+        val oldFieldId = table.schema().findField("value").fieldId()
+        sql(s"alter table $tableName drop column value")
+        sql(s"alter table $tableName add column value string")
+        table.refresh()
+        val newFieldId = table.schema().findField("value").fieldId()
+        assert(newFieldId != oldFieldId)
+        // Schema updates reassign names; keep the imported name owned by the dropped field.
+        table
+          .updateProperties()
+          .set(
+            mappingProperty,
+            s"""[{"field-id":$idFieldId,"names":["id"]},
+             |{"field-id":$oldFieldId,"names":["value"]},
+             |{"field-id":$newFieldId,"names":[]}]""".stripMargin)
+          .commit()
+        spark.catalog.refreshTable(tableName)
+        table.refresh()
+        val mapping = NameMappingParser.fromJson(table.properties().get(mappingProperty))
+        assert(mapping.find("value").id().intValue() == oldFieldId)
+        assert(mapping.find(newFieldId).names().isEmpty)
+        sql(s"insert into $tableName values (2, 'new')")
+
+        val source = if (changelog) s"$tableName.changes" else tableName
+        checkNameMappingFallback(
+          s"select id, value from $source",
+          Seq(Row(1, null), Row(2, "new")))
+        checkNameMappingFallback(s"select value from $source", Seq(Row(null), Row("new")))
+        checkNameMappingFallback(s"select id from $source where value is null", Seq(Row(1)))
+        checkNameMappingFallback(s"select id from $source where value = 'old'", Seq.empty)
+        checkNameMappingFallback(s"select id from $source where value = 'new'", Seq(Row(2)))
+      }
+    }
+  }
+
+  test("imported parquet name mapping preserves aliases in full-data-file delete changelog") {
+    val tableName = "local.db.t_mapping_delete_changes"
+    withImportedParquet(tableName) { _ =>
+      sql(s"alter table $tableName rename column value to renamed")
+      sql(s"insert into $tableName values (2, 'new')")
+      sql(s"delete from $tableName")
+
+      val query = s"select id, renamed, _change_type from $tableName.changes"
+      val tasks = changelogScanTasks(query)
+      assert(tasks.exists(_.isInstanceOf[AddedRowsScanTask]))
+      assert(tasks.count(_.isInstanceOf[DeletedDataFileScanTask]) == 2)
+      checkNameMappingFallback(
+        query,
+        Seq(
+          Row(1, "old", "INSERT"),
+          Row(2, "new", "INSERT"),
+          Row(1, "old", "DELETE"),
+          Row(2, "new", "DELETE")))
+      checkNameMappingFallback(
+        s"select id from $tableName.changes where renamed = 'old'",
+        Seq(Row(1), Row(1)))
+    }
+  }
+
+  test("field-ID parquet stays native without name mapping and falls back when it is set") {
+    val tableName = "local.db.t_mapping_field_ids"
+    withTable(tableName) {
+      sql(s"create table $tableName (id int, value string) using iceberg")
+      sql(s"insert into $tableName values (1, 'native')")
+      val table = Spark3Util.loadIcebergTable(spark, tableName)
+      assert(!table.properties().containsKey(mappingProperty))
+      val df = sql(s"select id, value from $tableName")
+      checkAnswer(df, Seq(Row(1, "native")))
+      assert(df.queryExecution.executedPlan.toString().contains("NativeIcebergTableScan"))
+
+      table
+        .updateProperties()
+        .set(mappingProperty, NameMappingParser.toJson(MappingUtil.create(table.schema())))
+        .commit()
+      spark.catalog.refreshTable(tableName)
+      checkNameMappingFallback(s"select id, value from $tableName", Seq(Row(1, "native")))
+    }
+  }
 
   test("iceberg native scan with auron.enable.iceberg.scan=false") {
     withTable("local.db.t2") {
@@ -2137,4 +2270,63 @@ class AuronIcebergIntegrationSuite
       assert(df.rdd.getNumPartitions === 1)
     }
   }
+
+  private def withImportedParquet(tableName: String)(f: Table => Unit): Unit = {
+    withTable(tableName) {
+      withTempDir { dir =>
+        sql(s"""create table $tableName (id int, value string) using iceberg
+               |tblproperties ('format-version' = '2')""".stripMargin)
+        val path = new Path(dir.toURI.toString, "imported.parquet")
+        val schema = MessageTypeParser.parseMessageType("""
+            |message imported {
+            |  required int32 id;
+            |  optional binary value (UTF8);
+            |}
+            |""".stripMargin)
+        val conf = spark.sessionState.newHadoopConf()
+        val writer = ExampleParquetWriter.builder(path).withConf(conf).withType(schema).build()
+        try {
+          writer.write(
+            new SimpleGroupFactory(schema).newGroup().append("id", 1).append("value", "old"))
+        } finally {
+          writer.close()
+        }
+        val reader = ParquetFileReader.open(HadoopInputFile.fromPath(path, conf))
+        try {
+          assert(
+            reader.getFooter.getFileMetaData.getSchema.getFields.asScala.forall(_.getId == null))
+        } finally {
+          reader.close()
+        }
+        sql(s"""CALL local.system.add_files(
+               |  table => '${tableName.stripPrefix("local.")}',
+               |  source_table => 'parquet.`${dir.toURI}`')""".stripMargin)
+        val table = Spark3Util.loadIcebergTable(spark, tableName)
+        val mapping = NameMappingParser.fromJson(table.properties().get(mappingProperty))
+        assert(
+          mapping.find("value").id().intValue() == table.schema().findField("value").fieldId())
+        f(table)
+      }
+    }
+  }
+
+  private def checkNameMappingFallback(query: String, expected: Seq[Row]): Unit = {
+    withSQLConf("spark.auron.enabled" -> "false") {
+      val reference = sql(query)
+      checkAnswer(reference, expected)
+      val plan = reference.queryExecution.executedPlan.toString()
+      assert(plan.contains("BatchScan") && !plan.contains("NativeIcebergTableScan"), plan)
+    }
+    withSQLConf("spark.auron.enabled" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+      val df = sql(query)
+      checkAnswer(df, expected)
+      val plan = df.queryExecution.executedPlan
+      assert(!plan.toString().contains("NativeIcebergTableScan"), plan)
+      val reason = collectFirst(plan) { case scan: BatchScanExec =>
+        scan.getTagValue(TreeNodeTag[String]("auron.never.convert.reason"))
+      }.flatten
+      assert(reason.contains(nameMappingFallbackReason), s"$reason\n$plan")
+    }
+  }
+
 }

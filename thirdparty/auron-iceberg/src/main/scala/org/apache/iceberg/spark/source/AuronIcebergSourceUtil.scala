@@ -19,7 +19,7 @@ package org.apache.iceberg.spark.source
 import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.reflect.FieldUtils
-import org.apache.iceberg.{MetadataColumns, Partitioning, Table}
+import org.apache.iceberg.{MetadataColumns, Partitioning, Table, TableProperties}
 import org.apache.iceberg.types.{Types, TypeUtil}
 
 object AuronIcebergSourceUtil {
@@ -32,6 +32,15 @@ object AuronIcebergSourceUtil {
 
   def getClassOfSparkInputPartition(): Class[SparkInputPartition] = {
     classOf[SparkInputPartition]
+  }
+
+  def hasNameMapping(scan: AnyRef): Boolean = {
+    val table = scan match {
+      case batchScan: SparkBatchQueryScan => batchScan.table()
+      // SparkChangelogScan does not expose its Iceberg table.
+      case _ => FieldUtils.readField(scan, "table", true).asInstanceOf[Table]
+    }
+    table.properties().containsKey(TableProperties.DEFAULT_NAME_MAPPING)
   }
 
   def expectedFieldIds(scan: AnyRef): Map[String, Int] = {
