@@ -75,6 +75,7 @@ exec $SPARK_HOME/bin/spark-submit \
   --conf spark.auron.memoryFraction=0.8 \
   --conf spark.driver.extraJavaOptions=-XX:+UseG1GC \
   --conf spark.ui.enabled=false \
+  --conf spark.sql.adaptive.enabled=false \
   --jars "${AURON_SPARK_JAR}" \
   "${SPARK_CONF[@]}" \
   "${AURON_IT_JAR}" \
