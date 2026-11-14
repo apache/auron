@@ -20,10 +20,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.AuronConverters
 import org.apache.spark.sql.auron.AuronConvertProvider
 import org.apache.spark.sql.auron.paimon.PaimonScanSupport
+import org.apache.spark.sql.auron.paimon.PaimonWriteConverter
 import org.apache.spark.sql.auron.util.AuronLogUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.auron.plan.NativePaimonV2TableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.execution.auron.plan.NativePaimonTableScanExec
 
@@ -37,6 +39,9 @@ class PaimonConvertProvider extends AuronConvertProvider with Logging {
         SparkAuronConfiguration.ENABLE_PAIMON_SCAN.get()
       case _: BatchScanExec =>
         SparkAuronConfiguration.ENABLE_PAIMON_SCAN.get()
+      case e: V2ExistingTableWriteExec if PaimonWriteConverter.isPaimonWrite(e) =>
+        SparkAuronConfiguration.ENABLE_DATA_WRITING.get() &&
+        SparkAuronConfiguration.ENABLE_PAIMON_WRITE.get()
       case _ => false
     }
 
@@ -50,6 +55,8 @@ class PaimonConvertProvider extends AuronConvertProvider with Logging {
         true
       case e: BatchScanExec =>
         PaimonScanSupport.isPaimonScan(e) && PaimonScanSupport.plan(e).nonEmpty
+      case e: V2ExistingTableWriteExec if PaimonWriteConverter.isPaimonWrite(e) =>
+        PaimonWriteConverter.isSupported(e)
       case _ => false
     }
   }
@@ -58,6 +65,7 @@ class PaimonConvertProvider extends AuronConvertProvider with Logging {
     exec match {
       case hiveExec: HiveTableScanExec => convertPaimonTableScanExec(hiveExec)
       case batchScan: BatchScanExec => convertPaimonV2BatchScanExec(batchScan)
+      case write: V2ExistingTableWriteExec => PaimonWriteConverter.convert(write)
       case _ => exec
     }
   }
