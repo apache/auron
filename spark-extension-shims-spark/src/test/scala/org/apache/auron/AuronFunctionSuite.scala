@@ -328,6 +328,157 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("array_position function") {
+    withTable("t1") {
+      sql("create table t1(id int, arr array<int>, value int) using parquet")
+      sql("""insert into t1 values
+          |  (0, array(312, 773, 708, 708), 708),
+          |  (1, array(null, 2, null, 2), 2),
+          |  (2, array(1, 2), 3),
+          |  (3, array(), 1),
+          |  (4, null, 1),
+          |  (5, array(1, null), null),
+          |  (6, array(null), 1)
+          |""".stripMargin)
+      val query = "select id, array_position(arr, value) from t1"
+      checkSparkAnswerAndOperator(query)
+      checkAnswer(
+        sql(query),
+        Seq(
+          Row(0, 3L),
+          Row(1, 2L),
+          Row(2, 0L),
+          Row(3, 0L),
+          Row(4, null),
+          Row(5, null),
+          Row(6, 0L)))
+      checkSparkAnswerAndOperator("""select
+          |  array_position(arr, 2),
+          |  array_position(array(1, 2, 3, null, 3), value)
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_position function with atomic element types") {
+    withTable("t1") {
+      sql("""create table t1(
+          |  bytes array<tinyint>, y tinyint,
+          |  shorts array<smallint>, h smallint,
+          |  longs array<bigint>, l bigint,
+          |  strings array<string>, s string,
+          |  bools array<boolean>, b boolean,
+          |  dates array<date>, d date,
+          |  timestamps array<timestamp>, ts timestamp,
+          |  decimals array<decimal(10, 2)>, n decimal(10, 2),
+          |  ints array<int>, w bigint) using parquet
+          |""".stripMargin)
+      sql("""insert into t1 values
+          |  (array(1Y, 2Y, 2Y), 2Y, array(1S, null, 3S), 3S, array(1L, 2L, 1L), 1L,
+          |   array('a', 'b', null, 'a'), 'a', array(false, null, true), true,
+          |   array(date'2024-01-01', date'2024-01-02', null), date'2024-01-02',
+          |   array(timestamp'2024-01-01 00:00:00', timestamp'2024-01-02 12:30:00'),
+          |   timestamp'2024-01-02 12:30:00',
+          |   array(1.10, 2.20, 1.10), 2.20, array(1, 2, 3), 3L),
+          |  (array(3Y), 4Y, array(5S), 6S, array(2L), 3L, array('A'), 'a',
+          |   array(false), true, array(date'2024-01-03'), date'2024-01-04',
+          |   array(timestamp'2024-01-03 00:00:00'), timestamp'2024-01-03 00:00:01',
+          |   array(3.30), 4.40, array(1), 1L),
+          |  (null, null, null, null, null, null, null, null, null,
+          |   null, null, null, null, null, null, null, null, null)
+          |""".stripMargin)
+      checkSparkAnswerAndOperator("""select
+          |  array_position(bytes, y), array_position(shorts, h),
+          |  array_position(longs, l), array_position(strings, s),
+          |  array_position(bools, b), array_position(dates, d),
+          |  array_position(timestamps, ts), array_position(decimals, n),
+          |  array_position(ints, w),
+          |  array_position(longs, 2L), array_position(strings, 'b'),
+          |  array_position(bools, false), array_position(dates, date'2024-01-02'),
+          |  array_position(timestamps, timestamp'2024-01-01 00:00:00'),
+          |  array_position(decimals, cast(1.10 as decimal(10, 2)))
+          |from t1
+          |""".stripMargin)
+    }
+  }
+
+  test("array_position function with floating point elements") {
+    withTable("t1") {
+      sql("create table t1(arr array<double>, value double) using parquet")
+      sql("""insert into t1 values
+          |  (array(1.0, cast('-0.0' as double)), cast('0.0' as double)),
+          |  (array(cast('0.0' as double), 1.0), cast('-0.0' as double)),
+          |  (array(null, 1.0, cast('NaN' as double)), cast('NaN' as double)),
+          |  (array(cast('NaN' as double), null), 1.0),
+          |  (array(cast('Infinity' as double)), cast('-Infinity' as double))
+          |""".stripMargin)
+      val query = """select
+          |  array_position(arr, value),
+          |  array_position(cast(arr as array<float>), cast(value as float)),
+          |  array_position(arr, cast('NaN' as double)),
+          |  array_position(arr, 0.0D)
+          |from t1
+          |""".stripMargin
+      checkSparkAnswerAndOperator(query)
+      checkAnswer(
+        sql(query),
+        Seq(
+          Row(2L, 2L, 0L, 2L),
+          Row(1L, 1L, 0L, 1L),
+          Row(3L, 3L, 3L, 0L),
+          Row(0L, 0L, 1L, 0L),
+          Row(0L, 0L, 0L, 0L)))
+    }
+  }
+
+  test("array_position function with complex elements falls back") {
+    withTable("t1") {
+      sql("""create table t1 using parquet as select
+          |  array(array(1), array(2), null) as nested,
+          |  array(named_struct('x', 1), named_struct('x', 2)) as structs
+          |""".stripMargin)
+      val query = """select
+          |  array_position(nested, array(2)),
+          |  array_position(structs, named_struct('x', 2))
+          |from t1
+          |""".stripMargin
+      for (fallbackEnabled <- Seq("false", "true")) {
+        withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> fallbackEnabled) {
+          val df = sql(query)
+          checkAnswer(df, Seq(Row(2L, 2L)))
+          val plan = df.queryExecution.executedPlan
+          if (fallbackEnabled == "true") {
+            assertPlanIsNative(df)
+            val project = collectFirst(plan) { case p: NativeProjectBase => p }.get
+            val expressions = project.expressions.collect { case a: Alias => a.child }
+            assert(expressions.size == 2)
+            expressions.foreach { expression =>
+              assert(NativeConverters.convertExpr(expression).hasSparkUdfWrapperExpr)
+            }
+          } else {
+            assert(collectFirst(plan) { case _: ProjectExec => true }.contains(true))
+          }
+        }
+      }
+    }
+  }
+
+  test("array_position function with collated strings falls back") {
+    if (SparkVersionUtil.isSparkV40OrGreater) {
+      withTable("t1") {
+        sql("""create table t1(
+            |  arr array<string collate UTF8_LCASE>, value string collate UTF8_LCASE)
+            |using parquet
+            |""".stripMargin)
+        sql("insert into t1 values (array('A', 'a', 'b'), 'a')")
+        val df = sql("select array_position(arr, value) from t1")
+        checkAnswer(df, Seq(Row(1L)))
+        val plan = df.queryExecution.executedPlan
+        assert(collectFirst(plan) { case _: ProjectExec => true }.contains(true))
+      }
+    }
+  }
+
   test("arrays_overlap function") {
     withTable("t1") {
       sql("create table t1(id int, a1 array<int>, a2 array<int>) using parquet")

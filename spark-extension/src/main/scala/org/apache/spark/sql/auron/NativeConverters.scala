@@ -1196,6 +1196,9 @@ object NativeConverters extends Logging {
       case e: ArrayContains
           if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
         buildExtScalarFunction("Spark_ArrayContains", e.children, e.dataType)
+      case e: ArrayPosition
+          if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
+        buildExtScalarFunction("Spark_ArrayPosition", e.children, e.dataType)
       case e: ArraysOverlap if isTypeSupported(e.left.dataType) && (e.left.dataType match {
             // Spark 3.0's interpreted and code-generated paths compare floats differently.
             case ArrayType(FloatType | DoubleType, _) =>
