@@ -248,13 +248,6 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         let batch_size = self.join_params.batch_size.max(1);
         let (mut probe_indices, mut build_indices): (Vec<u32>, Vec<u32>) = (vec![], vec![]);
 
-        // Whether the build side contains any NULL join keys
-        let build_has_null_keys = if map.num_rows() == 0 {
-            false
-        } else {
-            map.key_columns().iter().any(|col| col.null_count() > 0)
-        };
-
         for row_idx in 0..probed_batch.num_rows() {
             let key_is_valid = probed_valids
                 .as_ref()
@@ -262,7 +255,8 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                 .unwrap_or(true);
             if get_joiner(P).mode == Anti
                 && get_joiner(P).probe_is_join_side
-                && (!key_is_valid || build_has_null_keys) // Filter if probe row is NULL or build side has any NULL
+                && !map.is_empty()
+                && (!key_is_valid || map.has_null_keys())
                 && self.join_params.is_null_aware_anti_join
             {
                 probed_joined.set(row_idx, true);

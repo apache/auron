@@ -696,6 +696,11 @@ async fn run_hybrid_join(
         } else {
             JoinHashMap::load_from_hash_map_batches(group_batches, &map_keys)?
         });
+        // NULL-aware anti joins have one key. Its NULLs are in bucket 0,
+        // so they are encountered before any probe rows can be emitted.
+        if join_params.is_null_aware_anti_join && map.has_null_keys() {
+            return Ok(());
+        }
         let mut joiner = create_joiner(broadcast_side, join_params.clone(), map, sender.clone());
 
         // probe data left over from the previous group, if it belongs here
@@ -1368,6 +1373,64 @@ mod fuzztest {
             "seed={seed} jt={jt:?} build_left={build_left} left_n={left_n} right_n={right_n} \
              key_range={key_range}",
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn null_aware_anti_join_build_nulls() -> Result<()> {
+        MemManager::init(10_000_000);
+        let schema = Arc::new(Schema::new(vec![Field::new("k", DataType::Int32, true)]));
+        let key = Arc::new(Column::new("k", 0)) as PhysicalExprRef;
+        let batch = |values: Vec<Option<i32>>| {
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(Int32Array::from(values))])
+        };
+        let probe = batch(vec![Some(1), None, Some(2), Some(3)])?;
+        for (values, expected) in [
+            (vec![Some(1), None], vec![]),
+            (vec![None], vec![]),
+            (vec![Some(1)], vec![Some(2), Some(3)]),
+            (vec![], vec![Some(1), None, Some(2), Some(3)]),
+        ] {
+            let build = batch(values.clone())?;
+            for path in ["direct", "hash map", "hybrid"] {
+                let built = if path == "direct" {
+                    memory(build.clone())
+                } else {
+                    let groups = if path == "hybrid" {
+                        build_bucketed_group_batches(build.clone(), key.clone(), 1)?
+                    } else {
+                        JoinHashMap::create_from_data_batch(
+                            build.clone(),
+                            std::slice::from_ref(&key),
+                        )?
+                        .into_hash_map_batches(None)?
+                    };
+                    Arc::new(TestMemoryExec::try_new(
+                        &[groups],
+                        join_hash_map_schema(&schema),
+                        None,
+                    )?) as Arc<dyn ExecutionPlan>
+                };
+                let join = BroadcastJoinExec::try_new(
+                    schema.clone(),
+                    memory(probe.clone()),
+                    built,
+                    vec![(key.clone(), key.clone())],
+                    JoinType::LeftAnti,
+                    JoinSide::Right,
+                    path != "direct",
+                    None,
+                    true,
+                    None,
+                )?;
+                let output = collect(join.execute(0, SessionContext::new().task_ctx())?).await?;
+                assert_eq!(
+                    to_sorted_rows(output),
+                    to_sorted_rows(vec![batch(expected.clone())?]),
+                    "build={values:?}, path={path}",
+                );
+            }
+        }
         Ok(())
     }
 
