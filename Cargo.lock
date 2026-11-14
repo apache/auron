@@ -339,7 +339,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auron"
-version = "9.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "auron-jni-bridge"
-version = "9.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "datafusion",
  "jni",
@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "auron-memmgr"
-version = "9.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "async-trait",
  "auron-jni-bridge",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "auron-planner"
-version = "9.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "base64 0.23.1",
@@ -1191,7 +1191,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-ext-commons"
-version = "9.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "arrow-schema",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-ext-exprs"
-version = "9.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
@@ -1235,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-ext-functions"
-version = "9.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "auron-jni-bridge",
@@ -1257,7 +1257,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-ext-plans"
-version = "9.0.0"
+version = "10.0.0-SNAPSHOT"
 dependencies = [
  "arrow",
  "arrow-schema",
