@@ -44,7 +44,7 @@ pub struct IpcWriterExec {
     input: Arc<dyn ExecutionPlan>,
     ipc_consumer_resource_id: String,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl IpcWriterExec {
@@ -70,23 +70,28 @@ impl ExecutionPlan for IpcWriterExec {
         "IpcWriterExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -125,10 +130,6 @@ impl ExecutionPlan for IpcWriterExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 

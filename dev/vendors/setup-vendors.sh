@@ -42,8 +42,8 @@ PATCHES_DIR="${SCRIPT_DIR}/patches"
 # To add a new vendor, append "name|repo_url|tag" to VENDOR_DEFS.
 # -----------------------------------------------------------------------------
 VENDOR_DEFS=(
-  "datafusion|https://github.com/apache/datafusion.git|49.0.0"
-  "arrow-rs|https://github.com/apache/arrow-rs.git|55.2.0"
+  "datafusion|https://github.com/apache/datafusion.git|55.2.0"
+  "arrow-rs|https://github.com/apache/arrow-rs.git|59.2.0"
   "orc-rust|https://github.com/datafusion-contrib/orc-rust.git|v0.7.1"
   "serde_json|https://github.com/serde-rs/json.git|v1.0.96"
 )

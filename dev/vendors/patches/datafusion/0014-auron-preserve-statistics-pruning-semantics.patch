@@ -1,0 +1,54 @@
+--- a/datafusion/datasource-parquet/src/row_group_filter.rs
++++ b/datafusion/datasource-parquet/src/row_group_filter.rs
+@@ -286,11 +286,8 @@
+             parquet_schema,
+             row_group_metadatas,
+             arrow_schema,
+-            // Preserve the existing row-group pruning behavior. This path only
+-            // proves whether matching rows may exist, so it uses the
+-            // StatisticsConverter default for older parquet-rs files where a
+-            // missing null count can mean there are zero nulls.
+-            missing_null_counts_as_zero: true,
++            // Auron treats absent null counts as unknown during pruning.
++            missing_null_counts_as_zero: false,
+             use_dictionary_filtering: false,
+             cached_dictionaries: std::sync::Mutex::new(vec![]),
+             dict_reader: std::cell::Cell::new(None),
+@@ -315,12 +312,12 @@
+                 // dictionary-aware pass (more expensive, so only run it on
+                 // the candidates remaining).
+                 if let Some(dict_reader) = dict_reader.as_deref_mut() {
+-                    for &rg_idx in &fully_contained_candidates_original_idx {
++                    fully_contained_candidates_original_idx.retain(|&rg_idx| {
+                         let dict_pruning_stats = RowGroupPruningStatistics {
+                             parquet_schema,
+                             row_group_metadatas: vec![&groups[rg_idx]],
+                             arrow_schema,
+-                            missing_null_counts_as_zero: true,
++                            missing_null_counts_as_zero: false,
+                             use_dictionary_filtering: true,
+                             cached_dictionaries: std::sync::Mutex::new(vec![]),
+                             dict_reader: std::cell::Cell::new(Some(
+@@ -331,16 +328,20 @@
+                             Ok(values) if !values[0] => {
+                                 self.access_plan.skip(rg_idx);
+                                 metrics.row_groups_pruned_statistics.add_pruned(1);
++                                metrics.row_groups_pruned_statistics.subtract_matched(1);
++                                false
+                             }
+                             Err(e) => {
+                                 log::debug!(
+                                     "Error evaluating row group predicate values with dictionary {e}"
+                                 );
+                                 metrics.predicate_evaluation_errors.add(1);
++                                metrics.row_groups_pruned_statistics.subtract_matched(1);
++                                false
+                             }
+-                            _ => {}
++                            _ => true,
+                         }
+-                    }
++                    });
+                 }
+ 
+                 // Check if any of the matched row groups are fully contained by the predicate

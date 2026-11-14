@@ -116,7 +116,7 @@ mod tests {
     // these test cases come from org.apache.spark.util.sketch.BitArraySuite
 
     use itertools::Itertools;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
 
     use super::*;
 

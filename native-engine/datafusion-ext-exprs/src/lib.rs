@@ -38,11 +38,11 @@ fn down_cast_any_ref(any: &dyn Any) -> &dyn Any {
     if any.is::<PhysicalExprRef>() {
         any.downcast_ref::<PhysicalExprRef>()
             .expect("Expected a PhysicalExpr")
-            .as_any()
+            .as_ref() as &dyn Any
     } else if any.is::<Box<dyn PhysicalExpr>>() {
         any.downcast_ref::<Box<dyn PhysicalExpr>>()
             .expect("Expected a PhysicalExpr")
-            .as_any()
+            .as_ref() as &dyn Any
     } else {
         any
     }

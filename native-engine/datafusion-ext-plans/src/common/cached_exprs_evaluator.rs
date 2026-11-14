@@ -43,7 +43,9 @@ use datafusion::{
     physical_expr_common::{physical_expr::DynEq, utils::scatter},
     physical_plan::ColumnarValue,
 };
-use datafusion_ext_commons::{arrow::cast::cast, downcast_any, uda::UserDefinedArray};
+use datafusion_ext_commons::{
+    arrow::cast::cast, downcast_any, downcast_any_dyn, uda::UserDefinedArray,
+};
 use itertools::Itertools;
 use parking_lot::Mutex;
 
@@ -187,9 +189,9 @@ fn transform_to_cached_exprs(exprs: &[PhysicalExprRef]) -> Result<(Vec<PhysicalE
         dups: &mut HashSet<ExprKey>,
     ) {
         // ignore trivial leaf exprs
-        if matches!(downcast_any!(expr, NoOp), Ok(_))
-            || matches!(downcast_any!(expr, Column), Ok(_))
-            || matches!(downcast_any!(expr, Literal), Ok(_))
+        if matches!(downcast_any_dyn!(expr, NoOp), Ok(_))
+            || matches!(downcast_any_dyn!(expr, Column), Ok(_))
+            || matches!(downcast_any_dyn!(expr, Literal), Ok(_))
         {
             return;
         }
@@ -202,16 +204,16 @@ fn transform_to_cached_exprs(exprs: &[PhysicalExprRef]) -> Result<(Vec<PhysicalE
         }
 
         // traverse children, excluding exprs with short circuiting evaluation
-        if matches!(downcast_any!(expr, CaseExpr), Ok(_))
-            || matches!(downcast_any!(expr, SCAndExpr), Ok(_))
-            || matches!(downcast_any!(expr, SCOrExpr), Ok(_))
-            || matches!(downcast_any!(expr, BinaryExpr), Ok(e) if e.op() == &Operator::And)
-            || matches!(downcast_any!(expr, BinaryExpr), Ok(e) if e.op() == &Operator::Or)
+        if matches!(downcast_any_dyn!(expr, CaseExpr), Ok(_))
+            || matches!(downcast_any_dyn!(expr, SCAndExpr), Ok(_))
+            || matches!(downcast_any_dyn!(expr, SCOrExpr), Ok(_))
+            || matches!(downcast_any_dyn!(expr, BinaryExpr), Ok(e) if e.op() == &Operator::And)
+            || matches!(downcast_any_dyn!(expr, BinaryExpr), Ok(e) if e.op() == &Operator::Or)
         {
             // short circuiting expression - only first child can be cached
             // first `when` expr can also be cached
             collect_dups(&expr.children()[0], current_count, expr_counts, dups);
-            if let Ok(case_expr) = downcast_any!(expr, CaseExpr)
+            if let Ok(case_expr) = downcast_any_dyn!(expr, CaseExpr)
                 && case_expr.expr().is_some()
             {
                 let children = case_expr.children();
@@ -245,9 +247,9 @@ fn transform_to_cached_exprs(exprs: &[PhysicalExprRef]) -> Result<(Vec<PhysicalE
         cache: &Cache,
     ) -> Result<PhysicalExprRef> {
         // ignore trivial leaf exprs
-        if matches!(downcast_any!(expr, NoOp), Ok(_))
-            || matches!(downcast_any!(expr, Column), Ok(_))
-            || matches!(downcast_any!(expr, Literal), Ok(_))
+        if matches!(downcast_any_dyn!(expr, NoOp), Ok(_))
+            || matches!(downcast_any_dyn!(expr, Column), Ok(_))
+            || matches!(downcast_any_dyn!(expr, Literal), Ok(_))
         {
             return Ok(expr);
         }
@@ -257,11 +259,11 @@ fn transform_to_cached_exprs(exprs: &[PhysicalExprRef]) -> Result<(Vec<PhysicalE
         let current_cache_id = cached_expr_ids.get(&expr_key).cloned();
 
         // transform children
-        let transformed_expr = if matches!(downcast_any!(expr, CaseExpr), Ok(_))
-            || matches!(downcast_any!(expr, SCAndExpr), Ok(_))
-            || matches!(downcast_any!(expr, SCOrExpr), Ok(_))
-            || matches!(downcast_any!(expr, BinaryExpr), Ok(e) if e.op() == &Operator::And)
-            || matches!(downcast_any!(expr, BinaryExpr), Ok(e) if e.op() == &Operator::Or)
+        let transformed_expr = if matches!(downcast_any_dyn!(expr, CaseExpr), Ok(_))
+            || matches!(downcast_any_dyn!(expr, SCAndExpr), Ok(_))
+            || matches!(downcast_any_dyn!(expr, SCOrExpr), Ok(_))
+            || matches!(downcast_any_dyn!(expr, BinaryExpr), Ok(e) if e.op() == &Operator::And)
+            || matches!(downcast_any_dyn!(expr, BinaryExpr), Ok(e) if e.op() == &Operator::Or)
         {
             // short circuiting expression - only first child can be cached
             // first `when` expr can also be cached
@@ -272,7 +274,7 @@ fn transform_to_cached_exprs(exprs: &[PhysicalExprRef]) -> Result<(Vec<PhysicalE
                 .collect::<Vec<_>>();
             children[0] = transform(children[0].clone(), cached_expr_ids, cache)?;
 
-            if let Some(case_expr) = expr.as_any().downcast_ref::<CaseExpr>()
+            if let Some(case_expr) = expr.downcast_ref::<CaseExpr>()
                 && children.len() >= 2
                 && case_expr.expr().is_some()
             {
@@ -349,14 +351,7 @@ impl PartialEq for CachedExpr {
     }
 }
 
-impl DynEq for CachedExpr {
-    fn dyn_eq(&self, other: &dyn Any) -> bool {
-        other
-            .downcast_ref::<Self>()
-            .map(|other| other.eq(self))
-            .unwrap_or(false)
-    }
-}
+impl Eq for CachedExpr {}
 
 impl Hash for CachedExpr {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -365,10 +360,6 @@ impl Hash for CachedExpr {
 }
 
 impl PhysicalExpr for CachedExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, input_schema: &Schema) -> Result<DataType> {
         self.orig_expr.data_type(input_schema)
     }
@@ -466,7 +457,7 @@ fn prune_expr_cols(expr: &PhysicalExprRef) -> (PhysicalExprRef, Vec<usize>) {
     let transformed = expr
         .clone()
         .transform(&|expr: PhysicalExprRef| {
-            if let Some(col) = expr.as_any().downcast_ref::<Column>() {
+            if let Some(col) = expr.downcast_ref::<Column>() {
                 let used_cols = used_cols.clone();
                 let mut used_cols_ref = used_cols.borrow_mut();
                 let new_idx = used_cols_ref.len();

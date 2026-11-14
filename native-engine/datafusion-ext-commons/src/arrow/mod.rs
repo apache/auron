@@ -18,4 +18,6 @@ pub mod boolean;
 pub mod cast;
 pub mod coalesce;
 pub mod eq_comparator;
+pub mod ffi;
+pub mod scan_util;
 pub mod selection;
