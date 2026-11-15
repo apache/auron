@@ -855,7 +855,8 @@ mod tests {
 
         // One indexed row group: [NULL, 1, 2, 3], written by Apache ORC 1.9.8.
         let bytes = Bytes::from_static(include_bytes!("../test-data/mixed-null.orc"));
-        let mut builder = ArrowReaderBuilder::try_new(bytes).unwrap();
+        let mut builder =
+            ArrowReaderBuilder::try_new(bytes).expect("indexed ORC fixture should open");
         let schema = builder.schema();
         if let Some(predicate) = convert_predicate_to_orc(Some(expr.clone()), &schema) {
             builder = builder.with_predicate(predicate);
@@ -863,24 +864,24 @@ mod tests {
         builder
             .build()
             .flat_map(|batch| {
-                let batch = batch.unwrap();
+                let batch = batch.expect("indexed ORC fixture should decode");
                 let selected = expr
                     .evaluate(&batch)
-                    .unwrap()
+                    .expect("test predicate should evaluate")
                     .into_array(batch.num_rows())
-                    .unwrap();
+                    .expect("predicate result should match the batch length");
                 let filtered = arrow::compute::filter_record_batch(
                     &batch,
-                    as_boolean_array(&selected).unwrap(),
+                    as_boolean_array(&selected).expect("predicate result should be Boolean"),
                 )
-                .unwrap();
+                .expect("predicate should filter the batch");
                 filtered
                     .column(0)
                     .as_any()
                     .downcast_ref::<Int32Array>()
-                    .unwrap()
+                    .expect("fixture id column should be Int32")
                     .iter()
-                    .map(Option::unwrap)
+                    .map(|id| id.expect("test predicate should exclude NULL ids"))
                     .collect::<Vec<_>>()
             })
             .collect()
@@ -962,7 +963,7 @@ mod tests {
                 &double_negation,
                 &create_test_schema(),
             )
-            .unwrap();
+            .expect("test IN expression should be valid");
             let expr = if double_negation {
                 Arc::new(NotExpr::new(inner)) as PhysicalExprRef
             } else {
@@ -990,11 +991,12 @@ mod tests {
             assert_eq!(filtered_indexed_orc_values(expr), vec![1]);
         }
         let exact_not = Arc::new(NotExpr::new(id_comparison(Operator::Lt, 4)));
-        let predicate = convert_predicate_to_orc(Some(exact_not), &create_test_schema()).unwrap();
+        let predicate = convert_predicate_to_orc(Some(exact_not), &create_test_schema())
+            .expect("fully supported NOT predicate should be pushed down");
         let bytes = Bytes::from_static(include_bytes!("../test-data/mixed-null.orc"));
         assert_eq!(
             ArrowReaderBuilder::try_new(bytes)
-                .unwrap()
+                .expect("indexed ORC fixture should open")
                 .with_predicate(predicate)
                 .build()
                 .count(),
