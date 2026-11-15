@@ -42,7 +42,7 @@ pub struct UnionExec {
     num_partitions: usize,
     cur_partition: usize,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 #[derive(Debug, Clone)]
@@ -77,23 +77,28 @@ impl ExecutionPlan for UnionExec {
         "UnionExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 UnknownPartitioning(self.num_partitions),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -104,10 +109,18 @@ impl ExecutionPlan for UnionExec {
         self: Arc<Self>,
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
+        if children.len() != self.inputs.len() {
+            return datafusion_ext_commons::df_execution_err!(
+                "UnionExec expected {} children, got {}",
+                self.inputs.len(),
+                children.len()
+            );
+        }
         Ok(Arc::new(Self::new(
             children
                 .into_iter()
-                .map(|child| UnionInput(child, 0))
+                .zip(&self.inputs)
+                .map(|(child, input)| UnionInput(child, input.1))
                 .collect(),
             self.schema.clone(),
             self.num_partitions,
@@ -188,8 +201,92 @@ impl ExecutionPlan for UnionExec {
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
     }
+}
 
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow::{
+        array::Int32Array,
+        datatypes::{DataType, Field, Schema},
+        record_batch::RecordBatch,
+    };
+    use datafusion::{
+        assert_batches_eq,
+        common::Result,
+        physical_plan::{ExecutionPlan, ExecutionPlanProperties, common, test::TestMemoryExec},
+        prelude::SessionContext,
+    };
+
+    use super::{UnionExec, UnionInput};
+
+    fn input(values: &[i32]) -> Result<Arc<dyn ExecutionPlan>> {
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Int32,
+            false,
+        )]));
+        let partitions = values
+            .iter()
+            .map(|value| {
+                Ok(vec![RecordBatch::try_new(
+                    schema.clone(),
+                    vec![Arc::new(Int32Array::from(vec![*value]))],
+                )?])
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &partitions,
+            schema,
+            None,
+        )?))
+    }
+
+    #[tokio::test]
+    async fn replacing_children_preserves_union_partition_mapping() -> Result<()> {
+        let left = input(&[10, 11])?;
+        let right = input(&[20, 21, 22])?;
+        let union: Arc<dyn ExecutionPlan> = Arc::new(UnionExec::new(
+            vec![UnionInput(left.clone(), 1), UnionInput(right, 2)],
+            left.schema(),
+            8,
+            7,
+        ));
+
+        let rebuilt = union.with_new_children(vec![input(&[30, 31])?, input(&[40, 41, 42])?])?;
+        assert_eq!(rebuilt.output_partitioning().partition_count(), 8);
+        let ctx = SessionContext::new();
+        let batches = common::collect(rebuilt.execute(7, ctx.task_ctx())?).await?;
+        assert_batches_eq!(
+            [
+                "+-------+",
+                "| value |",
+                "+-------+",
+                "| 31    |",
+                "| 42    |",
+                "+-------+"
+            ],
+            &batches
+        );
+        assert!(
+            common::collect(rebuilt.execute(6, ctx.task_ctx())?)
+                .await?
+                .is_empty()
+        );
+        Ok(())
+    }
+    #[test]
+    fn replacing_children_rejects_changed_input_count() -> Result<()> {
+        let input = input(&[10, 11])?;
+        let union: Arc<dyn ExecutionPlan> = Arc::new(UnionExec::new(
+            vec![UnionInput(input.clone(), 1)],
+            input.schema(),
+            2,
+            1,
+        ));
+        assert!(union.clone().with_new_children(vec![]).is_err());
+        assert!(union.with_new_children(vec![input.clone(), input]).is_err());
+        Ok(())
     }
 }

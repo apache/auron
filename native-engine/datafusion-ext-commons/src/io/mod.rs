@@ -29,6 +29,7 @@ use crate::{UninitializedInit, arrow::cast::cast};
 mod batch_serde;
 pub mod ipc_compression;
 mod scalar_serde;
+mod transpose;
 
 pub fn write_one_batch(num_rows: usize, cols: &[ArrayRef], mut output: impl Write) -> Result<()> {
     batch_serde::write_batch(num_rows, cols, &mut output)

@@ -19,19 +19,16 @@ use std::{
     sync::Arc,
 };
 
-use arrow::{
-    array::{RecordBatch, new_null_array},
-    datatypes::SchemaRef,
-};
-use arrow_schema::DataType;
+use arrow::{array::RecordBatch, datatypes::SchemaRef};
 use auron_jni_bridge::{
     conf,
     conf::{BooleanConf, IntConf},
 };
+use auron_memmgr::MemManager;
 use datafusion::{
     common::Result,
     execution::{SendableRecordBatchStream, TaskContext},
-    physical_expr::{EquivalenceProperties, Partitioning, PhysicalExprRef},
+    physical_expr::{EquivalenceProperties, Partitioning, PhysicalExprRef, expressions::Column},
     physical_plan::{
         DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
         execution_plan::{Boundedness, EmissionType},
@@ -44,19 +41,19 @@ use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    common::{
-        execution_context::ExecutionContext, stream_exec::create_record_batch_stream_exec,
-        timer_helper::TimerHelper,
+    common::{execution_context::ExecutionContext, timer_helper::TimerHelper},
+    joins::{
+        bucket_repartitioner::BucketRepartitioner,
+        bucketed_group::{BucketGroupBuilder, NUM_BUCKETS, append_bucket_id_column, bucket_schema},
+        join_hash_map::{JoinHashMap, join_hash_map_schema},
     },
-    joins::join_hash_map::{JoinHashMap, join_hash_map_schema},
-    sort_exec::create_default_ascending_sort_exec,
 };
 
 pub struct BroadcastJoinBuildHashMapExec {
     input: Arc<dyn ExecutionPlan>,
     keys: Vec<PhysicalExprRef>,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl BroadcastJoinBuildHashMapExec {
@@ -87,25 +84,30 @@ impl ExecutionPlan for BroadcastJoinBuildHashMapExec {
         "BroadcastJoinBuildHashMapExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         join_hash_map_schema(&self.input.schema())
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 Partitioning::UnknownPartitioning(
                     self.input.output_partitioning().partition_count(),
                 ),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -148,11 +150,10 @@ pub fn execute_build_hash_map(
             sender.exclude_time(&build_time);
             let _timer = build_time.timer();
 
-            let smj_fallback_enabled = conf::SMJ_FALLBACK_ENABLE.value().unwrap_or(false);
-            let smj_fallback_rows_threshold = conf::SMJ_FALLBACK_ROWS_THRESHOLD
-                .value()
-                .unwrap_or(i32::MAX) as usize;
-            let smj_fallback_mem_threshold = conf::SMJ_FALLBACK_MEM_SIZE_THRESHOLD
+            let hybrid_join_enabled = conf::HYBRID_JOIN_ENABLE.value().unwrap_or(false);
+            let hybrid_join_rows_threshold =
+                conf::HYBRID_JOIN_ROWS_THRESHOLD.value().unwrap_or(i32::MAX) as usize;
+            let hybrid_join_mem_threshold = conf::HYBRID_JOIN_MEM_SIZE_THRESHOLD
                 .value()
                 .unwrap_or(i32::MAX) as usize;
 
@@ -160,7 +161,7 @@ pub fn execute_build_hash_map(
             let mut staging_batches: Vec<RecordBatch> = vec![];
             let mut staging_num_rows = 0;
             let mut stating_mem_size = 0;
-            let mut fallback_to_sorted = false;
+            let mut fallback_to_hybrid_join = false;
 
             while let Some(batch) = build_time
                 .exclude_timer_async(input.next())
@@ -168,26 +169,28 @@ pub fn execute_build_hash_map(
                 .transpose()?
             {
                 staging_batches.push(batch.clone());
-                if smj_fallback_enabled {
+                if hybrid_join_enabled {
                     staging_num_rows += batch.num_rows();
                     stating_mem_size += batch.get_batch_mem_size();
 
                     // fallback if staging data is too large
-                    if staging_num_rows > smj_fallback_rows_threshold
-                        || stating_mem_size > smj_fallback_mem_threshold
+                    if staging_num_rows > hybrid_join_rows_threshold
+                        || stating_mem_size > hybrid_join_mem_threshold
                     {
-                        fallback_to_sorted = true;
+                        fallback_to_hybrid_join = true;
                         break;
                     }
                 }
             }
 
             // no fallbacks - generate one hashmap batch
-            if !fallback_to_sorted {
+            if !fallback_to_hybrid_join {
                 let data_batch =
                     coalesce_batches_unchecked(data_schema, &std::mem::take(&mut staging_batches));
                 let hash_map = JoinHashMap::create_from_data_batch(data_batch, &keys)?;
-                sender.send(hash_map.into_hash_map_batch()?).await;
+                for hash_map_batch in hash_map.into_hash_map_batches(None)? {
+                    sender.send(hash_map_batch).await;
+                }
                 exec_ctx
                     .baseline_metrics()
                     .elapsed_compute()
@@ -195,37 +198,52 @@ pub fn execute_build_hash_map(
                 return Ok(());
             }
 
-            // fallback to sort-merge join
-            // sort all input data
+            // fallback to hybrid join (bucketed hash join):
+            // 1. append a ~BUCKET column (hash(keys) % NUM_BUCKETS) to every batch
+            // 2. group all input data by ~BUCKET using a spill-capable radix-sort based
+            //    repartitioner (reusing the same grouping/spill machinery as shuffle writes
+            //    - see `BucketRepartitioner`), rather than a full comparison sort: the join
+            //    only needs rows grouped by bucket, not globally ordered.
+            // 3. greedily cut the bucket-grouped stream into bucket groups, each one built
+            //    into its own JoinHashMap and serialized as a bucketed-group hash-map-batch
             let input: SendableRecordBatchStream = Box::pin(RecordBatchStreamAdapter::new(
-                data_schema,
-                futures::stream::iter(staging_batches.into_iter().map(|batch| Ok(batch)))
-                    .chain(input),
+                data_schema.clone(),
+                futures::stream::iter(staging_batches.into_iter().map(Ok)).chain(input),
             ));
-            let input_exec = create_record_batch_stream_exec(input, exec_ctx.partition_id())?;
-            let sort_exec = create_default_ascending_sort_exec(
-                input_exec,
-                &keys,
-                Some(exec_ctx.execution_plan_metrics().clone()),
-                false, // do not record output metric
-            );
-            let mut sorted_stream =
-                sort_exec.execute(exec_ctx.partition_id(), exec_ctx.task_ctx())?;
+            let bucket_keys = keys.clone();
+            let bucket_col_idx = data_schema.fields().len();
+            let mut bucketed_input = input.map(move |batch| {
+                batch.and_then(|batch| append_bucket_id_column(batch, &bucket_keys))
+            });
 
-            // append a null table data column
-            let hash_map_batch_schema = join_hash_map_schema(&sorted_stream.schema());
+            let bucket_repartitioner = Arc::new(BucketRepartitioner::new(
+                exec_ctx.clone(),
+                bucket_schema(&data_schema),
+                bucket_col_idx,
+                NUM_BUCKETS as usize,
+            ));
+            MemManager::register_consumer(bucket_repartitioner.clone(), true);
+            while let Some(batch) = bucketed_input.next().await.transpose()? {
+                bucket_repartitioner.insert_batch(batch).await?;
+            }
+            let mut sorted_stream = bucket_repartitioner.into_stream().await?;
+
+            let group_mem_size_threshold = conf::HYBRID_JOIN_GROUP_MEM_SIZE_THRESHOLD
+                .value()
+                .unwrap_or(16 * 1024 * 1024) as usize;
+            let mut group_builder = BucketGroupBuilder::new(
+                group_mem_size_threshold,
+                keys.clone(),
+                data_schema.clone(),
+            );
+
             while let Some(batch) = sorted_stream.next().await.transpose()? {
-                let null_table_data_column = new_null_array(&DataType::Binary, batch.num_rows());
-                let sorted_hash_map_batch = RecordBatch::try_new(
-                    hash_map_batch_schema.clone(),
-                    batch
-                        .columns()
-                        .iter()
-                        .cloned()
-                        .chain(Some(null_table_data_column))
-                        .collect(),
-                )?;
-                sender.send(sorted_hash_map_batch).await;
+                for group_batch in group_builder.push(batch)? {
+                    sender.send(group_batch).await;
+                }
+            }
+            for group_batch in group_builder.finish()? {
+                sender.send(group_batch).await;
             }
             exec_ctx
                 .baseline_metrics()
@@ -233,4 +251,373 @@ pub fn execute_build_hash_map(
                 .add_duration(build_time.duration());
             Ok(())
         }))
+}
+
+#[cfg(test)]
+mod tests {
+    use arrow::array::Int32Array;
+    use arrow_schema::{DataType, Field, Schema};
+    use auron_memmgr::MemManager;
+    use datafusion::{
+        common::{JoinSide, ScalarValue},
+        logical_expr::Operator,
+        physical_expr::expressions::{BinaryExpr, Column},
+        physical_plan::{common::collect, joins::utils::build_join_schema, test::TestMemoryExec},
+        prelude::SessionContext,
+    };
+
+    use super::*;
+    use crate::{
+        broadcast_join_exec::BroadcastJoinExec,
+        common::column_pruning::ExecuteWithColumnPruning,
+        joins::{
+            ColumnIndex, JoinFilter,
+            bucketed_group::{BucketGroupBuilder, append_bucket_id_column},
+            join_utils::JoinType,
+        },
+    };
+
+    fn memory(batch: RecordBatch) -> Result<Arc<dyn ExecutionPlan>> {
+        Ok(Arc::new(TestMemoryExec::try_new(
+            &[vec![batch.clone()]],
+            batch.schema(),
+            None,
+        )?))
+    }
+
+    #[tokio::test]
+    async fn hybrid_fallback_metrics_exclude_output_wait() -> Result<()> {
+        MemManager::init(1000000);
+        let schema = Arc::new(Schema::new(vec![Field::new("v", DataType::Int32, false)]));
+        let num_rows = 3 * datafusion_ext_commons::batch_size();
+        let probe_values = (0..num_rows as i32).collect::<Vec<_>>();
+        let probe = RecordBatch::try_new(
+            schema.clone(),
+            vec![Arc::new(Int32Array::from(probe_values.clone()))],
+        )?;
+        // Mark this hash-map batch as a hybrid group covering every bucket.
+        let built = JoinHashMap::create_from_data_batch(
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(Int32Array::from(vec![-1]))])?,
+            &[],
+        )?
+        .into_hash_map_batches(Some(NUM_BUCKETS as i32 - 1))?
+        .into_iter()
+        .next()
+        .expect("build group");
+        for build_left in [false, true] {
+            let (left, right) = if build_left {
+                (memory(built.clone())?, memory(probe.clone())?)
+            } else {
+                (memory(probe.clone())?, memory(built.clone())?)
+            };
+            let output_schema =
+                Arc::new(build_join_schema(&schema, &schema, &JoinType::Inner.try_into()?).0);
+            let join = BroadcastJoinExec::try_new(
+                output_schema,
+                left,
+                right,
+                vec![],
+                JoinType::Inner,
+                if build_left {
+                    JoinSide::Left
+                } else {
+                    JoinSide::Right
+                },
+                true,
+                None,
+                false,
+                None,
+            )?;
+            let mut stream = join.execute(0, SessionContext::new().task_ctx())?;
+            let first = stream
+                .next()
+                .await
+                .transpose()?
+                .expect("first output batch");
+            // Let the bounded output channel fill before draining the remaining batches.
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let mut output = vec![first];
+            output.extend(collect(stream).await?);
+            let mut actual = vec![];
+            for batch in output {
+                let values = batch
+                    .column(usize::from(build_left))
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .expect("probe values");
+                let build_values = batch
+                    .column(usize::from(!build_left))
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .expect("build values");
+                actual.extend(values.values().iter().copied());
+                assert!(build_values.values().iter().all(|&v| v == -1));
+            }
+            actual.sort_unstable();
+            assert_eq!(actual, probe_values);
+            let metrics = join.metrics().expect("join metrics");
+            let fallback_time = metrics
+                .sum_by_name("hybrid_join_time")
+                .expect("fallback time")
+                .as_usize() as i64;
+            assert!(
+                fallback_time > 0,
+                "build_left={build_left}: {fallback_time}"
+            );
+            let elapsed_compute = metrics.elapsed_compute().expect("elapsed compute") as i64;
+            assert!(
+                elapsed_compute > 0,
+                "build_left={build_left}: {elapsed_compute}"
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn keyed_hybrid_fallback_propagates_spill_metrics() -> Result<()> {
+        MemManager::init(1_000_000);
+        let schema = Arc::new(Schema::new(vec![Field::new("v", DataType::Int32, false)]));
+        // Exceed the 16 MiB automatic spill check threshold while bucketing.
+        let probe = RecordBatch::try_new(
+            schema.clone(),
+            vec![Arc::new(Int32Array::from_iter_values((0..1 << 21).rev()))],
+        )?;
+        let build_values = Int32Array::from(vec![0, 2, 4]);
+        let built = JoinHashMap::create_from_data_batch(
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(build_values.clone())])?,
+            &[Arc::new(Column::new("v", 0))],
+        )?
+        .into_hash_map_batches(Some(NUM_BUCKETS as i32 - 1))?
+        .into_iter()
+        .next()
+        .expect("build group");
+        for build_left in [false, true] {
+            let (left, right, side) = if build_left {
+                (
+                    memory(built.clone())?,
+                    memory(probe.clone())?,
+                    JoinSide::Left,
+                )
+            } else {
+                (
+                    memory(probe.clone())?,
+                    memory(built.clone())?,
+                    JoinSide::Right,
+                )
+            };
+            let join = BroadcastJoinExec::try_new(
+                Arc::new(build_join_schema(&schema, &schema, &JoinType::Inner.try_into()?).0),
+                left,
+                right,
+                vec![(Arc::new(Column::new("v", 0)), Arc::new(Column::new("v", 0)))],
+                JoinType::Inner,
+                side,
+                true,
+                None,
+                false,
+                None,
+            )?;
+            let output = collect(join.execute(0, SessionContext::new().task_ctx())?).await?;
+            let output = arrow::compute::concat_batches(&join.schema(), &output)?;
+            for column in output.columns() {
+                let mut actual = column
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .expect("joined values")
+                    .values()
+                    .to_vec();
+                actual.sort_unstable();
+                assert_eq!(actual.as_slice(), build_values.values().as_ref());
+            }
+            let metrics = join.metrics().expect("join metrics");
+            let metric_value = |name: &str| metrics.sum_by_name(name).expect(name).as_usize();
+            assert!(metric_value("hybrid_join_time") > 0, "{metrics}");
+            assert!(
+                metrics.elapsed_compute().expect("elapsed compute") as i64 > 0,
+                "{metrics}"
+            );
+            for name in ["disk_spill_size", "disk_spill_iotime"] {
+                assert!(metric_value(name) > 0, "{metrics}");
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn nested_loop_bucketed_group_fallback_preserves_condition_and_projection() -> Result<()>
+    {
+        MemManager::init(1000000);
+        let values = [
+            vec![None, Some(1), Some(3), Some(8)],
+            vec![None, Some(2), Some(4)],
+        ];
+        let batches = values
+            .iter()
+            .enumerate()
+            .map(|(side, values)| {
+                RecordBatch::try_new(
+                    Arc::new(Schema::new(vec![Field::new(
+                        if side == 0 { "l" } else { "r" },
+                        DataType::Int32,
+                        true,
+                    )])),
+                    vec![Arc::new(Int32Array::from(values.clone()))],
+                )
+                .expect("valid test batch")
+            })
+            .collect::<Vec<_>>();
+        for (jt, build_left) in [
+            (JoinType::Inner, false),
+            (JoinType::Inner, true),
+            (JoinType::Left, false),
+            (JoinType::Right, true),
+            (JoinType::LeftSemi, false),
+            (JoinType::LeftAnti, false),
+            (JoinType::Existence, false),
+        ] {
+            let schema = if jt == JoinType::Existence {
+                Arc::new(Schema::new(vec![
+                    batches[0].schema().field(0).clone(),
+                    Field::new("exists", DataType::Boolean, false),
+                ]))
+            } else {
+                Arc::new(
+                    build_join_schema(&batches[0].schema(), &batches[1].schema(), &jt.try_into()?)
+                        .0,
+                )
+            };
+            let mut expected = vec![];
+            let mut right_matched = vec![false; values[1].len()];
+            for &l in &values[0] {
+                let mut matched = false;
+                for (ri, &r) in values[1].iter().enumerate() {
+                    if l.zip(r).is_some_and(|(l, r)| l < r) {
+                        matched = true;
+                        right_matched[ri] = true;
+                        if matches!(jt, JoinType::Inner | JoinType::Left | JoinType::Right) {
+                            expected.push(vec![ScalarValue::Int32(l), ScalarValue::Int32(r)]);
+                        }
+                    }
+                }
+                match jt {
+                    JoinType::Left if !matched => {
+                        expected.push(vec![ScalarValue::Int32(l), ScalarValue::Int32(None)])
+                    }
+                    JoinType::LeftSemi if matched => expected.push(vec![ScalarValue::Int32(l)]),
+                    JoinType::LeftAnti if !matched => expected.push(vec![ScalarValue::Int32(l)]),
+                    JoinType::Existence => expected.push(vec![
+                        ScalarValue::Int32(l),
+                        ScalarValue::Boolean(Some(matched)),
+                    ]),
+                    _ => {}
+                }
+            }
+            if jt == JoinType::Right {
+                for (&r, matched) in values[1].iter().zip(right_matched) {
+                    if !matched {
+                        expected.push(vec![ScalarValue::Int32(None), ScalarValue::Int32(r)]);
+                    }
+                }
+            }
+            let ctx = SessionContext::new().task_ctx();
+            let build_batch = batches[usize::from(!build_left)].clone();
+            // Simulate a hybrid-join (bucketed hash join) fallback: the build
+            // side exceeded the configured threshold, so it got partitioned
+            // into bucket groups (here: a single oversized group, since the
+            // join has no equality keys). The build exec's declared schema
+            // is always `join_hash_map_schema` (data + ~TABLE); the bucket
+            // group id is packed into ~TABLE's own metadata rather than a
+            // separate column, so this matches BroadcastJoinBuildHashMapExec's
+            // real output exactly, hybrid or not.
+            let bucketed_batch = append_bucket_id_column(build_batch.clone(), &[])?;
+            let mut group_builder = BucketGroupBuilder::new(0, vec![], build_batch.schema());
+            let mut group_batches = group_builder.push(bucketed_batch)?;
+            group_batches.extend(group_builder.finish()?);
+            let hash_map_schema = join_hash_map_schema(&build_batch.schema());
+            let built = Arc::new(TestMemoryExec::try_new(
+                &[group_batches],
+                hash_map_schema,
+                None,
+            )?) as Arc<dyn ExecutionPlan>;
+            let (left, right) = if build_left {
+                (built, memory(batches[1].clone())?)
+            } else {
+                (memory(batches[0].clone())?, built)
+            };
+            let filter = JoinFilter {
+                expression: Arc::new(BinaryExpr::new(
+                    Arc::new(Column::new("l", 0)),
+                    Operator::Lt,
+                    Arc::new(Column::new("r", 1)),
+                )),
+                column_indices: vec![
+                    ColumnIndex {
+                        side: JoinSide::Left,
+                        index: 0,
+                    },
+                    ColumnIndex {
+                        side: JoinSide::Right,
+                        index: 0,
+                    },
+                ],
+                schema: Arc::new(Schema::new(vec![
+                    batches[0].schema().field(0).clone(),
+                    batches[1].schema().field(0).clone(),
+                ])),
+            };
+            let join = BroadcastJoinExec::try_new(
+                schema.clone(),
+                left,
+                right,
+                vec![],
+                jt,
+                if build_left {
+                    JoinSide::Left
+                } else {
+                    JoinSide::Right
+                },
+                true,
+                None,
+                false,
+                Some(filter),
+            )?;
+            for projection in [
+                (0..schema.fields().len()).collect::<Vec<_>>(),
+                vec![schema.fields().len() - 1],
+                vec![],
+            ] {
+                let output = collect(join.execute_projected(0, ctx.clone(), &projection)?).await?;
+                let mut actual = vec![];
+                for batch in output {
+                    for row in 0..batch.num_rows() {
+                        actual.push(
+                            batch
+                                .columns()
+                                .iter()
+                                .map(|col| {
+                                    ScalarValue::try_from_array(col, row).map(|v| v.to_string())
+                                })
+                                .collect::<Result<Vec<_>>>()?,
+                        );
+                    }
+                }
+                let mut wanted = expected
+                    .iter()
+                    .map(|row| {
+                        projection
+                            .iter()
+                            .map(|&i| row[i].to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                actual.sort();
+                wanted.sort();
+                assert_eq!(
+                    actual, wanted,
+                    "join={jt:?} build_left={build_left} projection={projection:?}"
+                );
+            }
+        }
+        Ok(())
+    }
 }

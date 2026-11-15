@@ -29,7 +29,7 @@ use datafusion::{
         metrics::{ExecutionPlanMetricsSet, MetricsSet},
     },
 };
-use datafusion_ext_commons::downcast_any;
+use datafusion_ext_commons::{downcast_any, downcast_any_dyn};
 use futures::StreamExt;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
@@ -50,7 +50,7 @@ pub struct ProjectExec {
     input: Arc<dyn ExecutionPlan>,
     schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl ProjectExec {
@@ -99,23 +99,28 @@ impl ExecutionPlan for ProjectExec {
         "ProjectExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -140,7 +145,7 @@ impl ExecutionPlan for ProjectExec {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
         let exprs: Vec<PhysicalExprRef> = self.expr.iter().map(|(e, _name)| e.clone()).collect();
 
-        let output = if let Ok(filter_exec) = downcast_any!(self.input, FilterExec) {
+        let output = if let Ok(filter_exec) = downcast_any_dyn!(self.input, FilterExec) {
             execute_project_with_filtering(
                 filter_exec.children()[0].clone(),
                 exec_ctx.clone(),
@@ -155,10 +160,6 @@ impl ExecutionPlan for ProjectExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 

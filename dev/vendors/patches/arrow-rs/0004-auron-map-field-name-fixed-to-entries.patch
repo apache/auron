@@ -1,0 +1,45 @@
+diff --git a/parquet/src/arrow/schema/complex.rs b/parquet/src/arrow/schema/complex.rs
+index 161b263..cf78a7c 100644
+--- a/parquet/src/arrow/schema/complex.rs
++++ b/parquet/src/arrow/schema/complex.rs
+@@ -304,10 +304,27 @@ impl Visitor {
+                 Some(fields)
+             }
+             Some(d) => {
+-                return Err(arrow_err!(
+-                    "incompatible arrow schema, expected struct got {}",
+-                    d
+-                ));
++                // auron: match old-style array<struct<..>> represented as
++                // `REPEATED group field_nme {..}`
++                let mut old_style_fields = None;
++                if let DataType::List(f) = d {
++                    if f.name() == struct_type.name() {
++                        if let DataType::Struct(fields) = &f.data_type() {
++                            if fields.len() == parquet_fields.len() {
++                                old_style_fields = Some(fields);
++                            }
++                        }
++                    }
++                }
++                match old_style_fields {
++                    Some(fields) => Some(fields),
++                    None => {
++                        return Err(arrow_err!(
++                            "incompatible arrow schema, expected struct got {}",
++                            d
++                        ));
++                    }
++                }
+             }
+             None => None,
+         };
+@@ -499,7 +516,7 @@ impl Visitor {
+                 };
+ 
+                 let map_field = Field::new_struct(
+-                    map_key_value.name(),
++                    "entries", // auron: map_field's name fixed to 'entries'
+                     [key_field, value_field],
+                     false, // The inner map field is always non-nullable (#1697)
+                 )

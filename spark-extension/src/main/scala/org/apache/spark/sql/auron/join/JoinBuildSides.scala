@@ -16,8 +16,19 @@
  */
 package org.apache.spark.sql.auron.join
 
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, InnerLike, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+
 object JoinBuildSides {
   sealed trait JoinBuildSide
   case object JoinBuildLeft extends JoinBuildSide
   case object JoinBuildRight extends JoinBuildSide
+
+  def supportsBroadcastJoin(joinType: JoinType, buildSide: JoinBuildSide): Boolean = {
+    (joinType, buildSide) match {
+      case (_: InnerLike, _) => true
+      case (LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin, JoinBuildRight) => true
+      case (RightOuter, JoinBuildLeft) => true
+      case _ => false
+    }
+  }
 }

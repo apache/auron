@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
 use arrow::{
     array::{
@@ -27,6 +27,87 @@ use arrow::{
     },
 };
 use arrow_schema::{DataType, SchemaRef};
+use datafusion::common::{DataFusionError, Result};
+
+use crate::{arrow::array_size::BatchSize, batch_size, suggested_batch_mem_size};
+
+pub struct BatchCoalescer {
+    schema: SchemaRef,
+    batch_size: usize,
+    batch_mem_size: usize,
+    staging_batches: Vec<RecordBatch>,
+    staging_num_rows: usize,
+    staging_mem_size: usize,
+    completed_batches: VecDeque<RecordBatch>,
+}
+
+impl BatchCoalescer {
+    pub fn new(schema: SchemaRef, batch_size: usize, batch_mem_size: usize) -> Self {
+        Self {
+            schema,
+            batch_size,
+            batch_mem_size,
+            staging_batches: Vec::new(),
+            staging_num_rows: 0,
+            staging_mem_size: 0,
+            completed_batches: VecDeque::new(),
+        }
+    }
+
+    pub fn new_with_default_batch_size(schema: SchemaRef) -> Self {
+        Self::new(schema, batch_size(), suggested_batch_mem_size())
+    }
+
+    pub fn schema(&self) -> SchemaRef {
+        self.schema.clone()
+    }
+
+    pub fn push_batch(&mut self, batch: RecordBatch) -> Result<()> {
+        if batch.num_rows() == 0 {
+            return Ok(());
+        }
+        self.staging_num_rows += batch.num_rows();
+        self.staging_mem_size += batch.get_batch_mem_size();
+        self.staging_batches.push(batch);
+
+        if self.staging_num_rows >= self.batch_size || self.staging_mem_size > self.batch_mem_size {
+            self.finish_buffered_batch()?;
+        }
+        Ok(())
+    }
+
+    pub fn finish_buffered_batch(&mut self) -> Result<()> {
+        if self.staging_batches.is_empty() {
+            return Ok(());
+        }
+        let batch = if self.staging_batches.len() == 1 {
+            self.staging_batches
+                .pop()
+                .ok_or_else(|| DataFusionError::Internal("missing buffered batch".to_string()))?
+        } else {
+            let batch = arrow::compute::concat_batches(&self.schema, &self.staging_batches)
+                .map_err(DataFusionError::from)?;
+            self.staging_batches.clear();
+            batch
+        };
+        self.completed_batches.push_back(batch);
+        self.staging_num_rows = 0;
+        self.staging_mem_size = 0;
+        Ok(())
+    }
+
+    pub fn has_completed_batch(&self) -> bool {
+        !self.completed_batches.is_empty()
+    }
+
+    pub fn has_buffered_batches(&self) -> bool {
+        !self.staging_batches.is_empty()
+    }
+
+    pub fn next_completed_batch(&mut self) -> Option<RecordBatch> {
+        self.completed_batches.pop_front()
+    }
+}
 
 /// coalesce batches without checking there schemas, invokers must make
 /// sure all arrays have the same schema
@@ -185,10 +266,134 @@ fn coalesce_null_buffer(items_len: usize, arrays: &[ArrayRef]) -> Option<NullBuf
 
 #[cfg(test)]
 mod tests {
-    use arrow::array::{Int32Array, StringArray};
+    use arrow::{
+        array::{BinaryArray, Int32Array, StringArray},
+        datatypes::{Field, Schema},
+    };
     use datafusion::common::Result;
 
     use super::*;
+
+    fn binary_batch(num_rows: usize) -> Result<RecordBatch> {
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "buffer",
+            DataType::Binary,
+            true,
+        )]));
+        RecordBatch::try_new(
+            schema,
+            vec![Arc::new(BinaryArray::from_iter_values(
+                (0..num_rows).map(|_| b"buffer".as_slice()),
+            ))],
+        )
+        .map_err(DataFusionError::from)
+    }
+
+    #[test]
+    fn test_batch_coalescer_row_threshold_does_not_split_binary() -> Result<()> {
+        let first = binary_batch(1)?;
+        let second = binary_batch(8)?;
+        let mut coalescer = BatchCoalescer::new(first.schema(), 8, usize::MAX);
+        coalescer.push_batch(first)?;
+        assert!(!coalescer.has_completed_batch());
+        coalescer.push_batch(second)?;
+        let output = coalescer.next_completed_batch().expect("expected batch");
+        assert_eq!(output.num_rows(), 9);
+        let binary = output.column(0).as_binary::<i32>();
+        assert_eq!(binary.value_offsets()[0], 0);
+        assert_eq!(
+            binary.value_offsets()[9] as usize,
+            binary.value_data().len()
+        );
+        assert!(
+            binary
+                .iter()
+                .all(|value| value == Some(b"buffer".as_slice()))
+        );
+        coalescer.finish_buffered_batch()?;
+        assert!(!coalescer.has_completed_batch());
+        Ok(())
+    }
+
+    #[test]
+    fn test_batch_coalescer_preserves_oversized_batch() -> Result<()> {
+        let input = binary_batch(17)?;
+        let column = input.column(0).clone();
+        let mut coalescer = BatchCoalescer::new(input.schema(), 8, usize::MAX);
+        coalescer.push_batch(input)?;
+        let output = coalescer.next_completed_batch().expect("expected batch");
+        assert_eq!(output.num_rows(), 17);
+        assert!(Arc::ptr_eq(output.column(0), &column));
+        assert!(!coalescer.has_completed_batch());
+        Ok(())
+    }
+
+    #[test]
+    fn test_batch_coalescer_memory_threshold_and_reset() -> Result<()> {
+        let input = binary_batch(2)?;
+        let batch_mem_size = input.get_batch_mem_size();
+        let mut coalescer = BatchCoalescer::new(input.schema(), 100, batch_mem_size);
+        coalescer.push_batch(input.clone())?;
+        assert!(!coalescer.has_completed_batch());
+        coalescer.push_batch(input.clone())?;
+        assert_eq!(
+            coalescer
+                .next_completed_batch()
+                .expect("expected batch")
+                .num_rows(),
+            4
+        );
+        coalescer.push_batch(input)?;
+        assert!(!coalescer.has_completed_batch());
+        coalescer.finish_buffered_batch()?;
+        assert_eq!(
+            coalescer
+                .next_completed_batch()
+                .expect("expected batch")
+                .num_rows(),
+            2
+        );
+        coalescer.finish_buffered_batch()?;
+        assert!(!coalescer.has_completed_batch());
+        Ok(())
+    }
+
+    #[test]
+    fn test_batch_coalescer_row_threshold_and_completed_queue() -> Result<()> {
+        let input = binary_batch(4)?;
+        let mut coalescer = BatchCoalescer::new(input.schema(), 4, usize::MAX);
+        coalescer.push_batch(RecordBatch::new_empty(input.schema()))?;
+        coalescer.finish_buffered_batch()?;
+        assert!(!coalescer.has_completed_batch());
+        coalescer.push_batch(input.clone())?;
+        coalescer.push_batch(binary_batch(5)?)?;
+        coalescer.push_batch(binary_batch(1)?)?;
+        assert_eq!(
+            coalescer
+                .next_completed_batch()
+                .expect("expected batch")
+                .num_rows(),
+            4
+        );
+        assert_eq!(
+            coalescer
+                .next_completed_batch()
+                .expect("expected batch")
+                .num_rows(),
+            5
+        );
+        assert!(!coalescer.has_completed_batch());
+        coalescer.finish_buffered_batch()?;
+        assert_eq!(
+            coalescer
+                .next_completed_batch()
+                .expect("expected batch")
+                .num_rows(),
+            1
+        );
+        assert!(!coalescer.has_completed_batch());
+        Ok(())
+    }
 
     #[test]
     fn test_coalesce_primitive_with_offsets() -> Result<()> {

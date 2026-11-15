@@ -20,6 +20,52 @@ import org.apache.spark.sql.AuronQueryTest
 
 class AuronExpressionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
+  test("Chr uses Spark byte-range character semantics") {
+    withTable("chr_inputs") {
+      sql("CREATE TABLE chr_inputs(n BIGINT) USING parquet")
+      sql("""INSERT INTO chr_inputs VALUES
+            |(-1), (0), (65), (233), (255), (256), (321), (9223372036854775807), (NULL)
+            |""".stripMargin)
+      checkSparkAnswerAndOperator("SELECT chr(n), hex(chr(n)) FROM chr_inputs")
+    }
+  }
+
+  test("preserve literal parameters during expression fallback") {
+    withSQLConf(
+      "spark.auron.decimal.arithOp.enabled" -> "false",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      withTable("literal_fallback") {
+        sql("CREATE TABLE literal_fallback(a DECIMAL(17,2), b DECIMAL(17,2)) USING parquet")
+        sql("""INSERT INTO literal_fallback VALUES
+              |(123.45, 7.00), (-123.45, 7.00), (1.00, 8.00), (NULL, 7.00), (1.00, NULL)
+              |""".stripMargin)
+        checkSparkAnswerAndOperator("SELECT round(a / b, 2) FROM literal_fallback")
+        checkSparkAnswerAndOperator(
+          "SELECT round(a, 4), round(a, 0), round(a, 2) FROM literal_fallback")
+        // Spark 3.0-3.2 require legacy mode for a negative decimal result scale.
+        withSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal" -> "true") {
+          checkSparkAnswerAndOperator("SELECT round(a, -1) FROM literal_fallback")
+        }
+      }
+    }
+  }
+
+  test("sqrt returns NaN for negative inputs") {
+    withTable("sqrt_inputs") {
+      sql("CREATE TABLE sqrt_inputs(x DOUBLE) USING parquet")
+      sql("""INSERT INTO sqrt_inputs VALUES
+            |(-1.0D), (4.0D), (0.0D), (-0.0D), (NULL),
+            |(CAST('NaN' AS DOUBLE)), (CAST('Infinity' AS DOUBLE)),
+            |(CAST('-Infinity' AS DOUBLE))
+            |""".stripMargin)
+      Seq("false", "true").foreach { ansi =>
+        withSQLConf("spark.sql.ansi.enabled" -> ansi) {
+          checkSparkAnswerAndOperator("SELECT sqrt(x) FROM sqrt_inputs")
+        }
+      }
+    }
+  }
+
   test("EqualNullSafe") {
     withTable("t1") {
       sql("CREATE TABLE t1(id INT, flag BOOLEAN) USING parquet")

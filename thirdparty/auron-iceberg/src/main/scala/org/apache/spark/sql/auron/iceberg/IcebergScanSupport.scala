@@ -17,28 +17,32 @@
 package org.apache.spark.sql.auron.iceberg
 
 import java.lang.reflect.InvocationTargetException
+import java.math.RoundingMode
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.reflect.MethodUtils
-import org.apache.iceberg.{AddedRowsScanTask, ChangelogOperation, ChangelogScanTask, DataFile, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, ScanTask}
+import org.apache.iceberg.{AddedRowsScanTask, ChangelogOperation, ChangelogScanTask, ContentScanTask, DataFile, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, ScanTask}
 import org.apache.iceberg.expressions.{And => IcebergAnd, BoundPredicate, Expression => IcebergExpression, Not => IcebergNot, Or => IcebergOr, UnboundPredicate}
+import org.apache.iceberg.spark.SparkUtil
 import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
+import org.apache.iceberg.types.Types
+import org.apache.iceberg.util.PartitionUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.{NativeConverters, Shims}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{And => SparkAnd, AttributeReference, EqualTo, Expression => SparkExpression, GreaterThan, GreaterThanOrEqual, In, InSet, IsNaN, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not => SparkNot, Or => SparkOr, StartsWith}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, DecimalType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType, Decimal, DecimalType, StringType, StructField, StructType}
 
 import org.apache.auron.{protobuf => pb}
 
-// fileSchema is read from the data files. partitionSchema carries supported metadata columns
-// (for example _file and _spec_id) that are materialized as per-file constant values in
-// the native scan.
+// fileSchema is read from the data files. partitionSchema carries identity partition columns
+// and supported metadata columns (for example _file and _spec_id) as per-file constants.
 final case class IcebergNativeScanTask(
     location: String,
     start: Long,
@@ -243,9 +247,12 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
-    val nativeTasks = fileTasks.map(task => toNativeScanTask(task, partitionSchema))
-    Some(
+    val pruningPredicates =
+      collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema, format)
+    val partitionType = AuronIcebergSourceUtil.expectedPartitionType(scan.asInstanceOf[AnyRef])
+    val nativeTasks = fileTasks.map(task =>
+      toNativeScanTask(task, partitionSchema, fieldIdsByName, partitionType.orNull))
+    withIdentityPartitions(
       IcebergScanPlan(
         nativeTasks,
         format,
@@ -253,7 +260,8 @@ object IcebergScanSupport extends Logging {
         fileSchema,
         partitionSchema,
         pruningPredicates,
-        fieldIdsByName))
+        fieldIdsByName),
+      fileTasks)
   }
 
   private def planChangelogScan(
@@ -323,12 +331,13 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    val pruningPredicates = collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema)
+    val pruningPredicates =
+      collectPruningPredicates(scan.asInstanceOf[AnyRef], readSchema, format)
     val filteredTasks = exec
       .getTagValue(changelogTaskFilterTag)
       .fold(nativeChangelogTasks)(filterChangelogTasks(nativeChangelogTasks, _, partitionSchema))
     val nativeTasks = filteredTasks.map(task => toNativeScanTask(task, partitionSchema))
-    Some(
+    withIdentityPartitions(
       IcebergScanPlan(
         nativeTasks,
         format,
@@ -336,7 +345,8 @@ object IcebergScanSupport extends Logging {
         fileSchema,
         partitionSchema,
         pruningPredicates,
-        fieldIdsByName))
+        fieldIdsByName),
+      filteredTasks.map(_.changelogTask))
   }
 
   private def inspectFieldIdSupport(
@@ -363,7 +373,11 @@ object IcebergScanSupport extends Logging {
           logWarning(s"Failed to inspect Iceberg schema history for $scanClassName.", t)
           return None
       }
-    assert(!renameOrDrop.nested, "Nested Iceberg rename or drop is not supported.")
+    // Iceberg's required schema includes columns used only by filters.
+    // shortcut: keep complex projections on Spark until nested field-ID resolution is supported.
+    assert(
+      !renameOrDrop.nested || fileSchema.fields.forall(_.dataType.isInstanceOf[AtomicType]),
+      "Nested Iceberg rename or drop is not supported for complex projections.")
 
     val missingFieldIds =
       fileSchema.fields.filterNot(field => fieldIdsByName.contains(field.name)).map(_.name)
@@ -432,6 +446,7 @@ object IcebergScanSupport extends Logging {
       isChangelogScan: Boolean): Boolean =
     field.name == MetadataColumns.FILE_PATH.name() ||
       field.name == MetadataColumns.SPEC_ID.name() ||
+      (!isChangelogScan && field.name == MetadataColumns.PARTITION_COLUMN_NAME) ||
       (isChangelogScan && ChangelogMetadataColumnNames.contains(field.name))
 
   private def deletesEmpty(deletes: java.util.List[_]): Boolean =
@@ -561,7 +576,7 @@ object IcebergScanSupport extends Logging {
       file: DataFile,
       start: Long,
       length: Long,
-      changelogTask: ChangelogScanTask)
+      changelogTask: ChangelogScanTask with ContentScanTask[DataFile])
 
   private def icebergPartition(partition: InputPartition): Option[IcebergPartitionView] = {
     val className = partition.getClass.getName
@@ -618,17 +633,12 @@ object IcebergScanSupport extends Logging {
     changelogTaskPredicate(condition, partitionSchema)
       .map(predicate =>
         tasks.filter { task =>
-          task.changelogTask match {
-            case _: AddedRowsScanTask =>
-              val values = metadataPartitionValues(
-                task.file.location(),
-                task.file.specId(),
-                Some(task.changelogTask),
-                partitionSchema)
-              predicate(values)
-            case _ =>
-              true
-          }
+          val values = metadataPartitionValues(
+            task.file.location(),
+            task.file.specId(),
+            Some(task.changelogTask),
+            partitionSchema)
+          predicate(values)
         })
       .getOrElse(tasks)
   }
@@ -684,16 +694,59 @@ object IcebergScanSupport extends Logging {
     case other => other
   }
 
+  private def withIdentityPartitions(
+      plan: IcebergScanPlan,
+      tasks: Seq[ContentScanTask[DataFile]]): Option[IcebergScanPlan] = {
+    val identityIds = tasks.map(_.spec().identitySourceIds().asScala.map(_.toInt).toSet)
+    val requestedIds = plan.fileSchema.fields.map(field => plan.fieldIdsByName(field.name)).toSet
+    val allIdentityIds = identityIds.flatten.toSet.intersect(requestedIds)
+    if (allIdentityIds.isEmpty) {
+      return Some(plan)
+    }
+    // A single native scan schema cannot mix per-file constants and data columns.
+    // Fall back when partition evolution leaves a requested column non-identity in some tasks.
+    if (identityIds.exists(ids => !allIdentityIds.subsetOf(ids))) {
+      return None
+    }
+    val (identityFields, dataFields) = plan.fileSchema.fields.partition(field =>
+      allIdentityIds.contains(plan.fieldIdsByName(field.name)))
+    val fileSchema = StructType(dataFields)
+    val nativeTasks = plan.scanTasks.zip(tasks).map { case (nativeTask, task) =>
+      val constants = PartitionUtil.constantsMap(task, SparkUtil.internalToSpark(_, _))
+      val values = identityFields.map { field =>
+        // Literal.create expects external Spark values, including dates and decimals.
+        CatalystTypeConverters.convertToScala(
+          constants.get(plan.fieldIdsByName(field.name)),
+          field.dataType)
+      }
+      nativeTask.copy(partitionValues = values.toSeq ++ nativeTask.partitionValues)
+    }
+    Some(
+      plan.copy(
+        scanTasks = nativeTasks,
+        fileSchema = fileSchema,
+        partitionSchema = StructType(identityFields ++ plan.partitionSchema.fields)))
+  }
+
   private def toNativeScanTask(
       task: FileScanTask,
-      partitionSchema: StructType): IcebergNativeScanTask = {
+      partitionSchema: StructType,
+      fieldIdsByName: Map[String, Int],
+      partitionType: Types.StructType): IcebergNativeScanTask = {
     val file = task.file()
+    lazy val constants =
+      PartitionUtil.constantsMap(task, partitionType, SparkUtil.internalToSpark(_, _))
+    val values = partitionSchema.fields.map { field =>
+      CatalystTypeConverters.convertToScala(
+        constants.get(fieldIdsByName(field.name)),
+        field.dataType)
+    }
     IcebergNativeScanTask(
       file.location(),
       task.start(),
       task.length(),
       file.fileSizeInBytes(),
-      metadataPartitionValues(file.location(), file.specId(), None, partitionSchema))
+      values.toSeq)
   }
 
   private def toNativeScanTask(
@@ -743,9 +796,10 @@ object IcebergScanSupport extends Logging {
 
   private def collectPruningPredicates(
       scan: AnyRef,
-      readSchema: StructType): Seq[pb.PhysicalExprNode] = {
+      readSchema: StructType,
+      format: FileFormat): Seq[pb.PhysicalExprNode] = {
     scanFilterExpressions(scan).flatMap { expr =>
-      convertIcebergFilterExpression(expr, readSchema) match {
+      convertIcebergFilterExpression(expr, readSchema, format) match {
         case Some(converted) =>
           Some(NativeConverters.convertScanPruningExpr(converted))
         case None =>
@@ -786,22 +840,25 @@ object IcebergScanSupport extends Logging {
     }
   }
 
-  private def convertIcebergFilterExpression(
+  private[iceberg] def convertIcebergFilterExpression(
       expr: IcebergExpression,
-      readSchema: StructType): Option[SparkExpression] = {
-    expr match {
+      readSchema: StructType,
+      format: FileFormat): Option[SparkExpression] = {
+    val converted = expr match {
       case and: IcebergAnd =>
         for {
-          left <- convertIcebergFilterExpression(and.left(), readSchema)
-          right <- convertIcebergFilterExpression(and.right(), readSchema)
+          left <- convertIcebergFilterExpression(and.left(), readSchema, format)
+          right <- convertIcebergFilterExpression(and.right(), readSchema, format)
         } yield SparkAnd(left, right)
       case or: IcebergOr =>
         for {
-          left <- convertIcebergFilterExpression(or.left(), readSchema)
-          right <- convertIcebergFilterExpression(or.right(), readSchema)
+          left <- convertIcebergFilterExpression(or.left(), readSchema, format)
+          right <- convertIcebergFilterExpression(or.right(), readSchema, format)
         } yield SparkOr(left, right)
       case not: IcebergNot =>
-        convertIcebergFilterExpression(not.child(), readSchema).map(SparkNot)
+        convertIcebergFilterExpression(not.child(), readSchema, format)
+          .filterNot(containsDecimalLiteral)
+          .map(SparkNot)
       case predicate: UnboundPredicate[_] =>
         convertUnboundPredicate(predicate, readSchema)
       case predicate: BoundPredicate[_] =>
@@ -816,7 +873,14 @@ object IcebergScanSupport extends Logging {
             None
         }
     }
+    converted.filter(expr => format == FileFormat.PARQUET || !containsDecimalLiteral(expr))
   }
+
+  private def containsDecimalLiteral(expr: SparkExpression): Boolean =
+    expr.exists {
+      case literal: Literal => literal.dataType.isInstanceOf[DecimalType]
+      case _ => false
+    }
 
   private def convertUnboundPredicate(
       predicate: UnboundPredicate[_],
@@ -906,11 +970,21 @@ object IcebergScanSupport extends Logging {
       return None
     }
 
-    if (!supportsScanPruningLiteralType(dataType)) {
+    val supported = dataType match {
+      case decimal: DecimalType =>
+        DecimalType.is64BitDecimalType(decimal) &&
+        op != org.apache.iceberg.expressions.Expression.Operation.NOT_EQ
+      case _ => supportsScanPruningLiteralType(dataType)
+    }
+    if (!supported) {
       return None
     }
     toLiteral(literalValue, dataType).flatMap { literal =>
       op match {
+        case org.apache.iceberg.expressions.Expression.Operation.EQ
+            if dataType.isInstanceOf[DecimalType] =>
+          // shortcut: use min/max equality until decimal dictionary/Bloom pruning is safe (#2591/#2595).
+          Some(SparkAnd(GreaterThanOrEqual(attr, literal), LessThanOrEqual(attr, literal)))
         case org.apache.iceberg.expressions.Expression.Operation.EQ =>
           Some(EqualTo(attr, literal))
         case org.apache.iceberg.expressions.Expression.Operation.NOT_EQ =>
@@ -957,6 +1031,21 @@ object IcebergScanSupport extends Logging {
       return Some(Literal.create(null, dataType))
     }
     dataType match {
+      case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+        value match {
+          case number: java.math.BigDecimal =>
+            try {
+              val exact = number.setScale(decimal.scale, RoundingMode.UNNECESSARY)
+              if (exact.precision() <= decimal.precision) {
+                Some(Literal(Decimal(exact, decimal.precision, decimal.scale), decimal))
+              } else {
+                None
+              }
+            } catch {
+              case _: ArithmeticException => None
+            }
+          case _ => None
+        }
       case _: DecimalType =>
         None
       case BinaryType =>

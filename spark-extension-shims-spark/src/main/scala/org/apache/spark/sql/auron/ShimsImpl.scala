@@ -23,8 +23,9 @@ import scala.annotation.nowarn
 import scala.collection.mutable
 
 import org.apache.commons.lang3.reflect.FieldUtils
-import org.apache.spark.{OneToOneDependency, ShuffleDependency, SparkContext, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{OneToOneDependency, ShuffleDependency, SparkConf, SparkContext, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
@@ -104,7 +105,7 @@ import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 import org.apache.spark.sql.execution.joins.auron.plan.NativeShuffledHashJoinExecProvider
 import org.apache.spark.sql.execution.joins.auron.plan.NativeSortMergeJoinExecProvider
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
-import org.apache.spark.sql.execution.ui.{AuronEventUtils, AuronSQLAppStatusListener, AuronSQLAppStatusStore, AuronSQLTab}
+import org.apache.spark.sql.execution.ui.{AuronEventUtils, AuronSQLAppStatusListener, AuronSQLAppStatusStore, AuronSQLTab, SQLTab}
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, StringType}
 import org.apache.spark.status.ElementTrackingStore
@@ -119,6 +120,38 @@ import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.spark.ui.AuronBuildInfoEvent
 
 class ShimsImpl extends Shims with Logging {
+
+  override private[auron] def executorMemoryOverheadMiB(
+      conf: SparkConf,
+      executorMemoryMiB: Long): Long = {
+    conf.get(config.EXECUTOR_MEMORY_OVERHEAD).getOrElse {
+      val factor = if (conf.contains(Shims.EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY)) {
+        executorMemoryOverheadFactor(conf)
+      } else if (conf.get("spark.master", "").matches("k8s://.*")) {
+        val value = conf.getDouble(
+          Shims.KUBERNETES_MEMORY_OVERHEAD_FACTOR_KEY,
+          executorMemoryOverheadFactor(conf))
+        require(
+          value >= 0,
+          s"${Shims.KUBERNETES_MEMORY_OVERHEAD_FACTOR_KEY} must be >= 0, but was $value")
+        value
+      } else {
+        executorMemoryOverheadFactor(conf)
+      }
+      math.max((factor * executorMemoryMiB).toLong, 384L)
+    }
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2")
+  override private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double = {
+    val value = conf.getDouble(Shims.EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY, 0.10)
+    require(value > 0, s"${Shims.EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY} must be > 0")
+    value
+  }
+
+  @sparkver("3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double =
+    conf.get(org.apache.spark.internal.config.EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
   @sparkver("3.0")
   override def shimVersion: String = "spark-3.0"
@@ -172,7 +205,10 @@ class ShimsImpl extends Shims with Logging {
         throw new IllegalStateException("No active spark context found that should not happen")
       }
       val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
-      val statusStore = new AuronSQLAppStatusStore(kvStore)
+      // Spark's SQL tab may be initialized after this extension, so resolve it on each read.
+      val statusStore = new AuronSQLAppStatusStore(
+        kvStore,
+        sparkContext.ui.flatMap(_.getTabs.collectFirst { case tab: SQLTab => tab.sqlStore }))
       sparkContext.ui.foreach(new AuronSQLTab(statusStore, _))
       logInfo(" onApplyingExtension add register ")
       AuronSQLAppStatusListener.register(sparkContext)
@@ -201,6 +237,8 @@ class ShimsImpl extends Shims with Logging {
     auronBuildInfo.put(AuronBuildInfo.PAIMON_VERSION_STRING, AuronBuildInfo.PAIMON_VERSION)
     auronBuildInfo.put(AuronBuildInfo.ICEBERG_VERSION_STRING, AuronBuildInfo.ICEBERG_VERSION)
     auronBuildInfo.put(AuronBuildInfo.FLINK_VERSION_STRING, AuronBuildInfo.FLINK_VERSION)
+    auronBuildInfo.put(AuronBuildInfo.BUILD_BRANCH_STRING, AuronBuildInfo.BUILD_BRANCH)
+    auronBuildInfo.put(AuronBuildInfo.BUILD_REVISION_STRING, AuronBuildInfo.BUILD_REVISION)
     auronBuildInfo.put(AuronBuildInfo.BUILD_DATE_STRING, AuronBuildInfo.BUILD_DATE)
     auronBuildInfo.retain { case (_, v) => v != null && v.nonEmpty }
     val event = AuronBuildInfoEvent(auronBuildInfo)
@@ -241,7 +279,8 @@ class ShimsImpl extends Shims with Logging {
       joinType: JoinType,
       condition: Option[Expression],
       broadcastSide: JoinBuildSide,
-      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase =
+      isNullAwareAntiJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeBroadcastJoinBase =
     NativeBroadcastJoinExec(
       left,
       right,
@@ -251,7 +290,8 @@ class ShimsImpl extends Shims with Logging {
       joinType,
       condition,
       broadcastSide,
-      isNullAwareAntiJoin)
+      isNullAwareAntiJoin,
+      requiredReservedOrder)
 
   override def createNativeSortMergeJoinExec(
       left: SparkPlan,
@@ -278,7 +318,8 @@ class ShimsImpl extends Shims with Logging {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): SparkPlan =
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): SparkPlan =
     NativeShuffledHashJoinExecProvider.provide(
       left,
       right,
@@ -287,7 +328,8 @@ class ShimsImpl extends Shims with Logging {
       joinType,
       condition,
       buildSide,
-      isSkewJoin)
+      isSkewJoin,
+      requiredReservedOrder)
 
   override def createNativeExpandExec(
       projections: Seq[Seq[Expression]],
@@ -649,9 +691,26 @@ class ShimsImpl extends Shims with Logging {
             .build()
         }
 
+      case e if NativeConverters.nativeDateTimeFunctionsEnabled && isUnixDateConversion(e) =>
+        // Date32 and Int32 share the same epoch-day representation.
+        Some(
+          pb.PhysicalExprNode
+            .newBuilder()
+            .setTryCast(
+              pb.PhysicalTryCastNode
+                .newBuilder()
+                .setExpr(NativeConverters
+                  .convertExprWithFallback(e.children.head, isPruningExpr, fallback))
+                .setArrowType(NativeConverters.convertDataType(e.dataType)))
+            .build())
+
       case e: TaggingExpression =>
         Some(NativeConverters.convertExprWithFallback(e.child, isPruningExpr, fallback))
       case e =>
+        convertFloatingArrayNormalization(e, isPruningExpr, fallback) match {
+          case Some(v) => return Some(v)
+          case None =>
+        }
         convertPromotePrecision(e, isPruningExpr, fallback) match {
           case Some(v) => return Some(v)
           case None =>
@@ -662,6 +721,53 @@ class ShimsImpl extends Shims with Logging {
         }
         None
     }
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1")
+  @nowarn("cat=unused")
+  private def convertFloatingArrayNormalization(
+      e: Expression,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = None
+
+  @sparkver("4.2")
+  private def convertFloatingArrayNormalization(
+      e: Expression,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = {
+    import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable}
+    import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
+    import org.apache.spark.sql.types.{DoubleType, FloatType}
+
+    e match {
+      case ArrayTransform(
+            array,
+            LambdaFunction(
+              KnownFloatingPointNormalized(NormalizeNaNAndZero(value: NamedLambdaVariable)),
+              Seq(argument: NamedLambdaVariable),
+              false))
+          if value.exprId == argument.exprId &&
+            (argument.dataType == FloatType || argument.dataType == DoubleType) &&
+            array.dataType == ArrayType(argument.dataType, argument.nullable) =>
+        Some(
+          NativeConverters.buildExtScalarFunctionNode(
+            "Spark_NormalizeNanAndZero",
+            array :: Nil,
+            array.dataType,
+            isPruningExpr,
+            fallback))
+      case _ => None
+    }
+  }
+
+  @sparkver("3.0")
+  @nowarn("cat=unused")
+  private def isUnixDateConversion(e: Expression): Boolean = false
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  private def isUnixDateConversion(e: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.{DateFromUnixDate, UnixDate}
+    e.isInstanceOf[UnixDate] || e.isInstanceOf[DateFromUnixDate]
   }
 
   private def literalStringSplitPattern(pattern: String): Option[String] = {
@@ -702,6 +808,36 @@ class ShimsImpl extends Shims with Logging {
 
   override def getLikeEscapeChar(expr: Expression): Char = {
     expr.asInstanceOf[Like].escapeChar
+  }
+
+  @sparkver("3.0")
+  override def getMakeDateFailOnError(expr: Expression): Boolean = false
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override def getMakeDateFailOnError(expr: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.MakeDate
+    expr.asInstanceOf[MakeDate].failOnError
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3")
+  override def getRoundFailOnError(expr: Expression): Boolean = false
+
+  @sparkver("3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override def getRoundFailOnError(expr: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.{BRound, Round}
+    expr match {
+      case e: Round => e.ansiEnabled
+      case e: BRound => e.ansiEnabled
+    }
+  }
+
+  @sparkver("3.0 / 3.1")
+  override def getNextDayFailOnError(expr: Expression): Boolean = false
+
+  @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override def getNextDayFailOnError(expr: Expression): Boolean = {
+    import org.apache.spark.sql.catalyst.expressions.NextDay
+    expr.asInstanceOf[NextDay].failOnError
   }
 
   override def convertMoreAggregateExpr(e: AggregateExpression): Option[pb.PhysicalExprNode] = {

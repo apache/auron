@@ -61,7 +61,7 @@ case class SparkAuronUDFWrapperContext(serialized: ByteBuffer)
   }
   private val paramsSchema = ArrowUtils.toArrowSchema(javaParamsSchema)
 
-  def eval(importFFIArrayPtr: Long, exportFFIArrayPtr: Long): Unit = {
+  def eval(importFFIArrayPtr: Long, exportFFIArrayPtr: Long): Unit = synchronized {
     Using.resources(
       VectorSchemaRoot.create(outputSchema, ROOT_ALLOCATOR),
       VectorSchemaRoot.create(paramsSchema, ROOT_ALLOCATOR),

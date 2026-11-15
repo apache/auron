@@ -18,12 +18,14 @@ package org.apache.spark.sql.execution.joins.auron.plan
 
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.auron.plan.NativeBroadcastJoinBase
 import org.apache.spark.sql.execution.joins.HashJoin
 
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.sparkver
 
 case class NativeBroadcastJoinExec(
@@ -35,7 +37,8 @@ case class NativeBroadcastJoinExec(
     override val joinType: JoinType,
     override val condition: Option[Expression],
     broadcastSide: JoinBuildSide,
-    isNullAwareAntiJoin: Boolean)
+    isNullAwareAntiJoin: Boolean,
+    requiredReservedOrder: Boolean)
     extends NativeBroadcastJoinBase(
       left,
       right,
@@ -45,8 +48,22 @@ case class NativeBroadcastJoinExec(
       joinType,
       condition,
       broadcastSide,
-      isNullAwareAntiJoin)
+      isNullAwareAntiJoin,
+      requiredReservedOrder)
     with HashJoin {
+
+  // Keyless joins cannot guarantee the original probe ordering. Hybrid join fallback no
+  // longer breaks probe ordering when requiredReservedOrder is set, since the native
+  // operator reserves it internally in that case (see auron.proto's
+  // BroadcastJoinExecNode.required_reserved_order), so only fall back to Nil otherwise.
+  override def outputOrdering: Seq[SortOrder] = {
+    if ((leftKeys.isEmpty && rightKeys.isEmpty) ||
+      (!requiredReservedOrder && SparkAuronConfiguration.HYBRID_JOIN_ENABLE.get())) {
+      Nil
+    } else {
+      super.outputOrdering
+    }
+  }
 
   @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
   override def buildSide: org.apache.spark.sql.catalyst.optimizer.BuildSide =

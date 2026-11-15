@@ -148,7 +148,7 @@ case class NativeShuffleExchangeExec(
           "Input iterator must be empty (SPARK-44605: adapt to Spark 4+ ShuffleWriteProcessor API changes)")
 
         val rdd = dep.asInstanceOf[AuronShuffleDependency[_, _, _]].inputRdd
-        val partition = rdd.partitions(mapIndex)
+        val partition = dep.asInstanceOf[AuronShuffleDependency[_, _, _]].rddPartitions(mapIndex)
         internalWrite(rdd, dep, mapId, context, partition)
       }
 

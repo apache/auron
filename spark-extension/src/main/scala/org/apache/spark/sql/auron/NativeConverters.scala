@@ -83,11 +83,14 @@ import org.apache.spark.util.Utils
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
+import org.apache.auron.util.SparkVersionUtil
 
 object NativeConverters extends Logging {
   def udfJsonEnabled: Boolean = SparkAuronConfiguration.UDF_JSON_ENABLED.get()
   def udfBrickHouseEnabled: Boolean = SparkAuronConfiguration.UDF_BRICKHOUSE_ENABLED.get()
   def decimalArithOpEnabled: Boolean = SparkAuronConfiguration.DECIMAL_ARITH_OP_ENABLED.get()
+  def nativeDateTimeFunctionsEnabled: Boolean =
+    SparkAuronConfiguration.ENABLE_NATIVE_DATETIME_FUNCTIONS.get()
   def datetimeExtractEnabled: Boolean = SparkAuronConfiguration.DATETIME_EXTRACT_ENABLED.get()
   def castTrimStringEnabled: Boolean = SparkAuronConfiguration.CAST_STRING_TRIM_ENABLE.get()
   def singleChildFallbackEnabled: Boolean =
@@ -358,7 +361,12 @@ object NativeConverters extends Logging {
             try {
               val converted =
                 convertExprWithFallback(child, isPruningExpr = false, fallbackToError)
-              Shims.get.createNativeExprWrapper(converted, child.dataType, child.nullable)
+              child match {
+                // Preserve literal parameters only after successful conversion.
+                case literal: Literal => literal
+                case _ =>
+                  Shims.get.createNativeExprWrapper(converted, child.dataType, child.nullable)
+              }
             } catch {
               case _: NotImplementedError =>
                 val fallbacked = convertExpr(child)
@@ -409,6 +417,11 @@ object NativeConverters extends Logging {
       this.buildExtScalarFunctionNode(_, _, _, isPruningExpr, fallback)
 
     sparkExpr match {
+      case e @ (_: Year | _: Month | _: DayOfMonth | _: DayOfYear | _: DayOfWeek | _: WeekOfYear |
+          _: Quarter | _: Hour | _: Minute | _: Second | _: LastDay | _: NextDay | _: DateDiff |
+          _: DateAdd | _: DateSub | _: AddMonths | _: MonthsBetween | _: TruncTimestamp)
+          if !nativeDateTimeFunctionsEnabled =>
+        fallback(e)
       case e: NativeExprWrapperBase => e.wrapped
       case e: Literal =>
         val schema = StructType(Seq(StructField("", e.dataType, e.nullable)))
@@ -827,7 +840,7 @@ object NativeConverters extends Logging {
         buildBinaryExprNode(lhs, castIfNecessary(rhs, lhs.dataType), "BitwiseShiftRight")
 
       // builtin scalar functions
-      case e: Sqrt => buildScalarFunction(pb.ScalarFunction.Sqrt, e.children, e.dataType)
+      case e: Sqrt => buildExtScalarFunction("Spark_Sqrt", e.children, e.dataType)
       case e: Sin => buildScalarFunction(pb.ScalarFunction.Sin, e.children, e.dataType)
       case e: Cos => buildScalarFunction(pb.ScalarFunction.Cos, e.children, e.dataType)
       case e: Tan => buildScalarFunction(pb.ScalarFunction.Tan, e.children, e.dataType)
@@ -836,7 +849,11 @@ object NativeConverters extends Logging {
       case e: Acosh => buildScalarFunction(pb.ScalarFunction.Acosh, e.children, e.dataType)
       case e: Atan => buildScalarFunction(pb.ScalarFunction.Atan, e.children, e.dataType)
       case e: Exp => buildScalarFunction(pb.ScalarFunction.Exp, e.children, e.dataType)
-      case e: MakeDate => buildScalarFunction(pb.ScalarFunction.MakeDate, e.children, e.dataType)
+      case e: MakeDate if nativeDateTimeFunctionsEnabled =>
+        buildExtScalarFunction(
+          "Spark_MakeDate",
+          e.children :+ Literal(Shims.get.getMakeDateFailOnError(e)),
+          e.dataType)
       case e: Log =>
         buildScalarFunction(pb.ScalarFunction.Ln, e.children.map(nullIfNegative), e.dataType)
       case e: Log2 =>
@@ -893,20 +910,18 @@ object NativeConverters extends Logging {
             }
           }
           .getOrElse(fallback(e))
-      case e: Round =>
-        e.scale match {
-          case Literal(n: Int, _) =>
-            buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(n.toLong)), e.dataType)
-          case _ =>
-            buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(0L)), e.dataType)
-        }
-
-      case e: BRound =>
-        e.scale match {
-          case Literal(n: Int, _) =>
-            buildExtScalarFunction("Spark_BRound", Seq(e.child, Literal(n.toLong)), e.dataType)
-          case _ =>
-            buildExtScalarFunction("Spark_BRound", Seq(e.child, Literal(0L)), e.dataType)
+      case e @ (_: Round | _: BRound) =>
+        val scale = e.children(1).eval()
+        if (scale == null) {
+          convertExprWithFallback(Literal.create(null, e.dataType), isPruningExpr, fallback)
+        } else {
+          buildExtScalarFunction(
+            if (e.isInstanceOf[BRound]) "Spark_BRound" else "Spark_Round",
+            Seq(
+              e.children.head,
+              Literal.create(scale, IntegerType),
+              Literal(Shims.get.getRoundFailOnError(e))),
+            e.dataType)
         }
 
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)
@@ -917,13 +932,15 @@ object NativeConverters extends Logging {
       case e: Ascii => buildScalarFunction(pb.ScalarFunction.Ascii, e.children, e.dataType)
       case e: BitLength =>
         buildScalarFunction(pb.ScalarFunction.BitLength, e.children, e.dataType)
-      case e: Chr => buildScalarFunction(pb.ScalarFunction.Chr, e.children, e.dataType)
+      case e: Chr => buildExtScalarFunction("Spark_Chr", e.children, e.dataType)
       case e: StringTranslate =>
         buildScalarFunction(pb.ScalarFunction.Translate, e.children, e.dataType)
       case e: StringReplace =>
         buildScalarFunction(pb.ScalarFunction.Replace, e.children, e.dataType)
       case e: TruncTimestamp =>
         buildScalarFunction(pb.ScalarFunction.DateTrunc, e.children, e.dataType)
+      case e: TruncDate =>
+        buildExtScalarFunction("Spark_Trunc", e.children, e.dataType)
 
       case e: OctetLength =>
         buildScalarFunction(pb.ScalarFunction.OctetLength, e.children, e.dataType)
@@ -988,12 +1005,33 @@ object NativeConverters extends Logging {
         buildTimePartExt("Spark_Month", child, isPruningExpr, fallback)
       case DayOfMonth(child) =>
         buildTimePartExt("Spark_Day", child, isPruningExpr, fallback)
+      case DayOfYear(child) =>
+        buildTimePartExt("Spark_DayOfYear", child, isPruningExpr, fallback)
       case DayOfWeek(child) =>
         buildTimePartExt("Spark_DayOfWeek", child, isPruningExpr, fallback)
       case WeekOfYear(child) =>
         buildTimePartExt("Spark_WeekOfYear", child, isPruningExpr, fallback)
       case Quarter(child) =>
         buildTimePartExt("Spark_Quarter", child, isPruningExpr, fallback)
+      case e: LastDay =>
+        buildExtScalarFunction("Spark_LastDay", e.children, e.dataType)
+      case e: NextDay =>
+        buildExtScalarFunction(
+          "Spark_NextDay",
+          e.children :+ Literal(Shims.get.getNextDayFailOnError(e)),
+          e.dataType)
+      case e: DateDiff =>
+        buildExtScalarFunction("Spark_DateDiff", e.children, e.dataType)
+      case e: DateAdd =>
+        buildExtScalarFunction("Spark_DateAdd", e.children, e.dataType)
+      case e: DateSub =>
+        buildExtScalarFunction("Spark_DateSub", e.children, e.dataType)
+      case e: AddMonths =>
+        // Spark 3.0 wraps date overflow; Spark 3.1+ throws even with ANSI disabled.
+        buildExtScalarFunction(
+          "Spark_AddMonths",
+          e.children :+ Literal(SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"),
+          e.dataType)
 
       case e: Levenshtein =>
         buildScalarFunction(pb.ScalarFunction.Levenshtein, e.children, e.dataType)
@@ -1141,7 +1179,31 @@ object NativeConverters extends Logging {
           if e.dataType.isInstanceOf[FloatType] || e.dataType.isInstanceOf[DoubleType] =>
         buildExtScalarFunction("Spark_NormalizeNanAndZero", e.children, e.dataType)
 
+      case e @ (_: ArrayDistinct | _: ArrayUnion) if (e.dataType match {
+            // Spark 3.0 has different NaN deduplication behavior.
+            case ArrayType(FloatType | DoubleType, _) =>
+              SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
+            case ArrayType(elementType: AtomicType, _) =>
+              isTypeSupported(elementType) || elementType == BinaryType
+            case ArrayType(NullType, _) => true
+            case _ => false
+          }) =>
+        buildExtScalarFunction(
+          if (e.isInstanceOf[ArrayUnion]) "Spark_ArrayUnion" else "Spark_ArrayDistinct",
+          e.children,
+          e.dataType)
       case e: CreateArray => buildExtScalarFunction("Spark_MakeArray", e.children, e.dataType)
+      case e: ArrayContains
+          if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
+        buildExtScalarFunction("Spark_ArrayContains", e.children, e.dataType)
+      case e: ArraysOverlap if isTypeSupported(e.left.dataType) && (e.left.dataType match {
+            // Spark 3.0's interpreted and code-generated paths compare floats differently.
+            case ArrayType(FloatType | DoubleType, _) =>
+              SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
+            case ArrayType(_: AtomicType, _) => true
+            case _ => false
+          }) =>
+        buildExtScalarFunction("Spark_ArraysOverlap", e.children, e.dataType)
       case e: Flatten => buildExtScalarFunction("Spark_ArrayFlatten", e.children, e.dataType)
       case e: MapFromEntries =>
         buildExtScalarFunction(
@@ -1394,15 +1456,23 @@ object NativeConverters extends Logging {
       right: Expression,
       op: String,
       isPruningExpr: Boolean,
-      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode =
+      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    // Pruning needs a direct column/literal comparison; row filters still normalize floats.
+    val normalizeFloatComparison = !isPruningExpr &&
+      (left.dataType == FloatType || left.dataType == DoubleType) &&
+      (op == "Eq" || op == "NotEq" || op == "Lt" || op == "LtEq" || op == "Gt" ||
+        op == "GtEq" || op == "IsNotDistinctFrom")
+    val lhs = if (normalizeFloatComparison) NormalizeNaNAndZero(left) else left
+    val rhs = if (normalizeFloatComparison) NormalizeNaNAndZero(right) else right
     buildExprNode {
       _.setBinaryExpr(
         pb.PhysicalBinaryExprNode
           .newBuilder()
-          .setL(convertExprWithFallback(left, isPruningExpr, fallback))
-          .setR(convertExprWithFallback(right, isPruningExpr, fallback))
+          .setL(convertExprWithFallback(lhs, isPruningExpr, fallback))
+          .setR(convertExprWithFallback(rhs, isPruningExpr, fallback))
           .setOp(op))
     }
+  }
 
   def buildScalarFunctionNode(
       fn: pb.ScalarFunction,

@@ -1,0 +1,232 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: COLDMANYU <46128522+COLDMANYU@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 12:50:00 +0800
+Subject: [PATCH] auron: fix LZ4_HADOOP framing interop with Hadoop/parquet-java
+
+- writer: emit one block per 256 KiB chunk. Hadoop Lz4Decompressor (parquet-java)
+  decompresses into a 256 KiB buffer, a single larger block fails with
+  "LZ4Exception: Error decoding offset" (same bug as apache/arrow#49641 in C++).
+- reader: follow Hadoop BlockCompressorStream: a block is one original-size header
+  followed by as many (compressed size, chunk) pairs as needed to reach it. parquet-java
+  writes pages larger than the codec buffer (e.g. big dictionary pages) that way; the old
+  reader assumed one chunk per header. The block list may end with an empty (size 0)
+  header that BlockCompressorStream.finish() writes after a large write.
+---
+diff --git a/parquet/src/compression.rs b/parquet/src/compression.rs
+index 23c4bce..ecc4d83 100644
+--- a/parquet/src/compression.rs
++++ b/parquet/src/compression.rs
+@@ -677,56 +677,71 @@ mod lz4_hadoop_codec {
+     /// Translated from the apache arrow c++ function [TryDecompressHadoop](https://github.com/apache/arrow/blob/bf18e6e4b5bb6180706b1ba0d597a65a4ce5ca48/cpp/src/arrow/util/compression_lz4.cc#L474).
+     /// Returns error if decompression failed.
+     fn try_decompress_hadoop(input_buf: &[u8], output_buf: &mut [u8]) -> io::Result<usize> {
+-        // Parquet files written with the Hadoop Lz4Codec use their own framing.
+-        // The input buffer can contain an arbitrary number of "frames", each
+-        // with the following structure:
+-        // - bytes 0..3: big-endian uint32_t representing the frame decompressed size
+-        // - bytes 4..7: big-endian uint32_t representing the frame compressed size
+-        // - bytes 8...: frame compressed data
++        // Parquet files written with the Hadoop Lz4Codec use the block format of Hadoop's
++        // BlockCompressorStream. The input is a sequence of blocks, each made of
++        // - 4 bytes: big-endian uint32 original (decompressed) size of the block
++        // - one or more chunks of
++        //   - 4 bytes: big-endian uint32 compressed size of the chunk
++        //   - the LZ4 compressed chunk
++        //   until the chunks add up to the original size.
++        // A block has one chunk unless a single write exceeded the codec buffer size
++        // (io.compression.codec.lz4.buffersize, 256 KiB by default): BlockCompressorStream then
++        // writes the original size once and splits the data into several chunks. parquet-java
++        // does this for dictionary pages larger than the buffer.
+         //
+-        // The Hadoop Lz4Codec source code can be found here:
+-        // https://github.com/apache/hadoop/blob/trunk/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-nativetask/src/main/native/src/codec/Lz4Codec.cc
+-        let mut input_len = input_buf.len();
++        // The Hadoop BlockCompressorStream source code can be found here:
++        // https://github.com/apache/hadoop/blob/trunk/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/io/compress/BlockCompressorStream.java
++        let read_u32 = |buf: &[u8]| -> io::Result<usize> {
++            if buf.len() < SIZE_U32 {
++                return Err(io::Error::other("Not enough bytes for Hadoop frame"));
++            }
++            let mut bytes = [0; SIZE_U32];
++            bytes.copy_from_slice(&buf[..SIZE_U32]);
++            Ok(u32::from_be_bytes(bytes) as usize)
++        };
+         let mut input = input_buf;
+-        let mut read_bytes = 0;
+-        let mut output_len = output_buf.len();
+         let mut output: &mut [u8] = output_buf;
+-        while input_len >= PREFIX_LEN {
+-            let mut bytes = [0; SIZE_U32];
+-            bytes.copy_from_slice(&input[0..4]);
+-            let expected_decompressed_size = u32::from_be_bytes(bytes);
+-            let mut bytes = [0; SIZE_U32];
+-            bytes.copy_from_slice(&input[4..8]);
+-            let expected_compressed_size = u32::from_be_bytes(bytes);
+-            input = &input[PREFIX_LEN..];
+-            input_len -= PREFIX_LEN;
+-
+-            if input_len < expected_compressed_size as usize {
+-                return Err(io::Error::other("Not enough bytes for Hadoop frame"));
++        let mut read_bytes = 0;
++        while input.len() >= SIZE_U32 {
++            let block_size = read_u32(input)?;
++            input = &input[SIZE_U32..];
++            if block_size == 0 {
++                // BlockCompressorStream.finish() appends an empty block header (original size 0)
++                // when the compressor was reset after a large write; BlockDecompressorStream
++                // treats it as the end of the stream
++                input = &input[input.len()..];
++                break;
+             }
+-
+-            if output_len < expected_decompressed_size as usize {
++            if output.len() < block_size {
+                 return Err(io::Error::other(
+                     "Not enough bytes to hold advertised output",
+                 ));
+             }
+-            let decompressed_size =
+-                lz4_flex::decompress_into(&input[..expected_compressed_size as usize], output)
+-                    .map_err(|e| ParquetError::External(Box::new(e)))?;
+-            if decompressed_size != expected_decompressed_size as usize {
+-                return Err(io::Error::other("Unexpected decompressed size"));
++            let mut block_read = 0;
++            while block_read < block_size {
++                let chunk_size = read_u32(input)?;
++                input = &input[SIZE_U32..];
++                if input.len() < chunk_size {
++                    return Err(io::Error::other("Not enough bytes for Hadoop frame"));
++                }
++                let decompressed_size = lz4_flex::decompress_into(
++                    &input[..chunk_size],
++                    &mut output[..block_size - block_read],
++                )
++                .map_err(|e| ParquetError::External(Box::new(e)))?;
++                if decompressed_size == 0 {
++                    return Err(io::Error::other("Unexpected decompressed size"));
++                }
++                input = &input[chunk_size..];
++                output = &mut output[decompressed_size..];
++                block_read += decompressed_size;
+             }
+-            input_len -= expected_compressed_size as usize;
+-            output_len -= expected_decompressed_size as usize;
+-            read_bytes += expected_decompressed_size as usize;
+-            if input_len > expected_compressed_size as usize {
+-                input = &input[expected_compressed_size as usize..];
+-                output = &mut output[expected_decompressed_size as usize..];
+-            } else {
+-                break;
++            if block_read != block_size {
++                return Err(io::Error::other("Unexpected decompressed size"));
+             }
++            read_bytes += block_size;
+         }
+-        if input_len == 0 {
++        if input.is_empty() {
+             Ok(read_bytes)
+         } else {
+             Err(io::Error::other("Not all input are consumed"))
+@@ -778,6 +793,28 @@ mod lz4_hadoop_codec {
+         }
+ 
+         fn compress(&mut self, input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<()> {
++            // Hadoop's BlockCompressorStream splits its input into blocks of at most
++            // `io.compression.codec.lz4.buffersize` (256 KiB by default) bytes, and Hadoop's
++            // Lz4Decompressor (used by parquet-java) decompresses each block into a buffer of
++            // that size. A single frame holding a larger page fails on JVM readers with
++            // `LZ4Exception: Error decoding offset ...`, so emit one frame per 256 KiB chunk.
++            // try_decompress_hadoop already reads any number of frames.
++            if input_buf.is_empty() {
++                return self.compress_frame(input_buf, output_buf);
++            }
++            for chunk in input_buf.chunks(HADOOP_LZ4_BLOCK_SIZE) {
++                self.compress_frame(chunk, output_buf)?;
++            }
++            Ok(())
++        }
++    }
++
++    /// Default `io.compression.codec.lz4.buffersize` of Hadoop's Lz4Codec.
++    const HADOOP_LZ4_BLOCK_SIZE: usize = 256 * 1024;
++
++    impl LZ4HadoopCodec {
++        /// Appends one Hadoop LZ4 frame (sizes prefix + LZ4 block) for `input_buf`.
++        fn compress_frame(&mut self, input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<()> {
+             // Allocate memory to store the LZ4_HADOOP prefix.
+             let offset = output_buf.len();
+             output_buf.resize(offset + PREFIX_LEN, 0);
+@@ -885,6 +922,73 @@ mod tests {
+         test_codec_without_size(CodecType::SNAPPY);
+     }
+ 
++    #[test]
++    fn test_lz4_hadoop_frames_fit_hadoop_block_size() {
++        // pages larger than Hadoop's 256 KiB LZ4 buffer must be split into several frames,
++        // each of which a JVM (Hadoop Lz4Decompressor) reader can decompress
++        for size in [0, 1, 256 * 1024, 256 * 1024 + 1, 1024 * 1024 + 17] {
++            let data = random_bytes(size);
++            test_roundtrip(CodecType::LZ4, &data, Some(data.len()));
++
++            let mut codec = create_codec(CodecType::LZ4, &CodecOptionsBuilder::default().build())
++                .unwrap()
++                .unwrap();
++            let mut compressed = Vec::new();
++            codec.compress(&data, &mut compressed).unwrap();
++            let (mut pos, mut frames, mut total) = (0, 0, 0);
++            while pos < compressed.len() {
++                let raw = u32::from_be_bytes(compressed[pos..pos + 4].try_into().unwrap()) as usize;
++                let comp = u32::from_be_bytes(compressed[pos + 4..pos + 8].try_into().unwrap());
++                assert!(raw <= 256 * 1024, "frame of {raw} bytes exceeds the Hadoop block size");
++                total += raw;
++                frames += 1;
++                pos += 8 + comp as usize;
++            }
++            assert_eq!(pos, compressed.len());
++            assert_eq!(total, size);
++            assert_eq!(frames, size.div_ceil(256 * 1024).max(1));
++        }
++    }
++
++    #[test]
++    fn test_lz4_hadoop_reads_block_with_several_chunks() {
++        // Hadoop BlockCompressorStream writes a write() larger than its buffer as ONE original
++        // size header followed by several (compressed size, chunk) pairs; parquet-java does so
++        // for large dictionary pages. Build that layout by hand and read it back.
++        let data = random_bytes(600 * 1024 + 7);
++        let mut buf = Vec::new();
++        buf.extend_from_slice(&(data.len() as u32).to_be_bytes());
++        for chunk in data.chunks(256 * 1024) {
++            let compressed = lz4_flex::block::compress(chunk);
++            buf.extend_from_slice(&(compressed.len() as u32).to_be_bytes());
++            buf.extend_from_slice(&compressed);
++        }
++        // followed by a second, single-chunk block
++        let tail = random_bytes(1000);
++        let compressed = lz4_flex::block::compress(&tail);
++        buf.extend_from_slice(&(tail.len() as u32).to_be_bytes());
++        buf.extend_from_slice(&(compressed.len() as u32).to_be_bytes());
++        buf.extend_from_slice(&compressed);
++        // and the empty block header BlockCompressorStream.finish() appends after a large write
++        buf.extend_from_slice(&0u32.to_be_bytes());
++
++        let mut codec = create_codec(
++            CodecType::LZ4,
++            &CodecOptionsBuilder::default()
++                .set_backward_compatible_lz4(false)
++                .build(),
++        )
++        .unwrap()
++        .unwrap();
++        let mut out = Vec::new();
++        let n = codec
++            .decompress(&buf, &mut out, Some(data.len() + tail.len()))
++            .unwrap();
++        assert_eq!(n, data.len() + tail.len());
++        assert_eq!(&out[..data.len()], data.as_slice());
++        assert_eq!(&out[data.len()..], tail.as_slice());
++    }
++
+     #[test]
+     fn test_codec_gzip() {
+         for level in GzipLevel::MINIMUM_LEVEL..=GzipLevel::MAXIMUM_LEVEL {

@@ -27,7 +27,6 @@ import scala.collection.immutable.SortedMap
 import scala.concurrent.Promise
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.spark.OneToOneDependency
 import org.apache.spark.Partition
 import org.apache.spark.SparkException
@@ -67,7 +66,9 @@ import org.apache.auron.{protobuf => pb, sparkver}
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.metric.SparkMetricNode
 
-abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val child: SparkPlan)
+abstract class NativeBroadcastExchangeBase(
+    @transient mode: BroadcastMode,
+    override val child: SparkPlan)
     extends BroadcastExchangeLike
     with NativeSupports {
 
@@ -97,7 +98,6 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
           "probed_side_search_time",
           "probed_side_compare_time",
           "build_output_time",
-          "fallback_sort_merge_join_time",
           "mem_spill_count",
           "mem_spill_size",
           "mem_spill_iotime",
@@ -125,7 +125,16 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
     relationFuture
   }
 
-  override def doExecuteBroadcast[T](): Broadcast[T] = {
+  // Mixed native/Spark execution needs a second JVM broadcast; otherwise the transformed relation
+  // would be serialized with every Spark task.
+  // Build it under a separate lock because relationFuture initializes lazy fields on another thread.
+  @transient
+  private lazy val sparkBroadcastLock = new Object
+
+  @transient
+  private var sparkBroadcast: Broadcast[Any] = _
+
+  private def createSparkBroadcast(): Broadcast[Any] = {
     val singlePartition = new Partition() {
       override def index: Int = 0
     }
@@ -145,18 +154,14 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
       .map(_.copy())
       .toArray
 
-    val broadcast = relationFuture.get // broadcast must be resolved
-    val v = mode.transform(dataRows)
-    val dummyBroadcasted = new Broadcast[Any](-1) {
-      override protected def getValue(): Any = v
-      override protected def doUnpersist(blocking: Boolean): Unit = {
-        MethodUtils.invokeMethod(broadcast, true, "doUnpersist", Array(blocking))
-      }
-      override protected def doDestroy(blocking: Boolean): Unit = {
-        MethodUtils.invokeMethod(broadcast, true, "doDestroy", Array(blocking))
-      }
+    sparkContext.broadcast(mode.transform(dataRows))
+  }
+
+  override def doExecuteBroadcast[T](): Broadcast[T] = sparkBroadcastLock.synchronized {
+    if (sparkBroadcast == null) {
+      sparkBroadcast = createSparkBroadcast()
     }
-    dummyBroadcasted.asInstanceOf[Broadcast[T]]
+    sparkBroadcast.asInstanceOf[Broadcast[T]]
   }
 
   def doExecuteBroadcastNative[T](): broadcast.Broadcast[T] = {
@@ -241,7 +246,7 @@ abstract class NativeBroadcastExchangeBase(mode: BroadcastMode, override val chi
               metrics("dataSize") += byteArray.length
             })
 
-          val input = inputRDD.nativePlan(inputRDD.partitions(split.index), context)
+          val input = inputRDD.nativePlan(split, context)
           val nativeIpcWriterExec = pb.PhysicalPlanNode
             .newBuilder()
             .setIpcWriter(

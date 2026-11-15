@@ -113,9 +113,28 @@ case class OnHeapSpill(hsm: SparkOnHeapSpillManager, id: Int) extends Logging {
     spillBuf match {
       case memBasedBuf: MemBasedSpillBuf =>
         val releasingMemory = memUsed
-        spillBuf = memBasedBuf.spill(hsm)
+        val fileBasedBuf =
+          try {
+            memBasedBuf.spill(hsm)
+          } catch {
+            case e: SpillIOException =>
+              // buffers were already released by spill(); give the memory back to
+              // the manager so the accounting does not leak, then rethrow so the
+              // caller sees the real IO cause.
+              spillBuf = new ReleasedSpillBuf(memBasedBuf)
+              hsm.freeMemory(releasingMemory)
+              logError(s"failed to spill in-mem buffer to disk, id=$id", e)
+              throw e
+          }
+        spillBuf = fileBasedBuf
         hsm.freeMemory(releasingMemory)
         releasingMemory
+
+      case _: FileBasedSpillBuf =>
+        0L
+
+      case _: ReleasedSpillBuf =>
+        0L
     }
   }
 }

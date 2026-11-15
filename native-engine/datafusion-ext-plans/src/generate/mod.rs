@@ -28,7 +28,9 @@ use datafusion::{
     common::{Result, ScalarValue},
     physical_expr::{PhysicalExprRef, expressions::Literal},
 };
-use datafusion_ext_commons::{df_execution_err, df_unimplemented_err, downcast_any};
+use datafusion_ext_commons::{
+    df_execution_err, df_unimplemented_err, downcast_any, downcast_any_dyn,
+};
 
 use crate::generate::{
     explode::{ExplodeArray, ExplodeMap},
@@ -90,7 +92,7 @@ pub fn create_generator(
             children[1..]
                 .iter()
                 .map(|child| {
-                    if let ScalarValue::Utf8(Some(s)) = downcast_any!(child, Literal)?.value() {
+                    if let ScalarValue::Utf8(Some(s)) = downcast_any_dyn!(child, Literal)?.value() {
                         Ok(s.clone())
                     } else {
                         df_execution_err!("json_tuple() accepts only literal string params")

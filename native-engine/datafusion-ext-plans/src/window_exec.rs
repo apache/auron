@@ -32,7 +32,7 @@ use datafusion::{
         metrics::{ExecutionPlanMetricsSet, MetricsSet, Time},
     },
 };
-use datafusion_ext_commons::{arrow::cast::cast, downcast_any};
+use datafusion_ext_commons::{arrow::cast::cast, downcast_any, downcast_any_dyn};
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
@@ -49,7 +49,7 @@ pub struct WindowExec {
     input: Arc<dyn ExecutionPlan>,
     context: Arc<WindowContext>,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl WindowExec {
@@ -125,23 +125,28 @@ impl ExecutionPlan for WindowExec {
         "WindowExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.context.output_schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -167,9 +172,11 @@ impl ExecutionPlan for WindowExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
-        // combine WindowGroupLimitExec -> WindowExec
-        if let Ok(window_group_limit) = downcast_any!(&self.input, WindowExec)
+        // Combining group limit filtering requires exactly one rank-like output column.
+        if let Ok(window_group_limit) = downcast_any_dyn!(&self.input, WindowExec)
             && window_group_limit.window_context().group_limit.is_some()
+            && self.context.window_exprs.len() == 1
+            && self.context.window_exprs[0].is_rank_like()
         {
             let combined = Arc::new(Self {
                 input: window_group_limit.input.clone(),
@@ -199,10 +206,6 @@ impl ExecutionPlan for WindowExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 
@@ -994,6 +997,72 @@ mod test {
             let batches = datafusion::physical_plan::common::collect(stream).await?;
             assert_batches_eq!(expected, &batches);
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_window_group_limit_with_multiple_rank_functions()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let task_ctx = SessionContext::new().task_ctx();
+        let input = build_table(
+            ("a1", &vec![1, 1, 1, 1, 2, 3, 3]),
+            ("b1", &vec![1, 2, 2, 3, 4, 1, 1]),
+            ("c1", &vec![0, 0, 0, 0, 0, 0, 0]),
+        )?;
+        let window_exprs = vec![
+            WindowExpr::new(
+                WindowFunction::RankLike(WindowRankType::Rank),
+                vec![],
+                Arc::new(Field::new("rank", DataType::Int32, false)),
+                DataType::Int32,
+            ),
+            WindowExpr::new(
+                WindowFunction::RankLike(WindowRankType::RowNumber),
+                vec![],
+                Arc::new(Field::new("row_number", DataType::Int32, false)),
+                DataType::Int32,
+            ),
+        ];
+        let group_limit = Arc::new(WindowExec::try_new(
+            input,
+            vec![window_exprs[0].clone()],
+            vec![Arc::new(Column::new("a1", 0))],
+            vec![PhysicalSortExpr {
+                expr: Arc::new(Column::new("b1", 1)),
+                options: Default::default(),
+            }],
+            Some(2),
+            false,
+        )?);
+        let window = WindowExec::try_new(
+            group_limit,
+            window_exprs,
+            vec![Arc::new(Column::new("a1", 0))],
+            vec![PhysicalSortExpr {
+                expr: Arc::new(Column::new("b1", 1)),
+                options: Default::default(),
+            }],
+            None,
+            true,
+        )?;
+
+        let batches =
+            datafusion::physical_plan::common::collect(window.execute(0, task_ctx)?).await?;
+        assert_batches_eq!(
+            [
+                "+----+----+----+------+------------+",
+                "| a1 | b1 | c1 | rank | row_number |",
+                "+----+----+----+------+------------+",
+                "| 1  | 1  | 0  | 1    | 1          |",
+                "| 1  | 2  | 0  | 2    | 2          |",
+                "| 1  | 2  | 0  | 2    | 3          |",
+                "| 2  | 4  | 0  | 1    | 1          |",
+                "| 3  | 1  | 0  | 1    | 1          |",
+                "| 3  | 1  | 0  | 1    | 2          |",
+                "+----+----+----+------+------------+",
+            ],
+            &batches
+        );
         Ok(())
     }
 

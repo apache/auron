@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.auron.shuffle
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Aggregator, Partitioner, ShuffleDependency, SparkEnv}
+import org.apache.spark.{Aggregator, Partition, Partitioner, ShuffleDependency, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
@@ -35,7 +35,8 @@ class AuronShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     override val aggregator: Option[Aggregator[K, V, C]] = None,
     override val mapSideCombine: Boolean = false,
     override val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
-    val schema: StructType)
+    val schema: StructType,
+    val rddPartitions: Array[Partition] = null)
     extends ShuffleDependency[K, V, C](
       _rdd,
       partitioner,

@@ -87,14 +87,7 @@ impl PartialEq for BloomFilterMightContainExpr {
     }
 }
 
-impl DynEq for BloomFilterMightContainExpr {
-    fn dyn_eq(&self, other: &dyn Any) -> bool {
-        other
-            .downcast_ref::<Self>()
-            .map(|other| other.eq(self))
-            .unwrap_or(false)
-    }
-}
+impl Eq for BloomFilterMightContainExpr {}
 
 impl Hash for BloomFilterMightContainExpr {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -105,10 +98,6 @@ impl Hash for BloomFilterMightContainExpr {
 }
 
 impl PhysicalExpr for BloomFilterMightContainExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
         Ok(DataType::Boolean)
     }

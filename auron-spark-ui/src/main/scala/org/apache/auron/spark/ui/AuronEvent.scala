@@ -23,3 +23,31 @@ import org.apache.spark.scheduler.SparkListenerEvent
 sealed trait AuronEvent extends SparkListenerEvent {}
 
 case class AuronBuildInfoEvent(info: mutable.LinkedHashMap[String, String]) extends AuronEvent {}
+
+/** A conversion snapshot; AQE can publish several snapshots for one SQL execution. */
+case class AuronPlanDiagnosticEvent(
+    executionId: Long,
+    timestamp: Long,
+    physicalPlan: String,
+    nodes: Seq[AuronPlanDiagnosticNode],
+    configurations: Map[String, String])
+    extends AuronEvent
+
+case class AuronPlanDiagnosticNode(id: Int, name: String, status: String, reason: String)
+
+object AuronFallbackReason {
+  val keptOnJvm = "Auron kept this operator on the JVM."
+
+  def conversionFailure(operator: String, failure: String): String = {
+    val detail =
+      Option(failure).getOrElse("").stripPrefix("assertion failed:").trim.stripSuffix(".")
+    if (detail.nonEmpty) s"Auron could not convert $operator: $detail."
+    else s"Auron could not convert $operator."
+  }
+
+  def inputsOnJVM(inputOperators: Seq[String]): String = {
+    val inputs = inputOperators.distinct
+    if (inputs.size == 1) s"Kept on the JVM because ${inputs.head} runs there."
+    else s"Kept on the JVM because these inputs run there: ${inputs.mkString(", ")}."
+  }
+}

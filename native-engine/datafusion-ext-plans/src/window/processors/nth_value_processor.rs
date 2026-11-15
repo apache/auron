@@ -41,16 +41,13 @@ impl NthValueProcessor {
             )));
         }
 
-        let offset_literal = children[1]
-            .as_any()
-            .downcast_ref::<Literal>()
-            .ok_or_else(|| {
-                DataFusionError::Execution(
-                    "nth_value offset must be a literal physical expression; \
+        let offset_literal = children[1].downcast_ref::<Literal>().ok_or_else(|| {
+            DataFusionError::Execution(
+                "nth_value offset must be a literal physical expression; \
                      foldable offsets should be constant-folded before building the native plan"
-                        .to_string(),
-                )
-            })?;
+                    .to_string(),
+            )
+        })?;
 
         let offset = match offset_literal.value() {
             ScalarValue::Int32(Some(value)) if *value > 0 => *value as usize,

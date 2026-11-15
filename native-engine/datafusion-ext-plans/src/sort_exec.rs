@@ -91,7 +91,7 @@ pub struct SortExec {
     offset: usize,
     metrics: ExecutionPlanMetricsSet,
     record_output: bool,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl SortExec {
@@ -124,6 +124,13 @@ pub fn create_default_ascending_sort_exec(
     execution_plan_metrics: Option<ExecutionPlanMetricsSet>,
     record_output: bool,
 ) -> Arc<dyn ExecutionPlan> {
+    // This helper has no limit or offset, so an empty ordering is a no-op.
+    // Preserve zero-column batch row counts instead of passing them through
+    // RowConverter without any columns.
+    if key_exprs.is_empty() {
+        return input;
+    }
+
     let mut sort_exec = SortExec::new(
         input,
         key_exprs
@@ -160,23 +167,28 @@ impl ExecutionPlan for SortExec {
         "SortExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -207,16 +219,6 @@ impl ExecutionPlan for SortExec {
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
     }
-
-    fn statistics(&self) -> Result<Statistics> {
-        Statistics::with_fetch(
-            self.input.partition_statistics(None)?,
-            self.schema(),
-            self.limit,
-            self.offset,
-            1,
-        )
-    }
 }
 
 impl SortExec {
@@ -230,10 +232,10 @@ impl SortExec {
             projection,
             &self.exprs,
         )?);
-        let mut sorter = Arc::new(ExternalSorter {
+        let sorter = Arc::new_cyclic(|weak| ExternalSorter {
             exec_ctx,
-            mem_consumer_info: None,
-            weak: Weak::new(),
+            mem_consumer_info: OnceCell::new(),
+            weak: weak.clone(),
             prune_sort_keys_from_batch: prune_sort_keys_from_batch.clone(),
             skip: self.offset,
             limit: self.limit.unwrap_or(usize::MAX),
@@ -244,13 +246,6 @@ impl SortExec {
             mem_total_size: Default::default(),
         });
         MemManager::register_consumer(sorter.clone(), true);
-
-        unsafe {
-            // safety: set weak reference to sorter
-            let weak = Arc::downgrade(&sorter);
-            let sorter_mut = Arc::get_mut_unchecked(&mut sorter);
-            sorter_mut.weak = weak;
-        }
         Ok(sorter)
     }
 
@@ -261,8 +256,9 @@ impl SortExec {
         context: Arc<TaskContext>,
         projection: &[usize],
     ) -> Result<SendableRecordBatchStream> {
+        let output_schema = Arc::new(self.schema().project(projection)?);
         let exec_ctx =
-            ExecutionContext::new(context.clone(), partition, self.schema(), &self.metrics);
+            ExecutionContext::new(context.clone(), partition, output_schema, &self.metrics);
         let sorter = self.init_sorter(exec_ctx.clone(), projection)?;
 
         let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
@@ -307,8 +303,9 @@ impl SortExec {
         context: Arc<TaskContext>,
         projection: &[usize],
     ) -> Result<SendableRecordBatchWithKeyRowsStream> {
+        let output_schema = Arc::new(self.schema().project(projection)?);
         let exec_ctx =
-            ExecutionContext::new(context.clone(), partition, self.schema(), &self.metrics);
+            ExecutionContext::new(context.clone(), partition, output_schema, &self.metrics);
         let sorter = self.init_sorter(exec_ctx.clone(), projection)?;
 
         let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
@@ -346,7 +343,7 @@ struct LevelSpill {
 
 struct ExternalSorter {
     exec_ctx: Arc<ExecutionContext>,
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     weak: Weak<Self>,
     prune_sort_keys_from_batch: Arc<PruneSortKeysFromBatch>,
     skip: usize,
@@ -378,14 +375,14 @@ impl MemConsumer for ExternalSorter {
         "ExternalSorter"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {
@@ -746,7 +743,7 @@ impl ExternalSorter {
                 self.name(),
                 ByteSize(self.mem_used() as u64),
             );
-            self.force_spill().await?;
+            self.spill().await?;
         }
         self.set_spillable(false);
 
@@ -1149,7 +1146,7 @@ impl PrimitiveSortKey {
         }
         let expr = &exprs[0];
         // must be a direct column reference
-        expr.expr.as_any().downcast_ref::<Column>()?;
+        expr.expr.downcast_ref::<Column>()?;
         let data_type = expr.expr.data_type(input_schema).ok()?;
         if !matches!(
             data_type,
@@ -1211,8 +1208,13 @@ impl PruneSortKeysFromBatch {
 
         let mut relation = vec![];
         for (expr_idx, expr) in exprs.iter().enumerate() {
-            if let Some(col) = expr.expr.as_any().downcast_ref::<Column>() {
-                relation.push((expr_idx, col.index()));
+            if let Some(col) = expr.expr.downcast_ref::<Column>() {
+                // Relation indices are consumed against the projected schema below.
+                relation.extend(input_projection.iter().enumerate().filter_map(
+                    |(projected_idx, &input_idx)| {
+                        (input_idx == col.index()).then_some((expr_idx, projected_idx))
+                    },
+                ));
             }
         }
 
@@ -1490,10 +1492,7 @@ impl SortedKeysWriter {
                 self.cur_key
                     .reserve(key.len().saturating_sub(self.cur_key.len()));
                 self.cur_key.set_len(key.len());
-                let write_buf = self
-                    .cur_key
-                    .get_unchecked_mut(prefix_len..key.len())
-                    .as_mut();
+                let write_buf = self.cur_key.get_unchecked_mut(prefix_len..key.len());
                 write_buf.copy_from_slice(key.get_unchecked(prefix_len..));
                 write_buf
             };
@@ -1524,9 +1523,7 @@ impl SortedKeysReader {
                 self.cur_key
                     .reserve(new_key_len.saturating_sub(self.cur_key.len()));
                 self.cur_key.set_len(new_key_len);
-                self.cur_key
-                    .get_unchecked_mut(prefix_len..new_key_len)
-                    .as_mut()
+                self.cur_key.get_unchecked_mut(prefix_len..new_key_len)
             };
             r.read_exact(read_buf)?;
         } else {
@@ -1574,6 +1571,7 @@ mod test {
         physical_plan::{ExecutionPlan, common, test::TestMemoryExec},
         prelude::SessionContext,
     };
+    use futures::TryStreamExt;
 
     use super::common_prefix_len;
     use crate::sort_exec::SortExec;
@@ -1675,6 +1673,45 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_sort_projected_with_key_rows_excludes_sort_key() -> Result<()> {
+        MemManager::init(100);
+        let task_ctx = SessionContext::new().task_ctx();
+        let input = build_table(
+            ("key", &vec![3, 1, 2]),
+            ("value", &vec![30, 10, 20]),
+            ("unused", &vec![300, 100, 200]),
+        )?;
+        let sort = SortExec::new(
+            input,
+            vec![PhysicalSortExpr {
+                expr: Arc::new(Column::new("key", 0)),
+                options: SortOptions::default(),
+            }],
+            None,
+            0,
+        );
+
+        let output = sort.execute_projected_with_key_rows(0, task_ctx, &[1])?;
+        assert_eq!(output.schema().fields().len(), 1);
+        assert_eq!(output.schema().field(0).name(), "value");
+        let batches = output
+            .map_ok(|batch| batch.batch)
+            .try_collect::<Vec<_>>()
+            .await?;
+        let expected = vec![
+            "+-------+",
+            "| value |",
+            "+-------+",
+            "| 10    |",
+            "| 20    |",
+            "| 30    |",
+            "+-------+",
+        ];
+        assert_batches_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_top_k_with_only_sort_column() -> Result<()> {
         MemManager::init(100);
         let session_ctx = SessionContext::new();
@@ -1736,6 +1773,76 @@ mod test {
 
         Ok(())
     }
+
+    mod default_sort_tests {
+        use arrow::{compute::concat_batches, record_batch::RecordBatchOptions};
+        use datafusion::{physical_expr::PhysicalExpr, physical_plan::ExecutionPlanProperties};
+
+        use super::*;
+        use crate::sort_exec::create_default_ascending_sort_exec;
+
+        #[tokio::test]
+        async fn test_default_sort_zero_column_batches() -> Result<()> {
+            MemManager::init(100);
+            let schema = Arc::new(Schema::empty());
+            let row_counts: &[&[usize]] = &[&[1], &[0, 4, 0, 100001], &[0], &[]];
+            let mut partitions = vec![];
+            for rows in row_counts {
+                let mut batches = vec![];
+                for &num_rows in *rows {
+                    batches.push(RecordBatch::try_new_with_options(
+                        schema.clone(),
+                        vec![],
+                        &RecordBatchOptions::new().with_row_count(Some(num_rows)),
+                    )?);
+                }
+                partitions.push(batches);
+            }
+            let input = Arc::new(TestMemoryExec::try_new(&partitions, schema.clone(), None)?);
+            let sort = create_default_ascending_sort_exec(input, &[], None, true);
+            assert_eq!(sort.schema(), schema);
+            assert_eq!(
+                sort.output_partitioning().partition_count(),
+                partitions.len()
+            );
+
+            let task_ctx = SessionContext::new().task_ctx();
+            for (partition, rows) in row_counts.iter().enumerate() {
+                let batches = common::collect(sort.execute(partition, task_ctx.clone())?).await?;
+                assert!(batches.iter().all(|batch| batch.num_columns() == 0));
+                assert_eq!(
+                    batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
+                    rows.iter().sum::<usize>(),
+                );
+                if rows.is_empty() {
+                    assert!(batches.is_empty());
+                }
+            }
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn test_default_sort_values() -> Result<()> {
+            MemManager::init(100);
+            for (with_key, expected) in [(false, [3, 1, 2]), (true, [1, 2, 3])] {
+                let input = build_single_column_table("id", vec![3, 1, 2])?;
+                let keys: Vec<Arc<dyn PhysicalExpr>> = if with_key {
+                    vec![Arc::new(Column::new("id", 0))]
+                } else {
+                    vec![]
+                };
+                let sort = create_default_ascending_sort_exec(input, &keys, None, true);
+                let batches =
+                    common::collect(sort.execute(0, SessionContext::new().task_ctx())?).await?;
+                let batch = concat_batches(&sort.schema(), &batches)?;
+                assert_eq!(
+                    batch.column(0).as_any().downcast_ref::<Int32Array>(),
+                    Some(&Int32Array::from(expected.to_vec())),
+                );
+            }
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1765,10 +1872,10 @@ mod fuzztest {
     /// repeated `repeat` times, shuffled, to simulate TPC-H
     /// lineitem.l_orderkey distribution.
     fn build_repeated_i64_batch(num_rows: usize, repeat: usize, seed: u64) -> RecordBatch {
-        use rand::{Rng, SeedableRng};
-        let unique_keys = (num_rows + repeat - 1) / repeat;
+        use rand::{RngExt, SeedableRng};
+        let unique_keys = num_rows.div_ceil(repeat);
         let mut values: Vec<i64> = (0..unique_keys)
-            .flat_map(|v| std::iter::repeat(v as i64).take(repeat))
+            .flat_map(|v| std::iter::repeat_n(v as i64, repeat))
             .take(num_rows)
             .collect();
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
@@ -1914,7 +2021,7 @@ mod fuzztest {
         with_payload: bool,
         seed: u64,
     ) -> Vec<RecordBatch> {
-        use rand::{Rng, SeedableRng, seq::SliceRandom};
+        use rand::{RngExt, SeedableRng, seq::SliceRandom};
         let total = num_batches * rows_per_batch;
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         let keys: Vec<Option<i64>> = if with_payload {
@@ -2092,7 +2199,7 @@ mod fuzztest {
         T::Native: rand::distr::uniform::SampleUniform,
         PrimitiveArray<T>: From<Vec<Option<T::Native>>>,
     {
-        use rand::{Rng, SeedableRng, seq::SliceRandom};
+        use rand::{RngExt, SeedableRng, seq::SliceRandom};
         MemManager::init(1000000000);
         let total = 51000;
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
@@ -2165,7 +2272,7 @@ mod fuzztest {
     /// included) and every payload must be aligned with its key.
     #[tokio::test]
     async fn fuzztest_primitive_fast_path_topn_nullable_key_with_payload() -> Result<()> {
-        use rand::{Rng, SeedableRng};
+        use rand::{RngExt, SeedableRng};
         const NULL_PAYLOAD: u32 = u32::MAX;
         let payload_of = |key: i64| (key as u32).wrapping_mul(31).wrapping_add(7);
 
@@ -2312,7 +2419,7 @@ mod fuzztest {
         let sort = Arc::new(SortExec::new(input, sort_exprs.clone(), None, 0));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
         let a = concat_batches(&schema, &output)?;
-        let a_row_count = sort.clone().statistics()?.num_rows;
+        let a_row_count = sort.clone().partition_statistics(None)?.num_rows;
 
         let input = Arc::new(TestMemoryExec::try_new(
             &[batches.clone()],
@@ -2325,11 +2432,11 @@ mod fuzztest {
         ));
         let output = datafusion::physical_plan::collect(sort.clone(), task_ctx.clone()).await?;
         let b = concat_batches(&schema, &output)?;
-        let b_row_count = sort.clone().statistics()?.num_rows;
+        let b_row_count = sort.clone().partition_statistics(None)?.num_rows;
 
         assert_eq!(a.num_rows(), b.num_rows());
         assert_eq!(a_row_count, b_row_count);
-        assert_eq!(a_row_count, Precision::Exact(n));
+        assert_eq!(a.num_rows(), n);
         assert!(a == b);
         Ok(())
     }

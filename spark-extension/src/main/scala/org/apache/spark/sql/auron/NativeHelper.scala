@@ -54,10 +54,8 @@ object NativeHelper extends Logging {
     if (TaskContext.get() != null) {
       // executor side
       val executorMemoryMiB = conf.get(config.EXECUTOR_MEMORY)
-      val executorMemoryOverheadMiB = conf
-        .get(config.EXECUTOR_MEMORY_OVERHEAD)
-        .getOrElse(
-          math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMiB).toLong, MEMORY_OVERHEAD_MIN))
+      val executorMemoryOverheadMiB =
+        Shims.get.executorMemoryOverheadMiB(conf, executorMemoryMiB)
       (executorMemoryMiB + executorMemoryOverheadMiB) * 1024L * 1024L
     } else {
       // driver side
@@ -182,8 +180,10 @@ object NativeHelper extends Logging {
       SQLMetrics.createNanoTimingMetric(sc, "Native.probed_side_compare_time")),
     "build_output_time" -> (sc =>
       SQLMetrics.createNanoTimingMetric(sc, "Native.build_output_time")),
-    "fallback_sort_merge_join_time" -> (sc =>
-      SQLMetrics.createNanoTimingMetric(sc, "Native.fallback_sort_merge_join_time")),
+    "hybrid_join_time" -> (sc =>
+      SQLMetrics.createNanoTimingMetric(sc, "Native.hybrid_join_time")),
+    "reserve_order_sort_time" -> (sc =>
+      SQLMetrics.createNanoTimingMetric(sc, "Native.reserve_order_sort_time")),
     "mem_spill_count" -> (sc => SQLMetrics.createMetric(sc, "Native.mem_spill_count")),
     "mem_spill_size" -> (sc => SQLMetrics.createSizeMetric(sc, "Native.mem_spill_size")),
     "mem_spill_iotime" -> (sc =>

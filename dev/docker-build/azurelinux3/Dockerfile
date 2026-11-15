@@ -53,11 +53,12 @@ RUN tdnf -y update && \
 RUN gcc --version && g++ --version
 
 # ---------------------------------------------------------------------
-# Install Rust nightly toolchain
+# Install Rust stable toolchain
 # ---------------------------------------------------------------------
 RUN curl https://sh.rustup.rs -sSf -o rustup-init && \
     chmod +x rustup-init && \
-    ./rustup-init -y --default-toolchain nightly-2025-05-09-x86_64-unknown-linux-gnu && \
+    ./rustup-init -y --default-toolchain stable-x86_64-unknown-linux-gnu \
+    --component rust-src,cargo,rustfmt,clippy && \
     rm rustup-init
 ENV PATH="/root/.cargo/bin:${PATH}"
 

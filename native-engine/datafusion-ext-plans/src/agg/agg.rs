@@ -71,20 +71,74 @@ pub trait Agg: Send + Sync + Debug {
     fn final_merge(&self, accs: &mut AccColumnRef, acc_idx: IdxSelection<'_>) -> Result<ArrayRef>;
 }
 
+/// An immutable index slice paired with its computed maximum.
+/// Constructed only by `IdxSelection::with_cached_max` so the cache cannot
+/// disagree with the indices.
+///
+/// ```compile_fail
+/// use datafusion_ext_plans::agg::agg::CachedIndices;
+/// let cached = CachedIndices {
+///     indices: &[2usize, 7],
+///     max_index: Some(2),
+/// };
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct CachedIndices<'a, T> {
+    indices: &'a [T],
+    max_index: Option<usize>,
+}
+
+impl<'a, T> CachedIndices<'a, T> {
+    pub fn indices(&self) -> &'a [T] {
+        self.indices
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum IdxSelection<'a> {
     Single(usize),
     Indices(&'a [usize]),
     IndicesU32(&'a [u32]),
+    IndicesWithMax(CachedIndices<'a, usize>),
+    IndicesU32WithMax(CachedIndices<'a, u32>),
     Range(usize, usize),
 }
 
 impl IdxSelection<'_> {
+    /// Cache slice maxima once before sharing the selection across
+    /// accumulators.
+    pub fn with_cached_max(self) -> Self {
+        match self {
+            Self::Indices(indices) => Self::IndicesWithMax(CachedIndices {
+                indices,
+                max_index: self.max_index(),
+            }),
+            Self::IndicesU32(indices) => Self::IndicesU32WithMax(CachedIndices {
+                indices,
+                max_index: self.max_index(),
+            }),
+            _ => self,
+        }
+    }
+
+    pub fn max_index(&self) -> Option<usize> {
+        match *self {
+            Self::Single(idx) => Some(idx),
+            Self::Indices(indices) => indices.iter().copied().max(),
+            Self::IndicesU32(indices) => indices.iter().copied().max().map(|idx| idx as usize),
+            Self::IndicesWithMax(cached) => cached.max_index,
+            Self::IndicesU32WithMax(cached) => cached.max_index,
+            Self::Range(begin, end) => (begin < end).then(|| end - 1),
+        }
+    }
+
     pub fn len(&self) -> usize {
         match *self {
             IdxSelection::Single(_) => 1,
-            IdxSelection::Indices(indices) => indices.len(),
-            IdxSelection::IndicesU32(indices) => indices.len(),
+            IdxSelection::Indices(indices)
+            | IdxSelection::IndicesWithMax(CachedIndices { indices, .. }) => indices.len(),
+            IdxSelection::IndicesU32(indices)
+            | IdxSelection::IndicesU32WithMax(CachedIndices { indices, .. }) => indices.len(),
             IdxSelection::Range(begin, end) => end - begin,
         }
     }
@@ -115,6 +169,14 @@ macro_rules! idx_with_iter {
             }
             IdxSelection::IndicesU32(indices) => {
                 let mut $iter_var = indices.iter().map(|v| *v as usize);
+                $($s)*
+            }
+            IdxSelection::IndicesWithMax(cached) => {
+                let mut $iter_var = cached.indices().iter().copied();
+                $($s)*
+            }
+            IdxSelection::IndicesU32WithMax(cached) => {
+                let mut $iter_var = cached.indices().iter().map(|v| *v as usize);
                 $($s)*
             }
             IdxSelection::Range(begin, end) => {

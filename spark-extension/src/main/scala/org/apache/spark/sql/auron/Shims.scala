@@ -21,6 +21,7 @@ import java.io.File
 import scala.annotation.nowarn
 
 import org.apache.spark.ShuffleDependency
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
@@ -64,6 +65,10 @@ abstract class Shims {
 
   def shimVersion: String
 
+  private[auron] def executorMemoryOverheadFactor(conf: SparkConf): Double
+
+  private[auron] def executorMemoryOverheadMiB(conf: SparkConf, executorMemoryMiB: Long): Long
+
   def initExtension(): Unit = {}
 
   def onApplyingExtension(): Unit = {}
@@ -92,7 +97,8 @@ abstract class Shims {
       joinType: JoinType,
       condition: Option[Expression],
       broadcastSide: JoinBuildSide,
-      isNullAwareAntiJoin: Boolean): NativeBroadcastJoinBase
+      isNullAwareAntiJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeBroadcastJoinBase
 
   def createNativeSortMergeJoinExec(
       left: SparkPlan,
@@ -111,7 +117,8 @@ abstract class Shims {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): SparkPlan
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): SparkPlan
 
   def createNativeExpandExec(
       projections: Seq[Seq[Expression]],
@@ -248,6 +255,12 @@ abstract class Shims {
 
   def getLikeEscapeChar(expr: Expression): Char
 
+  def getMakeDateFailOnError(expr: Expression): Boolean
+
+  def getRoundFailOnError(expr: Expression): Boolean
+
+  def getNextDayFailOnError(expr: Expression): Boolean
+
   def getAggregateExpressionFilter(expr: Expression): Option[Expression]
 
   def createFileSegment(file: File, offset: Long, length: Long, numRecords: Long): FileSegment
@@ -308,6 +321,10 @@ abstract class Shims {
 }
 
 object Shims {
+  private[auron] val EXECUTOR_MEMORY_OVERHEAD_FACTOR_KEY = "spark.executor.memoryOverheadFactor"
+  private[auron] val KUBERNETES_MEMORY_OVERHEAD_FACTOR_KEY =
+    "spark.kubernetes.memoryOverheadFactor"
+
   lazy val get: Shims = {
     classOf[Shims].getClassLoader
       .loadClass("org.apache.spark.sql.auron.ShimsImpl")

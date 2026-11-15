@@ -20,13 +20,15 @@ import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.InnerLike
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.RightOuter
 import org.apache.spark.sql.execution.BinaryExecNode
@@ -35,6 +37,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.metric.SparkMetricNode
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 abstract class NativeShuffledHashJoinBase(
     override val left: SparkPlan,
@@ -43,7 +46,8 @@ abstract class NativeShuffledHashJoinBase(
     rightKeys: Seq[Expression],
     joinType: JoinType,
     condition: Option[Expression],
-    buildSide: JoinBuildSide)
+    buildSide: JoinBuildSide,
+    requiredReservedOrder: Boolean)
     extends BinaryExecNode
     with NativeSupports {
 
@@ -60,7 +64,8 @@ abstract class NativeShuffledHashJoinBase(
           "probed_side_search_time",
           "probed_side_compare_time",
           "build_output_time",
-          "fallback_sort_merge_join_time",
+          "hybrid_join_time",
+          "reserve_order_sort_time",
           "input_batch_count",
           "input_batch_mem_size",
           "input_row_count"))
@@ -94,8 +99,20 @@ abstract class NativeShuffledHashJoinBase(
 
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
 
+  // Keyless joins cannot guarantee the original probe ordering. Hybrid join fallback no
+  // longer breaks probe ordering when requiredReservedOrder is set, since the native
+  // operator reserves it internally in that case (see auron.proto's
+  // HashJoinExecNode.required_reserved_order), so only fall back to Nil otherwise.
+  protected def reservedOutputOrdering(computeOrdering: => Seq[SortOrder]): Seq[SortOrder] = {
+    if ((leftKeys.isEmpty && rightKeys.isEmpty) ||
+      (!requiredReservedOrder && SparkAuronConfiguration.HYBRID_JOIN_ENABLE.get())) {
+      Nil
+    } else {
+      computeOrdering
+    }
+  }
+
   // check whether native converting is supported
-  assert(condition.isEmpty || joinType.isInstanceOf[InnerLike], "join condition is not supported")
   nativeSchema
   nativeJoinOn
   nativeJoinType
@@ -109,6 +126,7 @@ abstract class NativeShuffledHashJoinBase(
     val nativeJoinType = this.nativeJoinType
     val nativeJoinFilter = this.nativeJoinFilter
     val nativeBuildSide = this.nativeBuildSide
+    val nativeSchema = this.nativeSchema
 
     val (partitions, partitioner) = if (joinType != RightOuter) {
       (leftRDD.partitions, leftRDD.partitioner)
@@ -116,19 +134,24 @@ abstract class NativeShuffledHashJoinBase(
       (rightRDD.partitions, rightRDD.partitioner)
     }
     val dependencies = Seq(new OneToOneDependency(leftRDD), new OneToOneDependency(rightRDD))
+    val nativePartitions = partitions.map { p =>
+      NativePartition[(Partition, Partition)](
+        p.index,
+        (leftRDD.partitions(p.index), rightRDD.partitions(p.index)))
+    }
 
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      partitions,
+      rddPartitions = nativePartitions.toArray,
       partitioner,
       dependencies,
       leftRDD.isShuffleReadFull && rightRDD.isShuffleReadFull,
       (partition, taskContext) => {
-        val leftPartition = leftRDD.partitions(partition.index)
+        val (leftPartition, rightPartition) =
+          partition.asInstanceOf[NativePartition[(Partition, Partition)]].payload
         val leftChild = leftRDD.nativePlan(leftPartition, taskContext)
 
-        val rightPartition = rightRDD.partitions(partition.index)
         val rightChild = rightRDD.nativePlan(rightPartition, taskContext)
 
         val hashJoinExec = pb.HashJoinExecNode
@@ -139,6 +162,7 @@ abstract class NativeShuffledHashJoinBase(
           .setJoinType(nativeJoinType)
           .addAllOn(nativeJoinOn.asJava)
           .setBuildSide(nativeBuildSide)
+          .setRequiredReservedOrder(requiredReservedOrder)
         nativeJoinFilter.foreach(hashJoinExec.setFilter)
         pb.PhysicalPlanNode.newBuilder().setHashJoin(hashJoinExec).build()
       },

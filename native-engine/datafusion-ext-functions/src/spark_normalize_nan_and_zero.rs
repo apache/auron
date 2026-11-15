@@ -16,7 +16,7 @@
 use std::sync::Arc;
 
 use arrow::{
-    array::{Float32Array, Float64Array},
+    array::{Array, Float32Array, Float64Array, ListArray},
     datatypes::DataType,
 };
 use datafusion::{
@@ -26,11 +26,21 @@ use datafusion::{
     },
     logical_expr::ColumnarValue,
 };
-use datafusion_ext_commons::df_execution_err;
+use datafusion_ext_commons::{df_execution_err, downcast_any};
 use num::Float;
 
 pub fn spark_normalize_nan_and_zero(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 1 {
+        return df_execution_err!("normalize_nan_and_zero requires exactly 1 argument");
+    }
     match &args[0] {
+        ColumnarValue::Scalar(ScalarValue::List(list)) => {
+            let result = spark_normalize_nan_and_zero(&[ColumnarValue::Array(list.clone())])?
+                .into_array(1)?;
+            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+                &result, 0,
+            )?))
+        }
         ColumnarValue::Scalar(ScalarValue::Float32(Some(v))) => Ok(ColumnarValue::Scalar(
             ScalarValue::Float32(Some(normalize_float(*v))),
         )),
@@ -44,6 +54,21 @@ pub fn spark_normalize_nan_and_zero(args: &[ColumnarValue]) -> Result<ColumnarVa
             Ok(ColumnarValue::Scalar(ScalarValue::Float64(None)))
         }
         ColumnarValue::Array(array) => match array.as_ref().data_type() {
+            DataType::List(field)
+                if matches!(field.data_type(), DataType::Float32 | DataType::Float64) =>
+            {
+                let list = downcast_any!(array, ListArray)?;
+                let values = spark_normalize_nan_and_zero(&[ColumnarValue::Array(Arc::clone(
+                    list.values(),
+                ))])?
+                .into_array(list.values().len())?;
+                Ok(ColumnarValue::Array(Arc::new(ListArray::try_new(
+                    Arc::clone(field),
+                    list.offsets().clone(),
+                    values,
+                    list.nulls().cloned(),
+                )?)))
+            }
             DataType::Float32 => Ok(ColumnarValue::Array(Arc::new(Float32Array::from_iter(
                 as_float32_array(array)?
                     .into_iter()
@@ -80,10 +105,151 @@ fn normalize_float<T: Float>(v: T) -> T {
 mod test {
     use std::{error::Error, sync::Arc};
 
-    use arrow::array::{ArrayRef, Float32Array, Float64Array};
+    use arrow::{
+        array::{Array, ArrayRef, Float32Array, Float64Array, ListArray},
+        datatypes::{DataType, Field, Float32Type, Float64Type},
+    };
     use datafusion::{common::ScalarValue, logical_expr::ColumnarValue};
+    use datafusion_ext_commons::downcast_any;
 
     use crate::spark_normalize_nan_and_zero::spark_normalize_nan_and_zero;
+
+    #[test]
+    fn test_normalize_floating_lists_preserves_slices_and_nulls() -> Result<(), Box<dyn Error>> {
+        let doubles: ArrayRef = Arc::new(
+            ListArray::from_iter_primitive::<Float64Type, _, _>(vec![
+                Some(vec![Some(99.0)]),
+                Some(vec![
+                    Some(-0.0),
+                    None,
+                    Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+                ]),
+                Some(vec![]),
+                None,
+            ])
+            .slice(1, 3),
+        );
+        let floats = arrow::compute::cast(
+            &doubles,
+            &DataType::List(Arc::new(Field::new_list_field(DataType::Float32, true))),
+        )?;
+        for input in [doubles, floats] {
+            let result = spark_normalize_nan_and_zero(&[ColumnarValue::Array(Arc::clone(&input))])?
+                .into_array(3)?;
+            let result = result
+                .as_any()
+                .downcast_ref::<ListArray>()
+                .expect("list result");
+            let original = input
+                .as_any()
+                .downcast_ref::<ListArray>()
+                .expect("list input");
+            assert_eq!(result.offsets(), original.offsets());
+            assert_eq!(result.nulls(), original.nulls());
+            let row = result.value(0);
+            let scalar = spark_normalize_nan_and_zero(&[ColumnarValue::Scalar(
+                ScalarValue::List(Arc::new(original.slice(0, 1))),
+            )])?;
+            assert!(matches!(scalar, ColumnarValue::Scalar(_)));
+            assert_eq!(
+                &scalar.into_array(1)?,
+                &(Arc::new(result.slice(0, 1)) as ArrayRef)
+            );
+            match row.data_type() {
+                DataType::Float32 => {
+                    let values = row.as_any().downcast_ref::<Float32Array>().expect("floats");
+                    assert_eq!(values.value(0).to_bits(), 0.0f32.to_bits());
+                    assert!(values.is_null(1));
+                    assert_eq!(values.value(2).to_bits(), f32::NAN.to_bits());
+                }
+                _ => {
+                    let values = row
+                        .as_any()
+                        .downcast_ref::<Float64Array>()
+                        .expect("doubles");
+                    assert_eq!(values.value(0).to_bits(), 0.0f64.to_bits());
+                    assert!(values.is_null(1));
+                    assert_eq!(values.value(2).to_bits(), f64::NAN.to_bits());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_normalize_nan_and_zero_lists() -> datafusion::common::Result<()> {
+        macro_rules! check {
+            ($type:ty, $array_type:ty, $nan:expr, $other_nan:expr) => {{
+                let input = ListArray::from_iter_primitive::<$type, _, _>([
+                    Some(vec![Some(-0.0), Some($other_nan), None, Some(1.0)]),
+                    Some(vec![]),
+                    None,
+                    Some(vec![Some(0.0)]),
+                ]);
+                let expected: ArrayRef = Arc::new(ListArray::from_iter_primitive::<$type, _, _>([
+                    Some(vec![Some(0.0), Some($nan), None, Some(1.0)]),
+                    Some(vec![]),
+                    None,
+                    Some(vec![Some(0.0)]),
+                ]));
+                for (offset, len) in [(0, 4), (1, 3)] {
+                    let result = spark_normalize_nan_and_zero(&[ColumnarValue::Array(Arc::new(
+                        input.slice(offset, len),
+                    ))])?
+                    .into_array(len)?;
+                    assert_eq!(&result, &expected.slice(offset, len));
+                    let list = downcast_any!(&result, ListArray)?;
+                    let values = downcast_any!(list.values(), $array_type)?;
+                    assert_eq!(
+                        values.value(0).to_bits(),
+                        (0.0 as <$type as arrow::array::ArrowPrimitiveType>::Native).to_bits()
+                    );
+                    assert_eq!(values.value(1).to_bits(), $nan.to_bits());
+                }
+                for row in [0, 2] {
+                    let result = spark_normalize_nan_and_zero(&[ColumnarValue::Scalar(
+                        ScalarValue::List(Arc::new(input.slice(row, 1))),
+                    )])?;
+                    assert!(matches!(
+                        result,
+                        ColumnarValue::Scalar(ScalarValue::List(_))
+                    ));
+                    assert_eq!(&result.into_array(1)?, &expected.slice(row, 1));
+                }
+            }};
+        }
+        check!(
+            Float32Type,
+            Float32Array,
+            f32::NAN,
+            f32::from_bits(0xff80_0001)
+        );
+        check!(
+            Float64Type,
+            Float64Array,
+            f64::NAN,
+            f64::from_bits(0xfff0_0000_0000_0001)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_normalize_nan_and_zero_invalid_arguments() {
+        assert!(spark_normalize_nan_and_zero(&[]).is_err());
+        assert!(
+            spark_normalize_nan_and_zero(&[
+                ColumnarValue::Scalar(ScalarValue::Float64(Some(0.0))),
+                ColumnarValue::Scalar(ScalarValue::Float64(Some(0.0))),
+            ])
+            .is_err()
+        );
+        let input = ColumnarValue::Scalar(ScalarValue::List(ScalarValue::new_list(
+            &[ScalarValue::Int32(Some(1))],
+            &DataType::Int32,
+            true,
+        )));
+        assert!(spark_normalize_nan_and_zero(&[input]).is_err());
+    }
 
     macro_rules! test_normalize_nan_and_zero_array_type {
         ($test_name:ident, $array_type:ty, $nan_literal:expr) => {

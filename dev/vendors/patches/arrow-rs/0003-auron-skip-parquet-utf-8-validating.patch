@@ -1,0 +1,111 @@
+diff --git a/arrow-array/src/types.rs b/arrow-array/src/types.rs
+index a8de926..7e3c53f 100644
+--- a/arrow-array/src/types.rs
++++ b/arrow-array/src/types.rs
+@@ -1668,26 +1668,26 @@ impl<O: OffsetSizeTrait> ByteArrayType for GenericStringType<O> {
+     };
+ 
+     fn validate(offsets: &OffsetBuffer<Self::Offset>, values: &Buffer) -> Result<(), ArrowError> {
+-        // Verify that the slice as a whole is valid UTF-8
+-        let validated = std::str::from_utf8(values).map_err(|e| {
+-            ArrowError::InvalidArgumentError(format!("Encountered non UTF-8 data: {e}"))
+-        })?;
+-
+-        // Verify each offset is at a valid character boundary in this UTF-8 array
+-        for offset in offsets.iter() {
+-            let o = offset.as_usize();
+-            if !validated.is_char_boundary(o) {
+-                if o < validated.len() {
+-                    return Err(ArrowError::InvalidArgumentError(format!(
+-                        "Split UTF-8 codepoint at offset {o}"
+-                    )));
+-                }
+-                return Err(ArrowError::InvalidArgumentError(format!(
+-                    "Offset of {o} exceeds length of values {}",
+-                    validated.len()
+-                )));
+-            }
+-        }
++        // // Verify that the slice as a whole is valid UTF-8
++        // let validated = std::str::from_utf8(values).map_err(|e| {
++        //     ArrowError::InvalidArgumentError(format!("Encountered non UTF-8 data: {e}"))
++        // })?;
++
++        // // Verify each offset is at a valid character boundary in this UTF-8 array
++        // for offset in offsets.iter() {
++        //     let o = offset.as_usize();
++        //     if !validated.is_char_boundary(o) {
++        //         if o < validated.len() {
++        //             return Err(ArrowError::InvalidArgumentError(format!(
++        //                 "Split UTF-8 codepoint at offset {o}"
++        //             )));
++        //         }
++        //         return Err(ArrowError::InvalidArgumentError(format!(
++        //             "Offset of {o} exceeds length of values {}",
++        //             validated.len()
++        //         )));
++        //     }
++        // }
+         Ok(())
+     }
+ }
+diff --git a/arrow-data/src/data.rs b/arrow-data/src/data.rs
+index 2c9dfe6..d119012 100644
+--- a/arrow-data/src/data.rs
++++ b/arrow-data/src/data.rs
+@@ -1485,8 +1485,8 @@ impl ArrayData {
+     /// 1. Union type_ids are valid see [#85](https://github.com/apache/arrow-rs/issues/85)
+     pub fn validate_values(&self) -> Result<(), ArrowError> {
+         match &self.data_type {
+-            DataType::Utf8 => self.validate_utf8::<i32>(),
+-            DataType::LargeUtf8 => self.validate_utf8::<i64>(),
++            DataType::Utf8 => /* self.validate_utf8::<i32>() */ Ok(()),
++            DataType::LargeUtf8 => /* self.validate_utf8::<i64>() */ Ok(()),
+             DataType::Binary => self.validate_offsets_full::<i32>(self.buffers[1].len()),
+             DataType::LargeBinary => self.validate_offsets_full::<i64>(self.buffers[1].len()),
+             DataType::BinaryView => {
+diff --git a/parquet/src/arrow/buffer/offset_buffer.rs b/parquet/src/arrow/buffer/offset_buffer.rs
+index ab67694..7c8e793 100644
+--- a/parquet/src/arrow/buffer/offset_buffer.rs
++++ b/parquet/src/arrow/buffer/offset_buffer.rs
+@@ -62,17 +62,18 @@ impl<I: OffsetSizeTrait> OffsetBuffer<I> {
+     /// UTF-8. This should be done by calling [`Self::check_valid_utf8`] after
+     /// all data has been written
+     pub fn try_push(&mut self, data: &[u8], validate_utf8: bool) -> Result<()> {
+-        if validate_utf8 {
+-            if let Some(&b) = data.first() {
+-                // A valid code-point iff it does not start with 0b10xxxxxx
+-                // Bit-magic taken from `std::str::is_char_boundary`
+-                if (b as i8) < -0x40 {
+-                    return Err(ParquetError::General(
+-                        "encountered non UTF-8 data".to_string(),
+-                    ));
+-                }
+-            }
+-        }
++        // skip utf-8 validating
++        // if validate_utf8 {
++        //     if let Some(&b) = data.first() {
++        //         // A valid code-point iff it does not start with 0b10xxxxxx
++        //         // Bit-magic taken from `std::str::is_char_boundary`
++        //         if (b as i8) < -0x40 {
++        //             return Err(ParquetError::General(
++        //                 "encountered non UTF-8 data".to_string(),
++        //             ));
++        //         }
++        //     }
++        // }
+ 
+         self.values.extend_from_slice(data);
+ 
+@@ -126,7 +127,9 @@ impl<I: OffsetSizeTrait> OffsetBuffer<I> {
+     ///
+     /// [`Self::try_push`] can perform this validation check on insertion
+     pub fn check_valid_utf8(&self, start_offset: usize) -> Result<()> {
+-        check_valid_utf8(&self.values.as_slice()[start_offset..])
++        // auron: ignore utf8 validation
++        // check_valid_utf8(&self.values.as_slice()[start_offset..])
++        Ok(())
+     }
+ 
+     /// Converts this into an [`ArrayRef`] with the provided `data_type` and `null_buffer`

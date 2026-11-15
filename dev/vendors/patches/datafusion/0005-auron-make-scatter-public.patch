@@ -1,0 +1,13 @@
+diff --git a/datafusion/physical-expr-common/src/physical_expr.rs b/datafusion/physical-expr-common/src/physical_expr.rs
+index 59393e7..2c508ef 100644
+--- a/datafusion/physical-expr-common/src/physical_expr.rs
++++ b/datafusion/physical-expr-common/src/physical_expr.rs
+@@ -21,7 +21,7 @@ use std::fmt::{Debug, Display, Formatter};
+ use std::hash::{Hash, Hasher};
+ use std::sync::Arc;
+ 
+-use crate::utils::scatter;
++pub use crate::utils::scatter;
+ 
+ use arrow::array::{Array, ArrayRef, BooleanArray, new_empty_array};
+ use arrow::compute::filter_record_batch;

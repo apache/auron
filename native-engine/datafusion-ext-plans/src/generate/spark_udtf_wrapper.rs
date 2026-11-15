@@ -31,7 +31,10 @@ use auron_jni_bridge::{
     is_task_running, jni_call, jni_new_direct_byte_buffer, jni_new_global_ref, jni_new_object,
 };
 use datafusion::{common::Result, physical_expr::PhysicalExprRef};
-use datafusion_ext_commons::{arrow::cast::cast, df_execution_err, downcast_any};
+use datafusion_ext_commons::{
+    arrow::{cast::cast, ffi::export_ffi_array},
+    df_execution_err, downcast_any,
+};
 use jni::objects::GlobalRef;
 use once_cell::sync::OnceCell;
 
@@ -141,7 +144,7 @@ impl Generator for SparkUDTFWrapper {
 
         // invoke UDAFWrapper.evalStart()
         let struct_array = StructArray::from(params_batch);
-        let mut export_ffi_array = FFI_ArrowArray::new(&struct_array.to_data());
+        let mut export_ffi_array = export_ffi_array(&struct_array);
         let jcontext = self.jcontext()?;
         jni_call!(SparkUDTFWrapperContext(jcontext.as_obj())
             .evalStart(&mut export_ffi_array as *mut FFI_ArrowArray as i64) -> ())?;

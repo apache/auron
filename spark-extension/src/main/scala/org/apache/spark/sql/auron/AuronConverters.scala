@@ -21,6 +21,7 @@ import java.util.ServiceLoader
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
@@ -28,8 +29,9 @@ import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, joinSmallerSideTag, neverConvertReasonTag}
+import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeReasonTag, convertToNonNativeTag, isNeverConvert, neverConvertReasonTag, requiredReservedOrderTag}
 import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
+import org.apache.spark.sql.auron.join.JoinBuildSides
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.auron.util.AuronLogUtils.logDebugPlanConversion
 import org.apache.spark.sql.catalyst.expressions.AggregateWindowFunction
@@ -47,8 +49,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
-import org.apache.spark.sql.catalyst.plans.InnerLike
-import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -63,6 +64,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeOrcInsertIntoHiveTableBase
 import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
+import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
 import org.apache.spark.sql.execution.auron.plan.NativeSortBase
 import org.apache.spark.sql.execution.auron.plan.NativeUnionBase
 import org.apache.spark.sql.execution.auron.plan.Util
@@ -93,6 +95,7 @@ import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.EmptyPartitionsExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
+import org.apache.auron.spark.ui.AuronFallbackReason
 
 object AuronConverters extends Logging {
   def enableScan: Boolean = SparkAuronConfiguration.ENABLE_SCAN.get()
@@ -197,12 +200,50 @@ object AuronConverters extends Logging {
       exec.getTagValue(convertibleTag).foreach(newExec.setTagValue(convertibleTag, _))
       exec.getTagValue(convertStrategyTag).foreach(newExec.setTagValue(convertStrategyTag, _))
       exec
+        .getTagValue(convertToNonNativeReasonTag)
+        .foreach(newExec.setTagValue(convertToNonNativeReasonTag, _))
+      exec
         .getTagValue(childOrderingRequiredTag)
         .foreach(newExec.setTagValue(childOrderingRequiredTag, _))
-      exec.getTagValue(joinSmallerSideTag).foreach(newExec.setTagValue(joinSmallerSideTag, _))
+      exec
+        .getTagValue(requiredReservedOrderTag)
+        .foreach(newExec.setTagValue(requiredReservedOrderTag, _))
 
       if (!isNeverConvert(newExec)) {
         newExec = convertSparkPlan(newExec)
+      }
+      if (exec.isInstanceOf[SortMergeJoinExec] &&
+        newExec.isInstanceOf[NativeShuffledHashJoinBase]) {
+        def resetOrdering(plan: SparkPlan, required: Boolean): Boolean = {
+          var changed = plan.getTagValue(childOrderingRequiredTag).contains(true) != required
+          plan.setTagValue(childOrderingRequiredTag, required)
+          plan match {
+            case _: BroadcastHashJoinExec | _: BroadcastNestedLoopJoinExec |
+                _: ShuffledHashJoinExec =>
+              changed ||= plan.getTagValue(requiredReservedOrderTag).contains(true) != required
+              plan.setTagValue(requiredReservedOrderTag, required)
+            case _ =>
+          }
+          val inherited = required && !plan.isInstanceOf[SortExec] &&
+            !plan.isInstanceOf[NativeSortBase]
+          plan.children.zip(plan.requiredChildOrdering).foreach { case (child, ordering) =>
+            val childChanged = resetOrdering(child, inherited || ordering.nonEmpty)
+            changed ||= childChanged
+          }
+          changed
+        }
+        val children = exec.children.zip(newExec.children).map { case (child, converted) =>
+          val input = child match {
+            case sort: SortExec => sort.child
+            case other => other
+          }
+          if (resetOrdering(input, required = false)) {
+            addRenameColumnsExec(convertToNative(convertSparkPlanRecursively(input)))
+          } else {
+            converted
+          }
+        }
+        newExec = newExec.withNewChildren(children)
       }
       danglingConverted = newDanglingConverted :+ newExec
     }
@@ -227,6 +268,9 @@ object AuronConverters extends Logging {
                 .getOrElse(err.toString)
                 .replaceFirst("^assertion failed: ?", "")
             exec.setTagValue(convertToNonNativeTag, true)
+            exec.setTagValue(
+              convertToNonNativeReasonTag,
+              AuronFallbackReason.conversionFailure(exec.getClass.getSimpleName, msg))
             exec.setTagValue(convertibleTag, false)
             exec.setTagValue(convertStrategyTag, NeverConvert)
             exec.setTagValue(neverConvertReasonTag, msg)
@@ -328,6 +372,9 @@ object AuronConverters extends Logging {
         } catch {
           case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
             exec.setTagValue(convertToNonNativeTag, true)
+            exec.setTagValue(
+              convertToNonNativeReasonTag,
+              AuronFallbackReason.conversionFailure(exec.getClass.getSimpleName, e.getMessage))
             exec.setTagValue(convertibleTag, false)
             exec.setTagValue(convertStrategyTag, NeverConvert)
             exec.setTagValue(
@@ -566,13 +613,62 @@ object AuronConverters extends Logging {
       exec.output)
   }
 
+  private def getForcedShuffledHashJoinBuildSide(exec: SortMergeJoinExec): JoinBuildSide = {
+    import org.apache.spark.sql.execution.adaptive.QueryStageExec
+    import org.apache.spark.sql.execution.auron.plan.NativeRenameColumnsBase
+
+    def runtimeSize(plan: SparkPlan): Option[BigInt] = plan match {
+      case stage: QueryStageExec => stage.computeStats().map(_.sizeInBytes)
+      case _: NativeSortBase | _: SortExec | _: NativeRenameColumnsBase | _: ConvertToNativeBase |
+          _: InputAdapter =>
+        runtimeSize(plan.children.head)
+      case reader if Seq("AQEShuffleRead", "CustomShuffleReader").contains(reader.nodeName) =>
+        runtimeSize(reader.children.head)
+      case _ => None
+    }
+
+    def validSize(size: BigInt): Boolean = size >= 0 && size < BigInt(Long.MaxValue)
+
+    val sizes =
+      try {
+        val runtimeSizes = for {
+          leftSize <- runtimeSize(exec.left).filter(validSize)
+          rightSize <- runtimeSize(exec.right).filter(validSize)
+        } yield (leftSize, rightSize, "runtime")
+        runtimeSizes.orElse {
+          exec.logicalLink
+            .collect { case join: Join =>
+              (join.left.stats.sizeInBytes, join.right.stats.sizeInBytes, "logical")
+            }
+            .filter { case (leftSize, rightSize, _) =>
+              Seq(leftSize, rightSize).forall(size =>
+                validSize(size) && size != SQLConf.get.defaultSizeInBytes)
+            }
+        }
+      } catch {
+        case NonFatal(err) =>
+          logWarning("Unable to read join statistics, defaults to BuildRight", err)
+          None
+      }
+    sizes match {
+      case Some((leftSize, rightSize, source)) =>
+        val buildSide = if (leftSize < rightSize) JoinBuildLeft else JoinBuildRight
+        logInfo(
+          s"Forced shuffled hash join: leftKeys=${exec.leftKeys}, rightKeys=${exec.rightKeys}, " +
+            s"statistics=$source, leftSize=$leftSize, rightSize=$rightSize, buildSide=$buildSide")
+        buildSide
+      case None =>
+        logWarning("Join statistics are missing or invalid, defaults to BuildRight")
+        JoinBuildRight
+    }
+  }
+
   def convertSortMergeJoinExec(exec: SortMergeJoinExec): SparkPlan = {
     val requireOrdering = exec.getTagValue(childOrderingRequiredTag).contains(true)
 
     // force shuffled-hash join
     if (!requireOrdering
-      && sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN)
-      && exec.children.forall(_.isInstanceOf[NativeSortBase])) {
+      && sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN)) {
       val (leftKeys, rightKeys, joinType, condition, left, right, isSkewJoin) =
         (
           exec.leftKeys,
@@ -590,24 +686,26 @@ object AuronConverters extends Logging {
           "joinType" -> joinType,
           "condition" -> condition))
 
-      val buildSide = exec
-        .getTagValue(joinSmallerSideTag)
-        .map(_.asInstanceOf[JoinBuildSide])
-        .getOrElse {
-          logWarning("JoinSmallerSideTag is missing, defaults to BuildRight")
-          JoinBuildRight
-        }
+      val buildSide = getForcedShuffledHashJoinBuildSide(exec)
+      def withoutSort(plan: SparkPlan): SparkPlan = plan match {
+        case sort: NativeSortBase => sort.child
+        case sort: SortExec => sort.child
+        case other => other
+      }
 
-      validateNativeInnerJoinCondition(joinType, condition)
+      validateNativeJoinCondition(condition)
       return Shims.get.createNativeShuffledHashJoinExec(
-        addRenameColumnsExec(convertToNative(left.children(0))),
-        addRenameColumnsExec(convertToNative(right.children(0))),
+        addRenameColumnsExec(convertToNative(withoutSort(left))),
+        addRenameColumnsExec(convertToNative(withoutSort(right))),
         leftKeys,
         rightKeys,
         joinType,
         condition,
         buildSide,
-        isSkewJoin)
+        isSkewJoin,
+        // this branch only converts when !requireOrdering, so no downstream operator
+        // depends on this join's output order.
+        requiredReservedOrder = false)
     }
 
     val (leftKeys, rightKeys, joinType, condition, left, right, isSkewJoin) =
@@ -627,7 +725,7 @@ object AuronConverters extends Logging {
         "joinType" -> joinType,
         "condition" -> condition))
 
-    validateNativeInnerJoinCondition(joinType, condition)
+    validateNativeJoinCondition(condition)
     Shims.get.createNativeSortMergeJoinExec(
       addRenameColumnsExec(convertToNative(left)),
       addRenameColumnsExec(convertToNative(right)),
@@ -642,6 +740,7 @@ object AuronConverters extends Logging {
     val buildSide = Shims.get.getJoinBuildSide(exec)
     val (leftKeys, rightKeys, joinType, condition, left, right) =
       (exec.leftKeys, exec.rightKeys, exec.joinType, exec.condition, exec.left, exec.right)
+    val requiredReservedOrder = exec.getTagValue(requiredReservedOrderTag).contains(true)
     logDebugPlanConversion(
       exec,
       Seq(
@@ -649,9 +748,10 @@ object AuronConverters extends Logging {
         "rightKeys" -> rightKeys,
         "joinType" -> joinType,
         "condition" -> condition,
-        "buildSide" -> buildSide))
+        "buildSide" -> buildSide,
+        "requiredReservedOrder" -> requiredReservedOrder))
     try {
-      validateNativeInnerJoinCondition(joinType, condition)
+      validateNativeJoinCondition(condition)
       Shims.get.createNativeShuffledHashJoinExec(
         addRenameColumnsExec(convertToNative(left)),
         addRenameColumnsExec(convertToNative(right)),
@@ -660,9 +760,11 @@ object AuronConverters extends Logging {
         joinType,
         condition,
         buildSide,
-        Shims.get.getIsSkewJoinFromSHJ(exec))
+        Shims.get.getIsSkewJoinFromSHJ(exec),
+        requiredReservedOrder)
     } catch {
-      case _ if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN) =>
+      case error
+          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN) =>
         logWarning(
           "in forceShuffledHashJoin mode, hash joins are likely too run OOM because of " +
             "small on-heap memory configuration. to avoid this, we will fall back this " +
@@ -695,23 +797,23 @@ object AuronConverters extends Logging {
         val smj =
           SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, leftSorted, rightSorted)
         smj.setTagValue(convertToNonNativeTag, true)
+        smj.setTagValue(
+          convertToNonNativeReasonTag,
+          s"Auron used SortMergeJoin instead. ${AuronFallbackReason.conversionFailure(exec.getClass.getSimpleName, error.getMessage)}")
         smj
     }
   }
 
-  private def validateNativeInnerJoinCondition(
-      joinType: JoinType,
-      condition: Option[Expression]): Unit = {
+  private def validateNativeJoinCondition(condition: Option[Expression]): Unit = {
     condition.foreach { expr =>
       assert(
         SparkAuronConfiguration.ENABLE_NATIVE_JOIN_CONDITION.get(),
         "native join condition is disabled")
-      assert(joinType.isInstanceOf[InnerLike], "join condition is not supported")
-      validateNativeInnerJoinConditionExpr(expr)
+      validateNativeJoinConditionExpr(expr)
     }
   }
 
-  private def validateNativeInnerJoinConditionExpr(condition: Expression): Unit = {
+  private def validateNativeJoinConditionExpr(condition: Expression): Unit = {
     Shims.get.shimVersion match {
       case "spark-3.0" | "spark-3.1" =>
         NativeConverters.convertExprWithFallback(
@@ -734,6 +836,7 @@ object AuronConverters extends Logging {
           exec.left,
           exec.right,
           Shims.get.isNullAwareAntiJoin(exec))
+      val requiredReservedOrder = exec.getTagValue(requiredReservedOrderTag).contains(true)
       logDebugPlanConversion(
         exec,
         Seq(
@@ -741,8 +844,9 @@ object AuronConverters extends Logging {
           "rightKeys" -> rightKeys,
           "joinType" -> joinType,
           "condition" -> condition,
-          "buildSide" -> buildSide))
-      validateNativeInnerJoinCondition(joinType, condition)
+          "buildSide" -> buildSide,
+          "requiredReservedOrder" -> requiredReservedOrder))
+      validateNativeJoinCondition(condition)
 
       // verify build side is native
       buildSide match {
@@ -761,7 +865,8 @@ object AuronConverters extends Logging {
         joinType,
         condition,
         buildSide,
-        naaj)
+        naaj,
+        requiredReservedOrder)
 
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
@@ -779,11 +884,20 @@ object AuronConverters extends Logging {
     try {
       val (joinType, condition, left, right) =
         (exec.joinType, exec.condition, exec.left, exec.right)
+      val requiredReservedOrder = exec.getTagValue(requiredReservedOrderTag).contains(true)
       logDebugPlanConversion(
         exec,
-        Seq("joinType" -> joinType, "condition" -> condition, "buildSide" -> buildSide))
+        Seq(
+          "joinType" -> joinType,
+          "condition" -> condition,
+          "buildSide" -> buildSide,
+          "requiredReservedOrder" -> requiredReservedOrder))
 
-      assert(condition.isEmpty, "join condition is not supported")
+      // Preserving broadcast-side rows requires global match tracking across probe partitions.
+      require(
+        JoinBuildSides.supportsBroadcastJoin(joinType, buildSide),
+        s"native broadcast join does not support $joinType with $buildSide")
+      validateNativeJoinCondition(condition)
 
       // verify build side is native
       buildSide match {
@@ -801,9 +915,10 @@ object AuronConverters extends Logging {
         Nil,
         Nil,
         joinType,
-        None,
+        condition,
         buildSide,
-        isNullAwareAntiJoin = false)
+        isNullAwareAntiJoin = false,
+        requiredReservedOrder)
     } catch {
       case e @ (_: NotImplementedError | _: Exception) =>
         val underlyingBroadcast = buildSide match {
@@ -936,6 +1051,9 @@ object AuronConverters extends Logging {
               s"${e.getMessage}")
           val proj = ProjectExec(exec.resultExpressions, nativeAggr)
           proj.setTagValue(convertToNonNativeTag, true)
+          proj.setTagValue(
+            convertToNonNativeReasonTag,
+            AuronFallbackReason.conversionFailure(proj.getClass.getSimpleName, e.getMessage))
           return proj
       }
     }
@@ -997,6 +1115,9 @@ object AuronConverters extends Logging {
               s"${e.getMessage}")
           val proj = ProjectExec(exec.resultExpressions, nativeAggr)
           proj.setTagValue(convertToNonNativeTag, true)
+          proj.setTagValue(
+            convertToNonNativeReasonTag,
+            AuronFallbackReason.conversionFailure(proj.getClass.getSimpleName, e.getMessage))
           return proj
       }
     }
@@ -1051,6 +1172,9 @@ object AuronConverters extends Logging {
               s"${e.getMessage}")
           val proj = ProjectExec(exec.resultExpressions, nativeAggr)
           proj.setTagValue(convertToNonNativeTag, true)
+          proj.setTagValue(
+            convertToNonNativeReasonTag,
+            AuronFallbackReason.conversionFailure(proj.getClass.getSimpleName, e.getMessage))
           return proj
       }
     }

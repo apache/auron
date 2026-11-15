@@ -41,7 +41,7 @@ jobs:
         sparkver: [spark-3.0, spark-3.1, spark-3.2, spark-3.3, spark-3.4, spark-3.5, spark-4.0, spark-4.1, spark-4.2]
         scalaver: [ 2.12, 2.13 ]
         javaver: [ 8, 21 ]
-        auronver: [9.0.0-SNAPSHOT]
+        auronver: [10.0.0-SNAPSHOT]
         runner: [ ubuntu-24.04 ]
         exclude:
           # Only build on scala-2.13 for spark-3.5+
@@ -93,19 +93,19 @@ jobs:
           - sparkver: spark-4.0
             scalaver: '2.13'
             javaver: '21'
-            auronver: 9.0.0-SNAPSHOT
+            auronver: 10.0.0-SNAPSHOT
             runner: ubuntu-24.04
             image: rockylinux8
           - sparkver: spark-4.1
             scalaver: '2.13'
             javaver: '21'
-            auronver: 9.0.0-SNAPSHOT
+            auronver: 10.0.0-SNAPSHOT
             runner: ubuntu-24.04
             image: rockylinux8
           - sparkver: spark-4.2
             scalaver: '2.13'
             javaver: '21'
-            auronver: 9.0.0-SNAPSHOT
+            auronver: 10.0.0-SNAPSHOT
             runner: ubuntu-24.04
             image: rockylinux8
 
@@ -143,6 +143,8 @@ jobs:
       - name: Build auron-${{ matrix.sparkver }}_${{ matrix.scalaver }}
         env:
           AURON_JAVA_VERSION: ${{ matrix.javaver }}
+          AURON_BUILD_BRANCH: ${{ github.head_ref || github.ref_name }}
+          AURON_BUILD_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           sed -i 's/docker-compose -f/docker compose -f/g' ./auron-build.sh
           ./auron-build.sh \

@@ -65,6 +65,34 @@ public abstract class AuronConfiguration {
                             + "if not configured, the default value of 1 is used.")
             .withDefaultValue(1);
 
+    public static final ConfigOption<Integer> NUM_MAX_SPILLING_CONSUMERS = new ConfigOption<>(Integer.class)
+            .withKey("auron.memory.spill.maxSpillingConsumers")
+            .withDescription("Maximum number of consumers that can be scheduled to spill "
+                    + "simultaneously at or above watermark L2. Must be positive.")
+            .checkValue(value -> value > 0, "Spill concurrency must be positive")
+            .withDefaultValue(2);
+
+    public static final ConfigOption<Double> MEM_SPILL_WATERMARK_L1 = new ConfigOption<>(Double.class)
+            .withKey("auron.memory.spill.watermarkL1")
+            .withDescription("Host (off-heap) memory usage ratio below which no spill is scheduled "
+                    + "at all. The ratio is relative to the MEMORY_FRACTION budget.")
+            .checkValue(
+                    value -> Double.isFinite(value) && value > 0 && value <= 1,
+                    "Spill watermarks must be finite and in (0, 1]")
+            .withDefaultValue(0.8);
+
+    public static final ConfigOption<Double> MEM_SPILL_WATERMARK_L2 = new ConfigOption<>(Double.class)
+            .withKey("auron.memory.spill.watermarkL2")
+            .withDescription("Host (off-heap) memory usage ratio at or above which the coordinator spills "
+                    + "as many consumers as possible (up to NUM_MAX_SPILLING_CONSUMERS) and blocks "
+                    + "the others. Between L1 and L2 only the single largest spillable consumer is "
+                    + "scheduled to spill. The ratio is relative to the MEMORY_FRACTION budget. "
+                    + "L1 must not exceed L2; invalid pairs use the default watermarks.")
+            .checkValue(
+                    value -> Double.isFinite(value) && value > 0 && value <= 1,
+                    "Spill watermarks must be finite and in (0, 1]")
+            .withDefaultValue(0.9);
+
     public abstract <T> Optional<T> getOptional(ConfigOption<T> option);
 
     public <T> T get(ConfigOption<T> option) {

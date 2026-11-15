@@ -40,6 +40,7 @@ pub fn cast_impl(
         (&t1, t2) if t1 == t2 => make_array(array.to_data()),
 
         (_, &DataType::Null) => Arc::new(NullArray::new(array.len())),
+        (&DataType::Null, _) => new_null_array(cast_type, array.len()),
 
         // spark compatible str to int
         (&DataType::Utf8, to_dt) if to_dt.is_signed_integer() => {
@@ -222,6 +223,22 @@ pub fn cast_impl(
         // string to decimal
         (&DataType::Utf8, DataType::Decimal128(..)) => {
             arrow::compute::kernels::cast::cast(&to_plain_string_array(array), cast_type)?
+        }
+        // Spark formats finite floats as shortest round-trip strings before exact rescaling;
+        // non-finite values become NULL.
+        (&DataType::Float32, DataType::Decimal128(..))
+        | (&DataType::Float64, DataType::Decimal128(..)) => {
+            let floats = arrow::compute::cast(array, &DataType::Float64)?;
+            let strings = floats
+                .as_primitive::<Float64Type>()
+                .iter()
+                .map(|value| {
+                    value
+                        .filter(|value| value.is_finite())
+                        .map(|value| value.to_string())
+                })
+                .collect::<StringArray>();
+            cast_impl(&strings, cast_type, match_struct_fields)?
         }
         // map to string (spark compatible)
         (&DataType::Map(..), &DataType::Utf8) => {
@@ -621,6 +638,47 @@ mod test {
                 Some(i32::MIN as i128 * 1000000000000000000),
             ])
             .with_precision_and_scale(38, 18)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_float_to_decimal() -> Result<()> {
+        let f64_array: ArrayRef = Arc::new(Float64Array::from_iter(vec![
+            Some(0.034567890),
+            None,
+            Some(f64::NAN),
+            Some(f64::INFINITY),
+            Some(f64::NEG_INFINITY),
+            Some(1e40),
+        ]));
+        let casted = cast(&f64_array, &DataType::Decimal128(38, 33))?;
+        assert_eq!(
+            as_decimal128_array(&casted)?,
+            &Decimal128Array::from_iter(vec![
+                Some(34_567_890_000_000_000_000_000_000_000_000i128),
+                None,
+                None,
+                None,
+                None,
+                None,
+            ])
+            .with_precision_and_scale(38, 33)?
+        );
+
+        let f32_array: ArrayRef = Arc::new(Float32Array::from(vec![0.1]));
+        let casted = cast(&f32_array, &DataType::Decimal128(20, 18))?;
+        assert_eq!(
+            as_decimal128_array(&casted)?,
+            &Decimal128Array::from(vec![100_000_001_490_116_120i128])
+                .with_precision_and_scale(20, 18)?
+        );
+
+        let rounding_array: ArrayRef = Arc::new(Float64Array::from(vec![1.25, -1.25, -0.0]));
+        let casted = cast(&rounding_array, &DataType::Decimal128(2, 1))?;
+        assert_eq!(
+            as_decimal128_array(&casted)?,
+            &Decimal128Array::from(vec![13, -13, 0]).with_precision_and_scale(2, 1)?
         );
         Ok(())
     }

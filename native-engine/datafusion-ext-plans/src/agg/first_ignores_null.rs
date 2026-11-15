@@ -107,7 +107,7 @@ impl Agg for AggFirstIgnoresNull {
                 idx_for_zipped! {
                     ((acc_idx, partial_arg_idx) in (acc_idx, partial_arg_idx)) => {
                         if accs.value(acc_idx).is_none() && partial_arg.is_valid(partial_arg_idx) {
-                            accs.set_value(acc_idx, Some(AccBytes::from(partial_arg.value(partial_arg_idx).as_ref())));
+                            accs.set_value(acc_idx, Some(AccBytes::from_slice_copy(partial_arg.value(partial_arg_idx).as_ref())));
                         }
                     }
                 }

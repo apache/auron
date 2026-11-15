@@ -17,13 +17,19 @@
 package org.apache.auron
 
 import org.apache.spark.sql.{AuronQueryTest, Row}
+import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
 import org.apache.spark.sql.execution.auron.plan.NativeFilterBase
+import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
+import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
+import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffledHashJoinBase
+import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
+import org.apache.auron.jni.JniBridge
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.util.AuronTestUtils
 
@@ -48,6 +54,81 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     // Primary key wins when both are set to conflicting values.
     withSQLConf("spark.auron.enabled" -> "true", "spark.auron.enable" -> "false") {
       assert(SparkAuronConfiguration.AURON_ENABLED.get())
+    }
+  }
+
+  test("ORC reader batch size configuration") {
+    assert(JniBridge.intConf("ORC_BATCH_SIZE") == 10000)
+    Seq(128, 256).foreach { globalBatchSize =>
+      withSparkConf("spark.auron.batchSize" -> globalBatchSize.toString) {
+        assert(JniBridge.intConf("ORC_BATCH_SIZE") == globalBatchSize)
+        withSparkConf("spark.auron.orc.batchSize" -> "2") {
+          assert(JniBridge.intConf("ORC_BATCH_SIZE") == 2)
+          assert(JniBridge.intConf("BATCH_SIZE") == globalBatchSize)
+        }
+        assert(JniBridge.intConf("ORC_BATCH_SIZE") == globalBatchSize)
+      }
+    }
+    Seq("0", "-1", "invalid", "2147483648").foreach { value =>
+      withSparkConf("spark.auron.orc.batchSize" -> value) {
+        intercept[IllegalArgumentException] {
+          JniBridge.intConf("ORC_BATCH_SIZE")
+        }
+      }
+    }
+  }
+
+  Seq("orc", "parquet").foreach { format =>
+    test(s"ORC reader batch size only changes ORC batches: $format") {
+      withTempPath { path =>
+        // Keep each decoded row above the coalescer's memory threshold so that
+        // the project's input batch count exposes the reader's batch boundaries.
+        val valueSize = 3 * 1024 * 1024
+        withSQLConf("spark.auron.enabled" -> "false") {
+          spark
+            .range(7)
+            .selectExpr(
+              "id",
+              s"CASE WHEN id = 0 THEN NULL WHEN id = 1 THEN '' ELSE repeat('x', $valueSize) END AS s",
+              s"CAST(CASE WHEN id = 2 THEN NULL WHEN id = 3 THEN '' ELSE repeat('y', $valueSize) END AS BINARY) AS b")
+            .coalesce(1)
+            .write
+            .format(format)
+            .save(path.getCanonicalPath)
+        }
+        val expected = (0L until 7L).map { id =>
+          Row(
+            id,
+            if (id == 0) null else if (id == 1) 0 else valueSize,
+            if (id == 2) null else if (id == 3) 0 else valueSize)
+        }
+        val batchCounts = Seq(1, 2, 3, 16).map { batchSize =>
+          var batchCount = 0L
+          withSparkConf("spark.auron.orc.batchSize" -> batchSize.toString) {
+            val df = spark.read
+              .format(format)
+              .load(path.getCanonicalPath)
+              .selectExpr("id", "length(s)", "octet_length(b)")
+            assert(df.collect().toSeq.sortBy(_.getLong(0)) == expected)
+            assertPlanIsNative(df)
+            val plan = df.queryExecution.executedPlan
+            assert(collectFirst(plan) {
+              case _: NativeOrcScanBase if format == "orc" => true
+              case _: NativeParquetScanBase if format == "parquet" => true
+            }.contains(true))
+            val project = collectFirst(plan) { case p: NativeProjectBase => p }.get
+            batchCount = project.metrics("input_batch_count").value
+            if (format == "orc") {
+              assert(batchCount == (7 + batchSize - 1) / batchSize)
+            }
+          }
+          batchCount
+        }
+        if (format == "parquet") {
+          // Parquet chooses an adaptive batch size independently of the ORC setting.
+          assert(batchCounts.head > 0 && batchCounts.distinct.size == 1)
+        }
+      }
     }
   }
 
@@ -82,7 +163,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test select multiple spark ext functions with the same signature") {
-    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+    withSQLConf(
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t1") {
         sql("create table t1 using parquet as select '2024-12-18' as event_time")
         checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
@@ -114,9 +197,15 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       sql("create table t1(c1 binary, c2 int) using parquet")
       sql("insert into t1 values (cast('test1' as binary), 1), (cast('test2' as binary), 2)")
       val df = checkSparkAnswerAndOperator("select c2 from t1 order by c1")
-      assert(collectFirst(df.queryExecution.executedPlan) { case e: NativeShuffleExchangeExec =>
-        e
-      }.isDefined)
+      val exchange = collectFirst(df.queryExecution.executedPlan) {
+        case e: NativeShuffleExchangeExec =>
+          e
+      }.get
+      val nativeShuffleRDD =
+        exchange.shuffleDependency.rdd.dependencies.head.rdd.asInstanceOf[NativeRDD]
+      assert(!nativeShuffleRDD.nativePlanWrapper.p.getClass.getDeclaredFields.exists { field =>
+        classOf[NativeShuffleExchangeBase].isAssignableFrom(field.getType)
+      })
     }
   }
 
@@ -258,12 +347,20 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
           SparkAuronConfiguration.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
-            Seq[(Integer, Integer, Integer)]((1, 2, 1), (3, 4, 2), (5, 6, 3), (null, null, 4))
+            Seq[(Integer, Integer, Integer)](
+              (1, 2, 1),
+              (3, 4, 2),
+              (5, 6, 3),
+              (null, null, 4),
+              (7, 8, null))
               .toDF("c1", "c2", "p")
               .write
               .partitionBy("p")
               .orc(path)
             checkSparkAnswerAndOperator(() => spark.read.orc(path))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).select("p", "c2", "c1"))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).select("p"))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).selectExpr("count(*)"))
 
             withTable("t") {
               sql(s"""
@@ -274,6 +371,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                      |""".stripMargin)
               sql("MSCK REPAIR TABLE t")
               checkSparkAnswerAndOperator(() => spark.table("t"))
+              checkSparkAnswerAndOperator(() => spark.table("t").select("p", "c2", "c3"))
             }
           }
         }
@@ -388,7 +486,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with hour function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_hour") {
         sql("""
               |create table t_hour using parquet as
@@ -410,7 +510,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with minute function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_minute") {
         sql("""
               |create table t_minute using parquet as
@@ -431,7 +533,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with second function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_second") {
         sql("""
               |create table t_second using parquet as
@@ -453,7 +557,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
   // For Date input: hour/minute/second should all be 0
   test("timeparts on Date input return zeros") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_date_parts") {
         sql(
           "create table t_date_parts using parquet as select date'2024-12-18' as d union all select date'2024-12-19'")
@@ -470,7 +576,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("hour/minute/second respect timezone via from_utc_timestamp") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_tz") {
         // Construct: UTC 1970-01-01 00:00:00 → Asia/Shanghai => local 08:00:00
         sql("""
@@ -487,7 +595,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("minute/second with non-whole-hour offsets") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_tz2") {
         sql("""
               |create table t_tz2 using parquet as
@@ -945,7 +1055,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
-  test("native broadcast hash join rejects non-inner residual condition") {
+  test("native broadcast hash join supports left outer residual condition") {
     withSQLConf("spark.sql.adaptive.enabled" -> "false") {
       withTable("bhj_left", "bhj_right") {
         sql("""
@@ -968,7 +1078,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |AS t(id, rv)
               |""".stripMargin)
 
-        val df = checkSparkAnswer("""
+        val df = checkSparkAnswerAndOperator("""
               |SELECT /*+ BROADCAST(r) */ l.id
               |FROM bhj_left l
               |LEFT JOIN bhj_right r
@@ -977,9 +1087,12 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
               |""".stripMargin)
 
         val plan = stripAQEPlan(df.queryExecution.executedPlan)
-        assert(
-          plan.collectFirst { case _: NativeBroadcastJoinExec => true }.isEmpty,
-          s"expected non-inner residual broadcast hash join to fall back, but got:\n$plan")
+        val nativeBhj = plan
+          .collectFirst { case join: NativeBroadcastJoinExec => join }
+          .getOrElse(fail(s"expected NativeBroadcastJoinExec in executed plan, but got:\n$plan"))
+        assert(nativeBhj.condition.nonEmpty)
+        assert(nativeBhj.leftKeys.nonEmpty)
+        assert(nativeBhj.broadcastSide == JoinBuildRight)
       }
     }
   }
@@ -1121,6 +1234,53 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         |  COUNT(*) FILTER (WHERE is_vip = true)          AS cnt_vip_star,
         |  COUNT(quantity) FILTER (WHERE amount > 150)    AS cnt_qty
         |FROM t_filter_agg_2289""".stripMargin)
+    }
+  }
+
+  test("UDAF fallback with different aggregate filters") {
+    withTable("udaf_filter_indices") {
+      // Keep both filtered groups in the same input partition.
+      sql("""CREATE TABLE udaf_filter_indices USING parquet AS
+        |SELECT /*+ COALESCE(1) */ * FROM VALUES
+        |('a', 1D, true), ('a', 3D, true), ('a', 10D, false), ('a', 30D, false)
+        |AS t(category, value, flag)""".stripMargin)
+
+      Seq("global", "hash", "sort").foreach { mode =>
+        withSparkConf(
+          "spark.auron.udafFallback.num.udafs.trigger.sortAgg" ->
+            (if (mode == "hash") "4" else "1")) {
+          val groupBy = if (mode == "global") "" else "GROUP BY category"
+          checkAnswer(
+            checkSparkAnswerAndOperator(s"""SELECT
+              |var_pop(value) FILTER (WHERE flag),
+              |var_pop(value) FILTER (WHERE NOT flag),
+              |var_pop(value)
+              |FROM udaf_filter_indices $groupBy""".stripMargin),
+            Seq(Row(1d, 100d, 131.5d)))
+        }
+      }
+    }
+  }
+
+  test("aggregate filter excludes null predicates") {
+    withTable("t_filter_agg_null") {
+      sql("""CREATE TABLE t_filter_agg_null(category STRING, amount INT, flag BOOLEAN)
+        |USING parquet""".stripMargin)
+      sql("""INSERT INTO t_filter_agg_null VALUES
+        |('a', 10, true), ('a', 100, NULL), ('a', 1, false), ('b', 200, NULL)
+        |""".stripMargin)
+
+      checkAnswer(
+        checkSparkAnswerAndOperator("""SELECT
+          |SUM(amount) FILTER (WHERE NOT flag), COUNT(*) FILTER (WHERE NOT flag)
+          |FROM t_filter_agg_null""".stripMargin),
+        Seq(Row(1L, 1L)))
+
+      checkAnswer(
+        checkSparkAnswerAndOperator("""SELECT category,
+          |SUM(amount) FILTER (WHERE NOT flag), COUNT(*) FILTER (WHERE NOT flag)
+          |FROM t_filter_agg_null GROUP BY category""".stripMargin),
+        Seq(Row("a", 1L, 1L), Row("b", null, 0L)))
     }
   }
 

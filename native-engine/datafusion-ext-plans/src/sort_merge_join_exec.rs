@@ -43,6 +43,7 @@ use crate::{
     cur_forward,
     joins::{
         JoinFilter, JoinParams, JoinProjection,
+        join_filter::JoinFilter as PreparedJoinFilter,
         join_utils::{JoinType, JoinType::*},
         smj::{
             existence_join::ExistenceJoiner,
@@ -64,7 +65,7 @@ pub struct SortMergeJoinExec {
     join_params: OnceCell<JoinParams>,
     schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl SortMergeJoinExec {
@@ -77,9 +78,6 @@ impl SortMergeJoinExec {
         join_filter: Option<JoinFilter>,
         sort_options: Vec<SortOptions>,
     ) -> Result<Self> {
-        if join_filter.is_some() && join_type != JoinType::Inner {
-            df_execution_err!("join filter is only supported for inner sort-merge join")?;
-        }
         Ok(Self {
             schema,
             left,
@@ -116,12 +114,18 @@ impl SortMergeJoinExec {
             })
             .collect::<Result<_>>()?;
 
-        let projection = JoinProjection::try_new(
+        let filter_expr = self
+            .join_filter
+            .as_ref()
+            .map(|filter| filter.physical_expr(left_schema.fields().len()))
+            .transpose()?;
+        let projection = JoinProjection::try_new_with_filter(
             self.join_type,
             &self.schema,
             &self.left.schema(),
             &self.right.schema(),
             projection,
+            filter_expr.as_ref(),
         )?;
         Ok(JoinParams {
             join_type: self.join_type,
@@ -134,8 +138,10 @@ impl SortMergeJoinExec {
             sort_options: self.sort_options.clone(),
             projection,
             join_filter: self.join_filter.clone(),
+            residual_filter: None,
             batch_size: batch_size(),
             is_null_aware_anti_join: false,
+            output_time: Time::new(),
         })
     }
 
@@ -145,7 +151,7 @@ impl SortMergeJoinExec {
         context: Arc<TaskContext>,
         projection: Vec<usize>,
     ) -> Result<SendableRecordBatchStream> {
-        let join_params = self
+        let mut join_params = self
             .join_params
             .get_or_try_init(|| self.create_join_params(&projection))?
             .clone();
@@ -156,29 +162,27 @@ impl SortMergeJoinExec {
             &self.metrics,
         );
 
+        if let Some(filter) = &self.join_filter {
+            join_params.residual_filter = Some(Arc::new(PreparedJoinFilter::try_new_remapped(
+                filter.physical_expr(join_params.left_schema.fields().len())?,
+                &join_params.left_schema,
+                &join_params.right_schema,
+                &join_params.projection.left_read,
+                &join_params.projection.right_read,
+                exec_ctx.register_timer_metric("post_filter_time"),
+            )?));
+        }
+        join_params.output_time = exec_ctx.register_timer_metric("output_time");
         let poll_time = Time::new();
-        let left_projection;
-        let right_projection;
-        // The residual join condition may reference columns that are not part
-        // of the final projection. Keep full child rows while matching, then
-        // apply the output projection after the filter has selected rows.
-        let (left_output_projection, right_output_projection) = if join_params.join_filter.is_some()
-        {
-            left_projection = (0..join_params.left_schema.fields().len()).collect::<Vec<_>>();
-            right_projection = (0..join_params.right_schema.fields().len()).collect::<Vec<_>>();
-            (&left_projection, &right_projection)
-        } else {
-            (&join_params.projection.left, &join_params.projection.right)
-        };
         let left = exec_ctx.execute_projected_with_key_rows_output(
             &self.left,
             &join_params
                 .left_keys
                 .iter()
                 .zip(&join_params.sort_options)
-                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), s.clone()))
+                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), *s))
                 .collect::<Vec<_>>(),
-            left_output_projection,
+            &join_params.projection.left_read,
         )?;
         let right = exec_ctx.execute_projected_with_key_rows_output(
             &self.right,
@@ -186,9 +190,9 @@ impl SortMergeJoinExec {
                 .right_keys
                 .iter()
                 .zip(&join_params.sort_options)
-                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), s.clone()))
+                .map(|(k, s)| PhysicalSortExpr::new(k.clone(), *s))
                 .collect::<Vec<_>>(),
-            right_output_projection,
+            &join_params.projection.right_read,
         )?;
 
         let left = StreamCursor::try_new(left, poll_time.clone(), &join_params.key_data_types)?;
@@ -256,23 +260,28 @@ impl ExecutionPlan for SortMergeJoinExec {
         "SortMergeJoinExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.right.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -306,10 +315,6 @@ impl ExecutionPlan for SortMergeJoinExec {
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
     }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
-    }
 }
 
 async fn execute_join(
@@ -326,8 +331,14 @@ async fn execute_join(
     let concurrent_poll_time = Time::new();
     let concurrent_poll_timer = concurrent_poll_time.timer();
     tokio::try_join!(
-        async { Ok::<_, DataFusionError>(cur_forward!(left)) },
-        async { Ok::<_, DataFusionError>(cur_forward!(right)) },
+        async {
+            cur_forward!(left);
+            Ok::<_, DataFusionError>(())
+        },
+        async {
+            cur_forward!(right);
+            Ok::<_, DataFusionError>(())
+        },
     )?;
     drop(concurrent_poll_timer);
     poll_time.sub_duration(poll_time.duration());
@@ -387,6 +398,10 @@ macro_rules! compare_cursor {
 }
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait Joiner {
     async fn join(
         self: Pin<&mut Self>,

@@ -1,0 +1,64 @@
+From a3f528a1ea0d3e64992dbda9d764774fbc6185b0 Mon Sep 17 00:00:00 2001
+From: zhangli20 <richselian@gmail.com>
+Date: Wed, 13 Aug 2025 11:34:56 +0800
+Subject: [PATCH] auron: exclude testing submodules
+
+---
+ .gitmodules        | 20 ++++++++++----------
+ datafusion-testing |  1 -
+ parquet-testing    |  1 -
+ testing            |  1 -
+ 4 files changed, 10 insertions(+), 13 deletions(-)
+ delete mode 160000 datafusion-testing
+ delete mode 160000 parquet-testing
+ delete mode 160000 testing
+
+diff --git a/.gitmodules b/.gitmodules
+index 037accdbe..41cef1bba 100644
+--- a/.gitmodules
++++ b/.gitmodules
+@@ -1,10 +1,10 @@
+-[submodule "parquet-testing"]
+-	path = parquet-testing
+-	url = https://github.com/apache/parquet-testing.git
+-[submodule "testing"]
+-	path = testing
+-	url = https://github.com/apache/arrow-testing
+-[submodule "datafusion-testing"]
+-	path = datafusion-testing
+-	url = https://github.com/apache/datafusion-testing.git
+-	branch = main
++# [submodule "parquet-testing"]
++# 	path = parquet-testing
++# 	url = https://github.com/apache/parquet-testing.git
++# [submodule "testing"]
++# 	path = testing
++# 	url = https://github.com/apache/arrow-testing
++# [submodule "datafusion-testing"]
++# 	path = datafusion-testing
++# 	url = https://github.com/apache/datafusion-testing.git
++# 	branch = main
+diff --git a/datafusion-testing b/datafusion-testing
+deleted file mode 160000
+index 13bbae387..000000000
+--- a/datafusion-testing
++++ /dev/null
+@@ -1 +0,0 @@
+-Subproject commit 13bbae38776c2bfbc1fab1be7e7220222d4284bf
+diff --git a/parquet-testing b/parquet-testing
+deleted file mode 160000
+index 107b36603..000000000
+--- a/parquet-testing
++++ /dev/null
+@@ -1 +0,0 @@
+-Subproject commit 107b36603e051aee26bd93e04b871034f6c756c0
+diff --git a/testing b/testing
+deleted file mode 160000
+index 7df2b70ba..000000000
+--- a/testing
++++ /dev/null
+@@ -1 +0,0 @@
+-Subproject commit 7df2b70baf4f081ebf8e0c6bd22745cf3cbfd824
+--
+2.50.1
+

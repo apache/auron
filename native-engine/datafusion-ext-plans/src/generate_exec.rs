@@ -55,7 +55,7 @@ pub struct GenerateExec {
     input: Arc<dyn ExecutionPlan>,
     output_schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl GenerateExec {
@@ -121,23 +121,28 @@ impl ExecutionPlan for GenerateExec {
         "GenerateExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.output_schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -181,10 +186,6 @@ impl ExecutionPlan for GenerateExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 
@@ -274,9 +275,13 @@ fn execute_generate(
                         let generated_ids = generated_ids.finish();
                         let child_outputs = take_cols(&child_outputs, child_output_row_ids)?;
                         let generated_outputs = match generated_outputs {
-                            Some(generated_outputs) => {
+                            Some(generated_outputs) if outer => {
                                 take_cols(&generated_outputs.cols, generated_ids)?
                             }
+                            // When outer is false, generated_ids is the identity sequence
+                            // 0..generated_outputs.row_ids.len(). Reuse the generated arrays
+                            // instead of copying them through Arrow take.
+                            Some(generated_outputs) => generated_outputs.cols,
                             None => generator_output_schema
                                 .fields()
                                 .iter()
@@ -402,7 +407,7 @@ mod test {
             "|   |                 | {}             |",
             "+---+-----------------+----------------+",
         ];
-        assert_batches_eq!(input, &[input_batch.clone()]);
+        assert_batches_eq!(input, std::slice::from_ref(&input_batch));
 
         let input = Arc::new(TestMemoryExec::try_new(
             &[vec![input_batch.clone()]],

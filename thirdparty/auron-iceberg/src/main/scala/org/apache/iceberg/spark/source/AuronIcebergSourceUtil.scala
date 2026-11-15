@@ -19,8 +19,8 @@ package org.apache.iceberg.spark.source
 import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.reflect.FieldUtils
-import org.apache.iceberg.Table
-import org.apache.iceberg.types.TypeUtil
+import org.apache.iceberg.{MetadataColumns, Partitioning, Table}
+import org.apache.iceberg.types.{Types, TypeUtil}
 
 object AuronIcebergSourceUtil {
 
@@ -37,6 +37,22 @@ object AuronIcebergSourceUtil {
   def expectedFieldIds(scan: AnyRef): Map[String, Int] = {
     val expectedSchema = asBatchQueryScan(scan).expectedSchema()
     expectedSchema.columns().asScala.map(field => field.name() -> field.fieldId()).toMap
+  }
+
+  def expectedPartitionType(scan: AnyRef): Option[Types.StructType] = {
+    val batchScan = asBatchQueryScan(scan)
+    Option(batchScan.expectedSchema().findType(MetadataColumns.PARTITION_COLUMN_ID)).map {
+      projected =>
+        // Spark may renumber nested metadata fields; retain Iceberg partition field IDs.
+        val partitionType = Partitioning.partitionType(batchScan.table())
+        Types.StructType.of(
+          projected
+            .asStructType()
+            .fields()
+            .asScala
+            .map(field => partitionType.field(field.name()))
+            .asJava)
+    }
   }
 
   def expectedFieldIdsForChangelogScan(scan: AnyRef): Map[String, Int] = {

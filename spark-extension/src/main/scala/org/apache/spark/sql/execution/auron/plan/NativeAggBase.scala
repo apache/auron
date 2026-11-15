@@ -21,9 +21,11 @@ import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.OneToOneDependency
+import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.NativeHelper
+import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.Shims
@@ -174,18 +176,22 @@ abstract class NativeAggBase(
     val nativeAggrModes = this.nativeAggrModes
     val nativeAggrs = this.nativeAggrs
     val nativeGroupingExprs = this.nativeGroupingExprs
+    val nativePartitions = inputRDD.partitions.map { inputPartition =>
+      NativePartition[Partition](inputPartition.index, inputPartition)
+    }
 
     new NativeRDD(
       sparkContext,
       nativeMetrics,
-      rddPartitions = inputRDD.partitions,
+      rddPartitions = nativePartitions.toArray,
       rddPartitioner = inputRDD.partitioner,
       rddDependencies = new OneToOneDependency(inputRDD) :: Nil,
       inputRDD.isShuffleReadFull,
       (partition, taskContext) => {
+        val inputPartition = NativePartition.unwrap(partition)
 
         lazy val inputPlan =
-          inputRDD.nativePlan(inputRDD.partitions(partition.index), taskContext)
+          inputRDD.nativePlan(inputPartition, taskContext)
         pb.PhysicalPlanNode
           .newBuilder()
           .setAgg(

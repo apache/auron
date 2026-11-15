@@ -53,6 +53,10 @@ pub mod rss_single_repartitioner;
 pub mod rss_sort_repartitioner;
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait ShuffleRepartitioner: Send + Sync {
     async fn insert_batch(&self, input: RecordBatch) -> Result<()>;
     async fn shuffle_write(&self) -> Result<()>;
@@ -120,6 +124,14 @@ pub enum Partitioning {
     SinglePartitioning(),
     /// Range partitioning
     RangePartitioning(Vec<PhysicalSortExpr>, usize, Arc<Rows>),
+    /// Each row's partition (bucket) id has already been computed and
+    /// appended as an `Int32` column at `.0` (see
+    /// `joins::bucketed_group::append_bucket_id_column`); this variant just
+    /// reads that column directly instead of hashing/evaluating expressions.
+    /// Used by [`crate::joins::bucket_repartitioner::BucketRepartitioner`] to
+    /// reuse [`BufferedData`](buffered_data::BufferedData)'s radix-sort-based
+    /// grouping for hybrid (bucketed hash) join.
+    BucketPartitioning(usize, usize),
 }
 
 impl Partitioning {
@@ -129,6 +141,7 @@ impl Partitioning {
         match self {
             RoundRobinPartitioning(n) | HashPartitioning(_, n) | RangePartitioning(_, n, _) => *n,
             SinglePartitioning() => 1,
+            BucketPartitioning(_, num_buckets) => *num_buckets,
         }
     }
 }
@@ -155,6 +168,9 @@ impl fmt::Display for Partitioning {
                     .collect::<Vec<String>>()
                     .join(", ");
                 write!(f, "Range([{phy_exprs_str}], {size}, {bounds:?})")
+            }
+            Partitioning::BucketPartitioning(bucket_col_idx, num_buckets) => {
+                write!(f, "Bucket(col={bucket_col_idx}, {num_buckets})")
             }
         }
     }

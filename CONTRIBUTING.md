@@ -15,7 +15,7 @@
 - limitations under the License.
 -->
 
-# Contributing to Apache Auron (Incubating)
+# Contributing to Apache Auron
 
 Welcome! We're excited that you're interested in contributing to Apache Auron. This document provides guidelines and information to help you contribute effectively to the project.
 

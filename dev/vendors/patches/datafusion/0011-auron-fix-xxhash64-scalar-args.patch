@@ -1,0 +1,30 @@
+diff --git a/datafusion/spark/src/function/hash/xxhash64.rs b/datafusion/spark/src/function/hash/xxhash64.rs
+index 9d02a51..a03314d 100644
+--- a/datafusion/spark/src/function/hash/xxhash64.rs
++++ b/datafusion/spark/src/function/hash/xxhash64.rs
+@@ -75,13 +75,21 @@ impl ScalarUDFImpl for SparkXxhash64 {
+     }
+
+     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+-        let num_rows = args.number_rows;
+-        let mut hashes: Vec<u64> = vec![DEFAULT_SEED; num_rows];
+-
++        let is_scalar = args
++            .args
++            .iter()
++            .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
++        let num_rows = if is_scalar { 1 } else { args.number_rows };
+         let arrays = ColumnarValue::values_to_arrays(&args.args)?;
++        if arrays.iter().any(|array| array.len() != num_rows) {
++            return internal_err!(
++                "xxhash64 argument array length does not match the expected row count: {num_rows}"
++            );
++        }
++        let mut hashes: Vec<u64> = vec![DEFAULT_SEED; num_rows];
+         create_xxhash64_hashes(&arrays, &mut hashes)?;
+
+-        if num_rows == 1 {
++        if is_scalar {
+             Ok(ColumnarValue::Scalar(ScalarValue::Int64(Some(
+                 hashes[0] as i64,
+             ))))

@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.iceberg.FileFormat
+import org.apache.iceberg.spark.source.AuronIcebergSourceUtil
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -54,6 +55,9 @@ case class NativeIcebergTableScanExec(
     extends LeafExecNode
     with NativeSupports
     with Logging {
+
+  // Spark 4 AQE needs this link when recreating result stages for repeated actions.
+  Shims.get.setLogicalLink(this, basedScan)
 
   override lazy val metrics: Map[String, SQLMetric] =
     NativeHelper.getNativeFileScanMetrics(sparkContext) ++ Seq(
@@ -150,8 +154,7 @@ case class NativeIcebergTableScanExec(
   private def metadataPartitionValues(file: PartitionedFile): Seq[pb.ScalarValue] =
     partitionSchema.fields.zipWithIndex.map { case (field, index) =>
       NativeConverters
-        .convertExpr(
-          Literal.create(file.partitionValues.get(index, field.dataType), field.dataType))
+        .convertExpr(Literal(file.partitionValues.get(index, field.dataType), field.dataType))
         .getLiteral
     }
 
@@ -261,14 +264,19 @@ case class NativeIcebergTableScanExec(
     scanTasks
       .map(task => task.location -> task.fileSizeInBytes)
       .groupBy(_._1)
-      .mapValues(_.head._2)
-      .toMap
+      .map { case (location, files) => location -> files.head._2 }
   }
 
   private def postDriverMetrics(filePartitions: Array[FilePartition]): Unit = {
     val numPartitions = filePartitions.length
     metrics("numPartitions").add(numPartitions)
-    val numFiles = filePartitions.foldLeft(0L)(_ + _.files.length)
+    // Count planned snapshot files, while preserving changelog event/range counting.
+    val numFiles =
+      if (AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(basedScan.scan)) {
+        fileSizes.size.toLong
+      } else {
+        filePartitions.foldLeft(0L)(_ + _.files.length)
+      }
     metrics("numFiles").add(numFiles)
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(
@@ -317,8 +325,9 @@ case class NativeIcebergTableScanExec(
     val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
     val minPartitionNum = Shims.get.getMinPartitionNum(sparkSession)
+    // Match FilePartition packing: account for each scan range and its open cost.
     val totalBytes = tasks
-      .map(task => task.fileSizeInBytes + openCostInBytes)
+      .map(task => task.length + openCostInBytes)
       .sum
     val bytesPerCore = if (minPartitionNum > 0) totalBytes / minPartitionNum else totalBytes
 

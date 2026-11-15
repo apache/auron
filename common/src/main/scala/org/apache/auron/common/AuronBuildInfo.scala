@@ -50,6 +50,8 @@ object AuronBuildInfo {
   val UNIFFLE_VERSION_STRING: String = "Uniffle Version"
   val PAIMON_VERSION_STRING: String = "Paimon Version"
   val ICEBERG_VERSION_STRING: String = "Iceberg Version"
+  val BUILD_BRANCH_STRING: String = "Build Branch"
+  val BUILD_REVISION_STRING: String = "Build Revision"
   val BUILD_DATE_STRING: String = "Build Timestamp"
 
   val VERSION: String = props.getProperty("project.version", unknown)
@@ -62,5 +64,7 @@ object AuronBuildInfo {
   val PAIMON_VERSION: String = props.getProperty("paimon.version", unknown)
   val ICEBERG_VERSION: String = props.getProperty("iceberg.version", unknown)
   val FLINK_VERSION: String = props.getProperty("flink.version", unknown)
+  val BUILD_BRANCH: String = props.getProperty("build.branch", unknown)
+  val BUILD_REVISION: String = props.getProperty("build.revision", unknown)
   val BUILD_DATE: String = props.getProperty("build.timestamp", unknown)
 }
