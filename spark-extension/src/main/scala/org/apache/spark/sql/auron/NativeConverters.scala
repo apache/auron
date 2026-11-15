@@ -20,11 +20,13 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
+import java.time.ZoneOffset
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.math.max
 import scala.math.min
+import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.c.CDataDictionaryProvider
@@ -291,11 +293,30 @@ object NativeConverters extends Logging {
       case _ =>
     }
     val exprString = sparkExpr.toString()
+    val fromUnixTimes = sparkExpr.collect { case expr: FromUnixTime => expr }
+    fromUnixTimes.filter(_.format.foldable).foreach { expr =>
+      try {
+        expr.copy(sec = Literal(0L)).eval(null)
+      } catch {
+        case NonFatal(error) =>
+          // Spark codegen validates constant formats even when every input is null.
+          // Keep these calls in Spark rather than suppressing the error in expr.eval.
+          throw new UnsupportedOperationException(
+            "from_unixtime constant format requires Spark execution",
+            error)
+      }
+    }
+    val preserveFromUnixTimeInputs = fromUnixTimes.nonEmpty
 
     // bind all convertible children
     val convertedChildren = mutable.LinkedHashMap[pb.PhysicalExprNode, BoundReference]()
     val bound = sparkExpr.mapChildren(_.transformDown {
       case p: Literal => p
+      // Keep casts and arithmetic in Spark when from_unixtime falls back.
+      case p
+          if preserveFromUnixTimeInputs && !p.isInstanceOf[AttributeReference] &&
+            !p.isInstanceOf[BoundReference] =>
+        p
       case p =>
         try {
           val convertedChild = convertExprWithFallback(p, isPruningExpr = false, fallback)
@@ -419,8 +440,8 @@ object NativeConverters extends Logging {
     sparkExpr match {
       case e @ (_: Year | _: Month | _: DayOfMonth | _: DayOfYear | _: DayOfWeek | _: WeekOfYear |
           _: Quarter | _: Hour | _: Minute | _: Second | _: LastDay | _: NextDay | _: DateDiff |
-          _: DateAdd | _: DateSub | _: AddMonths | _: MonthsBetween | _: TruncTimestamp)
-          if !nativeDateTimeFunctionsEnabled =>
+          _: DateAdd | _: DateSub | _: AddMonths | _: MonthsBetween | _: TruncTimestamp |
+          _: FromUnixTime) if !nativeDateTimeFunctionsEnabled =>
         fallback(e)
       case e: NativeExprWrapperBase => e.wrapped
       case e: Literal =>
@@ -1044,6 +1065,8 @@ object NativeConverters extends Logging {
         buildTimePartExt("Spark_Second", e.children.head, isPruningExpr, fallback)
       case e: MonthsBetween =>
         buildMonthsBetweenExt("Spark_MonthsBetween", e, isPruningExpr, fallback)
+      case e: FromUnixTime =>
+        buildFromUnixTimeExt(e, isPruningExpr, fallback)
 
       // startswith is converted to scalar function in pruning-expr mode
       case StartsWith(expr, Literal(prefix, StringType)) if isPruningExpr =>
@@ -1520,6 +1543,78 @@ object NativeConverters extends Logging {
         Literal.create(null, StringType)
     }
     buildExtScalarFunctionNode(name, Seq(child, tzArg), IntegerType, isPruningExpr, fallback)
+  }
+
+  private def buildFromUnixTimeExt(
+      expr: FromUnixTime,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): pb.PhysicalExprNode = {
+    def nativeInput(input: Expression): Boolean = input match {
+      case _: Literal | _: AttributeReference | _: BoundReference => true
+      case cast: Cast
+          if cast.dataType == LongType &&
+            Seq(ByteType, ShortType, IntegerType, LongType).contains(cast.child.dataType) =>
+        nativeInput(cast.child)
+      case _ => false
+    }
+
+    if (expr.sec.dataType != LongType || !nativeInput(expr.sec) ||
+      SQLConf.get.getConfString("spark.sql.legacy.timeParserPolicy").equalsIgnoreCase("LEGACY")) {
+      return fallback(expr)
+    }
+    // shortcut: extend this format whitelist only with Spark comparison tests.
+    val format = expr.format match {
+      case Literal(value: UTF8String, StringType) =>
+        value.toString match {
+          case "yyyy-MM-dd HH:mm:ss" => "%Y-%m-%d %H:%M:%S"
+          case "yyyy-MM-dd" => "%Y-%m-%d"
+          case "yyyyMMdd" => "%Y%m%d"
+          case _ => return fallback(expr)
+        }
+      case _ => return fallback(expr)
+    }
+    val offset = expr.timeZoneId.map(_ => expr.zoneId.normalized()) match {
+      case Some(zone: ZoneOffset) => zone.getTotalSeconds
+      case _ => return fallback(expr)
+    }
+    val lower = -62135596800L - offset
+    val upper = 253402300800L - offset
+    val native = buildExtScalarFunctionNode(
+      "Spark_FromUnixTime",
+      Seq(expr.sec, Literal(format), Literal(offset)),
+      expr.dataType,
+      isPruningExpr,
+      fallback)
+
+    if (expr.sec.foldable) {
+      expr.sec.eval(null) match {
+        case null =>
+          return convertExprWithFallback(
+            Literal.create(null, expr.dataType),
+            isPruningExpr,
+            fallback)
+        case seconds: Long if seconds >= lower && seconds < upper => return native
+        case _ => return fallback(expr)
+      }
+    }
+    if (isPruningExpr || !singleChildFallbackEnabled) {
+      return fallback(expr)
+    }
+
+    // Spark multiplies seconds by 1000000 with wrapping overflow. Let Spark handle
+    // values outside local years 0001..9999 rather than changing their semantics.
+    val inRange =
+      And(GreaterThanOrEqual(expr.sec, Literal(lower)), LessThan(expr.sec, Literal(upper)))
+    val guarded = CaseWhen(
+      Seq(
+        IsNull(expr.sec) -> Literal.create(null, expr.dataType),
+        inRange -> Shims.get.createNativeExprWrapper(native, expr.dataType, nullable = true)),
+      Some(
+        Shims.get.createNativeExprWrapper(
+          buildSparkUdfWrapperExpr(expr, fallback),
+          expr.dataType,
+          nullable = true)))
+    convertExprWithFallback(guarded, isPruningExpr, fallback)
   }
 
   private def buildMonthsBetweenExt(
