@@ -37,6 +37,10 @@ required-features = ["nightly-bench"]
 name = "explode"
 required-features = ["nightly-bench"]
 
+[[bench]]
+name = "window_group_limit"
+required-features = ["nightly-bench"]
+
 [dependencies]
 arrow = { workspace = true }
 arrow-schema = { workspace = true }
