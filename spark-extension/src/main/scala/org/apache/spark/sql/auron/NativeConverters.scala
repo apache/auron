@@ -118,9 +118,7 @@ object NativeConverters extends Logging {
   }
 
   private def isSupportedSetArrayType(dataType: DataType): Boolean = dataType match {
-    // Spark 3.0 has different NaN deduplication behavior.
-    case ArrayType(FloatType | DoubleType, _) =>
-      SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
+    case ArrayType(FloatType | DoubleType, _) => Shims.get.hasNaNAwareArraySetOps
     case ArrayType(elementType: AtomicType, _) =>
       isTypeSupported(elementType) || elementType == BinaryType
     case ArrayType(NullType, _) => true
@@ -1200,9 +1198,7 @@ object NativeConverters extends Logging {
           if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
         buildExtScalarFunction("Spark_ArrayContains", e.children, e.dataType)
       case e: ArraysOverlap if isTypeSupported(e.left.dataType) && (e.left.dataType match {
-            // Spark 3.0's interpreted and code-generated paths compare floats differently.
-            case ArrayType(FloatType | DoubleType, _) =>
-              SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
+            case ArrayType(FloatType | DoubleType, _) => Shims.get.hasNaNAwareArraySetOps
             case ArrayType(_: AtomicType, _) => true
             case _ => false
           }) =>
