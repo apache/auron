@@ -1073,10 +1073,18 @@ mod test {
     }
 
     macro_rules! test_array_except_float {
-        ($name:ident, $arrow_type:ty, $array_type:ty, $float_type:ty, $nan_bits:expr) => {
+        (
+            $name:ident,
+            $arrow_type:ty,
+            $array_type:ty,
+            $float_type:ty,
+            $nan_bits:expr,
+            $signaling_nan_bits:expr
+        ) => {
             #[test]
             fn $name() -> Result<()> {
                 let non_canonical_nan = <$float_type>::from_bits($nan_bits);
+                let signaling_nan = <$float_type>::from_bits($signaling_nan_bits);
                 let left: ArrayRef =
                     Arc::new(ListArray::from_iter_primitive::<$arrow_type, _, _>(vec![
                         Some(vec![
@@ -1089,22 +1097,43 @@ mod test {
                             Some(1.0),
                         ]),
                         Some(vec![Some(non_canonical_nan), Some(2.0)]),
+                        Some(vec![
+                            Some(<$float_type>::NAN),
+                            Some(-<$float_type>::NAN),
+                            Some(0.0),
+                            Some(-0.0),
+                            Some(3.0),
+                        ]),
+                        Some(vec![Some(<$float_type>::NAN), Some(4.0)]),
+                        Some(vec![Some(non_canonical_nan), Some(5.0)]),
+                        Some(vec![None, Some(non_canonical_nan), Some(6.0)]),
                     ]));
                 let right: ArrayRef =
                     Arc::new(ListArray::from_iter_primitive::<$arrow_type, _, _>(vec![
                         Some(vec![Some(0.0)]),
                         Some(vec![Some(<$float_type>::NAN)]),
+                        Some(vec![Some(non_canonical_nan), Some(-0.0)]),
+                        Some(vec![Some(-non_canonical_nan)]),
+                        Some(vec![Some(signaling_nan)]),
+                        Some(vec![None]),
                     ]));
                 let result =
                     array_except(&[ColumnarValue::Array(left), ColumnarValue::Array(right)])?
-                        .into_array(2)?;
+                        .into_array(6)?;
                 let list = downcast_any!(&result, ListArray)?;
                 let values = downcast_any!(list.values(), $array_type)?;
-                assert_eq!(list.value_offsets(), &[0, 3, 4]);
+                assert_eq!(list.value_offsets(), &[0, 3, 4, 6, 7, 8, 10]);
+                assert_eq!(values.null_count(), 0);
                 assert_eq!(values.value(0).to_bits(), (-0.0 as $float_type).to_bits());
                 assert_eq!(values.value(1).to_bits(), <$float_type>::NAN.to_bits());
                 assert_eq!(values.value(2), 1.0);
                 assert_eq!(values.value(3), 2.0);
+                assert_eq!(values.value(4).to_bits(), (0.0 as $float_type).to_bits());
+                assert_eq!(values.value(5), 3.0);
+                assert_eq!(values.value(6), 4.0);
+                assert_eq!(values.value(7), 5.0);
+                assert_eq!(values.value(8).to_bits(), <$float_type>::NAN.to_bits());
+                assert_eq!(values.value(9), 6.0);
                 Ok(())
             }
         };
@@ -1115,14 +1144,16 @@ mod test {
         Float32Type,
         Float32Array,
         f32,
-        0x7fc0_0001
+        0x7fc0_0001,
+        0x7f80_0001
     );
     test_array_except_float!(
         test_array_except_f64,
         Float64Type,
         Float64Array,
         f64,
-        0x7ff8_0000_0000_0001
+        0x7ff8_0000_0000_0001,
+        0x7ff0_0000_0000_0001
     );
 
     #[test]
