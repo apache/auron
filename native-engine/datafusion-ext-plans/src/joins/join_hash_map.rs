@@ -132,7 +132,11 @@ impl Table {
             "join hash table: number of rows exceeded 2^30: {num_rows}"
         );
 
-        let key_is_valid = |row_idx| key_columns.iter().all(|col| col.is_valid(row_idx));
+        let key_nulls: Vec<_> = key_columns
+            .iter()
+            .filter_map(|col| col.logical_nulls())
+            .collect();
+        let key_is_valid = |row_idx| key_nulls.iter().all(|nulls| nulls.is_valid(row_idx));
         let mut mapped_indices = unchecked!(vec![]);
         let mut num_valid_items = 0;
 

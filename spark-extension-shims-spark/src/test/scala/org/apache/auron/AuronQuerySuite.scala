@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
+import org.apache.spark.sql.types.{NullType, StructType}
 
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
@@ -1144,6 +1145,28 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
           assert(bhj.metrics("hybrid_join_time").value > 0)
           bhj
         }.isDefined)
+      }
+    }
+  }
+
+  test("NOT IN subquery with VOID join keys") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempView("not_in_void_keys") {
+        spark
+          .createDataFrame(
+            java.util.Arrays.asList(Row(null)),
+            new StructType().add("k", NullType))
+          .createOrReplaceTempView("not_in_void_keys")
+        val df = sql("""
+            |SELECT k FROM not_in_void_keys
+            |WHERE k NOT IN (SELECT k FROM not_in_void_keys)
+            |""".stripMargin)
+        checkAnswer(df, Seq.empty)
+        if (AuronTestUtils.isSparkV31OrGreater) {
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+          }.isDefined)
+        }
       }
     }
   }

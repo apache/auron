@@ -1119,7 +1119,7 @@ async fn get_cached_join_hash_map<Fut: Future<Output = Result<CollectJoinHashMap
 #[cfg(test)]
 mod fuzztest {
     use arrow::{
-        array::{Array, ArrayRef, Int32Array},
+        array::{Array, ArrayRef, Int32Array, NullArray},
         datatypes::{Field, Schema},
     };
     use auron_memmgr::MemManager;
@@ -1430,6 +1430,40 @@ mod fuzztest {
                     "build={values:?}, path={path}",
                 );
             }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn null_aware_anti_join_void_keys() -> Result<()> {
+        MemManager::init(10_000_000);
+        let schema = Arc::new(Schema::new(vec![Field::new("k", DataType::Null, true)]));
+        let key = Arc::new(Column::new("k", 0)) as PhysicalExprRef;
+        let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(NullArray::new(1))])?;
+        for hybrid in [false, true] {
+            let built = if hybrid {
+                Arc::new(TestMemoryExec::try_new(
+                    &[build_bucketed_group_batches(batch.clone(), key.clone(), 1)?],
+                    join_hash_map_schema(&schema),
+                    None,
+                )?) as Arc<dyn ExecutionPlan>
+            } else {
+                memory(batch.clone())
+            };
+            let join = BroadcastJoinExec::try_new(
+                schema.clone(),
+                memory(batch.clone()),
+                built,
+                vec![(key.clone(), key.clone())],
+                JoinType::LeftAnti,
+                JoinSide::Right,
+                hybrid,
+                None,
+                true,
+                None,
+            )?;
+            let output = collect(join.execute(0, SessionContext::new().task_ctx())?).await?;
+            assert!(output.iter().all(|batch| batch.num_rows() == 0));
         }
         Ok(())
     }

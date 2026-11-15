@@ -429,6 +429,13 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
     }
 
     fn can_early_stop(&self) -> bool {
+        if self.join_params.is_null_aware_anti_join
+            && get_joiner(P).mode == Anti
+            && get_joiner(P).probe_is_join_side
+            && self.map.has_null_keys()
+        {
+            return true;
+        }
         if !get_joiner(P).probe_is_join_side && self.map_joined.all() {
             // semi join: map is join side and all items are joined
             return true;
