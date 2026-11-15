@@ -23,8 +23,7 @@ use arrow::{
         make_array,
     },
     buffer::{NullBuffer, OffsetBuffer, ScalarBuffer},
-    compute::kernels::arity::unary,
-    datatypes::{DataType, Field, Float32Type, Float64Type},
+    datatypes::{DataType, Field},
     row::{RowConverter, SortField},
 };
 use datafusion::{
@@ -35,26 +34,8 @@ use datafusion_ext_commons::{
     arrow::eq_comparator::{DynEqComparator, make_eq_comparator},
     df_execution_err, downcast_any,
     scalar_value::compacted_scalar_value_from_array,
-    spark_float::spark_float_cmp,
+    spark_float::{canonicalize_nans, spark_float_cmp},
 };
-
-// Spark canonicalizes NaNs but keeps signed zeros distinct before Spark 4.2's
-// normalization.
-fn canonicalize_nans(values: &ArrayRef) -> Result<ArrayRef> {
-    Ok(match values.data_type() {
-        DataType::Float32 => Arc::new(Float32Array::from_iter(
-            downcast_any!(values, Float32Array)?
-                .iter()
-                .map(|v| v.map(|v| if v.is_nan() { f32::NAN } else { v })),
-        )),
-        DataType::Float64 => Arc::new(Float64Array::from_iter(
-            downcast_any!(values, Float64Array)?
-                .iter()
-                .map(|v| v.map(|v| if v.is_nan() { f64::NAN } else { v })),
-        )),
-        _ => Arc::clone(values),
-    })
-}
 
 pub fn array_distinct(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 1 {
@@ -359,25 +340,7 @@ pub fn arrays_overlap(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let converter = RowConverter::new(vec![SortField::new(element_type.clone())])?;
     let element_rows = lists
         .iter()
-        .map(|list| {
-            // Spark's boxed floats equate NaNs but distinguish signed zeros.
-            let values: ArrayRef = match element_type {
-                DataType::Float32 => Arc::new(unary::<_, _, Float32Type>(
-                    downcast_any!(list.values(), Float32Array)?,
-                    |v| {
-                        if v.is_nan() { f32::NAN } else { v }
-                    },
-                )),
-                DataType::Float64 => Arc::new(unary::<_, _, Float64Type>(
-                    downcast_any!(list.values(), Float64Array)?,
-                    |v| {
-                        if v.is_nan() { f64::NAN } else { v }
-                    },
-                )),
-                _ => list.values().clone(),
-            };
-            Ok(converter.convert_columns(&[values])?)
-        })
+        .map(|list| Ok(converter.convert_columns(&[canonicalize_nans(list.values())?])?))
         .collect::<Result<Vec<_>>>()?;
 
     let mut seen = HashSet::new();
