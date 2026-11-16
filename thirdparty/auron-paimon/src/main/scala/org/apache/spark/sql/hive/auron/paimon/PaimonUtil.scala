@@ -59,22 +59,11 @@ object PaimonUtil extends Logging {
     }
   }
 
-  // Paimon 1.4 (apache/paimon#7098) changed the value of the `__paimon_file_path` metadata
-  // column from `path.toUri.toString` to `path.toString`. Both differ only for paths with
-  // characters that need escaping (e.g. a `%` in a partition value), so follow the Paimon
-  // version that is actually on the classpath to keep results identical to Paimon reads.
-  private lazy val fileMetadataPathUsesUri: Boolean = {
-    val version = Option(classOf[FileStoreTable].getPackage)
-      .flatMap(p => Option(p.getImplementationVersion))
-      .getOrElse("")
-    val majorMinor = version.split("[.-]").take(2).flatMap(s => scala.util.Try(s.toInt).toOption)
-    majorMinor match {
-      case Array(major, minor) => major < 1 || (major == 1 && minor < 4)
-      case _ => false
-    }
-  }
-
-  def metadataFilePath(path: Path): String = {
-    if (fileMetadataPathUsesUri) path.toUri.toString else path.toString
-  }
+  /**
+   * Value of the `__paimon_file_path` metadata column for a data file. Paimon 1.4
+   * (apache/paimon#7098) changed it from `path.toUri.toString` to `path.toString`. Both differ
+   * only for paths with characters that need escaping (e.g. a `%` in a partition value), so the
+   * format is chosen at build time by the Paimon version the module is compiled against.
+   */
+  def metadataFilePath(path: Path): String = PaimonFilePathFormat.format(path)
 }
