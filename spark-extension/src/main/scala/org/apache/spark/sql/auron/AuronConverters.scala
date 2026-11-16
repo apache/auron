@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.spark.Partition
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeTag, isNeverConvert, neverConvertReasonTag, requiredReservedOrderTag}
+import org.apache.spark.sql.auron.AuronConvertStrategy.{childOrderingRequiredTag, convertibleTag, convertStrategyTag, convertToNonNativeReasonTag, convertToNonNativeTag, isNeverConvert, neverConvertReasonTag, requiredReservedOrderTag}
 import org.apache.spark.sql.auron.NativeConverters.{existTimestampType, isTypeSupported, roundRobinTypeSupported, StubExpr}
 import org.apache.spark.sql.auron.join.JoinBuildSides
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
@@ -95,6 +95,7 @@ import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.EmptyPartitionsExecNode
 import org.apache.auron.protobuf.PhysicalPlanNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
+import org.apache.auron.spark.ui.AuronFallbackReason
 
 object AuronConverters extends Logging {
   def enableScan: Boolean = SparkAuronConfiguration.ENABLE_SCAN.get()
@@ -203,6 +204,9 @@ object AuronConverters extends Logging {
       exec.getTagValue(convertibleTag).foreach(newExec.setTagValue(convertibleTag, _))
       exec.getTagValue(convertStrategyTag).foreach(newExec.setTagValue(convertStrategyTag, _))
       exec
+        .getTagValue(convertToNonNativeReasonTag)
+        .foreach(newExec.setTagValue(convertToNonNativeReasonTag, _))
+      exec
         .getTagValue(childOrderingRequiredTag)
         .foreach(newExec.setTagValue(childOrderingRequiredTag, _))
       exec
@@ -268,6 +272,9 @@ object AuronConverters extends Logging {
                 .getOrElse(err.toString)
                 .replaceFirst("^assertion failed: ?", "")
             exec.setTagValue(convertToNonNativeTag, true)
+            exec.setTagValue(
+              convertToNonNativeReasonTag,
+              AuronFallbackReason.conversionFailure(exec.getClass.getSimpleName, msg))
             exec.setTagValue(convertibleTag, false)
             exec.setTagValue(convertStrategyTag, NeverConvert)
             exec.setTagValue(neverConvertReasonTag, msg)
@@ -369,6 +376,9 @@ object AuronConverters extends Logging {
         } catch {
           case e @ (_: NotImplementedError | _: AssertionError | _: Exception) =>
             exec.setTagValue(convertToNonNativeTag, true)
+            exec.setTagValue(
+              convertToNonNativeReasonTag,
+              AuronFallbackReason.conversionFailure(exec.getClass.getSimpleName, e.getMessage))
             exec.setTagValue(convertibleTag, false)
             exec.setTagValue(convertStrategyTag, NeverConvert)
             exec.setTagValue(
@@ -757,7 +767,8 @@ object AuronConverters extends Logging {
         Shims.get.getIsSkewJoinFromSHJ(exec),
         requiredReservedOrder)
     } catch {
-      case _ if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN) =>
+      case error
+          if sparkAuronConfig.getBoolean(SparkAuronConfiguration.FORCE_SHUFFLED_HASH_JOIN) =>
         logWarning(
           "in forceShuffledHashJoin mode, hash joins are likely too run OOM because of " +
             "small on-heap memory configuration. to avoid this, we will fall back this " +
@@ -790,6 +801,9 @@ object AuronConverters extends Logging {
         val smj =
           SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, leftSorted, rightSorted)
         smj.setTagValue(convertToNonNativeTag, true)
+        smj.setTagValue(
+          convertToNonNativeReasonTag,
+          s"Auron used SortMergeJoin instead. ${AuronFallbackReason.conversionFailure(exec.getClass.getSimpleName, error.getMessage)}")
         smj
     }
   }
@@ -1041,6 +1055,9 @@ object AuronConverters extends Logging {
               s"${e.getMessage}")
           val proj = ProjectExec(exec.resultExpressions, nativeAggr)
           proj.setTagValue(convertToNonNativeTag, true)
+          proj.setTagValue(
+            convertToNonNativeReasonTag,
+            AuronFallbackReason.conversionFailure(proj.getClass.getSimpleName, e.getMessage))
           return proj
       }
     }
@@ -1102,6 +1119,9 @@ object AuronConverters extends Logging {
               s"${e.getMessage}")
           val proj = ProjectExec(exec.resultExpressions, nativeAggr)
           proj.setTagValue(convertToNonNativeTag, true)
+          proj.setTagValue(
+            convertToNonNativeReasonTag,
+            AuronFallbackReason.conversionFailure(proj.getClass.getSimpleName, e.getMessage))
           return proj
       }
     }
@@ -1156,6 +1176,9 @@ object AuronConverters extends Logging {
               s"${e.getMessage}")
           val proj = ProjectExec(exec.resultExpressions, nativeAggr)
           proj.setTagValue(convertToNonNativeTag, true)
+          proj.setTagValue(
+            convertToNonNativeReasonTag,
+            AuronFallbackReason.conversionFailure(proj.getClass.getSimpleName, e.getMessage))
           return proj
       }
     }

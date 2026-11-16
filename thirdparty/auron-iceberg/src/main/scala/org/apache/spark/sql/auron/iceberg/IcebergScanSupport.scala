@@ -114,7 +114,10 @@ object IcebergScanSupport extends Logging {
     }
 
     val isChangelogScan = scan.getClass.getName == SparkChangelogScanClassName
-    if (collectUnsupportedMetadataColumns(scan.readSchema, isChangelogScan).nonEmpty) {
+    // shortcut: also exclude files with IDs until native scans can honor name mapping.
+    if (AuronIcebergSourceUtil.hasNameMapping(scan.asInstanceOf[AnyRef])) {
+      Some("Iceberg name mapping (schema.name-mapping.default) is not supported by native scans.")
+    } else if (collectUnsupportedMetadataColumns(scan.readSchema, isChangelogScan).nonEmpty) {
       Some("Has per-row materialization (for example _pos).")
     } else {
       val unsupportedFields = collectUnsupportedDataTypeFields(scan.readSchema, isChangelogScan)
@@ -166,12 +169,12 @@ object IcebergScanSupport extends Logging {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
-    if (scanClassName == SparkChangelogScanClassName) {
-      return planChangelogScan(exec, scan, useRuntimeFilters)
+    if (!isIcebergScan(scan) || fallbackReason(exec).nonEmpty) {
+      return None
     }
 
-    if (!AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan)) {
-      return None
+    if (scanClassName == SparkChangelogScanClassName) {
+      return planChangelogScan(exec, scan, useRuntimeFilters)
     }
 
     planFileScan(exec, scan, scanClassName, useRuntimeFilters)

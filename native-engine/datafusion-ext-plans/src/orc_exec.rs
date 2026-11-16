@@ -476,35 +476,29 @@ fn convert_predicate_to_orc(
     convert_expr_to_orc(&predicate, file_schema)
 }
 
-/// Recursively collect all AND sub-conditions and flatten nested AND
-/// structures.
+/// Flatten AND conditions, omitting unsupported conjuncts only outside NOT.
 fn collect_and_predicates(
-    expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+    expr: &PhysicalExprRef,
     schema: &SchemaRef,
     predicates: &mut Vec<Predicate>,
-) {
-    // Handle short-circuit AND expression (SCAndExpr)
+    allow_partial_and: bool,
+) -> bool {
     if let Some(sc_and) = expr.downcast_ref::<SCAndExpr>() {
-        // Recursively collect AND sub-conditions from both sides
-        collect_and_predicates(&sc_and.left, schema, predicates);
-        collect_and_predicates(&sc_and.right, schema, predicates);
-        return;
+        return collect_and_predicates(&sc_and.left, schema, predicates, allow_partial_and)
+            && collect_and_predicates(&sc_and.right, schema, predicates, allow_partial_and);
     }
-
-    // Handle BinaryExpr with AND operator
     if let Some(binary) = expr.downcast_ref::<BinaryExpr>()
         && matches!(binary.op(), Operator::And)
     {
-        // Recursively collect AND sub-conditions from both sides
-        collect_and_predicates(binary.left(), schema, predicates);
-        collect_and_predicates(binary.right(), schema, predicates);
-        return;
+        return collect_and_predicates(binary.left(), schema, predicates, allow_partial_and)
+            && collect_and_predicates(binary.right(), schema, predicates, allow_partial_and);
     }
-
-    // Not an AND expression, convert the whole expression
-    // (could be OR, comparison, IS NULL, etc.)
-    if let Some(pred) = convert_expr_to_orc(expr, schema) {
-        predicates.push(pred);
+    match convert_expr_to_orc_with_partial_and(expr, schema, allow_partial_and) {
+        Some(predicate) => {
+            predicates.push(predicate);
+            true
+        }
+        None => allow_partial_and,
     }
 }
 
@@ -517,17 +511,18 @@ fn collect_and_predicates(
 /// (`true_filter => pushed`). Dropping a disjunct narrows the OR into a subset
 /// of the true filter, which makes the reader skip row groups that actually
 /// contain matching rows. (Dropping AND conjuncts only loosens the predicate,
-/// so that stays safe.)
+/// so that stays safe outside negation.)
 fn collect_or_predicates(
     expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
     schema: &SchemaRef,
     predicates: &mut Vec<Predicate>,
+    allow_partial_and: bool,
 ) -> bool {
     // Handle short-circuit OR expression (SCOrExpr)
     if let Some(sc_or) = expr.downcast_ref::<SCOrExpr>() {
         // Recursively collect OR sub-conditions from both sides
-        return collect_or_predicates(&sc_or.left, schema, predicates)
-            && collect_or_predicates(&sc_or.right, schema, predicates);
+        return collect_or_predicates(&sc_or.left, schema, predicates, allow_partial_and)
+            && collect_or_predicates(&sc_or.right, schema, predicates, allow_partial_and);
     }
 
     // Handle BinaryExpr with OR operator
@@ -535,14 +530,14 @@ fn collect_or_predicates(
         && matches!(binary.op(), Operator::Or)
     {
         // Recursively collect OR sub-conditions from both sides
-        return collect_or_predicates(binary.left(), schema, predicates)
-            && collect_or_predicates(binary.right(), schema, predicates);
+        return collect_or_predicates(binary.left(), schema, predicates, allow_partial_and)
+            && collect_or_predicates(binary.right(), schema, predicates, allow_partial_and);
     }
 
     // Not an OR expression, convert the whole expression as a single disjunct
     // (could be AND, comparison, IS NULL, etc.). If it cannot be converted, the
     // entire OR is unpushable.
-    match convert_expr_to_orc(expr, schema) {
+    match convert_expr_to_orc_with_partial_and(expr, schema, allow_partial_and) {
         Some(pred) => {
             predicates.push(pred);
             true
@@ -551,14 +546,21 @@ fn collect_or_predicates(
     }
 }
 
-fn convert_expr_to_orc(
-    expr: &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+fn convert_expr_to_orc(expr: &PhysicalExprRef, schema: &SchemaRef) -> Option<Predicate> {
+    convert_expr_to_orc_with_partial_and(expr, schema, true)
+}
+
+fn convert_expr_to_orc_with_partial_and(
+    expr: &PhysicalExprRef,
     schema: &SchemaRef,
+    allow_partial_and: bool,
 ) -> Option<Predicate> {
     // Handle top-level short-circuit AND expression (SCAndExpr)
     if let Some(_sc_and) = expr.downcast_ref::<SCAndExpr>() {
         let mut predicates = Vec::new();
-        collect_and_predicates(expr, schema, &mut predicates);
+        if !collect_and_predicates(expr, schema, &mut predicates, allow_partial_and) {
+            return None;
+        }
 
         if predicates.is_empty() {
             return None;
@@ -579,7 +581,7 @@ fn convert_expr_to_orc(
     // Handle top-level short-circuit OR expression (SCOrExpr)
     if let Some(_sc_or) = expr.downcast_ref::<SCOrExpr>() {
         let mut predicates = Vec::new();
-        if !collect_or_predicates(expr, schema, &mut predicates) {
+        if !collect_or_predicates(expr, schema, &mut predicates, allow_partial_and) {
             // an OR disjunct could not be converted: pushing a narrowed
             // predicate would skip row groups holding matching rows
             return None;
@@ -605,7 +607,9 @@ fn convert_expr_to_orc(
     if let Some(binary) = expr.downcast_ref::<BinaryExpr>() {
         if matches!(binary.op(), Operator::And) {
             let mut predicates = Vec::new();
-            collect_and_predicates(expr, schema, &mut predicates);
+            if !collect_and_predicates(expr, schema, &mut predicates, allow_partial_and) {
+                return None;
+            }
 
             if predicates.is_empty() {
                 return None;
@@ -626,7 +630,7 @@ fn convert_expr_to_orc(
         // Handle top-level OR expression (BinaryExpr with OR operator)
         if matches!(binary.op(), Operator::Or) {
             let mut predicates = Vec::new();
-            if !collect_or_predicates(expr, schema, &mut predicates) {
+            if !collect_or_predicates(expr, schema, &mut predicates, allow_partial_and) {
                 // an OR disjunct could not be converted: pushing a narrowed
                 // predicate would skip row groups holding matching rows
                 return None;
@@ -691,7 +695,11 @@ fn convert_expr_to_orc_internal(
 
     // Handle NOT expressions (WHERE NOT condition)
     if let Some(not_expr) = expr.downcast_ref::<NotExpr>() {
-        if let Some(inner_pred) = convert_expr_to_orc(not_expr.arg(), schema) {
+        // Weakening p to q is safe for positive pruning, but NOT(q) is stronger
+        // than NOT(p). Preserve every conjunct beneath NOT, even inside OR.
+        if let Some(inner_pred) =
+            convert_expr_to_orc_with_partial_and(not_expr.arg(), schema, false)
+        {
             return Some(Predicate::not(inner_pred));
         }
         return None;
@@ -723,11 +731,10 @@ fn convert_expr_to_orc_internal(
             // Convert IN to multiple OR conditions: col = val1 OR col = val2 OR ...
             let mut predicates = Vec::new();
             for list_expr in in_list.list() {
-                if let Some(lit) = list_expr.downcast_ref::<Literal>()
-                    && let Some(pred_value) = convert_scalar_value(lit.value())
-                {
-                    predicates.push(Predicate::eq(col_name, pred_value));
-                }
+                // IN is an OR of equalities: dropping an item can lose matches.
+                let lit = list_expr.downcast_ref::<Literal>()?;
+                let pred_value = convert_scalar_value(lit.value())?;
+                predicates.push(Predicate::eq(col_name, pred_value));
             }
 
             if predicates.is_empty() {
@@ -841,6 +848,161 @@ mod tests {
     };
 
     use super::*;
+
+    fn filtered_indexed_orc_values(expr: PhysicalExprRef) -> Vec<i32> {
+        use arrow::array::{Array, Int32Array};
+        use datafusion::common::cast::as_boolean_array;
+
+        // One indexed row group: [NULL, 1, 2, 3], written by Apache ORC 1.9.8.
+        let bytes = Bytes::from_static(include_bytes!("../test-data/mixed-null.orc"));
+        let mut builder =
+            ArrowReaderBuilder::try_new(bytes).expect("indexed ORC fixture should open");
+        let schema = builder.schema();
+        if let Some(predicate) = convert_predicate_to_orc(Some(expr.clone()), &schema) {
+            builder = builder.with_predicate(predicate);
+        }
+        builder
+            .build()
+            .flat_map(|batch| {
+                let batch = batch.expect("indexed ORC fixture should decode");
+                let selected = expr
+                    .evaluate(&batch)
+                    .expect("test predicate should evaluate")
+                    .into_array(batch.num_rows())
+                    .expect("predicate result should match the batch length");
+                let filtered = arrow::compute::filter_record_batch(
+                    &batch,
+                    as_boolean_array(&selected).expect("predicate result should be Boolean"),
+                )
+                .expect("predicate should filter the batch");
+                filtered
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .expect("fixture id column should be Int32")
+                    .iter()
+                    .map(|id| id.expect("test predicate should exclude NULL ids"))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    fn id_comparison(op: Operator, value: i32) -> PhysicalExprRef {
+        Arc::new(BinaryExpr::new(
+            Arc::new(Column::new("id", 0)),
+            op,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(value)))),
+        ))
+    }
+
+    fn unsupported_id_comparison() -> PhysicalExprRef {
+        // (id + 1) = 3 cannot be evaluated from ORC statistics.
+        Arc::new(BinaryExpr::new(
+            Arc::new(BinaryExpr::new(
+                Arc::new(Column::new("id", 0)),
+                Operator::Plus,
+                Arc::new(Literal::new(ScalarValue::Int32(Some(1)))),
+            )),
+            Operator::Eq,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(3)))),
+        ))
+    }
+
+    #[test]
+    fn indexed_orc_negation_uses_patched_reader_semantics() {
+        // These cases are already fixed by the public orc-rust vendor patch.
+        let expr = Arc::new(NotExpr::new(id_comparison(Operator::Eq, 1)));
+        assert_eq!(filtered_indexed_orc_values(expr), vec![2, 3]);
+        let expr = Arc::new(IsNotNullExpr::new(Arc::new(Column::new("id", 0))));
+        assert_eq!(filtered_indexed_orc_values(expr), vec![1, 2, 3]);
+    }
+
+    fn partial_and(short_circuit: bool) -> PhysicalExprRef {
+        let left = id_comparison(Operator::Lt, 4);
+        let right = unsupported_id_comparison();
+        if short_circuit {
+            Arc::new(SCAndExpr::new(left, right))
+        } else {
+            Arc::new(BinaryExpr::new(left, Operator::And, right))
+        }
+    }
+
+    #[test]
+    fn indexed_orc_not_must_not_drop_an_and_conjunct() {
+        for short_circuit in [false, true] {
+            // NOT(id < 4 AND id + 1 = 3) matches 1 and 3.
+            // Dropping the second conjunct pushes NOT(id < 4), losing the group.
+            let expr = Arc::new(NotExpr::new(partial_and(short_circuit)));
+            assert!(convert_predicate_to_orc(Some(expr.clone()), &create_test_schema()).is_none());
+            assert_eq!(filtered_indexed_orc_values(expr), vec![1, 3]);
+        }
+    }
+
+    #[test]
+    fn indexed_orc_not_preserves_conjuncts_below_or() {
+        for short_circuit in [false, true] {
+            let left = partial_and(short_circuit);
+            let right = id_comparison(Operator::Eq, 99);
+            let inner: PhysicalExprRef = if short_circuit {
+                Arc::new(SCOrExpr::new(left, right))
+            } else {
+                Arc::new(BinaryExpr::new(left, Operator::Or, right))
+            };
+            let expr = Arc::new(NotExpr::new(inner));
+            assert_eq!(filtered_indexed_orc_values(expr), vec![1, 3]);
+        }
+    }
+
+    #[test]
+    fn indexed_orc_in_list_keeps_nonliteral_items() {
+        for double_negation in [false, true] {
+            let column: PhysicalExprRef = Arc::new(Column::new("id", 0));
+            let inner = in_list(
+                column.clone(),
+                vec![Arc::new(Literal::new(ScalarValue::Int32(Some(99)))), column],
+                &double_negation,
+                &create_test_schema(),
+            )
+            .expect("test IN expression should be valid");
+            let expr = if double_negation {
+                Arc::new(NotExpr::new(inner)) as PhysicalExprRef
+            } else {
+                inner
+            };
+            assert_eq!(filtered_indexed_orc_values(expr), vec![1, 2, 3]);
+        }
+    }
+
+    #[test]
+    fn indexed_orc_still_pushes_safe_and_siblings_and_exact_not() {
+        for short_circuit in [false, true] {
+            let left = id_comparison(Operator::Eq, 1);
+            let right: PhysicalExprRef = Arc::new(NotExpr::new(partial_and(short_circuit)));
+            let expr: PhysicalExprRef = if short_circuit {
+                Arc::new(SCAndExpr::new(left, right))
+            } else {
+                Arc::new(BinaryExpr::new(left, Operator::And, right))
+            };
+            let pushed = convert_predicate_to_orc(Some(expr.clone()), &create_test_schema());
+            assert_eq!(
+                pushed,
+                Some(Predicate::eq("id", PredicateValue::Int32(Some(1))))
+            );
+            assert_eq!(filtered_indexed_orc_values(expr), vec![1]);
+        }
+        let exact_not = Arc::new(NotExpr::new(id_comparison(Operator::Lt, 4)));
+        let predicate = convert_predicate_to_orc(Some(exact_not), &create_test_schema())
+            .expect("fully supported NOT predicate should be pushed down");
+        let bytes = Bytes::from_static(include_bytes!("../test-data/mixed-null.orc"));
+        assert_eq!(
+            ArrowReaderBuilder::try_new(bytes)
+                .expect("indexed ORC fixture should open")
+                .with_predicate(predicate)
+                .build()
+                .count(),
+            0
+        );
+    }
 
     fn create_test_schema() -> SchemaRef {
         Arc::new(Schema::new(vec![
