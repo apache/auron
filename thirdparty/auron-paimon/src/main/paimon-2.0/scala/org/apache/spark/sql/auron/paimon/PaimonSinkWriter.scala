@@ -16,33 +16,37 @@
  */
 package org.apache.spark.sql.auron.paimon
 
+import java.io.ByteArrayInputStream
 import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.paimon.data.{BinaryRow, GenericRow}
+import org.apache.arrow.vector.ipc.ArrowStreamReader
+import org.apache.paimon.data.BinaryRow
 import org.apache.paimon.data.serializer.InternalRowSerializer
 import org.apache.paimon.format.{FileFormat, SimpleStatsExtractor}
 import org.apache.paimon.fs.{FileIO, Path}
 import org.apache.paimon.io.{CompactIncrement, DataFileMeta, DataFilePathFactory, DataIncrement}
 import org.apache.paimon.manifest.FileSource
+import org.apache.paimon.spark.{SparkInternalRowWrapper, SparkTypeUtils}
 import org.apache.paimon.stats.SimpleStatsConverter
 import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.table.sink.{CommitMessage, CommitMessageImpl}
 import org.apache.paimon.types.RowType
 import org.apache.paimon.utils.StatsCollectorFactories
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils
+import org.apache.spark.sql.execution.auron.columnar.ColumnarHelper
 import org.apache.spark.sql.execution.auron.plan.PaimonSinkTaskHandler
 
 /**
  * Task side of the native Paimon sink. Hands out data file paths and turns the files written by
  * the native sink into Paimon commit messages.
  *
- * The partition of a file is not passed from native code: Paimon data files contain the partition
- * columns, so it is read back from the file statistics (min == max) together with the column
- * statistics Paimon stores in the manifest. This keeps the native/JVM interface free of any
- * Paimon specific encoding.
+ * The native sink passes the partition values of every file as a one row Arrow IPC stream of the
+ * partition columns. They are not derived from the footer statistics, which parquet truncates (64
+ * bytes for strings by default).
  */
 class PaimonSinkWriter(table: FileStoreTable) extends PaimonSinkTaskHandler with Logging {
 
@@ -54,6 +58,7 @@ class PaimonSinkWriter(table: FileStoreTable) extends PaimonSinkTaskHandler with
   private val partitionType: RowType = table.schema().logicalPartitionType()
   private val partitionIndexes: Array[Int] =
     partitionKeys.map(k => rowType.getFieldNames.indexOf(k)).toArray
+  private val sparkPartitionType = SparkTypeUtils.fromPaimonRowType(partitionType)
 
   // files are first written into a task scoped staging directory and moved into their
   // partition/bucket directory once the partition is known
@@ -73,44 +78,46 @@ class PaimonSinkWriter(table: FileStoreTable) extends PaimonSinkTaskHandler with
       .orElseThrow(() => new IllegalStateException("parquet stats extractor is not available"))
   }
   private val statsConverter = new SimpleStatsConverter(rowType, options.statsDenseStore())
-  // partition stats are always collected so the partition can be derived from the file
-  private val partitionStatsExtractor: SimpleStatsExtractor = FileFormat
-    .fromIdentifier(options.fileFormatString(), options.toConfiguration)
-    .createStatsExtractor(
-      rowType,
-      StatsCollectorFactories.createStatsFactories("full", options, rowType.getFieldNames))
-    .orElseThrow(() => new IllegalStateException("parquet stats extractor is not available"))
-
   private val partitionSerializer = new InternalRowSerializer(partitionType)
 
   private val newFiles = mutable.LinkedHashMap[BinaryRow, mutable.ArrayBuffer[DataFileMeta]]()
+  // every file moved out of the staging directory, deleted when the task is aborted
+  private val movedFiles = mutable.ArrayBuffer[Path]()
   // sequence numbers are only meaningful per bucket for unaware-bucket append tables and are
   // assigned at commit time for row tracking; keep them monotonic within the task like Paimon
   private var nextSequenceNumber = 0L
 
   override def nextOutputPath(): String = stagingFileFactory.newPath().toString
 
-  override def completeFile(path: String, numRows: Long, numBytes: Long): Unit = {
+  override def completeFile(
+      path: String,
+      numRows: Long,
+      numBytes: Long,
+      partitionValues: Array[Byte]): Unit = {
     val stagingPath = new Path(path)
     if (numRows == 0) {
       fileIO.deleteQuietly(stagingPath)
       return
     }
-    val partition = derivePartition(stagingPath, numBytes)
+    // validate the file while it is still in the staging directory, so that a file failing
+    // validation is removed together with the staging directory
+    val fileInfo = statsExtractor.extractWithFileInfo(fileIO, stagingPath, numBytes)
+    val rowCount = fileInfo.getRight.getRowCount
+    if (rowCount != numRows) {
+      throw new IllegalStateException(
+        s"row count mismatch for $stagingPath: native sink reported $numRows, footer $rowCount")
+    }
+    val statsPair = statsConverter.toBinary(fileInfo.getLeft)
+    val partition = decodePartition(partitionValues)
+
     val bucketPath = table.store().pathFactory().bucketPath(partition, 0)
     val finalPath = new Path(bucketPath, stagingPath.getName)
     fileIO.mkdirs(bucketPath)
     if (!fileIO.rename(stagingPath, finalPath)) {
       throw new IllegalStateException(s"failed to move $stagingPath to $finalPath")
     }
+    movedFiles += finalPath
 
-    val fileInfo = statsExtractor.extractWithFileInfo(fileIO, finalPath, numBytes)
-    val statsPair = statsConverter.toBinary(fileInfo.getLeft)
-    val rowCount = fileInfo.getRight.getRowCount
-    if (rowCount != numRows) {
-      throw new IllegalStateException(
-        s"row count mismatch for $finalPath: native sink reported $numRows, footer $rowCount")
-    }
     val minSeq = nextSequenceNumber
     nextSequenceNumber += rowCount
     val meta = DataFileMeta.forAppend(
@@ -150,10 +157,8 @@ class PaimonSinkWriter(table: FileStoreTable) extends PaimonSinkTaskHandler with
 
   /** Deletes staged and moved files of this task, used when the task fails. */
   def abort(): Unit = {
-    newFiles.foreach { case (partition, files) =>
-      val bucketPath = table.store().pathFactory().bucketPath(partition, 0)
-      files.foreach(f => fileIO.deleteQuietly(new Path(bucketPath, f.fileName())))
-    }
+    movedFiles.foreach(fileIO.deleteQuietly)
+    movedFiles.clear()
     newFiles.clear()
     cleanupStaging()
   }
@@ -166,25 +171,29 @@ class PaimonSinkWriter(table: FileStoreTable) extends PaimonSinkTaskHandler with
     }
   }
 
-  private def derivePartition(path: Path, numBytes: Long): BinaryRow = {
+  private def decodePartition(partitionValues: Array[Byte]): BinaryRow = {
     if (partitionIndexes.isEmpty) {
       return BinaryRow.EMPTY_ROW
     }
-    val stats = partitionStatsExtractor.extract(fileIO, path, numBytes)
-    val values = partitionIndexes.map { idx =>
-      val s = stats(idx)
-      val nullCount = Option(s.nullCount()).map(_.longValue())
-      val allNull = s.min() == null && s.max() == null && nullCount.exists(_ > 0)
-      val single = s.min() != null && s.min() == s.max() && nullCount.contains(0L)
-      if (!allNull && !single) {
-        throw new IllegalStateException(
-          s"data file $path does not contain exactly one value of partition column " +
-            s"${rowType.getFieldNames.get(idx)}: $s")
+    val allocator = ArrowUtils.CHILD_ALLOCATOR("PaimonSinkWriter.decodePartition")
+    try {
+      val reader = new ArrowStreamReader(new ByteArrayInputStream(partitionValues), allocator)
+      try {
+        val root = reader.getVectorSchemaRoot
+        if (!reader.loadNextBatch() || root.getRowCount != 1) {
+          throw new IllegalStateException("expected one row of partition values")
+        }
+        val sparkRow = ColumnarHelper.rootRowReusable(root)
+        val paimonRow =
+          new SparkInternalRowWrapper(sparkPartitionType, partitionIndexes.length)
+            .replace(sparkRow)
+        // copies the values out of the arrow buffers before they are released
+        partitionSerializer.toBinaryRow(paimonRow).copy()
+      } finally {
+        reader.close()
       }
-      if (allNull) null else s.min()
+    } finally {
+      allocator.close()
     }
-    val row = new GenericRow(values.length)
-    values.zipWithIndex.foreach { case (v, i) => row.setField(i, v) }
-    partitionSerializer.toBinaryRow(row).copy()
   }
 }

@@ -80,5 +80,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: auron-paimon-test-report
+          name: auron-paimon-test-report-${{ matrix.paimon }}
           path: ${{ matrix.module }}/target/surefire-reports

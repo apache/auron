@@ -16,11 +16,19 @@
  */
 package org.apache.auron.paimon
 
+import java.nio.file.Files
+
+import org.apache.hadoop.fs.{FileSystem, Path => HadoopPath}
+import org.apache.paimon.table.FileStoreTable
+import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.auron.AuronConvertStrategy
+import org.apache.spark.sql.auron.paimon.PaimonSinkWriter
 import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.auron.plan.NativePaimonWriteExec
 import org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec
+import org.apache.spark.sql.hive.auron.paimon.PaimonUtil
 
 /**
  * Native write of Paimon append-only tables. Every test writes the same data once with the native
@@ -139,6 +147,116 @@ class AuronPaimonWriteSuite extends org.apache.spark.sql.QueryTest with BaseAuro
       "w_nullpart",
       "create table %t (id int, p string) using paimon partitioned by (p)",
       Seq("insert into %t values (1, null), (2, '50%'), (3, 'a b'), (4, null)"))()
+  }
+
+  test("native write keeps partition values longer than the parquet statistics truncation") {
+    // parquet truncates string statistics to 64 bytes by default, so these partition values
+    // cannot be recovered from the footer statistics
+    val long1 = "a" * 80
+    val long2 = "a" * 79 + "b"
+    checkSameAsPaimon(
+      "w_longpart",
+      "create table %t (id int, p string, q int) using paimon partitioned by (p, q)",
+      Seq(s"insert into %t values (1, '$long1', 1), (2, '$long2', 1), (3, '$long1', 2)"))()
+  }
+
+  test("native write partitions by date, decimal and small integer columns") {
+    checkSameAsPaimon(
+      "w_typedpart",
+      """create table %t (id int, d date, c decimal(10, 2), s smallint) using paimon
+        |partitioned by (d, c, s)""".stripMargin,
+      Seq(
+        "insert into %t values (1, date'2026-10-27', 1.50, cast(1 as smallint)), " +
+          "(2, date'2026-10-28', 2.50, cast(2 as smallint)), (3, null, null, null)"))()
+  }
+
+  test("native write bounds the memory of a single open file") {
+    val table = "paimon.db.w_budget"
+    withTable(table) {
+      sql(s"create table $table (id bigint, v string) using paimon")
+      var nodes: Seq[String] = Nil
+      withSQLConf(nativeWriteConfs :+ ("spark.auron.paimon.write.memoryBudget" -> "65536"): _*) {
+        nodes = runWrites(
+          Seq(s"insert into $table select id, repeat(cast(id as string), 20) " +
+            "from range(0, 50000, 1, 1)"))
+      }
+      assert(nodes.exists(_.contains("NativePaimonWrite")), s"not native: $nodes")
+      // the only open file flushes its row group whenever it exceeds the budget
+      val files = sql(s"select file_path from `paimon`.`db`.`w_budget$$files`")
+        .collect()
+        .map(_.getString(0))
+      assert(files.length == 1, s"expected one file, got ${files.toSeq}")
+      assert(rowGroupCount(files.head) > 1, s"expected several row groups in ${files.head}")
+      checkAnswer(sql(s"select count(*), sum(id) from $table"), Row(50000L, 1249975000L))
+    }
+  }
+
+  test("files failing validation stay in staging and moved files are removed on abort") {
+    val table = "paimon.db.w_abort"
+    withTable(table) {
+      sql(s"create table $table (id int, v string) using paimon")
+      val paimonTable = loadTable("w_abort")
+      val writer = new PaimonSinkWriter(paimonTable)
+      val tablePath = new HadoopPath(paimonTable.location().toString)
+      val fs = tablePath.getFileSystem(spark.sessionState.newHadoopConf())
+      def dataFiles(): Seq[String] =
+        listFiles(fs, tablePath).filter(_.contains("/bucket-0/")).sorted
+
+      // a valid file is moved into the bucket directory
+      val good = writeParquetTo(writer.nextOutputPath(), rows = 3)
+      writer.completeFile(good, 3, fileSize(fs, good), Array.emptyByteArray)
+      assert(dataFiles().size == 1, s"expected the moved file, got ${dataFiles()}")
+
+      // a file whose footer does not match is rejected before it is moved
+      val bad = writeParquetTo(writer.nextOutputPath(), rows = 2)
+      intercept[IllegalStateException] {
+        writer.completeFile(bad, 5, fileSize(fs, bad), Array.emptyByteArray)
+      }
+      assert(dataFiles().size == 1, s"rejected file must not be moved: ${dataFiles()}")
+
+      writer.abort()
+      assert(dataFiles().isEmpty, s"abort must remove moved files: ${dataFiles()}")
+      assert(
+        !listFiles(fs, tablePath).exists(_.contains(".auron-staging")),
+        "abort must remove the staging directory")
+    }
+  }
+
+  private def loadTable(name: String): FileStoreTable =
+    PaimonUtil.loadTable(s"$paimonWarehouse/db.db/$name")
+
+  private def writeParquetTo(path: String, rows: Int): String = {
+    val tmp = Files.createTempDirectory("auron-paimon-parquet-").toFile
+    spark
+      .range(0, rows)
+      .selectExpr("cast(id as int) as id", "cast(id as string) as v")
+      .coalesce(1)
+      .write
+      .mode("overwrite")
+      .parquet(tmp.getAbsolutePath)
+    val part = tmp.listFiles().find(_.getName.endsWith(".parquet")).get
+    val target = new HadoopPath(path)
+    val fs = target.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.mkdirs(target.getParent)
+    fs.copyFromLocalFile(new HadoopPath(part.getAbsolutePath), target)
+    path
+  }
+
+  private def fileSize(fs: FileSystem, path: String): Long =
+    fs.getFileStatus(new HadoopPath(path)).getLen
+
+  private def listFiles(fs: FileSystem, dir: HadoopPath): Seq[String] = {
+    val it = fs.listFiles(dir, true)
+    val out = scala.collection.mutable.ArrayBuffer[String]()
+    while (it.hasNext) out += it.next().getPath.toString
+    out.toSeq
+  }
+
+  private def rowGroupCount(path: String): Int = {
+    val file = HadoopInputFile.fromPath(new HadoopPath(path), spark.sessionState.newHadoopConf())
+    val reader = ParquetFileReader.open(file)
+    try reader.getRowGroups.size()
+    finally reader.close()
   }
 
   test("native write supports decimal, date, binary and small integer types") {

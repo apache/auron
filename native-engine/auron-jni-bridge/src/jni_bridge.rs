@@ -1647,7 +1647,7 @@ impl<'a> AuronNativePaimonSinkUtils<'a> {
             method_completeFile: env.get_static_method_id(
                 class,
                 "completeFile",
-                "(Ljava/lang/String;JJ)V",
+                "(Ljava/lang/String;JJ[B)V",
             )?,
             method_completeFile_ret: ReturnType::Primitive(Primitive::Void),
         })

@@ -32,8 +32,11 @@ public class NativePaimonSinkUtils {
         return PaimonSinkTaskContext.get().nextOutputPath();
     }
 
-    /** Called by native code after a data file is closed. */
-    public static void completeFile(String path, long numRows, long numBytes) throws Exception {
-        PaimonSinkTaskContext.get().completeFile(path, numRows, numBytes);
+    /**
+     * Called by native code after a data file is closed. {@code partitionValues} is a one row Arrow
+     * IPC stream of the partition columns, empty for unpartitioned tables.
+     */
+    public static void completeFile(String path, long numRows, long numBytes, byte[] partitionValues) throws Exception {
+        PaimonSinkTaskContext.get().completeFile(path, numRows, numBytes, partitionValues);
     }
 }
