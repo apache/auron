@@ -932,7 +932,7 @@ object NativeConverters extends Logging {
       case e: Ascii => buildScalarFunction(pb.ScalarFunction.Ascii, e.children, e.dataType)
       case e: BitLength =>
         buildScalarFunction(pb.ScalarFunction.BitLength, e.children, e.dataType)
-      case e: Chr => buildScalarFunction(pb.ScalarFunction.Chr, e.children, e.dataType)
+      case e: Chr => buildExtScalarFunction("Spark_Chr", e.children, e.dataType)
       case e: StringTranslate =>
         buildScalarFunction(pb.ScalarFunction.Translate, e.children, e.dataType)
       case e: StringReplace =>

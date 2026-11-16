@@ -142,7 +142,7 @@ impl<T: ComparableForLoserTree> Drop for LoserTreePeekMut<'_, T> {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use rand::Rng;
+    use rand::RngExt;
 
     use crate::algorithm::loser_tree::{ComparableForLoserTree, LoserTree};
 
