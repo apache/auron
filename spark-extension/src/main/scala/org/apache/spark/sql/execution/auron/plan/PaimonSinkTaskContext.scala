@@ -29,8 +29,15 @@ trait PaimonSinkTaskHandler {
   /** Allocates the absolute path of the next data file written by this task. */
   def nextOutputPath(): String
 
-  /** Called after the native sink closed a data file. */
-  def completeFile(path: String, numRows: Long, numBytes: Long): Unit
+  /**
+   * Called after the native sink closed a data file. `partitionValues` is a one row Arrow IPC
+   * stream of the partition columns, empty for unpartitioned tables.
+   */
+  def completeFile(
+      path: String,
+      numRows: Long,
+      numBytes: Long,
+      partitionValues: Array[Byte]): Unit
 }
 
 /** Registry of the [[PaimonSinkTaskHandler]] of each running task attempt. */

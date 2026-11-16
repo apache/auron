@@ -28,10 +28,12 @@
 //! * a file is closed when it reaches `target_file_size`, when more than
 //!   `max_open_files` files are open (the largest is closed), or at the end of
 //!   the input;
-//! * the JVM side hands out output paths and is told the row count and size of
-//!   every closed file; it derives the partition of a file from the parquet
-//!   footer statistics of the partition columns (min == max), so no partition
-//!   values cross the JNI boundary.
+//! * the JVM side hands out output paths and is told the row count, size and
+//!   partition values of every closed file. Partition values are sent as a one
+//!   row Arrow IPC stream of the partition columns, so that the JVM side does
+//!   not have to derive them from the (possibly truncated) footer statistics;
+//! * open row groups are flushed once their memory usage exceeds
+//!   `memory_budget`, largest first.
 
 use std::{collections::HashMap, fmt::Formatter, io::Write, sync::Arc};
 
@@ -39,10 +41,13 @@ use arrow::{
     array::{ArrayRef, UInt32Array},
     compute::take_record_batch,
     datatypes::SchemaRef,
+    ipc::writer::StreamWriter,
     record_batch::{RecordBatch, RecordBatchOptions},
     row::{OwnedRow, RowConverter, SortField},
 };
-use auron_jni_bridge::{jni_call_static, jni_get_string, jni_new_global_ref, jni_new_string};
+use auron_jni_bridge::{
+    jni_call_static, jni_get_string, jni_new_global_ref, jni_new_prim_array, jni_new_string,
+};
 use datafusion::{
     common::Result,
     execution::context::TaskContext,
@@ -61,6 +66,7 @@ use datafusion_ext_commons::{
     hadoop_fs::{FsDataOutputWrapper, FsProvider},
 };
 use futures::StreamExt;
+use jni::objects::JObject;
 use once_cell::sync::OnceCell;
 
 use crate::{common::execution_context::ExecutionContext, parquet_sink_exec::parse_writer_props};
@@ -234,6 +240,7 @@ fn execute_paimon_sink(
                             jni_new_string!(&stat.path)?.as_obj(),
                             stat.num_rows as i64,
                             stat.num_bytes as i64,
+                            jni_new_prim_array!(byte, &stat.partition_values[..])?.as_obj(),
                         ) -> ()
                     )?;
                     exec_ctx.baseline_metrics().output_rows().add(stat.num_rows);
@@ -307,12 +314,14 @@ impl PartitionedWriters {
         let mut closed = vec![];
         let Some(converter) = &self.row_converter else {
             if self.single.is_none() {
-                self.single = Some(FileWriter::try_new(self.sink_ctx.clone())?);
+                self.single = Some(FileWriter::try_new(self.sink_ctx.clone(), vec![])?);
             }
             let w = self.single.as_mut().expect("single writer");
             w.write(batch)?;
             if w.estimated_size() >= self.sink_ctx.target_file_size {
                 closed.push(self.single.take().expect("single writer").close()?);
+            } else if w.buffered_size() > self.sink_ctx.memory_budget {
+                w.flush_row_group()?;
             }
             return Ok(closed);
         };
@@ -348,8 +357,13 @@ impl PartitionedWriters {
                 if self.writers.len() >= self.sink_ctx.max_open_files {
                     closed.push(self.close_largest()?);
                 }
-                self.writers
-                    .insert(key.clone(), FileWriter::try_new(self.sink_ctx.clone())?);
+                let partition_values = encode_partition_values(
+                    &part_batch.project(&self.sink_ctx.partition_col_indices)?,
+                )?;
+                self.writers.insert(
+                    key.clone(),
+                    FileWriter::try_new(self.sink_ctx.clone(), partition_values)?,
+                );
             }
             let w = self.writers.get_mut(&key).expect("partition writer");
             w.write(&part_batch)?;
@@ -360,7 +374,7 @@ impl PartitionedWriters {
         }
 
         // bound memory held by open row groups across partitions
-        while self.writers.len() > 1 && self.buffered_size() > self.sink_ctx.memory_budget {
+        while !self.writers.is_empty() && self.buffered_size() > self.sink_ctx.memory_budget {
             let (_, w) = self
                 .writers
                 .iter_mut()
@@ -400,22 +414,43 @@ impl PartitionedWriters {
     }
 }
 
-#[derive(Debug)]
+/// Encodes the partition values of a file as a one row Arrow IPC stream.
+fn encode_partition_values(partition_cols: &RecordBatch) -> Result<Vec<u8>> {
+    let row = partition_cols.slice(0, 1);
+    let mut writer = StreamWriter::try_new(Vec::new(), &row.schema())?;
+    writer.write(&row)?;
+    writer.finish()?;
+    Ok(writer.into_inner()?)
+}
+
 struct FileStat {
     path: String,
     num_rows: usize,
     num_bytes: usize,
+    // one row Arrow IPC stream of the partition columns, empty if unpartitioned
+    partition_values: Vec<u8>,
+}
+
+impl std::fmt::Debug for FileStat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileStat")
+            .field("path", &self.path)
+            .field("num_rows", &self.num_rows)
+            .field("num_bytes", &self.num_bytes)
+            .finish()
+    }
 }
 
 struct FileWriter {
     path: String,
+    partition_values: Vec<u8>,
     sink_ctx: Arc<PaimonSinkContext>,
     writer: ArrowWriter<FSDataWriter>,
     bytes_written: Count,
 }
 
 impl FileWriter {
-    fn try_new(sink_ctx: Arc<PaimonSinkContext>) -> Result<Self> {
+    fn try_new(sink_ctx: Arc<PaimonSinkContext>, partition_values: Vec<u8>) -> Result<Self> {
         let path = jni_get_string!(
             jni_call_static!(AuronNativePaimonSinkUtils.getTaskOutputPath() -> JObject)?
                 .as_obj()
@@ -432,6 +467,7 @@ impl FileWriter {
         )?;
         Ok(Self {
             path,
+            partition_values,
             sink_ctx,
             writer,
             bytes_written,
@@ -446,7 +482,7 @@ impl FileWriter {
 
     /// memory held by the open row group
     fn buffered_size(&self) -> usize {
-        self.writer.in_progress_size()
+        self.writer.memory_size()
     }
 
     fn flush_row_group(&mut self) -> Result<()> {
@@ -477,6 +513,7 @@ impl FileWriter {
             path: self.path,
             num_rows,
             num_bytes,
+            partition_values: self.partition_values,
         };
         log::info!("finished writing paimon data file: {stat:?}");
         Ok(stat)
