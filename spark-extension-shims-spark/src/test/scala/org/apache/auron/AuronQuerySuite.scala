@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
-import org.apache.spark.sql.types.{NullType, StructType}
+import org.apache.spark.sql.types.{IntegerType, NullType, StructType}
 
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
@@ -1162,6 +1162,28 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
             |WHERE k NOT IN (SELECT k FROM not_in_void_keys)
             |""".stripMargin)
         checkAnswer(df, Seq.empty)
+        if (AuronTestUtils.isSparkV31OrGreater) {
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+          }.isDefined)
+        }
+      }
+    }
+  }
+
+  test("NOT IN subquery with VOID keys and runtime empty build") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempView("not_in_empty_void_build") {
+        spark
+          .createDataFrame(
+            java.util.Arrays.asList(Row(null, 1), Row(null, 2)),
+            new StructType().add("k", NullType).add("id", IntegerType))
+          .createOrReplaceTempView("not_in_empty_void_build")
+        val df = sql("""
+            |SELECT id, k FROM not_in_empty_void_build
+            |WHERE k NOT IN (SELECT k FROM not_in_empty_void_build WHERE id < 0)
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, null), Row(2, null)))
         if (AuronTestUtils.isSparkV31OrGreater) {
           assert(collectFirst(df.queryExecution.executedPlan) {
             case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj

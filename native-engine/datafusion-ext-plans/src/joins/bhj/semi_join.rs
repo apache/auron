@@ -209,6 +209,27 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         probed_side_compare_time: &Time,
         build_output_time: &Time,
     ) -> Result<()> {
+        if self.join_params.is_null_aware_anti_join
+            && get_joiner(P).mode == Anti
+            && get_joiner(P).probe_is_join_side
+            && self.map.is_empty()
+        {
+            let _build_output_timer = build_output_time.timer();
+            let cols = match get_joiner(P).probe_side {
+                L => self
+                    .join_params
+                    .projection
+                    .project_left(probed_batch.columns()),
+                R => self
+                    .join_params
+                    .projection
+                    .project_right(probed_batch.columns()),
+            };
+            return build_output_time
+                .exclude_timer_async(self.flush(cols, probed_batch.num_rows()))
+                .await;
+        }
+
         let mut probed_joined = bitvec![0; probed_batch.num_rows()];
         let map_joined = unsafe {
             // safety: ignore r/w conflicts with self.map
