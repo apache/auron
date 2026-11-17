@@ -209,6 +209,23 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         probed_side_compare_time: &Time,
         build_output_time: &Time,
     ) -> Result<()> {
+        if get_joiner(P).mode == Anti && get_joiner(P).probe_is_join_side && self.map.is_empty() {
+            let _build_output_timer = build_output_time.timer();
+            let cols = match get_joiner(P).probe_side {
+                L => self
+                    .join_params
+                    .projection
+                    .project_left(probed_batch.columns()),
+                R => self
+                    .join_params
+                    .projection
+                    .project_right(probed_batch.columns()),
+            };
+            return build_output_time
+                .exclude_timer_async(self.flush(cols, probed_batch.num_rows()))
+                .await;
+        }
+
         let mut probed_joined = bitvec![0; probed_batch.num_rows()];
         let map_joined = unsafe {
             // safety: ignore r/w conflicts with self.map
@@ -248,13 +265,6 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         let batch_size = self.join_params.batch_size.max(1);
         let (mut probe_indices, mut build_indices): (Vec<u32>, Vec<u32>) = (vec![], vec![]);
 
-        // Whether the build side contains any NULL join keys
-        let build_has_null_keys = if map.num_rows() == 0 {
-            false
-        } else {
-            map.key_columns().iter().any(|col| col.null_count() > 0)
-        };
-
         for row_idx in 0..probed_batch.num_rows() {
             let key_is_valid = probed_valids
                 .as_ref()
@@ -262,7 +272,8 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                 .unwrap_or(true);
             if get_joiner(P).mode == Anti
                 && get_joiner(P).probe_is_join_side
-                && (!key_is_valid || build_has_null_keys) // Filter if probe row is NULL or build side has any NULL
+                && !map.is_empty()
+                && (!key_is_valid || map.has_null_keys())
                 && self.join_params.is_null_aware_anti_join
             {
                 probed_joined.set(row_idx, true);
@@ -435,6 +446,13 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
     }
 
     fn can_early_stop(&self) -> bool {
+        if self.join_params.is_null_aware_anti_join
+            && get_joiner(P).mode == Anti
+            && get_joiner(P).probe_is_join_side
+            && self.map.has_null_keys()
+        {
+            return true;
+        }
         if !get_joiner(P).probe_is_join_side && self.map_joined.all() {
             // semi join: map is join side and all items are joined
             return true;
