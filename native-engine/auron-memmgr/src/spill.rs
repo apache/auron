@@ -184,21 +184,10 @@ impl OnHeapSpill {
             Arc::new(RawOnHeapSpill {
                 hsm: jni_new_global_ref!(hsm.as_obj())?,
                 spill_id,
+                spill_metrics: spill_metrics.clone(),
             }),
             spill_metrics.clone(),
         ))
-    }
-
-    fn get_disk_usage(&self) -> Result<u64> {
-        let usage = jni_call!(AuronOnHeapSpillManager(self.0.hsm.as_obj())
-            .getSpillDiskUsage(self.0.spill_id) -> jlong)? as u64;
-        Ok(usage)
-    }
-
-    fn get_disk_iotime(&self) -> Result<u64> {
-        let iotime = jni_call!(AuronOnHeapSpillManager(self.0.hsm.as_obj())
-            .getSpillDiskIOTime(self.0.spill_id) -> jlong)? as u64;
-        Ok(iotime)
     }
 }
 
@@ -251,25 +240,36 @@ impl Read for OnHeapSpill {
     }
 }
 
-impl Drop for OnHeapSpill {
-    fn drop(&mut self) {
-        self.1.mem_spill_count.add(1);
-        self.1
-            .disk_spill_size
-            .add(self.get_disk_usage().unwrap_or(0) as usize);
-        self.1
-            .disk_spill_iotime
-            .add_duration(Duration::from_nanos(self.get_disk_iotime().unwrap_or(0)));
-    }
-}
-
 struct RawOnHeapSpill {
     hsm: GlobalRef,
     spill_id: i32,
+    spill_metrics: SpillMetrics,
 }
 
+impl RawOnHeapSpill {
+    fn get_disk_usage(&self) -> Result<u64> {
+        let usage = jni_call!(AuronOnHeapSpillManager(self.hsm.as_obj())
+            .getSpillDiskUsage(self.spill_id) -> jlong)? as u64;
+        Ok(usage)
+    }
+
+    fn get_disk_iotime(&self) -> Result<u64> {
+        let iotime = jni_call!(AuronOnHeapSpillManager(self.hsm.as_obj())
+            .getSpillDiskIOTime(self.spill_id) -> jlong)? as u64;
+        Ok(iotime)
+    }
+}
+
+// reader and writer wrappers share this, so spill metrics are recorded once here
 impl Drop for RawOnHeapSpill {
     fn drop(&mut self) {
+        self.spill_metrics.mem_spill_count.add(1);
+        self.spill_metrics
+            .disk_spill_size
+            .add(self.get_disk_usage().unwrap_or(0) as usize);
+        self.spill_metrics
+            .disk_spill_iotime
+            .add_duration(Duration::from_nanos(self.get_disk_iotime().unwrap_or(0)));
         let _ = jni_call!(AuronOnHeapSpillManager(self.hsm.as_obj())
             .releaseSpill(self.spill_id) -> ());
     }
