@@ -236,11 +236,7 @@ fn eq_list<O: OffsetSizeTrait>(
     let left = left.as_list::<O>();
     let right = right.as_list::<O>();
 
-    let eq = make_eq_comparator(
-        left.values().as_ref(),
-        right.values().as_ref(),
-        ignores_null,
-    )?;
+    let eq = make_nested_eq_comparator(left.values().as_ref(), right.values().as_ref())?;
 
     let l_o = left.offsets().clone();
     let r_o = right.offsets().clone();
@@ -269,11 +265,7 @@ fn eq_fixed_list(
 ) -> Result<DynEqComparator, ArrowError> {
     let left = left.as_fixed_size_list();
     let right = right.as_fixed_size_list();
-    let eq = make_eq_comparator(
-        left.values().as_ref(),
-        right.values().as_ref(),
-        ignores_null,
-    )?;
+    let eq = make_nested_eq_comparator(left.values().as_ref(), right.values().as_ref())?;
 
     let l_size = left
         .value_length()
@@ -317,7 +309,7 @@ fn eq_struct(
 
     let columns = left.columns().iter().zip(right.columns());
     let comparators = columns
-        .map(|(l, r)| make_eq_comparator(l, r, ignores_null))
+        .map(|(l, r)| make_nested_eq_comparator(l, r))
         .collect::<Result<Vec<_>, _>>()?;
 
     let f = eq_impl(left, right, ignores_null, move |i, j| {
@@ -330,6 +322,27 @@ fn eq_struct(
         true
     });
     Ok(f)
+}
+
+/// Compare nested values, treating two NULLs as equal and one NULL as unequal.
+pub fn make_nested_eq_comparator(
+    left: &dyn Array,
+    right: &dyn Array,
+) -> Result<DynEqComparator, ArrowError> {
+    let eq = make_eq_comparator(left, right, true)?;
+    let l = left.logical_nulls().filter(|x| x.null_count() > 0);
+    let r = right.logical_nulls().filter(|x| x.null_count() > 0);
+
+    Ok(match (l, r) {
+        (None, None) => eq,
+        (Some(l), None) => Box::new(move |i, j| !l.is_null(i) && eq(i, j)),
+        (None, Some(r)) => Box::new(move |i, j| !r.is_null(j) && eq(i, j)),
+        (Some(l), Some(r)) => Box::new(move |i, j| match (l.is_null(i), r.is_null(j)) {
+            (true, true) => true,
+            (false, false) => eq(i, j),
+            _ => false,
+        }),
+    })
 }
 
 pub fn make_eq_comparator(
@@ -346,6 +359,7 @@ pub fn make_eq_comparator(
     }
     downcast_primitive! {
         left.data_type(), right.data_type() => (primitive_helper, left, right),
+        (Null, Null) => Ok(Box::new(move |_, _| ignores_null)),
         (Boolean, Boolean) => Ok(eq_boolean(left, right, ignores_null)),
         (Utf8, Utf8) => Ok(eq_bytes::<Utf8Type>(left, right, ignores_null)),
         (LargeUtf8, LargeUtf8) => Ok(eq_bytes::<LargeUtf8Type>(left, right, ignores_null)),
@@ -394,6 +408,70 @@ pub mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn test_null() -> Result<()> {
+        let left = NullArray::new(2);
+        let right = NullArray::new(3);
+        for ignores_null in [false, true] {
+            let eq = make_eq_comparator(&left, &right, ignores_null)?;
+            assert_eq!(eq(0, 0), ignores_null);
+            assert_eq!(eq(1, 2), ignores_null);
+        }
+        assert!(make_eq_comparator(&left, &Int32Array::from(vec![1, 2]), true).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_list_with_null_elements() -> Result<()> {
+        let array = ListArray::new(
+            Arc::new(Field::new("item", DataType::Null, true)),
+            OffsetBuffer::from_lengths([0, 1, 1, 2]),
+            Arc::new(NullArray::new(4)),
+            None,
+        );
+        for ignores_null in [false, true] {
+            let eq = make_eq_comparator(&array, &array, ignores_null)?;
+            assert!(eq(0, 0));
+            assert!(eq(1, 2));
+            assert!(!eq(0, 1));
+            assert!(!eq(1, 3));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_nested_nulls() -> Result<()> {
+        let values: ArrayRef = Arc::new(Int32Array::new(
+            vec![0, 0, 7].into(),
+            Some(NullBuffer::from(vec![false, true, false])),
+        ));
+        let field = Arc::new(Field::new("item", DataType::Int32, true));
+        let arrays: Vec<ArrayRef> = vec![
+            Arc::new(StructArray::new(
+                vec![field.clone()].into(),
+                vec![values.clone()],
+                None,
+            )),
+            Arc::new(ListArray::new(
+                field.clone(),
+                OffsetBuffer::from_lengths([1, 1, 1]),
+                values.clone(),
+                None,
+            )),
+            Arc::new(FixedSizeListArray::new(field, 1, values, None)),
+        ];
+        for array in arrays {
+            for ignores_null in [false, true] {
+                let eq = make_eq_comparator(&array, &array, ignores_null)?;
+                assert!(eq(0, 2));
+                assert!(!eq(0, 1));
+                assert!(!eq(1, 0));
+                assert!(eq(1, 1));
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_fixed_size_binary() -> Result<()> {
@@ -782,12 +860,13 @@ pub mod tests {
         let b = b.finish();
 
         let eq = make_eq_comparator(&a, &b, false)?;
-        assert!(!eq(0, 0)); // lists contains null never equal
+        assert!(eq(0, 0));
         assert!(!eq(0, 1));
         assert!(!eq(0, 2));
         assert!(!eq(1, 2));
         assert!(!eq(1, 3));
         assert!(!eq(2, 0));
+        assert!(!eq(3, 3));
         assert!(eq(4, 4));
         Ok(())
     }
@@ -822,7 +901,7 @@ pub mod tests {
         assert!(!eq(1, 1)); // (2, [None]) eq (2, None)
         assert!(!eq(2, 2)); // (None, None) eq (None, [])
         assert!(!eq(3, 0)); // None eq (None, [])
-        assert!(!eq(2, 0)); // (None, None) eq (None, None)
+        assert!(eq(2, 0)); // (None, None) eq (None, None)
         assert!(!eq(3, 0)); // None eq (None, None)
         Ok(())
     }

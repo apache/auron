@@ -197,6 +197,53 @@ impl<const P: i32> SemiJoiner<P> {
         self.output_sender.send(output_batch).await;
         Ok(())
     }
+
+    async fn flush_probed(
+        &self,
+        probed_batch: &RecordBatch,
+        probed_joined: BitVec,
+        build_output_time: &Time,
+    ) -> Result<()> {
+        let _build_output_timer = build_output_time.timer();
+        let pprojected = match get_joiner(P).probe_side {
+            L => self
+                .join_params
+                .projection
+                .project_left(probed_batch.columns()),
+            R => self
+                .join_params
+                .projection
+                .project_right(probed_batch.columns()),
+        };
+        let (pcols, num_rows) = match get_joiner(P).mode {
+            Semi | Anti => {
+                let probed_indices = probed_joined
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(_, joined)| (get_joiner(P).mode == Semi) ^ !joined)
+                    .map(|(idx, _)| idx as u32)
+                    .collect::<Vec<_>>();
+                let num_rows = probed_indices.len();
+                (take_cols(&pprojected, probed_indices)?, num_rows)
+            }
+            Existence => {
+                let num_rows = probed_joined.len();
+                let mut cols = pprojected;
+                if let Some(pos) = self.join_params.projection.existence_output {
+                    cols.insert(
+                        pos,
+                        Arc::new(BooleanArray::from(
+                            probed_joined.into_iter().collect::<Vec<_>>(),
+                        )),
+                    );
+                }
+                (cols, num_rows)
+            }
+        };
+        build_output_time
+            .exclude_timer_async(self.flush(pcols, num_rows))
+            .await
+    }
 }
 
 #[async_trait]
@@ -210,6 +257,13 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         build_output_time: &Time,
     ) -> Result<()> {
         let mut probed_joined = bitvec![0; probed_batch.num_rows()];
+        if self.map.is_all_nulls() && !self.join_params.is_null_aware_anti_join {
+            if get_joiner(P).probe_is_join_side && get_joiner(P).mode != Semi {
+                self.flush_probed(&probed_batch, probed_joined, build_output_time)
+                    .await?;
+            }
+            return Ok(());
+        }
         let map_joined = unsafe {
             // safety: ignore r/w conflicts with self.map
             std::mem::transmute::<_, &mut BitVec>(&mut self.map_joined)
@@ -348,45 +402,11 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
 
         if get_joiner(P).probe_is_join_side {
             probed_side_compare_time
-                .exclude_timer_async(async {
-                    let _build_output_timer = build_output_time.timer();
-                    let pprojected = match get_joiner(P).probe_side {
-                        L => self
-                            .join_params
-                            .projection
-                            .project_left(probed_batch.columns()),
-                        R => self
-                            .join_params
-                            .projection
-                            .project_right(probed_batch.columns()),
-                    };
-                    let (pcols, num_rows) = match get_joiner(P).mode {
-                        Semi | Anti => {
-                            let probed_indices = probed_joined
-                                .into_iter()
-                                .enumerate()
-                                .filter(|(_, joined)| (get_joiner(P).mode == Semi) ^ !joined)
-                                .map(|(idx, _)| idx as u32)
-                                .collect::<Vec<_>>();
-                            let num_rows = probed_indices.len();
-                            (take_cols(&pprojected, probed_indices)?, num_rows)
-                        }
-                        Existence => {
-                            let num_rows = probed_joined.len();
-                            let exists_col = Arc::new(BooleanArray::from(
-                                probed_joined.into_iter().collect::<Vec<_>>(),
-                            ));
-                            let mut cols = pprojected;
-                            if let Some(pos) = self.join_params.projection.existence_output {
-                                cols.insert(pos, exists_col);
-                            }
-                            (cols, num_rows)
-                        }
-                    };
-                    build_output_time
-                        .exclude_timer_async(self.as_mut().flush(pcols, num_rows))
-                        .await
-                })
+                .exclude_timer_async(self.flush_probed(
+                    &probed_batch,
+                    probed_joined,
+                    build_output_time,
+                ))
                 .await?;
         }
         Ok(())
@@ -435,6 +455,9 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
     }
 
     fn can_early_stop(&self) -> bool {
+        if self.map.is_all_nulls() && !self.join_params.is_null_aware_anti_join {
+            return !get_joiner(P).probe_is_join_side || get_joiner(P).mode == Semi;
+        }
         if !get_joiner(P).probe_is_join_side && self.map_joined.all() {
             // semi join: map is join side and all items are joined
             return true;

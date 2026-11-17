@@ -25,6 +25,7 @@ use arrow::{
         Array, ArrayRef, AsArray, BinaryBuilder, BooleanArray, RecordBatch, RecordBatchOptions,
         UInt32Array,
     },
+    buffer::NullBuffer,
     datatypes::{DataType, Field, FieldRef, Schema, SchemaRef},
 };
 use datafusion::{common::Result, physical_expr::PhysicalExprRef};
@@ -132,7 +133,12 @@ impl Table {
             "join hash table: number of rows exceeded 2^30: {num_rows}"
         );
 
-        let key_is_valid = |row_idx| key_columns.iter().all(|col| col.is_valid(row_idx));
+        let key_valids = key_columns
+            .iter()
+            .map(|col| col.logical_nulls())
+            .reduce(|nb1, nb2| NullBuffer::union(nb1.as_ref(), nb2.as_ref()))
+            .flatten();
+        let key_is_valid = |row_idx| key_valids.as_ref().is_none_or(|nb| nb.is_valid(row_idx));
         let mut mapped_indices = unchecked!(vec![]);
         let mut num_valid_items = 0;
 
@@ -900,6 +906,23 @@ mod tests {
         let schema = Arc::new(Schema::new(vec![Field::new("k", DataType::Int32, true)]));
         RecordBatch::try_new(schema, vec![Arc::new(Int32Array::from(values)) as ArrayRef])
             .expect("valid Int32 test batch")
+    }
+
+    #[test]
+    fn void_keys_have_no_valid_items() -> Result<()> {
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("k", DataType::Null, true)])),
+            vec![Arc::new(arrow::array::NullArray::new(2))],
+        )?;
+        let map = JoinHashMap::create_from_data_batch(batch, std::slice::from_ref(&key))?;
+        assert_eq!(map.num_rows(), 2);
+        assert!(map.is_all_nulls());
+        let loaded =
+            JoinHashMap::load_from_hash_map_batches(map.into_hash_map_batches(None)?, &[key])?;
+        assert_eq!(loaded.num_rows(), 2);
+        assert!(loaded.is_all_nulls());
+        Ok(())
     }
 
     /// Normal (non hybrid-join) and hybrid-join hash-map-batches must share
