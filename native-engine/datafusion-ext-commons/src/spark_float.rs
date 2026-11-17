@@ -37,6 +37,10 @@ pub fn spark_float_cmp<T: num::Float>(left: T, right: T) -> Ordering {
     }
 }
 
+pub fn canonical_nan<T: num::Float>(v: T) -> T {
+    if v.is_nan() { T::nan() } else { v }
+}
+
 /// Replaces every NaN bit pattern with the canonical NaN, like Spark does when
 /// hashing floats. Signed zeros stay distinct. Non-float arrays are returned
 /// unchanged.
@@ -44,11 +48,11 @@ pub fn canonicalize_nans(values: &ArrayRef) -> Result<ArrayRef> {
     Ok(match values.data_type() {
         DataType::Float32 => Arc::new(unary::<_, _, Float32Type>(
             downcast_any!(values, Float32Array)?,
-            |v| if v.is_nan() { f32::NAN } else { v },
+            canonical_nan,
         )),
         DataType::Float64 => Arc::new(unary::<_, _, Float64Type>(
             downcast_any!(values, Float64Array)?,
-            |v| if v.is_nan() { f64::NAN } else { v },
+            canonical_nan,
         )),
         _ => Arc::clone(values),
     })

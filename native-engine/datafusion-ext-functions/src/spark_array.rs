@@ -15,15 +15,15 @@
 
 //! Array expressions
 
-use std::{cmp::Ordering, collections::HashSet, sync::Arc};
+use std::{cmp::Ordering, collections::HashSet, ops::Range, sync::Arc};
 
 use arrow::{
     array::{
-        Array, ArrayRef, BooleanArray, Float32Array, Float64Array, ListArray, MutableArrayData,
-        make_array,
+        Array, ArrayBuilder, ArrayRef, BooleanArray, Float32Array, Float64Array, ListArray,
+        MutableArrayData, PrimitiveArray, PrimitiveBuilder, make_array,
     },
     buffer::{NullBuffer, OffsetBuffer, ScalarBuffer},
-    datatypes::{DataType, Field},
+    datatypes::{ArrowPrimitiveType, DataType, Field, Float32Type, Float64Type},
     row::{RowConverter, SortField},
 };
 use datafusion::{
@@ -34,8 +34,9 @@ use datafusion_ext_commons::{
     arrow::eq_comparator::{DynEqComparator, make_eq_comparator},
     df_execution_err, downcast_any,
     scalar_value::compacted_scalar_value_from_array,
-    spark_float::{canonicalize_nans, spark_float_cmp},
+    spark_float::{canonical_nan, canonicalize_nans, spark_float_cmp},
 };
+use num::Float;
 
 pub fn array_distinct(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     if args.len() != 1 {
@@ -182,55 +183,23 @@ pub fn array_except(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         return df_execution_err!("array_except requires a list");
     };
 
-    let (left_base, left_values) = visible_values(&left)?;
-    let (right_base, right_values) = visible_values(&right)?;
-    let converter = RowConverter::new(vec![SortField::new(left_values.data_type().clone())])?;
-    let left_rows = converter.convert_columns(&[Arc::clone(&left_values)])?;
-    let right_rows = converter.convert_columns(&[right_values])?;
-    let data = left_values.to_data();
-    let mut output = MutableArrayData::new(vec![&data], false, left_values.len());
-    let mut offsets = Vec::with_capacity(num_rows + 1);
-    let mut valids = Vec::with_capacity(num_rows);
-    // Seeded with the right elements, so each left element needs one lookup.
-    let mut seen = HashSet::new();
-    offsets.push(0i32);
-    for row in 0..num_rows {
-        let l = if left_is_scalar { 0 } else { row };
-        let r = if right_is_scalar { 0 } else { row };
-        let valid = left.is_valid(l) && right.is_valid(r);
-        valids.push(valid);
-        if valid {
-            seen.clear();
-            let right_start = right.value_offsets()[r] as usize - right_base;
-            let right_end = right.value_offsets()[r + 1] as usize - right_base;
-            for index in right_start..right_end {
-                seen.insert(right_rows.row(index));
-            }
-            let start = left.value_offsets()[l] as usize - left_base;
-            let end = left.value_offsets()[l + 1] as usize - left_base;
-            let mut run_start = start;
-            for index in start..end {
-                if !seen.insert(left_rows.row(index)) {
-                    if run_start < index {
-                        output.extend(0, run_start, index);
-                    }
-                    run_start = index + 1;
-                }
-            }
-            if run_start < end {
-                output.extend(0, run_start, end);
-            }
-        }
-        let Ok(offset) = i32::try_from(output.len()) else {
-            return df_execution_err!("array_except result exceeds i32 offsets");
-        };
-        offsets.push(offset);
-    }
+    let rows = ListRowPairs {
+        left: &left,
+        right: &right,
+        left_is_scalar,
+        right_is_scalar,
+        num_rows,
+    };
+    let (offsets, nulls, values) = match left.value_type() {
+        DataType::Float32 => except_floats::<Float32Type>(&rows)?,
+        DataType::Float64 => except_floats::<Float64Type>(&rows)?,
+        _ => except_encoded(&rows)?,
+    };
     let result: ArrayRef = Arc::new(ListArray::try_new(
         Arc::clone(field),
-        OffsetBuffer::new(offsets.into()),
-        make_array(output.freeze()),
-        Some(NullBuffer::from(valids)),
+        offsets,
+        values,
+        Some(nulls),
     )?);
     if left_is_scalar && right_is_scalar {
         Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
@@ -241,14 +210,136 @@ pub fn array_except(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }
 }
 
-// Returns the first visible element index and the canonicalized visible
-// elements.
-fn visible_values(list: &ListArray) -> Result<(usize, ArrayRef)> {
+struct ListRowPairs<'a> {
+    left: &'a ListArray,
+    right: &'a ListArray,
+    left_is_scalar: bool,
+    right_is_scalar: bool,
+    num_rows: usize,
+}
+
+impl ListRowPairs<'_> {
+    fn offsets_and_nulls(
+        &self,
+        mut append_row: impl FnMut(Range<usize>, Range<usize>) -> usize,
+    ) -> Result<(OffsetBuffer<i32>, NullBuffer)> {
+        let mut offsets = Vec::with_capacity(self.num_rows + 1);
+        let mut valids = Vec::with_capacity(self.num_rows);
+        let mut len = 0;
+        offsets.push(0i32);
+        for row in 0..self.num_rows {
+            let l = if self.left_is_scalar { 0 } else { row };
+            let r = if self.right_is_scalar { 0 } else { row };
+            let valid = self.left.is_valid(l) && self.right.is_valid(r);
+            valids.push(valid);
+            if valid {
+                len += append_row(value_range(self.left, l), value_range(self.right, r));
+            }
+            let Ok(offset) = i32::try_from(len) else {
+                return df_execution_err!("array_except result exceeds i32 offsets");
+            };
+            offsets.push(offset);
+        }
+        Ok((OffsetBuffer::new(offsets.into()), NullBuffer::from(valids)))
+    }
+}
+
+fn value_range(list: &ListArray, row: usize) -> Range<usize> {
+    let offsets = list.value_offsets();
+    offsets[row] as usize..offsets[row + 1] as usize
+}
+
+fn except_encoded(rows: &ListRowPairs) -> Result<(OffsetBuffer<i32>, NullBuffer, ArrayRef)> {
+    let (left_base, left_values) = visible_values(rows.left);
+    let (right_base, right_values) = visible_values(rows.right);
+    let converter = RowConverter::new(vec![SortField::new(left_values.data_type().clone())])?;
+    let left_rows = converter.convert_columns(&[Arc::clone(&left_values)])?;
+    let right_rows = converter.convert_columns(&[right_values])?;
+    let data = left_values.to_data();
+    let mut output = MutableArrayData::new(vec![&data], false, left_values.len());
+    // Seeded with the right elements, so each left element needs one lookup.
+    let mut seen = HashSet::new();
+    let (offsets, nulls) = rows.offsets_and_nulls(|left, right| {
+        seen.clear();
+        for index in right {
+            seen.insert(right_rows.row(index - right_base));
+        }
+        let (start, end) = (left.start - left_base, left.end - left_base);
+        let len = output.len();
+        let mut run_start = start;
+        for index in start..end {
+            if !seen.insert(left_rows.row(index)) {
+                if run_start < index {
+                    output.extend(0, run_start, index);
+                }
+                run_start = index + 1;
+            }
+        }
+        if run_start < end {
+            output.extend(0, run_start, end);
+        }
+        output.len() - len
+    })?;
+    Ok((offsets, nulls, make_array(output.freeze())))
+}
+
+fn except_floats<T>(rows: &ListRowPairs) -> Result<(OffsetBuffer<i32>, NullBuffer, ArrayRef)>
+where
+    T: ArrowPrimitiveType,
+    T::Native: Float + FloatBits,
+{
+    let left = downcast_any!(rows.left.values(), PrimitiveArray<T>)?;
+    let right = downcast_any!(rows.right.values(), PrimitiveArray<T>)?;
+    let mut output = PrimitiveBuilder::<T>::new();
+    let mut seen = HashSet::new();
+    let (offsets, nulls) = rows.offsets_and_nulls(|left_range, right_range| {
+        seen.clear();
+        for index in right_range {
+            seen.insert(canonical_value(right, index).map(FloatBits::bits));
+        }
+        let len = output.len();
+        for index in left_range {
+            let value = canonical_value(left, index);
+            if seen.insert(value.map(FloatBits::bits)) {
+                output.append_option(value);
+            }
+        }
+        output.len() - len
+    })?;
+    Ok((offsets, nulls, Arc::new(output.finish())))
+}
+
+trait FloatBits {
+    fn bits(self) -> u64;
+}
+
+impl FloatBits for f32 {
+    fn bits(self) -> u64 {
+        self.to_bits().into()
+    }
+}
+
+impl FloatBits for f64 {
+    fn bits(self) -> u64 {
+        self.to_bits()
+    }
+}
+
+fn canonical_value<T>(values: &PrimitiveArray<T>, index: usize) -> Option<T::Native>
+where
+    T: ArrowPrimitiveType,
+    T::Native: Float,
+{
+    values
+        .is_valid(index)
+        .then(|| canonical_nan(values.value(index)))
+}
+
+fn visible_values(list: &ListArray) -> (usize, ArrayRef) {
     let offsets = list.value_offsets();
     let start = offsets[0] as usize;
     let end = offsets[offsets.len() - 1] as usize;
-    let values = canonicalize_nans(&list.values().slice(start, end - start))?;
-    Ok((start, values))
+    (start, list.values().slice(start, end - start))
 }
 
 pub fn array_contains(args: &[ColumnarValue]) -> Result<ColumnarValue> {
@@ -1107,6 +1198,7 @@ mod test {
                         Some(vec![Some(<$float_type>::NAN), Some(4.0)]),
                         Some(vec![Some(non_canonical_nan), Some(5.0)]),
                         Some(vec![None, Some(non_canonical_nan), Some(6.0)]),
+                        Some(vec![None, None, Some(non_canonical_nan)]),
                     ]));
                 let right: ArrayRef =
                     Arc::new(ListArray::from_iter_primitive::<$arrow_type, _, _>(vec![
@@ -1116,14 +1208,23 @@ mod test {
                         Some(vec![Some(-non_canonical_nan)]),
                         Some(vec![Some(signaling_nan)]),
                         Some(vec![None]),
+                        Some(vec![]),
                     ]));
-                let result =
-                    array_except(&[ColumnarValue::Array(left), ColumnarValue::Array(right)])?
-                        .into_array(6)?;
+                let result = array_except(&[
+                    ColumnarValue::Array(Arc::clone(&left)),
+                    ColumnarValue::Array(Arc::clone(&right)),
+                ])?
+                .into_array(7)?;
+                let sliced = array_except(&[
+                    ColumnarValue::Array(left.slice(1, 4)),
+                    ColumnarValue::Array(right.slice(1, 4)),
+                ])?
+                .into_array(4)?;
+                assert_eq!(&sliced, &result.slice(1, 4));
                 let list = downcast_any!(&result, ListArray)?;
                 let values = downcast_any!(list.values(), $array_type)?;
-                assert_eq!(list.value_offsets(), &[0, 3, 4, 6, 7, 8, 10]);
-                assert_eq!(values.null_count(), 0);
+                assert_eq!(list.value_offsets(), &[0, 3, 4, 6, 7, 8, 10, 12]);
+                assert_eq!(values.null_count(), 1);
                 assert_eq!(values.value(0).to_bits(), (-0.0 as $float_type).to_bits());
                 assert_eq!(values.value(1).to_bits(), <$float_type>::NAN.to_bits());
                 assert_eq!(values.value(2), 1.0);
@@ -1134,6 +1235,8 @@ mod test {
                 assert_eq!(values.value(7), 5.0);
                 assert_eq!(values.value(8).to_bits(), <$float_type>::NAN.to_bits());
                 assert_eq!(values.value(9), 6.0);
+                assert!(values.is_null(10));
+                assert_eq!(values.value(11).to_bits(), <$float_type>::NAN.to_bits());
                 Ok(())
             }
         };
