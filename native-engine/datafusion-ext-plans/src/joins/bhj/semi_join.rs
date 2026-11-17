@@ -209,11 +209,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         probed_side_compare_time: &Time,
         build_output_time: &Time,
     ) -> Result<()> {
-        if self.join_params.is_null_aware_anti_join
-            && get_joiner(P).mode == Anti
-            && get_joiner(P).probe_is_join_side
-            && self.map.is_empty()
-        {
+        if get_joiner(P).mode == Anti && get_joiner(P).probe_is_join_side && self.map.is_empty() {
             let _build_output_timer = build_output_time.timer();
             let cols = match get_joiner(P).probe_side {
                 L => self
