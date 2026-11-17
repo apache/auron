@@ -260,7 +260,6 @@ impl RawOnHeapSpill {
     }
 }
 
-// reader and writer wrappers share this, so spill metrics are recorded once here
 impl Drop for RawOnHeapSpill {
     fn drop(&mut self) {
         self.spill_metrics.mem_spill_count.add(1);
