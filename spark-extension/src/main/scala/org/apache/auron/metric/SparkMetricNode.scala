@@ -19,6 +19,7 @@ package org.apache.auron.metric
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.auron.NativeTaskMetrics
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 case class SparkMetricNode(
@@ -40,6 +41,9 @@ case class SparkMetricNode(
     metricValueHandler.foreach(_.apply(metricName, v))
     if (v > 0) {
       metrics.get(metricName).foreach(_.add(v))
+      if (metricName == "disk_spill_size") {
+        NativeTaskMetrics.incDiskBytesSpilled(v)
+      }
     }
   }
 
