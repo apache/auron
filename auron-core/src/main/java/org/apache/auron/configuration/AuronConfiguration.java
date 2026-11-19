@@ -43,9 +43,11 @@ public abstract class AuronConfiguration {
             .withKey("auron.tokio.worker.threads.per.cpu")
             .withCategory("Runtime Configuration")
             .withDescription(
-                    "Number of Tokio worker threads to create per CPU core (spark.task.cpus). Set to 0 for automatic detection "
-                            + "based on available CPU cores. This setting controls the thread pool size for Tokio-based asynchronous operations.")
-            .withDefaultValue(0);
+                    "Number of Tokio worker threads to create per CPU core (spark.task.cpus). Each task creates its own "
+                            + "Tokio runtime, so the default of 1 sizes it to the task's CPU allocation. Set to 0 to use "
+                            + "all available CPU cores of the host for every task, which can create a very large number "
+                            + "of threads on many-core machines.")
+            .withDefaultValue(1);
 
     public static final ConfigOption<Integer> SUGGESTED_BATCH_MEM_SIZE = new ConfigOption<>(Integer.class)
             .withKey("auron.suggested.batch.memSize")
