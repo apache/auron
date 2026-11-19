@@ -124,6 +124,9 @@ message PhysicalExprNode {
     // SparkRandn
     SparkRandnExprNode spark_randn_expr = 20103;
 
+    // SparkRand
+    SparkRandExprNode spark_rand_expr = 20104;
+
     // BloomFilterMightContain
     BloomFilterMightContainExprNode bloom_filter_might_contain_expr = 20200;
   }
@@ -388,6 +391,10 @@ message MonotonicIncreasingIdExprNode {
 }
 
 message SparkRandnExprNode {
+  int64 seed = 1;
+}
+
+message SparkRandExprNode {
   int64 seed = 1;
 }
 
