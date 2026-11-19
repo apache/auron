@@ -96,10 +96,10 @@ object NativeConverters extends Logging {
   def singleChildFallbackEnabled: Boolean =
     SparkAuronConfiguration.UDF_SINGLE_CHILD_FALLBACK_ENABLED.get()
 
-  // Bytes at or above 0x80 are negative in Java and never match Spark's trim check.
   private lazy val integralCastTrimChars: String =
-    (0 until 0x80)
-      .filter(b => Shims.get.isWhitespaceOrISOControl(b.toByte))
+    (Byte.MinValue to Byte.MaxValue)
+      .map(_.toByte)
+      .filter(Shims.get.shouldTrimForIntegralCast)
       .map(_.toChar)
       .mkString
 
