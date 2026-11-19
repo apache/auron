@@ -96,15 +96,9 @@ object NativeConverters extends Logging {
   def singleChildFallbackEnabled: Boolean =
     SparkAuronConfiguration.UDF_SINGLE_CHILD_FALLBACK_ENABLED.get()
 
-  // Bytes skipped by Spark's UTF8String integral parsing. Character.isWhitespace in older
-  // releases, plus ISO control characters from Spark 3.3.3/3.4.1. Probe the runtime because
-  // the change landed in patch releases.
+  // Bytes at or above 0x80 are negative in Java and never match Spark's trim check.
   private lazy val integralCastTrimChars: String =
-    if (UTF8String.fromString("\u00011").toLong(new UTF8String.LongWrapper)) {
-      ((0 to 0x20).map(_.toChar) :+ 0x7f.toChar).mkString
-    } else {
-      "\t\n\u000b\f\r\u001c\u001d\u001e\u001f "
-    }
+    (0 until 0x80).filter(b => Shims.get.isIntegralCastTrimByte(b.toByte)).map(_.toChar).mkString
 
   /**
    * Is the data type(scalar or complex) supported by Auron.

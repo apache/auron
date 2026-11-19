@@ -255,6 +255,9 @@ abstract class Shims {
 
   def getLikeEscapeChar(expr: Expression): Char
 
+  // Whether UTF8String.toLong/toInt skips this leading or trailing byte.
+  def isIntegralCastTrimByte(b: Byte): Boolean
+
   def getMakeDateFailOnError(expr: Expression): Boolean
 
   def getRoundFailOnError(expr: Expression): Boolean
