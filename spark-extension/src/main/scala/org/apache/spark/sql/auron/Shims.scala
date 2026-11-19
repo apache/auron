@@ -255,8 +255,9 @@ abstract class Shims {
 
   def getLikeEscapeChar(expr: Expression): Char
 
-  // Whether UTF8String.toLong/toInt skips this leading or trailing byte.
-  def isIntegralCastTrimByte(b: Byte): Boolean
+  // Mirrors UTF8String.isWhitespaceOrISOControl, which toLong/toInt use to skip leading and
+  // trailing bytes. Spark 3.0 to 3.2 only check Character.isWhitespace.
+  def isWhitespaceOrISOControl(b: Byte): Boolean
 
   def getMakeDateFailOnError(expr: Expression): Boolean
 

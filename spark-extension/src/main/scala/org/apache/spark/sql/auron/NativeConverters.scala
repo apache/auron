@@ -98,7 +98,10 @@ object NativeConverters extends Logging {
 
   // Bytes at or above 0x80 are negative in Java and never match Spark's trim check.
   private lazy val integralCastTrimChars: String =
-    (0 until 0x80).filter(b => Shims.get.isIntegralCastTrimByte(b.toByte)).map(_.toChar).mkString
+    (0 until 0x80)
+      .filter(b => Shims.get.isWhitespaceOrISOControl(b.toByte))
+      .map(_.toChar)
+      .mkString
 
   /**
    * Is the data type(scalar or complex) supported by Auron.
