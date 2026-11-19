@@ -1,0 +1,108 @@
+Subject: [PATCH] auron: respect fixed-length decimal Bloom filter widths
+
+Adapted from https://github.com/apache/datafusion/pull/22995 for DataFusion 49.
+Keep the Parquet column type_length with its Bloom filter and use it when
+probing decimal literals. Unsupported widths must not discard row groups.
+
+diff --git a/datafusion/datasource-parquet/src/row_group_filter.rs b/datafusion/datasource-parquet/src/row_group_filter.rs
+index ad03645bd6b5d56ccf8639145321fc230def2d9e..4f5d6e2c27971e84ef7a741636680db83f823d8a 100644
+--- a/datafusion/datasource-parquet/src/row_group_filter.rs
++++ b/datafusion/datasource-parquet/src/row_group_filter.rs
+@@ -208,10 +208,11 @@
+                         continue;
+                     }
+                 };
+-                let physical_type =
+-                    builder.parquet_schema().column(column_idx).physical_type();
+-
+-                column_sbbf.insert(column_name.to_string(), (bf, physical_type));
++                let descriptor = builder.parquet_schema().column(column_idx);
++                column_sbbf.insert(
++                    column_name.to_string(),
++                    (bf, descriptor.physical_type(), descriptor.type_length()),
++                );
+             }
+
+             let stats = BloomFilterStatistics { column_sbbf };
+@@ -239,8 +240,8 @@
+ }
+ /// Implements [`PruningStatistics`] for Parquet Split Block Bloom Filters (SBBF)
+ struct BloomFilterStatistics {
+-    /// Maps column name to the parquet bloom filter and parquet physical type
+-    column_sbbf: HashMap<String, (Sbbf, Type)>,
++    /// Maps column name to the bloom filter, physical type and declared byte width.
++    column_sbbf: HashMap<String, (Sbbf, Type, i32)>,
+ }
+
+ impl BloomFilterStatistics {
+@@ -248,7 +249,12 @@
+     ///
+     /// In case the type of scalar is not supported, returns `true`, assuming that the
+     /// value may be present.
+-    fn check_scalar(sbbf: &Sbbf, value: &ScalarValue, parquet_type: &Type) -> bool {
++    fn check_scalar(
++        sbbf: &Sbbf,
++        value: &ScalarValue,
++        parquet_type: &Type,
++        type_length: i32,
++    ) -> bool {
+         match value {
+             ScalarValue::Utf8(Some(v))
+             | ScalarValue::Utf8View(Some(v))
+@@ -297,8 +303,12 @@
+                     sbbf.check(&decimal)
+                 }
+                 Type::FIXED_LEN_BYTE_ARRAY => {
+-                    // keep with from_bytes_to_i128
+-                    let b = v.to_be_bytes().to_vec();
++                    if !(1..=16).contains(&type_length) {
++                        return true;
++                    }
++                    // Bloom filters hash the file's physical bytes at its declared width.
++                    let b = v.to_be_bytes();
++                    let b = b[b.len() - type_length as usize..].to_vec();
+                     // Use Decimal constructor after https://github.com/apache/arrow-rs/issues/5325
+                     let decimal = Decimal::Bytes {
+                         value: b.into(),
+@@ -309,9 +319,12 @@
+                 }
+                 _ => true,
+             },
+-            ScalarValue::Dictionary(_, inner) => {
+-                BloomFilterStatistics::check_scalar(sbbf, inner, parquet_type)
+-            }
++            ScalarValue::Dictionary(_, inner) => BloomFilterStatistics::check_scalar(
++                sbbf,
++                inner,
++                parquet_type,
++                type_length,
++            ),
+             _ => true,
+         }
+     }
+@@ -348,7 +361,8 @@
+         column: &Column,
+         values: &HashSet<ScalarValue>,
+     ) -> Option<BooleanArray> {
+-        let (sbbf, parquet_type) = self.column_sbbf.get(column.name.as_str())?;
++        let (sbbf, parquet_type, type_length) =
++            self.column_sbbf.get(column.name.as_str())?;
+
+         // Bloom filters are probabilistic data structures that can return false
+         // positives (i.e. it might return true even if the value is not
+@@ -357,7 +371,14 @@
+
+         let known_not_present = values
+             .iter()
+-            .map(|value| BloomFilterStatistics::check_scalar(sbbf, value, parquet_type))
++            .map(|value| {
++                BloomFilterStatistics::check_scalar(
++                    sbbf,
++                    value,
++                    parquet_type,
++                    *type_length,
++                )
++            })
+             // The row group doesn't contain any of the values if
+             // all the checks are false
+             .all(|v| !v);
