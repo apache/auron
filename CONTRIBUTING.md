@@ -139,7 +139,7 @@ integration is not supported for that Spark version and must not be passed to
 
 | Spark | Scala | JDK | Docker image | Flink | Celeborn | Uniffle | Paimon | Iceberg | Hudi |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 3.5 | 2.12 | 8+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | 1.10.1 | 0.15 |
+| 3.5 | 2.12 | 8+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2, 2.0 | 1.10.1 | 0.15 |
 | 4.0 | 2.13 | 17+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | 1.10.1 | — |
 | 4.1 | 2.13 | 17+ | `rockylinux8` | 1.18 | 0.6 | 0.10 | 1.2 | — | — |
 | 4.2 | 2.13 | 17+ | `rockylinux8` | - | - | - | - | — | — |
@@ -147,6 +147,10 @@ integration is not supported for that Spark version and must not be passed to
 Spark 4.x requires Scala 2.13 and JDK 17 or later. In Docker mode,
 `auron-build.sh` selects JDK 17 for Spark 4.x, and the `rockylinux8` image applies that
 selection. The `centos7` image only provides JDK 8 and must not be used for Spark 4.x.
+
+Paimon 2.0 is currently verified with Spark 3.5. Paimon 1.3+ is binary incompatible with
+code compiled against Paimon 1.2, so build with the Paimon profile that matches the Paimon
+jar deployed at runtime.
 
 Iceberg 1.10.1 supports Spark 3.4, 3.5, and 4.0 in Auron. Spark 4.1 support requires a
 future upgrade to Iceberg 1.11.0 or later. Hudi 0.15 supports Spark 3.0 through 3.5.
