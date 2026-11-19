@@ -86,6 +86,12 @@ fn spill_compression_codec() -> &'static str {
         .as_str()
 }
 
+/// Create a disk spill whose readers can restart from the beginning. On-heap
+/// spills are consumed as they are read and cannot replay a Cartesian input.
+pub fn try_new_file_spill(spill_metrics: &SpillMetrics) -> Result<Box<dyn Spill>> {
+    Ok(Box::new(FileSpill::try_new(spill_metrics)?))
+}
+
 pub fn try_new_spill(spill_metrics: &SpillMetrics) -> Result<Box<dyn Spill>> {
     if !is_jni_bridge_inited() {
         // is driver
