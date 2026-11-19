@@ -50,6 +50,7 @@ class NativeConvertersSuite
       "date_sub(date'2024-03-15', 1)",
       "add_months(date'2024-03-15', 1)",
       "months_between(timestamp'2024-03-15 14:30:45', timestamp'2024-02-15 14:30:45')",
+      "to_unix_timestamp(timestamp'2024-03-15 14:30:45')",
       "date_trunc('day', timestamp'2024-03-15 14:30:45')") ++
       (if (AuronTestUtils.isSparkV30OrGreater) Seq("make_date(2024, 3, 15)") else Nil) ++
       (if (AuronTestUtils.isSparkV31OrGreater) {
