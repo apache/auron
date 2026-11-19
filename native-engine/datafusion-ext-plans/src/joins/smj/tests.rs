@@ -312,8 +312,16 @@ fn test_product_blocks_are_lazy_for_large_groups() {
     assert_eq!(product_blocks(&ranges[..1], &[], 0).count(), 0);
 }
 
-#[tokio::test]
-async fn test_compact_residual_filter_all_join_types_and_projections() -> Result<()> {
+/// Runs every join type through [`SortMergeJoinExec`] and compares the output
+/// with a nested-loop join over the same rows. With `with_condition`, the
+/// residual condition `lv > rv` is applied.
+///
+/// [`SortMergeJoinExec`]: crate::sort_merge_join_exec::SortMergeJoinExec
+async fn assert_all_join_types(
+    (lkeys, lvalues): (&[Option<i32>], &[Option<i32>]),
+    (rkeys, rvalues): (&[Option<i32>], &[Option<i32>]),
+    with_condition: bool,
+) -> Result<()> {
     use arrow::array::BooleanArray;
     use datafusion::{
         common::JoinSide,
@@ -330,25 +338,21 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
     };
 
     auron_memmgr::MemManager::init(1_000_000);
-    let lkeys = vec![None, Some(1), Some(1), Some(2), Some(3)];
-    let lvalues = vec![Some(5), Some(1), Some(20), None, Some(30)];
-    let rkeys = vec![None, Some(1), Some(1), Some(2), Some(4)];
-    let rvalues = vec![Some(5), Some(10), None, Some(0), Some(40)];
-    let make_batch = |prefix: &str, keys: Vec<Option<i32>>, values: Vec<Option<i32>>| {
+    let make_batch = |prefix: &str, keys: &[Option<i32>], values: &[Option<i32>]| {
         RecordBatch::try_new(
             Arc::new(Schema::new(vec![
                 Field::new(format!("{prefix}k"), DataType::Int32, true),
                 Field::new(format!("{prefix}v"), DataType::Int32, true),
             ])),
             vec![
-                Arc::new(Int32Array::from(keys)) as ArrayRef,
-                Arc::new(Int32Array::from(values)) as ArrayRef,
+                Arc::new(Int32Array::from(keys.to_vec())) as ArrayRef,
+                Arc::new(Int32Array::from(values.to_vec())) as ArrayRef,
             ],
         )
         .expect("valid test batch")
     };
-    let left_batch = make_batch("l", lkeys.clone(), lvalues.clone());
-    let right_batch = make_batch("r", rkeys.clone(), rvalues.clone());
+    let left_batch = make_batch("l", lkeys, lvalues);
+    let right_batch = make_batch("r", rkeys, rvalues);
     let mut matches = vec![];
     let mut lmatched = vec![false; lkeys.len()];
     let mut rmatched = vec![false; rkeys.len()];
@@ -356,9 +360,10 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
         for r in 0..rkeys.len() {
             if lkeys[l].is_some()
                 && lkeys[l] == rkeys[r]
-                && lvalues[l]
-                    .zip(rvalues[r])
-                    .is_some_and(|(lvalue, rvalue)| lvalue > rvalue)
+                && (!with_condition
+                    || lvalues[l]
+                        .zip(rvalues[r])
+                        .is_some_and(|(lvalue, rvalue)| lvalue > rvalue))
             {
                 matches.push((l, r));
                 lmatched[l] = true;
@@ -462,16 +467,29 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                             .0,
                     )
                 };
-                let projection = if empty_projection {
-                    vec![]
-                } else if schema.fields().len() > 2 {
+                let narrow = if schema.fields().len() > 2 {
                     vec![0, 2]
                 } else {
                     vec![0]
                 };
+                let projection = if empty_projection {
+                    vec![]
+                } else if !with_condition {
+                    // Without a condition, a narrower projection would read only a prefix of
+                    // each input's columns, which the generic column-pruning fallback does
+                    // not prune yet.
+                    (0..schema.fields().len()).collect()
+                } else {
+                    narrow.clone()
+                };
+                let checked_columns = if empty_projection || with_condition {
+                    (0..projection.len()).collect::<Vec<_>>()
+                } else {
+                    narrow
+                };
                 // The compact payload deliberately lists right before left and
                 // contains only values; neither value is in the output projection.
-                let filter = CompactJoinFilter {
+                let filter = with_condition.then(|| CompactJoinFilter {
                     expression: Arc::new(BinaryExpr::new(
                         Arc::new(Column::new("lv", 1)),
                         Operator::Gt,
@@ -491,7 +509,7 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                         Field::new("rv", DataType::Int32, true),
                         Field::new("lv", DataType::Int32, true),
                     ])),
-                };
+                });
                 let join = SortMergeJoinExec::try_new(
                     schema,
                     left,
@@ -501,7 +519,7 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                         Arc::new(Column::new("rk", 0)),
                     )],
                     join_type,
-                    Some(filter),
+                    filter,
                     vec![SortOptions::default()],
                 )?;
                 let batches = collect(join.execute_projected(
@@ -514,9 +532,9 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                     .iter()
                     .flat_map(|batch| {
                         (0..batch.num_rows()).map(|row| {
-                            batch
-                                .columns()
+                            checked_columns
                                 .iter()
+                                .map(|&column| batch.column(column))
                                 .map(|column| {
                                     if column.is_null(row) {
                                         "null".to_owned()
@@ -546,10 +564,61 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                 expected.sort();
                 assert_eq!(
                     actual, expected,
-                    "join_type={join_type:?}, empty_projection={empty_projection}, input_batch_size={input_batch_size}"
+                    "join_type={join_type:?}, with_condition={with_condition}, empty_projection={empty_projection}, input_batch_size={input_batch_size}"
                 );
             }
         }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_compact_residual_filter_all_join_types_and_projections() -> Result<()> {
+    assert_all_join_types(
+        (
+            &[None, Some(1), Some(1), Some(2), Some(3)],
+            &[Some(5), Some(1), Some(20), None, Some(30)],
+        ),
+        (
+            &[None, Some(1), Some(1), Some(2), Some(4)],
+            &[Some(5), Some(10), None, Some(0), Some(40)],
+        ),
+        true,
+    )
+    .await
+}
+
+/// One side runs out while the other still has rows, which the join must
+/// either still output (outer, anti and existence joins) or may skip.
+#[tokio::test]
+async fn test_one_side_exhausted_first_all_join_types() -> Result<()> {
+    let short_keys = [None, Some(1), Some(2), Some(2)];
+    let short_values = [Some(5), Some(10), Some(0), Some(30)];
+    let long_keys = [None, Some(1), Some(2), Some(3), Some(4), Some(5), Some(5)];
+    let long_values = [
+        Some(5),
+        Some(0),
+        Some(20),
+        Some(30),
+        Some(40),
+        Some(50),
+        None,
+    ];
+    for with_condition in [false, true] {
+        // The left side runs out first.
+        assert_all_join_types(
+            (&short_keys, &short_values),
+            (&long_keys, &long_values),
+            with_condition,
+        )
+        .await?;
+        // The right side runs out first.
+        assert_all_join_types(
+            (&long_keys, &long_values),
+            (&short_keys, &short_values),
+            with_condition,
+        )
+        .await?;
     }
     Ok(())
 }
