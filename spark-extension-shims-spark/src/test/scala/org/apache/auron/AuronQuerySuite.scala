@@ -613,6 +613,20 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("cast string with surrounding whitespace and control characters to integral types") {
+    withSQLConf("spark.auron.cast.trimString" -> "true") {
+      withTable("t1") {
+        Seq(" 42 ", "\t42\t", "42\n", "\r42\r", "\u000b42\f", "\u001c42\u001f", "\u000142\u007f")
+          .toDF("c1")
+          .write
+          .saveAsTable("t1")
+        checkSparkAnswerAndOperator(
+          "select cast(c1 as tinyint), cast(c1 as smallint), cast(c1 as int), " +
+            "cast(c1 as bigint) from t1")
+      }
+    }
+  }
+
   test("cast struct to string") {
     // SPARK-32499 SPARK-32501 SPARK-33291
     if (AuronTestUtils.isSparkV31OrGreater) {

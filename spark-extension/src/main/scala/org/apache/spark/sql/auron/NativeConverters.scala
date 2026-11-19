@@ -96,6 +96,16 @@ object NativeConverters extends Logging {
   def singleChildFallbackEnabled: Boolean =
     SparkAuronConfiguration.UDF_SINGLE_CHILD_FALLBACK_ENABLED.get()
 
+  // Bytes skipped by Spark's UTF8String integral parsing. Character.isWhitespace in older
+  // releases, plus ISO control characters from Spark 3.3.3/3.4.1. Probe the runtime because
+  // the change landed in patch releases.
+  private lazy val integralCastTrimChars: String =
+    if (UTF8String.fromString("\u00011").toLong(new UTF8String.LongWrapper)) {
+      ((0 to 0x20).map(_.toChar) :+ 0x7f.toChar).mkString
+    } else {
+      "\t\n\u000b\f\r\u001c\u001d\u001e\u001f "
+    }
+
   /**
    * Is the data type(scalar or complex) supported by Auron.
    */
@@ -503,12 +513,16 @@ object NativeConverters extends Logging {
           buildSparkUdfWrapperExpr(cast, fallback)
         } else {
           val castChild =
-            if (cast.child.dataType == StringType &&
-              (cast.dataType.isInstanceOf[NumericType] || cast.dataType
-                .isInstanceOf[BooleanType]) &&
-              castTrimStringEnabled) {
-              // converting Cast(str as num) to StringTrim(Cast(str as num)) if enabled
-              StringTrim(cast.child)
+            if (cast.child.dataType == StringType && castTrimStringEnabled) {
+              cast.dataType match {
+                case ByteType | ShortType | IntegerType | LongType =>
+                  // Spark's UTF8String integral parsing strips more than spaces
+                  StringTrim(cast.child, Some(Literal(integralCastTrimChars)))
+                case _: NumericType | BooleanType =>
+                  StringTrim(cast.child)
+                case _ =>
+                  cast.child
+              }
             } else {
               cast.child
             }
