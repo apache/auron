@@ -875,7 +875,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
-  test("from_unixtime Spark fallback preserves ANSI errors in its inputs and invalid formats") {
+  test("from_unixtime Spark fallback preserves ANSI errors in its inputs") {
     withTable("t_from_unixtime_errors") {
       sql("create table t_from_unixtime_errors (seconds bigint, text string) using parquet")
       sql("insert into t_from_unixtime_errors values (1, 'bad-number')")
@@ -885,17 +885,16 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-          checkSparkAnswerAndOperator("""select from_unixtime(text),
+          checkSparkAnswerAndOperator("""select from_unixtime(cast(text as bigint)),
               |  from_unixtime(seconds + 9223372036854775807L)
               |from t_from_unixtime_errors""".stripMargin)
         }
         withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
           for (enabled <- Seq("false", "true");
             (call, message) <- Seq(
-              "from_unixtime(text)" -> "bad-number",
-              "concat(from_unixtime(text), 'suffix')" -> "bad-number",
-              "from_unixtime(seconds + 9223372036854775807L)" -> "overflow",
-              "from_unixtime(seconds, 'invalid')" -> "pattern")) {
+              "from_unixtime(cast(text as bigint))" -> "bad-number",
+              "concat(from_unixtime(cast(text as bigint)), 'suffix')" -> "bad-number",
+              "from_unixtime(seconds + 9223372036854775807L)" -> "overflow")) {
             withSQLConf("spark.auron.enable" -> enabled) {
               val error = intercept[Exception] {
                 sql(s"select $call from t_from_unixtime_errors").collect()
@@ -967,6 +966,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
         for (mode <- Seq("FALLBACK", "NO_CODEGEN");
           call <- Seq(
             "from_unixtime(seconds, 'invalid')",
+            "from_unixtime(coalesce(seconds, 0L), 'invalid')",
             "from_unixtime(seconds, 'yyyy-MM-dd')",
             "from_unixtime(seconds, cast(cast(text as bigint) as string))",
             "from_unixtime(cast(text as bigint), cast(null as string))")) {

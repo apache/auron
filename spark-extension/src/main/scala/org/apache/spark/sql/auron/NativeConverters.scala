@@ -296,11 +296,13 @@ object NativeConverters extends Logging {
     val fromUnixTimes = sparkExpr.collect { case expr: FromUnixTime => expr }
     fromUnixTimes.filter(_.format.foldable).foreach { expr =>
       try {
-        expr.copy(sec = Literal(0L)).eval(null)
+        require(
+          expr.copy(sec = Literal(0L)).eval(null) != null,
+          "from_unixtime constant format evaluates to null")
       } catch {
         case NonFatal(error) =>
-          // Spark codegen validates constant formats even when every input is null.
-          // Keep these calls in Spark rather than suppressing the error in expr.eval.
+          // Constant format initialization can throw or skip input evaluation in codegen.
+          // Keep these calls in Spark to preserve errors and null handling.
           throw new UnsupportedOperationException(
             "from_unixtime constant format requires Spark execution",
             error)

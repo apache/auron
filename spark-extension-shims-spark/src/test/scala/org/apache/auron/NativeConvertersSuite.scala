@@ -165,7 +165,6 @@ class NativeConvertersSuite
         "from_unixtime(id, cast(id as string))",
         "from_unixtime(id, 'yyyy')",
         "from_unixtime(id, '')",
-        "from_unixtime(id, cast(null as string))",
         "from_unixtime(cast(id as double))",
         "from_unixtime(cast(cast(id as string) as bigint))",
         "from_unixtime(id + 1)",
@@ -218,7 +217,7 @@ class NativeConvertersSuite
     }
   }
 
-  test("from_unixtime invalid constant formats require Spark operator fallback") {
+  test("from_unixtime invalid or null constant formats require Spark operator fallback") {
     withSQLConf(
       "spark.auron.enableNativeDateTimeFunctions" -> "true",
       "spark.auron.udf.singleChildFallback.enabled" -> "true",
@@ -226,7 +225,9 @@ class NativeConvertersSuite
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       for (call <- Seq(
           "from_unixtime(id, 'invalid')",
-          "concat(from_unixtime(id, 'invalid'), 'suffix')")) {
+          "concat(from_unixtime(id, 'invalid'), 'suffix')",
+          "from_unixtime(id, cast(null as string))",
+          "concat(from_unixtime(id, cast(null as string)), 'suffix')")) {
         val error = intercept[UnsupportedOperationException] {
           NativeConverters.convertExpr(fromUnixTimeExpression(call))
         }
