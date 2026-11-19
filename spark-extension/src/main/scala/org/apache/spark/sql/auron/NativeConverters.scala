@@ -71,7 +71,6 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.types.MapType
 import org.apache.spark.sql.types.NullType
-import org.apache.spark.sql.types.NumericType
 import org.apache.spark.sql.types.ShortType
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.types.StructField
@@ -96,12 +95,16 @@ object NativeConverters extends Logging {
   def singleChildFallbackEnabled: Boolean =
     SparkAuronConfiguration.UDF_SINGLE_CHILD_FALLBACK_ENABLED.get()
 
-  private lazy val integralCastTrimChars: String =
+  private lazy val integralOrBooleanCastTrimChars: String =
     (Byte.MinValue to Byte.MaxValue)
       .map(_.toByte)
-      .filter(Shims.get.shouldTrimForIntegralCast)
+      .filter(Shims.get.shouldTrimForIntegralOrBooleanCast)
       .map(_.toChar)
       .mkString
+
+  // Spark parses float, double, and decimal strings after Java's String.trim, which strips
+  // every character up to U+0020.
+  private lazy val fractionalCastTrimChars: String = (Char.MinValue to ' ').mkString
 
   /**
    * Is the data type(scalar or complex) supported by Auron.
@@ -512,11 +515,10 @@ object NativeConverters extends Logging {
           val castChild =
             if (cast.child.dataType == StringType && castTrimStringEnabled) {
               cast.dataType match {
-                case ByteType | ShortType | IntegerType | LongType =>
-                  // Spark's UTF8String integral parsing strips more than spaces
-                  StringTrim(cast.child, Some(Literal(integralCastTrimChars)))
-                case _: NumericType | BooleanType =>
-                  StringTrim(cast.child)
+                case ByteType | ShortType | IntegerType | LongType | BooleanType =>
+                  StringTrim(cast.child, Some(Literal(integralOrBooleanCastTrimChars)))
+                case FloatType | DoubleType | _: DecimalType =>
+                  StringTrim(cast.child, Some(Literal(fractionalCastTrimChars)))
                 case _ =>
                   cast.child
               }

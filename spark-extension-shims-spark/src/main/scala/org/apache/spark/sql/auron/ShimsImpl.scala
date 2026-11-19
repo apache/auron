@@ -811,10 +811,10 @@ class ShimsImpl extends Shims with Logging {
   }
 
   @sparkver("3.0 / 3.1 / 3.2")
-  override def shouldTrimForIntegralCast(b: Byte): Boolean = Character.isWhitespace(b)
+  override def shouldTrimForIntegralOrBooleanCast(b: Byte): Boolean = Character.isWhitespace(b)
 
   @sparkver("3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
-  override def shouldTrimForIntegralCast(b: Byte): Boolean =
+  override def shouldTrimForIntegralOrBooleanCast(b: Byte): Boolean =
     Character.isWhitespace(b) || Character.isISOControl(b)
 
   @sparkver("3.0")

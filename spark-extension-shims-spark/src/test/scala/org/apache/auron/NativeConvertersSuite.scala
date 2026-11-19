@@ -117,10 +117,7 @@ class NativeConvertersSuite
     }
   }
 
-  private def assertTrimmedCast(
-      rawValue: String,
-      targetType: DataType,
-      expectedArgsCount: Int): Unit = {
+  private def assertTrimmedCast(rawValue: String, targetType: DataType): Unit = {
     val expr = Cast(Literal.create(rawValue, StringType), targetType)
     val nativeExpr = NativeConverters.convertExpr(expr)
 
@@ -129,7 +126,7 @@ class NativeConvertersSuite
     assert(childExpr.hasScalarFunction)
     val scalarFn = childExpr.getScalarFunction
     assert(scalarFn.getFun == ScalarFunction.Trim)
-    assert(scalarFn.getArgsCount == expectedArgsCount && scalarFn.getArgs(0).hasLiteral)
+    assert(scalarFn.getArgsCount == 2 && scalarFn.getArgs(0).hasLiteral)
   }
 
   private def assertNonTrimmedCast(rawValue: String, targetType: DataType): Unit = {
@@ -144,13 +141,13 @@ class NativeConvertersSuite
 
   test("cast from string to numeric adds trim wrapper before native cast when enabled") {
     withSQLConf("spark.auron.cast.trimString" -> "true") {
-      assertTrimmedCast(" 42 ", IntegerType, expectedArgsCount = 2)
+      assertTrimmedCast(" 42 ", IntegerType)
     }
   }
 
   test("cast from string to boolean adds trim wrapper before native cast when enabled") {
     withSQLConf("spark.auron.cast.trimString" -> "true") {
-      assertTrimmedCast(" true ", BooleanType, expectedArgsCount = 1)
+      assertTrimmedCast(" true ", BooleanType)
     }
   }
 

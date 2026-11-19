@@ -613,18 +613,37 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
-  test("cast string with surrounding whitespace and control characters to integral types") {
+  private def checkPaddedStringCasts(value: String, castTypes: Seq[String]): Unit = {
     withSQLConf("spark.auron.cast.trimString" -> "true") {
       withTable("t1") {
-        Seq(" 42 ", "\t42\t", "42\n", "\r42\r", "\u000b42\f", "\u001c42\u001f", "\u000142\u007f")
+        Seq(
+          " " -> " ",
+          "\t" -> "\t",
+          "" -> "\n",
+          "\r" -> "\r",
+          "\u000b" -> "\f",
+          "\u001c" -> "\u001f",
+          "\u0001" -> "\u007f")
+          .map { case (prefix, suffix) => prefix + value + suffix }
           .toDF("c1")
           .write
           .saveAsTable("t1")
         checkSparkAnswerAndOperator(
-          "select cast(c1 as tinyint), cast(c1 as smallint), cast(c1 as int), " +
-            "cast(c1 as bigint) from t1")
+          castTypes.map(t => s"cast(c1 as $t)").mkString("select ", ", ", " from t1"))
       }
     }
+  }
+
+  test("cast string with surrounding whitespace and control characters to integral types") {
+    checkPaddedStringCasts("42", Seq("tinyint", "smallint", "int", "bigint"))
+  }
+
+  test("cast string with surrounding whitespace and control characters to boolean") {
+    checkPaddedStringCasts("true", Seq("boolean"))
+  }
+
+  test("cast string with surrounding whitespace and control characters to fractional types") {
+    checkPaddedStringCasts("1.5", Seq("float", "double", "decimal(10, 2)"))
   }
 
   test("cast struct to string") {
