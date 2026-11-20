@@ -209,4 +209,23 @@ class AuronMathCompatibilitySuite extends AuronQueryTest with BaseAuronSQLSuite 
       }
     }
   }
+
+  test("decimal remainder keeps operands that exceed the result type") {
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "false",
+      "spark.auron.decimal.arithOp.enabled" -> (SparkVersionUtil.SPARK_RUNTIME_VERSION < "3.4").toString) {
+      withTable("remainder_inputs") {
+        sql("""create table remainder_inputs (
+            |a decimal(15, 0), b int, x decimal(3, 0), y decimal(15, 0),
+            |c decimal(15, 2), d decimal(6, 4)) using parquet""".stripMargin)
+        sql("""insert into remainder_inputs values
+            |(12345678901, 7, 7, 10000000000, 1234567890123.45, 7.1234),
+            |(-12345678901, -7, -7, -10000000000, -1234567890123.45, -7.1234),
+            |(12345678901, 0, 7, 0, 1234567890123.45, 0),
+            |(null, 7, null, 10000000000, null, 7.1234)
+            |""".stripMargin)
+        checkSparkAnswerAndOperator("select a % b, x % y, c % d from remainder_inputs")
+      }
+    }
+  }
 }
