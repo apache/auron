@@ -82,10 +82,15 @@ case class NativeBroadcastJoinExec(
   override def requiredChildDistribution
       : List[org.apache.spark.sql.catalyst.plans.physical.Distribution] = {
     import org.apache.spark.sql.catalyst.plans.physical.BroadcastDistribution
+    import org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode
     import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
     import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 
-    def mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAware = false)
+    def mode = if (leftKeys.isEmpty && rightKeys.isEmpty) {
+      IdentityBroadcastMode
+    } else {
+      HashedRelationBroadcastMode(buildBoundKeys, isNullAware = false)
+    }
     broadcastSide match {
       case JoinBuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
