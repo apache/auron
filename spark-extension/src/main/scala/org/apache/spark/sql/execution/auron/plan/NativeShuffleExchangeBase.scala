@@ -36,7 +36,7 @@ import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BoundReference, NullsFirst, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
@@ -52,7 +52,7 @@ import org.apache.spark.util.{CompletionIterator, MutablePair}
 
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.metric.SparkMetricNode
-import org.apache.auron.protobuf.{IpcReaderExecNode, PhysicalExprNode, PhysicalHashRepartition, PhysicalPlanNode, PhysicalRangeRepartition, PhysicalRepartition, PhysicalRoundRobinRepartition, PhysicalSingleRepartition, PhysicalSortExprNode, Schema, SortExecNode}
+import org.apache.auron.protobuf.{IpcReaderExecNode, PhysicalHashRepartition, PhysicalPlanNode, PhysicalRangeRepartition, PhysicalRepartition, PhysicalRoundRobinRepartition, PhysicalSingleRepartition, Schema, SortExecNode}
 
 abstract class NativeShuffleExchangeBase(
     override val outputPartitioning: Partitioning,
@@ -97,18 +97,7 @@ abstract class NativeShuffleExchangeBase(
 
   private def nativeSortExecNode = outputPartitioning match {
     case RangePartitioning(expressions, _) =>
-      val nativeSortExprs = expressions.map { sortOrder =>
-        PhysicalExprNode
-          .newBuilder()
-          .setSort(
-            PhysicalSortExprNode
-              .newBuilder()
-              .setExpr(NativeConverters.convertExpr(sortOrder.child))
-              .setAsc(sortOrder.direction == Ascending)
-              .setNullsFirst(sortOrder.nullOrdering == NullsFirst)
-              .build())
-          .build()
-      }
+      val nativeSortExprs = expressions.map(NativeConverters.convertSortOrder)
       SortExecNode
         .newBuilder()
         .addAllExpr(nativeSortExprs.asJava)
