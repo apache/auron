@@ -810,6 +810,13 @@ class ShimsImpl extends Shims with Logging {
     expr.asInstanceOf[Like].escapeChar
   }
 
+  @sparkver("3.0 / 3.1 / 3.2")
+  override def shouldTrimForIntegralOrBooleanCast(b: Byte): Boolean = Character.isWhitespace(b)
+
+  @sparkver("3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override def shouldTrimForIntegralOrBooleanCast(b: Byte): Boolean =
+    Character.isWhitespace(b) || Character.isISOControl(b)
+
   @sparkver("3.0")
   override def getMakeDateFailOnError(expr: Expression): Boolean = false
 

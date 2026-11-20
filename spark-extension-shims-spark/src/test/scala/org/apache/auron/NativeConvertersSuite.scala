@@ -126,7 +126,7 @@ class NativeConvertersSuite
     assert(childExpr.hasScalarFunction)
     val scalarFn = childExpr.getScalarFunction
     assert(scalarFn.getFun == ScalarFunction.Trim)
-    assert(scalarFn.getArgsCount == 1 && scalarFn.getArgs(0).hasLiteral)
+    assert(scalarFn.getArgsCount == 2 && scalarFn.getArgs(0).hasLiteral)
   }
 
   private def assertNonTrimmedCast(rawValue: String, targetType: DataType): Unit = {
