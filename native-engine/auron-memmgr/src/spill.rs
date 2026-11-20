@@ -183,17 +183,26 @@ struct OnHeapSpill(Arc<RawOnHeapSpill>, SpillMetrics);
 impl OnHeapSpill {
     fn try_new(hsm: LocalRef, spill_metrics: &SpillMetrics) -> Result<Self> {
         let spill_id = jni_call!(AuronOnHeapSpillManager(hsm.as_obj()).newSpill() -> i32)?;
+        let raw_spill = RawOnHeapSpill {
+            hsm: jni_new_global_ref!(hsm.as_obj())?,
+            spill_id,
+            recorded_disk_usage: AtomicU64::new(0),
+            recorded_disk_iotime: AtomicU64::new(0),
+        };
         spill_metrics.mem_spill_count.add(1);
-        Ok(Self(
-            Arc::new(RawOnHeapSpill {
-                hsm: jni_new_global_ref!(hsm.as_obj())?,
-                spill_id,
-                spill_metrics: spill_metrics.clone(),
-                recorded_disk_usage: AtomicU64::new(0),
-                recorded_disk_iotime: AtomicU64::new(0),
-            }),
-            spill_metrics.clone(),
-        ))
+        Ok(Self(Arc::new(raw_spill), spill_metrics.clone()))
+    }
+
+    fn get_disk_usage(&self) -> Result<u64> {
+        let usage = jni_call!(AuronOnHeapSpillManager(self.0.hsm.as_obj())
+            .getSpillDiskUsage(self.0.spill_id) -> jlong)? as u64;
+        Ok(usage)
+    }
+
+    fn get_disk_iotime(&self) -> Result<u64> {
+        let iotime = jni_call!(AuronOnHeapSpillManager(self.0.hsm.as_obj())
+            .getSpillDiskIOTime(self.0.spill_id) -> jlong)? as u64;
+        Ok(iotime)
     }
 }
 
@@ -213,27 +222,7 @@ impl Spill for OnHeapSpill {
 
     fn get_buf_writer<'a>(&'a mut self) -> BufWriter<Box<dyn Write + Send + 'a>> {
         let cloned = Self(self.0.clone(), self.1.clone());
-        BufWriter::with_capacity(1048576, Box::new(OnHeapSpillWriter(cloned)))
-    }
-}
-
-struct OnHeapSpillWriter(OnHeapSpill);
-
-impl Write for OnHeapSpillWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.0.flush()
-    }
-}
-
-// the JVM can release the spill on task completion before the last reference
-// is dropped, so record disk stats while the spill is still held
-impl Drop for OnHeapSpillWriter {
-    fn drop(&mut self) {
-        self.0.0.record_disk_stats();
+        BufWriter::with_capacity(1048576, Box::new(cloned))
     }
 }
 
@@ -266,53 +255,41 @@ impl Read for OnHeapSpill {
     }
 }
 
-struct RawOnHeapSpill {
-    hsm: GlobalRef,
-    spill_id: i32,
-    spill_metrics: SpillMetrics,
-    recorded_disk_usage: AtomicU64,
-    recorded_disk_iotime: AtomicU64,
-}
-
-impl RawOnHeapSpill {
-    fn record_disk_stats(&self) {
+impl Drop for OnHeapSpill {
+    fn drop(&mut self) {
         let disk_usage = self.get_disk_usage().unwrap_or(0);
         let prev_disk_usage = self
+            .0
             .recorded_disk_usage
             .fetch_max(disk_usage, Ordering::Relaxed);
         if disk_usage > prev_disk_usage {
-            self.spill_metrics
+            self.1
                 .disk_spill_size
                 .add((disk_usage - prev_disk_usage) as usize);
         }
 
         let disk_iotime = self.get_disk_iotime().unwrap_or(0);
         let prev_disk_iotime = self
+            .0
             .recorded_disk_iotime
             .fetch_max(disk_iotime, Ordering::Relaxed);
         if disk_iotime > prev_disk_iotime {
-            self.spill_metrics
+            self.1
                 .disk_spill_iotime
                 .add_duration(Duration::from_nanos(disk_iotime - prev_disk_iotime));
         }
     }
+}
 
-    fn get_disk_usage(&self) -> Result<u64> {
-        let usage = jni_call!(AuronOnHeapSpillManager(self.hsm.as_obj())
-            .getSpillDiskUsage(self.spill_id) -> jlong)? as u64;
-        Ok(usage)
-    }
-
-    fn get_disk_iotime(&self) -> Result<u64> {
-        let iotime = jni_call!(AuronOnHeapSpillManager(self.hsm.as_obj())
-            .getSpillDiskIOTime(self.spill_id) -> jlong)? as u64;
-        Ok(iotime)
-    }
+struct RawOnHeapSpill {
+    hsm: GlobalRef,
+    spill_id: i32,
+    recorded_disk_usage: AtomicU64,
+    recorded_disk_iotime: AtomicU64,
 }
 
 impl Drop for RawOnHeapSpill {
     fn drop(&mut self) {
-        self.record_disk_stats();
         let _ = jni_call!(AuronOnHeapSpillManager(self.hsm.as_obj())
             .releaseSpill(self.spill_id) -> ());
     }
