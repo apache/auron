@@ -614,7 +614,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   private def checkPaddedStringCasts(value: String, castTypes: Seq[String]): Unit = {
-    withSQLConf("spark.auron.cast.trimString" -> "true") {
+    withSQLConf("spark.auron.cast.trimString" -> "true", "spark.sql.ansi.enabled" -> "false") {
       withTable("t1") {
         Seq(
           " " -> " ",
