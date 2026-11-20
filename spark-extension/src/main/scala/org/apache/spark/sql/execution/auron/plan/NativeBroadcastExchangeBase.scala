@@ -77,11 +77,14 @@ abstract class NativeBroadcastExchangeBase(
 
   def broadcastMode: BroadcastMode = this.mode
 
-  protected val hashMapOutput: Seq[Attribute] = output
-    .map(_.withNullability(true)) :+ AttributeReference("~TABLE", BinaryType, nullable = true)()
-
   protected val nativeSchema: pb.Schema = Util.getNativeSchema(output)
-  protected val nativeHashMapSchema: pb.Schema = Util.getNativeSchema(hashMapOutput)
+  private val broadcastSchema = mode match {
+    case IdentityBroadcastMode => nativeSchema
+    case _: HashedRelationBroadcastMode =>
+      val hashMapOutput = output.map(_.withNullability(true)) :+
+        AttributeReference("~TABLE", BinaryType, nullable = true)()
+      Util.getNativeSchema(hashMapOutput)
+  }
 
   def getRunId: UUID
   override lazy val metrics: Map[String, SQLMetric] = SortedMap[String, SQLMetric]() ++ Map(
@@ -181,6 +184,7 @@ abstract class NativeBroadcastExchangeBase(
 
   override def doExecuteNative(): NativeRDD = {
     val broadcast = doExecuteBroadcastNative[Array[Array[Byte]]]()
+    val readerSchema = broadcastSchema
     val nativeMetrics = SparkMetricNode(metrics, Nil)
     val partitions = Array(new Partition() {
       override def index: Int = 0
@@ -193,7 +197,7 @@ abstract class NativeBroadcastExchangeBase(
       None,
       Nil,
       rddShuffleReadFull = true,
-      (_, _) => {
+      (_, context) => {
         val resourceId = s"ArrowBroadcastExchangeExec:${UUID.randomUUID()}"
         val provideIpcIterator = () => {
           broadcast.value.iterator.map(bytes =>
@@ -205,12 +209,16 @@ abstract class NativeBroadcastExchangeBase(
         }
 
         JniBridge.putResource(resourceId, () => provideIpcIterator())
+        // A cached native build can finish the task without opening this reader.
+        if (context != null) {
+          context.addTaskCompletionListener[Unit](_ => JniBridge.getResource(resourceId))
+        }
         pb.PhysicalPlanNode
           .newBuilder()
           .setIpcReader(
             pb.IpcReaderExecNode
               .newBuilder()
-              .setSchema(nativeHashMapSchema)
+              .setSchema(readerSchema)
               .setNumPartitions(1)
               .setIpcProviderResourceId(resourceId)
               .build())
@@ -266,18 +274,17 @@ abstract class NativeBroadcastExchangeBase(
               Some(context))
           assert(iter.isEmpty)
 
-          // return ipcs as iterator
-          Iterator.single(bos.toByteArray)
+          if (bos.size() == 0) Iterator.empty else Iterator.single(bos.toByteArray)
         }
       }
 
-    // build broadcast data
     val collectedData = ipcRDD.collect()
-    val keys = mode match {
-      case mode: HashedRelationBroadcastMode => mode.key
-      case IdentityBroadcastMode => Nil
+    mode match {
+      case IdentityBroadcastMode =>
+        NativeBroadcastExchangeBase.prepareRowBlocks(collectedData, nativeSchema)
+      case mode: HashedRelationBroadcastMode =>
+        buildBroadcastData(collectedData, mode.key, nativeSchema)
     }
-    buildBroadcastData(collectedData, keys, nativeSchema)
   }
 
   @transient
@@ -328,26 +335,92 @@ object NativeBroadcastExchangeBase {
 
   def nativeExecutionTag: TreeNodeTag[Boolean] = TreeNodeTag("arrowBroadcastNativeExecution")
 
+  private def prepareRowBlocks(
+      blocks: Array[Array[Byte]],
+      schema: pb.Schema): Array[Array[Byte]] = {
+    if (blocks.length < 128) return packRowBlocks(blocks)
+    val prepared = Array.newBuilder[Array[Byte]]
+    var forwardFrom = 0
+    var i = 0
+    while (i < blocks.length) {
+      val start = i
+      while (i < blocks.length && blocks(i).length <= 4096) i += 1
+      // Coalesce rows across long runs of tiny codec frames. Each rewrite reads at most
+      // 16 MiB of compressed input and leaves larger partitions in their original encoding.
+      if (i - start >= 128) {
+        prepared ++= packRowBlocks(blocks.slice(forwardFrom, start))
+        var groupStart = start
+        while (groupStart < i) {
+          val groupEnd = groupStart + math.min(i - groupStart, 4096)
+          val group = packRowBlocks(blocks.slice(groupStart, groupEnd))
+          prepared ++= rewriteBroadcastData(group, schema)(identity)
+          groupStart = groupEnd
+        }
+        forwardFrom = i
+      }
+      if (i < blocks.length) i += 1
+    }
+    if (forwardFrom == 0) return packRowBlocks(blocks)
+    prepared ++= packRowBlocks(blocks.drop(forwardFrom))
+    prepared.result()
+  }
+
+  // Auron IPC frames are self-delimiting. Pack tiny partitions so executors can read several
+  // frames per JNI block, and forward larger partitions without copying their contents.
+  private def packRowBlocks(blocks: Array[Array[Byte]]): Array[Array[Byte]] = {
+    if (blocks.length < 2) return blocks
+    val targetSize = 64 * 1024
+    val packed = Array.newBuilder[Array[Byte]]
+    var start = 0
+    while (start < blocks.length) {
+      var end = start + 1
+      var size = blocks(start).length
+      while (end < blocks.length && blocks(end).length <= targetSize - size) {
+        size += blocks(end).length
+        end += 1
+      }
+      if (end == start + 1) {
+        packed += blocks(start)
+      } else {
+        val bytes = new Array[Byte](size)
+        var offset = 0
+        var i = start
+        while (i < end) {
+          System.arraycopy(blocks(i), 0, bytes, offset, blocks(i).length)
+          offset += blocks(i).length
+          i += 1
+        }
+        packed += bytes
+      }
+      start = end
+    }
+    packed.result()
+  }
+
   def buildBroadcastData(
       collectedData: Array[Array[Byte]],
       keys: Seq[Expression],
-      nativeSchema: pb.Schema): Array[Array[Byte]] = {
+      nativeSchema: pb.Schema): Array[Array[Byte]] =
+    rewriteBroadcastData(collectedData, nativeSchema) { input =>
+      val buildHashMap = pb.BroadcastJoinBuildHashMapExecNode
+        .newBuilder()
+        .setInput(input)
+        .addAllKeys(keys.map(key => NativeConverters.convertExpr(key)).asJava)
+      pb.PhysicalPlanNode.newBuilder().setBroadcastJoinBuildHashMap(buildHashMap).build()
+    }
 
+  private def rewriteBroadcastData(collectedData: Array[Array[Byte]], nativeSchema: pb.Schema)(
+      transform: pb.PhysicalPlanNode => pb.PhysicalPlanNode): Array[Array[Byte]] = {
     val readerIpcProviderResourceId = s"BuildBroadcastDataReader:${UUID.randomUUID()}"
     val readerExec = pb.IpcReaderExecNode
       .newBuilder()
       .setSchema(nativeSchema)
       .setIpcProviderResourceId(readerIpcProviderResourceId)
 
-    val buildHashMapExec = pb.BroadcastJoinBuildHashMapExecNode
-      .newBuilder()
-      .setInput(pb.PhysicalPlanNode.newBuilder().setIpcReader(readerExec))
-      .addAllKeys(keys.map(key => NativeConverters.convertExpr(key)).asJava)
-
     val writerIpcProviderResourceId = s"BuildBroadcastDataWriter:${UUID.randomUUID()}"
     val writerExec = pb.IpcWriterExecNode
       .newBuilder()
-      .setInput(pb.PhysicalPlanNode.newBuilder().setBroadcastJoinBuildHashMap(buildHashMapExec))
+      .setInput(transform(pb.PhysicalPlanNode.newBuilder().setIpcReader(readerExec).build()))
       .setIpcConsumerResourceId(writerIpcProviderResourceId)
 
     val exec = pb.PhysicalPlanNode

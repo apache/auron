@@ -35,13 +35,11 @@ import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.RightOuter
+import org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.BinaryExecNode
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
-import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.LongType
 
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.metric.SparkMetricNode
@@ -80,19 +78,14 @@ abstract class NativeBroadcastJoinBase(
           "input_row_count"))
       .toSeq: _*)
 
-  {
+  private val broadcastRows = {
     val baseBroadcast = broadcastSide match {
       case JoinBuildLeft => Shims.get.getUnderlyingBroadcast(left)
       case JoinBuildRight => Shims.get.getUnderlyingBroadcast(right)
     }
-    val mode = baseBroadcast match {
-      case b: BroadcastExchangeExec => b.mode
-      case b: NativeBroadcastExchangeBase => b.broadcastMode
-    }
-    mode match {
-      case mode: HashedRelationBroadcastMode
-          if mode.key.length == 1 && mode.key.head.dataType == LongType =>
-        true
+    baseBroadcast match {
+      case exchange: NativeBroadcastExchangeBase =>
+        exchange.broadcastMode == IdentityBroadcastMode
       case _ => false
     }
   }
@@ -189,6 +182,7 @@ abstract class NativeBroadcastJoinBase(
           .setRight(rightChild)
           .setJoinType(nativeJoinType)
           .setBroadcastSide(nativeBroadcastSide)
+          .setBroadcastRows(broadcastRows)
           .setCachedBuildHashMapId(cachedBuildHashMapId)
           .setIsNullAwareAntiJoin(isNullAwareAntiJoin)
           .setRequiredReservedOrder(requiredReservedOrder)

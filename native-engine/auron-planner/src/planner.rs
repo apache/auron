@@ -420,26 +420,31 @@ impl PhysicalPlanner {
                 let broadcast_side = protobuf::JoinSide::try_from(broadcast_join.broadcast_side)
                     .expect("invalid BroadcastSide");
 
-                let cached_build_hash_map_id = broadcast_join.cached_build_hash_map_id.clone();
+                let cache_id = &broadcast_join.cached_build_hash_map_id;
                 let is_null_aware_anti_join = broadcast_join.is_null_aware_anti_join;
                 let required_reserved_order = broadcast_join.required_reserved_order;
 
+                let plan = BroadcastJoinExec::try_new(
+                    schema,
+                    left,
+                    right,
+                    on,
+                    join_type,
+                    broadcast_side
+                        .try_into()
+                        .map_err(|_| proto_error("invalid BroadcastSide"))?,
+                    true,
+                    (!cache_id.is_empty()).then(|| cache_id.clone()),
+                    is_null_aware_anti_join,
+                    join_filter,
+                )?;
+                let plan = if broadcast_join.broadcast_rows {
+                    plan.with_broadcast_rows()?
+                } else {
+                    plan
+                };
                 Ok(Arc::new(
-                    BroadcastJoinExec::try_new(
-                        schema,
-                        left,
-                        right,
-                        on,
-                        join_type,
-                        broadcast_side
-                            .try_into()
-                            .map_err(|_| proto_error("invalid BroadcastSide"))?,
-                        true,
-                        Some(cached_build_hash_map_id),
-                        is_null_aware_anti_join,
-                        join_filter,
-                    )?
-                    .with_required_reserved_order(required_reserved_order),
+                    plan.with_required_reserved_order(required_reserved_order),
                 ))
             }
             PhysicalPlanType::Union(union) => {
