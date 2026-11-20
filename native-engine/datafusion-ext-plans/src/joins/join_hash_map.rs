@@ -25,7 +25,6 @@ use arrow::{
         Array, ArrayRef, AsArray, BinaryBuilder, BooleanArray, RecordBatch, RecordBatchOptions,
         UInt32Array,
     },
-    buffer::NullBuffer,
     datatypes::{DataType, Field, FieldRef, Schema, SchemaRef},
 };
 use datafusion::{common::Result, physical_expr::PhysicalExprRef};
@@ -133,12 +132,11 @@ impl Table {
             "join hash table: number of rows exceeded 2^30: {num_rows}"
         );
 
-        let key_valids = key_columns
+        let key_nulls: Vec<_> = key_columns
             .iter()
-            .map(|col| col.logical_nulls())
-            .reduce(|nb1, nb2| NullBuffer::union(nb1.as_ref(), nb2.as_ref()))
-            .flatten();
-        let key_is_valid = |row_idx| key_valids.as_ref().is_none_or(|nb| nb.is_valid(row_idx));
+            .filter_map(|col| col.logical_nulls())
+            .collect();
+        let key_is_valid = |row_idx| key_nulls.iter().all(|nulls| nulls.is_valid(row_idx));
         let mut mapped_indices = unchecked!(vec![]);
         let mut num_valid_items = 0;
 
@@ -594,6 +592,10 @@ impl JoinHashMap {
         self.table.num_valid_items == 0
     }
 
+    pub fn has_null_keys(&self) -> bool {
+        self.table.num_valid_items < self.num_rows()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.num_rows() == 0
     }
@@ -724,9 +726,10 @@ pub fn join_create_hashes(num_rows: usize, key_columns: &[ArrayRef]) -> Vec<u32>
         hasher.finish() as u32
     });
 
-    // use 31-bit non-zero hash
+    // Normalize the seed so single-column NULL keys map to hybrid bucket 0.
+    // Keep hashes non-zero for the hash table's empty-slot sentinel.
     for h in &mut hashes {
-        *h |= 0x80000000;
+        *h = (*h ^ JOIN_HASH_RANDOM_SEED) | 0x80000000;
     }
     hashes
 }

@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
+import org.apache.spark.sql.types.{IntegerType, NullType, StructType}
 
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
@@ -1173,18 +1174,94 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("NOT IN subquery with NULL values") {
-    val row = identity[(java.lang.Integer, java.lang.Integer)] _
-    Seq(row((1, 1)), row((2, 2)), row((3, null)))
-      .toDF("a", "b")
-      .createOrReplaceTempView("tbl")
-    val df = checkSparkAnswer("select * from tbl where a not in (select b from tbl)")
+    withSparkConf(
+      "spark.auron.hybrid.join.enable" -> "true",
+      "spark.auron.hybrid.join.rows.threshold" -> "0",
+      "spark.auron.hybrid.join.group.mem.threshold" -> "1") {
+      val row = identity[(java.lang.Integer, java.lang.Integer)] _
+      Seq(row((1, 1)), row((2, 2)), row((3, null)))
+        .toDF("a", "b")
+        .createOrReplaceTempView("tbl")
+      val df = checkSparkAnswer("select * from tbl where a not in (select b from tbl)")
 
-    // Spark 3.0: NOT IN subquery is converted to BroadcastNestedLoopJoinExec, and falls back due to unsupported join condition
-    if (AuronTestUtils.isSparkV31OrGreater) {
-      assert(collectFirst(df.queryExecution.executedPlan) { case bhj: NativeBroadcastJoinExec =>
-        assert(bhj.isNullAwareAntiJoin)
-        bhj
-      }.isDefined)
+      // Spark 3.0: NOT IN uses BroadcastNestedLoopJoinExec and falls back.
+      if (AuronTestUtils.isSparkV31OrGreater) {
+        assert(collectFirst(df.queryExecution.executedPlan) { case bhj: NativeBroadcastJoinExec =>
+          assert(bhj.isNullAwareAntiJoin)
+          assert(bhj.metrics("hybrid_join_time").value > 0)
+          bhj
+        }.isDefined)
+      }
+    }
+  }
+
+  test("NOT IN subquery with VOID join keys") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempView("not_in_void_keys") {
+        spark
+          .createDataFrame(
+            java.util.Arrays.asList(Row(null)),
+            new StructType().add("k", NullType))
+          .createOrReplaceTempView("not_in_void_keys")
+        val df = sql("""
+            |SELECT k FROM not_in_void_keys
+            |WHERE k NOT IN (SELECT k FROM not_in_void_keys)
+            |""".stripMargin)
+        checkAnswer(df, Seq.empty)
+        if (AuronTestUtils.isSparkV31OrGreater) {
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+          }.isDefined)
+        }
+      }
+    }
+  }
+
+  test("NOT IN subquery with VOID keys and runtime empty build") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempView("not_in_empty_void_build") {
+        spark
+          .createDataFrame(
+            java.util.Arrays.asList(Row(null, 1), Row(null, 2)),
+            new StructType().add("k", NullType).add("id", IntegerType))
+          .createOrReplaceTempView("not_in_empty_void_build")
+        val df = sql("""
+            |SELECT id, k FROM not_in_empty_void_build
+            |WHERE k NOT IN (SELECT k FROM not_in_empty_void_build WHERE id < 0)
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, null), Row(2, null)))
+        if (AuronTestUtils.isSparkV31OrGreater) {
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+          }.isDefined)
+        }
+      }
+    }
+  }
+
+  test("NOT IN subquery with runtime empty build retains NULL probe rows") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempPath { path =>
+        withTempView("not_in_empty_build") {
+          Seq[java.lang.Integer](null, 1, 2).toDF("k").write.parquet(path.getCanonicalPath)
+          spark.read
+            .parquet(path.getCanonicalPath)
+            .createOrReplaceTempView("not_in_empty_build")
+
+          val df = checkSparkAnswer("""
+              |SELECT k FROM not_in_empty_build
+              |WHERE k NOT IN (SELECT k FROM not_in_empty_build WHERE k < 0)
+              |""".stripMargin)
+          checkAnswer(df, Seq(Row(null), Row(1), Row(2)))
+
+          // Spark 3.0 uses BroadcastNestedLoopJoinExec and falls back.
+          if (AuronTestUtils.isSparkV31OrGreater) {
+            assert(collectFirst(df.queryExecution.executedPlan) {
+              case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+            }.isDefined)
+          }
+        }
+      }
     }
   }
 
