@@ -18,7 +18,7 @@ use std::sync::Arc;
 use arrow::{
     array::{
         ArrayRef, BooleanArray, Date32Array, Date32Builder, Float64Array, Int32Array, StringArray,
-        TimestampMillisecondArray, as_primitive_array,
+        StringBuilder, TimestampMillisecondArray, as_primitive_array,
     },
     compute::{DatePart, binary, date_part, try_binary},
     datatypes::{DataType, Date32Type, Int32Type, TimeUnit},
@@ -31,6 +31,74 @@ use datafusion::{
     physical_plan::ColumnarValue,
 };
 use datafusion_ext_commons::arrow::cast::cast;
+
+/// Formats seconds in a fixed-offset timezone. NativeConverters guards local
+/// years 0001..9999 and evaluates other values with Spark's original expression.
+pub fn spark_from_unixtime(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let [seconds, format, offset] = args else {
+        return Err(DataFusionError::Execution(
+            "Spark_FromUnixTime requires [seconds, format, offset]".into(),
+        ));
+    };
+    let format = match format {
+        ColumnarValue::Scalar(ScalarValue::Utf8(Some(format)))
+            if matches!(format.as_str(), "%Y-%m-%d %H:%M:%S" | "%Y-%m-%d" | "%Y%m%d") =>
+        {
+            format.as_str()
+        }
+        _ => {
+            return Err(DataFusionError::Execution(
+                "Spark_FromUnixTime requires a supported constant format".into(),
+            ));
+        }
+    };
+    let offset = match offset {
+        ColumnarValue::Scalar(ScalarValue::Int32(Some(offset)))
+            if (-64800..=64800).contains(offset) =>
+        {
+            i64::from(*offset)
+        }
+        _ => {
+            return Err(DataFusionError::Execution(
+                "Spark_FromUnixTime requires a constant offset within 18 hours".into(),
+            ));
+        }
+    };
+    let format_seconds = |seconds: i64| -> Result<String> {
+        let local_seconds = seconds
+            .checked_add(offset)
+            .filter(|seconds| (-62135596800..253402300800).contains(seconds))
+            .ok_or_else(|| {
+                DataFusionError::Execution("Spark_FromUnixTime outside native date range".into())
+            })?;
+        let local = Utc
+            .timestamp_opt(local_seconds, 0)
+            .single()
+            .ok_or_else(|| {
+                DataFusionError::Execution("Spark_FromUnixTime invalid timestamp".into())
+            })?;
+        Ok(local.format(format).to_string())
+    };
+    match seconds {
+        ColumnarValue::Scalar(ScalarValue::Int64(seconds)) => Ok(ColumnarValue::Scalar(
+            ScalarValue::Utf8(seconds.map(format_seconds).transpose()?),
+        )),
+        ColumnarValue::Array(array) => {
+            let seconds = datafusion::common::cast::as_int64_array(array)?;
+            let mut result = StringBuilder::with_capacity(seconds.len(), seconds.len() * 19);
+            for seconds in seconds {
+                match seconds {
+                    Some(seconds) => result.append_value(format_seconds(seconds)?),
+                    None => result.append_null(),
+                }
+            }
+            Ok(ColumnarValue::Array(Arc::new(result.finish())))
+        }
+        _ => Err(DataFusionError::Execution(
+            "Spark_FromUnixTime requires Int64 seconds".into(),
+        )),
+    }
+}
 
 /// Spark `weekofyear()`: ISO week number (Monday-based, week 1 has >3 days).
 /// For timestamps, localizes to the given timezone before computing the week.
@@ -800,10 +868,125 @@ mod tests {
     use std::sync::Arc;
 
     use arrow::array::{
-        ArrayRef, Date32Array, Float64Array, Int32Array, TimestampMillisecondArray,
+        ArrayRef, Date32Array, Float64Array, Int32Array, Int64Array, TimestampMillisecondArray,
     };
 
     use super::*;
+
+    #[test]
+    fn test_spark_from_unixtime_scalars() -> Result<()> {
+        for (seconds, format, offset, expected) in [
+            (0, "%Y-%m-%d %H:%M:%S", 0, "1970-01-01 00:00:00"),
+            (-1, "%Y-%m-%d %H:%M:%S", 0, "1969-12-31 23:59:59"),
+            (0, "%Y-%m-%d %H:%M:%S", 28800, "1970-01-01 08:00:00"),
+            (0, "%Y-%m-%d %H:%M:%S", -25200, "1969-12-31 17:00:00"),
+            (951782400, "%Y-%m-%d", 0, "2000-02-29"),
+            (0, "%Y%m%d", 19800, "19700101"),
+            (
+                -62135596800 - 64800,
+                "%Y-%m-%d %H:%M:%S",
+                64800,
+                "0001-01-01 00:00:00",
+            ),
+            (
+                253402300799 + 64800,
+                "%Y-%m-%d %H:%M:%S",
+                -64800,
+                "9999-12-31 23:59:59",
+            ),
+        ] {
+            let result = spark_from_unixtime(&[
+                ColumnarValue::Scalar(ScalarValue::Int64(Some(seconds))),
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some(format.into()))),
+                ColumnarValue::Scalar(ScalarValue::Int32(Some(offset))),
+            ])?;
+            assert!(matches!(
+                result,
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some(actual))) if actual == expected
+            ));
+        }
+        assert!(matches!(
+            spark_from_unixtime(&[
+                ColumnarValue::Scalar(ScalarValue::Int64(None)),
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some("%Y-%m-%d".into()))),
+                ColumnarValue::Scalar(ScalarValue::Int32(Some(0))),
+            ])?,
+            ColumnarValue::Scalar(ScalarValue::Utf8(None))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_from_unixtime_sliced_and_empty_arrays() -> Result<()> {
+        let values = Int64Array::from(vec![
+            Some(i64::MAX),
+            None,
+            Some(0),
+            Some(-1),
+            Some(-62135596800 - 28800),
+            Some(253402300799 - 28800),
+            Some(i64::MIN),
+        ]);
+        let result = spark_from_unixtime(&[
+            ColumnarValue::Array(Arc::new(values.slice(1, 5))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("%Y-%m-%d %H:%M:%S".into()))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(28800))),
+        ])?;
+        let expected: ArrayRef = Arc::new(StringArray::from(vec![
+            None,
+            Some("1970-01-01 08:00:00"),
+            Some("1970-01-01 07:59:59"),
+            Some("0001-01-01 00:00:00"),
+            Some("9999-12-31 23:59:59"),
+        ]));
+        assert_eq!(&result.into_array(5)?, &expected);
+        let empty = spark_from_unixtime(&[
+            ColumnarValue::Array(Arc::new(values.slice(0, 0))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("%Y%m%d".into()))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(0))),
+        ])?;
+        assert_eq!(empty.into_array(0)?.len(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_spark_from_unixtime_rejects_unguarded_values_and_invalid_arguments() {
+        let args = [
+            ColumnarValue::Scalar(ScalarValue::Int64(Some(0))),
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some("%Y-%m-%d".into()))),
+            ColumnarValue::Scalar(ScalarValue::Int32(Some(0))),
+        ];
+        assert!(spark_from_unixtime(&args[..2]).is_err());
+        for (index, value) in [
+            (0, ColumnarValue::Scalar(ScalarValue::Int64(Some(i64::MIN)))),
+            (0, ColumnarValue::Scalar(ScalarValue::Int64(Some(i64::MAX)))),
+            (
+                0,
+                ColumnarValue::Scalar(ScalarValue::Int64(Some(-62135596801))),
+            ),
+            (
+                0,
+                ColumnarValue::Scalar(ScalarValue::Int64(Some(253402300800))),
+            ),
+            (0, ColumnarValue::Scalar(ScalarValue::Int32(Some(0)))),
+            (0, ColumnarValue::Array(Arc::new(Int32Array::from(vec![0])))),
+            (
+                1,
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some("%Q".into()))),
+            ),
+            (1, ColumnarValue::Scalar(ScalarValue::Utf8(None))),
+            (
+                1,
+                ColumnarValue::Array(Arc::new(StringArray::from(vec!["%Y-%m-%d"]))),
+            ),
+            (2, ColumnarValue::Scalar(ScalarValue::Int32(Some(64801)))),
+            (2, ColumnarValue::Scalar(ScalarValue::Int32(None))),
+        ] {
+            let mut invalid = args.clone();
+            invalid[index] = value;
+            assert!(spark_from_unixtime(&invalid).is_err());
+        }
+    }
 
     #[test]
     fn test_spark_year() -> Result<()> {

@@ -18,10 +18,12 @@ package org.apache.auron
 
 import java.text.SimpleDateFormat
 
+import scala.util.Try
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{Alias, GetJsonObject}
+import org.apache.spark.sql.catalyst.expressions.{Alias, FromUnixTime, GetJsonObject}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.execution.auron.plan.NativeProjectBase
 import org.apache.spark.sql.functions.{col, split}
@@ -779,6 +781,218 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       sql("create table t1(c1 int, c2 string) using parquet")
       sql("insert into t1 values(17, 'Spark SQL')")
       checkSparkAnswerAndOperator("select hex(c1), hex(c2) from t1")
+    }
+  }
+
+  test("from_unixtime native formats and fixed offsets match Spark including guarded values") {
+    withTable("t_from_unixtime") {
+      sql("create table t_from_unixtime (seconds bigint, small int) using parquet")
+      val seconds = Seq(
+        None,
+        Some(0L),
+        Some(-1L),
+        Some(951782400L),
+        Some(-62135596800L),
+        Some(-62135596801L),
+        Some(253402300799L),
+        Some(253402300800L),
+        Some(-62135596800L - 28800),
+        Some(253402300800L - 28800),
+        Some(-62135596800L + 25200),
+        Some(253402300800L + 25200),
+        Some(Long.MinValue),
+        Some(Long.MaxValue))
+      val rows = seconds.zipWithIndex.map { case (value, index) =>
+        s"(${value.map(v => s"${v}L").getOrElse("null")}, $index)"
+      }
+      sql(s"insert into t_from_unixtime values ${rows.mkString(",")}")
+      for (policy <- Seq("CORRECTED", "EXCEPTION");
+        ansi <- Seq("false", "true");
+        zone <- Seq("UTC", "+08:00", "-07:00")) {
+        withSQLConf(
+          "spark.auron.enableNativeDateTimeFunctions" -> "true",
+          "spark.auron.udf.singleChildFallback.enabled" -> "true",
+          "spark.sql.legacy.timeParserPolicy" -> policy,
+          SQLConf.ANSI_ENABLED.key -> ansi,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          val df = checkSparkAnswerAndOperator("""select seconds,
+              |  from_unixtime(seconds),
+              |  from_unixtime(seconds, 'yyyy-MM-dd'),
+              |  from_unixtime(seconds, 'yyyyMMdd'),
+              |  from_unixtime(small)
+              |from t_from_unixtime""".stripMargin)
+          val expressions = stripAQEPlan(df.queryExecution.executedPlan).collect {
+            case project: NativeProjectBase =>
+              project.expressions.flatMap(_.collect { case e: FromUnixTime => e })
+          }.flatten
+          assert(expressions.nonEmpty)
+          expressions.foreach { expr =>
+            val converted = NativeConverters.convertExpr(expr)
+            assert(converted.hasCase)
+            assert(
+              converted.getCase
+                .getWhenThenExpr(1)
+                .getThenExpr
+                .getScalarFunction
+                .getName == "Spark_FromUnixTime")
+            assert(converted.getCase.getElseExpr.hasSparkUdfWrapperExpr)
+          }
+        }
+      }
+    }
+  }
+
+  test("from_unixtime retains Spark fallback for dynamic formats legacy policy and DST zones") {
+    withTable("t_from_unixtime_fallback") {
+      sql("create table t_from_unixtime_fallback (seconds bigint, fmt string) using parquet")
+      sql("""insert into t_from_unixtime_fallback values
+          |  (0, 'yyyy-MM-dd HH:mm:ss'),
+          |  (-1, 'yyyy'),
+          |  (-14831769600L, 'yyyy-MM-dd HH:mm:ss'),
+          |  (-62135596801L, 'yyyy-MM-dd HH:mm:ss'),
+          |  (1710064799, 'yyyy-MM-dd HH:mm:ss'),
+          |  (1710064800, 'yyyy-MM-dd HH:mm:ss'),
+          |  (1730624399, 'yyyy-MM-dd HH:mm:ss'),
+          |  (1730624400, 'yyyy-MM-dd HH:mm:ss'),
+          |  (0, ''), (0, null), (null, 'yyyy-MM-dd')
+          |""".stripMargin)
+      for (policy <- Seq("CORRECTED", "EXCEPTION", "LEGACY");
+        zone <- Seq("UTC", "Asia/Shanghai", "America/Los_Angeles")) {
+        withSQLConf(
+          "spark.auron.enableNativeDateTimeFunctions" -> "true",
+          "spark.auron.udf.singleChildFallback.enabled" -> "true",
+          "spark.sql.legacy.timeParserPolicy" -> policy,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          val df = checkSparkAnswerAndOperator("""select
+              |  from_unixtime(seconds, fmt), from_unixtime(seconds)
+              |from t_from_unixtime_fallback""".stripMargin)
+          val dynamic = df.queryExecution.analyzed.expressions
+            .flatMap(_.collect { case e: FromUnixTime if !e.format.foldable => e })
+            .head
+          assert(NativeConverters.convertExpr(dynamic).hasSparkUdfWrapperExpr)
+        }
+      }
+    }
+  }
+
+  test("from_unixtime Spark fallback preserves ANSI errors in its inputs") {
+    withTable("t_from_unixtime_errors") {
+      sql("create table t_from_unixtime_errors (seconds bigint, text string) using parquet")
+      sql("insert into t_from_unixtime_errors values (1, 'bad-number')")
+      withSQLConf(
+        "spark.auron.enableNativeDateTimeFunctions" -> "true",
+        "spark.auron.udf.singleChildFallback.enabled" -> "true",
+        "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          checkSparkAnswerAndOperator("""select from_unixtime(cast(text as bigint)),
+              |  from_unixtime(seconds + 9223372036854775807L)
+              |from t_from_unixtime_errors""".stripMargin)
+        }
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          for (enabled <- Seq("false", "true");
+            (call, message) <- Seq(
+              "from_unixtime(cast(text as bigint))" -> "bad-number",
+              "concat(from_unixtime(cast(text as bigint)), 'suffix')" -> "bad-number",
+              "from_unixtime(seconds + 9223372036854775807L)" -> "overflow")) {
+            withSQLConf("spark.auron.enable" -> enabled) {
+              val error = intercept[Exception] {
+                sql(s"select $call from t_from_unixtime_errors").collect()
+              }
+              assert(error.toString.toLowerCase.contains(message))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("from_unixtime respects the datetime switch and disabled expression fallback") {
+    withTable("t_from_unixtime_switch") {
+      sql("create table t_from_unixtime_switch (seconds bigint) using parquet")
+      sql("insert into t_from_unixtime_switch values (0), (-1), (null)")
+      withSQLConf(
+        "spark.auron.enableNativeDateTimeFunctions" -> "false",
+        "spark.auron.udf.singleChildFallback.enabled" -> "true") {
+        checkSparkAnswerAndOperator("select from_unixtime(seconds) from t_from_unixtime_switch")
+      }
+      withSQLConf(
+        "spark.auron.enableNativeDateTimeFunctions" -> "true",
+        "spark.auron.udf.singleChildFallback.enabled" -> "false",
+        "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val df = checkSparkAnswer("select from_unixtime(seconds) from t_from_unixtime_switch")
+        assert(stripAQEPlan(df.queryExecution.executedPlan).collectFirst {
+          case project: ProjectExec => project
+        }.nonEmpty)
+      }
+    }
+  }
+
+  test("from_unixtime fallback supports scalar subquery arguments") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTable("t_from_unixtime_subquery") {
+        sql("create table t_from_unixtime_subquery (seconds bigint, fmt string) using parquet")
+        sql("""insert into t_from_unixtime_subquery values
+            |  (0, 'yyyy-MM-dd'), (-1, 'yyyyMMdd'), (null, null)
+            |""".stripMargin)
+        for (call <- Seq(
+            "from_unixtime((select max(seconds) from t_from_unixtime_subquery))",
+            "from_unixtime(seconds, (select max(fmt) from t_from_unixtime_subquery))",
+            "from_unixtime(seconds + (select max(seconds) from t_from_unixtime_subquery))")) {
+          checkSparkAnswerAndOperator(s"select $call from t_from_unixtime_subquery")
+        }
+      }
+    }
+  }
+
+  test("from_unixtime fallback preserves null and format error evaluation") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTable("t_from_unixtime_null") {
+        sql("create table t_from_unixtime_null (seconds bigint, text string) using parquet")
+        sql("insert into t_from_unixtime_null values (null, 'bad-number'), (null, '0')")
+        def rootCause(error: Throwable): Throwable = {
+          if (error.getCause == null) error else rootCause(error.getCause)
+        }
+        for (mode <- Seq("FALLBACK", "NO_CODEGEN");
+          call <- Seq(
+            "from_unixtime(seconds, 'invalid')",
+            "from_unixtime(coalesce(seconds, 0L), 'invalid')",
+            "from_unixtime(seconds, 'yyyy-MM-dd')",
+            "from_unixtime(seconds, cast(cast(text as bigint) as string))",
+            "from_unixtime(cast(text as bigint), cast(null as string))")) {
+          withSQLConf(
+            "spark.sql.codegen.factoryMode" -> mode,
+            "spark.sql.codegen.wholeStage" -> (mode != "NO_CODEGEN").toString) {
+            val query = s"select $call from t_from_unixtime_null"
+            var expected: Either[Throwable, Seq[Row]] = Right(Nil)
+            withSQLConf("spark.auron.enable" -> "false") {
+              expected = Try(sql(query).collect().toSeq).toEither
+            }
+            val df = sql(query)
+            if (call.contains("'invalid'")) {
+              assert(stripAQEPlan(df.queryExecution.executedPlan).collectFirst {
+                case project: ProjectExec => project
+              }.nonEmpty)
+            }
+            expected match {
+              case Right(rows) => checkAnswer(df, rows)
+              case Left(error) =>
+                val actual = intercept[Exception](df.collect())
+                assert(rootCause(actual).getClass == rootCause(error).getClass)
+            }
+          }
+        }
+      }
     }
   }
 
