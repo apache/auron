@@ -204,8 +204,9 @@ abstract class NativeShuffleExchangeBase(
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
         val rddForSampling = rdd.mapPartitionsInternal { iter =>
-          val projection =
-            UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
+          val projection = UnsafeProjection.create(
+            sortingExpressions.map(o => NativeConverters.normalizeSortKey(o.child)),
+            outputAttributes)
           val mutablePair = new MutablePair[InternalRow, Null]()
           // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
           // partition bounds. To get accurate samples, we need to copy the mutable keys.

@@ -329,13 +329,22 @@ object NativeConverters extends Logging {
       .build()
   }
 
+  // Spark orders all NaNs as equal and greater than other values, and -0.0 as equal to 0.0.
+  // Native sorting compares raw float bits, so normalize float keys Spark has not normalized.
+  def normalizeSortKey(expr: Expression): Expression = expr match {
+    case _: KnownFloatingPointNormalized => expr
+    case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
+      NormalizeNaNAndZero(expr)
+    case _ => expr
+  }
+
   def convertSortOrder(sortOrder: SortOrder): pb.PhysicalExprNode = {
     pb.PhysicalExprNode
       .newBuilder()
       .setSort(
         pb.PhysicalSortExprNode
           .newBuilder()
-          .setExpr(convertExpr(sortOrder.child))
+          .setExpr(convertExpr(normalizeSortKey(sortOrder.child)))
           .setAsc(sortOrder.direction == Ascending)
           .setNullsFirst(sortOrder.nullOrdering == NullsFirst)
           .build())
