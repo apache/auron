@@ -344,7 +344,12 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         cur1: &mut StreamCursor,
         cur2: &mut StreamCursor,
     ) -> Result<()> {
-        let mut merger = GroupMerger::new();
+        // Only the anti join keeps rows that match nothing, on its own side.
+        let joiner = get_joiner(P);
+        let mut merger = GroupMerger::new(
+            joiner.join_side == L && !joiner.semi,
+            joiner.join_side == R && !joiner.semi,
+        );
 
         while let Some(action) = merger.next(cur1, cur2).await? {
             // Note: the group slices below live inside the merger and are invalidated by
