@@ -1272,10 +1272,15 @@ object AuronConverters extends Logging {
     }
 
     def sortInsertChild(cmd: InsertIntoHiveTable, child: SparkPlan): SparkPlan = {
-      var sortedChild = convertToNative(child)
       val numDynParts = cmd.partition.count(_._2.isEmpty)
       val requiredOrdering =
         child.output.slice(child.output.length - numDynParts, child.output.length)
+      // Native sinks need equal partition values to be contiguous, but float sort keys are
+      // normalized, so -0.0 and 0.0 rows can interleave.
+      if (requiredOrdering.exists(a => a.dataType == FloatType || a.dataType == DoubleType)) {
+        throw new NotImplementedError("unsupported float or double dynamic partition column")
+      }
+      var sortedChild = convertToNative(child)
       if (requiredOrdering.nonEmpty && child.outputOrdering.map(_.child) != requiredOrdering) {
         val rowNumExpr = StubExpr("RowNum", LongType, nullable = false)
         sortedChild = Shims.get.createNativeSortExec(

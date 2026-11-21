@@ -26,9 +26,7 @@ import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.NativePartition
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
-import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.NullsFirst
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.plans.physical.OrderedDistribution
@@ -39,9 +37,7 @@ import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 import org.apache.auron.metric.SparkMetricNode
-import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.protobuf.PhysicalPlanNode
-import org.apache.auron.protobuf.PhysicalSortExprNode
 import org.apache.auron.protobuf.SortExecNode
 
 abstract class NativeSortBase(
@@ -80,18 +76,7 @@ abstract class NativeSortBase(
       UnspecifiedDistribution :: Nil
     }
 
-  private def nativeSortExprs = sortOrder.map { sortOrder =>
-    PhysicalExprNode
-      .newBuilder()
-      .setSort(
-        PhysicalSortExprNode
-          .newBuilder()
-          .setExpr(NativeConverters.convertExpr(sortOrder.child))
-          .setAsc(sortOrder.direction == Ascending)
-          .setNullsFirst(sortOrder.nullOrdering == NullsFirst)
-          .build())
-      .build()
-  }
+  private def nativeSortExprs = sortOrder.map(NativeConverters.convertSortOrder)
 
   // check whether native converting is supported
   nativeSortExprs

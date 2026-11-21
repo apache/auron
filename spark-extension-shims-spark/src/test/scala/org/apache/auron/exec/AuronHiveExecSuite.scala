@@ -165,6 +165,33 @@ class AuronHiveExecSuite extends AuronQueryTest with BaseAuronHiveSQLSuite {
     }
   }
 
+  test("do not convert InsertIntoHiveTable with a double dynamic partition column") {
+    withSQLConf(
+      "spark.auron.enable.data.writing" -> "true",
+      "spark.auron.enable.data.writing.orc" -> "true",
+      "hive.exec.dynamic.partition" -> "true",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("src_orc_insert_double_part") {
+        sql("""
+          |create table src_orc_insert_double_part using parquet as
+          |select 1 as id, 'a' as v, 1.0D as part
+          |union all
+          |select 2 as id, 'b' as v, 2.0D as part
+          |""".stripMargin)
+
+        val queryDf = sql("select id, v, part from src_orc_insert_double_part")
+        val exec = buildOrcInsertExec(
+          buildOrcTable("t_orc_native_double_part", queryDf.schema, Seq("part")),
+          queryDf,
+          partition = Map("part" -> None))
+
+        intercept[NotImplementedError] {
+          AuronConverters.convertDataWritingCommandExec(exec)
+        }
+      }
+    }
+  }
+
   test(
     "convert ORC InsertIntoHiveTable with static and dynamic partitions to native ORC insert") {
     withSQLConf(

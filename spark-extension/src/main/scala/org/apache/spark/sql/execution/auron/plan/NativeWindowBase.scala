@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.Lead
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
-import org.apache.spark.sql.catalyst.expressions.NullsFirst
 import org.apache.spark.sql.catalyst.expressions.PercentRank
 import org.apache.spark.sql.catalyst.expressions.Rank
 import org.apache.spark.sql.catalyst.expressions.RowNumber
@@ -249,18 +248,7 @@ abstract class NativeWindowBase(
     NativeConverters.convertExpr(partition)
   }
 
-  private def nativeOrderSpecExprs = orderSpec.map { sortOrder =>
-    pb.PhysicalExprNode
-      .newBuilder()
-      .setSort(
-        pb.PhysicalSortExprNode
-          .newBuilder()
-          .setExpr(NativeConverters.convertExpr(sortOrder.child))
-          .setAsc(sortOrder.direction == Ascending)
-          .setNullsFirst(sortOrder.nullOrdering == NullsFirst)
-          .build())
-      .build()
-  }
+  private def nativeOrderSpecExprs = orderSpec.map(NativeConverters.convertSortOrder)
 
   // check whether native converting is supported
   nativeWindowExprs
