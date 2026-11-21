@@ -17,15 +17,16 @@ use std::sync::Arc;
 
 use arrow::{
     array::{
-        ArrayRef, BooleanArray, Date32Array, Date32Builder, Float64Array, Int32Array, StringArray,
-        TimestampMillisecondArray, as_primitive_array,
+        Array, ArrayRef, BooleanArray, Date32Array, Date32Builder, Decimal128Array, Float64Array,
+        Int32Array, StringArray, TimestampMicrosecondBuilder, TimestampMillisecondArray,
+        as_primitive_array,
     },
     compute::{DatePart, binary, date_part, try_binary},
     datatypes::{DataType, Date32Type, Int32Type, TimeUnit},
     error::ArrowError,
 };
 use chrono::{Duration, LocalResult, Months, NaiveDate, Offset, TimeZone, Utc, prelude::*};
-use chrono_tz::Tz;
+use chrono_tz::{GapInfo, Tz};
 use datafusion::{
     common::{DataFusionError, Result, ScalarValue},
     physical_plan::ColumnarValue,
@@ -617,6 +618,135 @@ pub fn spark_make_date(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }
 }
 
+pub fn spark_make_timestamp(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    if args.len() != 8 {
+        return Err(DataFusionError::Execution(
+            "spark_make_timestamp() requires eight arguments".to_string(),
+        ));
+    }
+    let fail_on_error = match &args[7] {
+        ColumnarValue::Scalar(ScalarValue::Boolean(Some(value))) => *value,
+        _ => {
+            return Err(DataFusionError::Execution(
+                "spark_make_timestamp() failOnError must be a boolean scalar".to_string(),
+            ));
+        }
+    };
+    // The converter resolves constant Java zone IDs, including aliases and fixed offsets.
+    let timezone = match &args[6] {
+        ColumnarValue::Scalar(ScalarValue::Utf8(Some(name))) => {
+            let tz = name.parse::<Tz>().map_err(|_| {
+                DataFusionError::Execution(format!(
+                    "spark_make_timestamp() unsupported timezone: {name}"
+                ))
+            })?;
+            Some((Some(tz), 0))
+        }
+        ColumnarValue::Scalar(ScalarValue::Int32(Some(offset)))
+            if (-64800..=64800).contains(offset) =>
+        {
+            Some((None, *offset))
+        }
+        ColumnarValue::Scalar(ScalarValue::Utf8(None)) => None,
+        _ => {
+            return Err(DataFusionError::Execution(
+                "spark_make_timestamp() timezone must be a zone ID or offset scalar".to_string(),
+            ));
+        }
+    };
+    let scalar_result = args[..6]
+        .iter()
+        .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
+    let arrays = ColumnarValue::values_to_arrays(&args[..6])?;
+    let parts = arrays[..5]
+        .iter()
+        .map(|array| {
+            array.as_any().downcast_ref::<Int32Array>().ok_or_else(|| {
+                DataFusionError::Execution(
+                    "spark_make_timestamp() date/time fields must be Int32".to_string(),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let seconds = arrays[5]
+        .as_any()
+        .downcast_ref::<Decimal128Array>()
+        .filter(|array| array.scale() == 6)
+        .ok_or_else(|| {
+            DataFusionError::Execution(
+                "spark_make_timestamp() seconds must be Decimal128 with scale 6".to_string(),
+            )
+        })?;
+    let mut result = TimestampMicrosecondBuilder::with_capacity(seconds.len());
+    for i in 0..seconds.len() {
+        if timezone.is_none() || arrays.iter().any(|array| array.is_null(i)) {
+            result.append_null();
+            continue;
+        }
+        let micros = seconds.value(i);
+        let local = if (0..=60_000_000).contains(&micros) {
+            u32::try_from(parts[1].value(i))
+                .ok()
+                .zip(u32::try_from(parts[2].value(i)).ok())
+                .and_then(|(month, day)| NaiveDate::from_ymd_opt(parts[0].value(i), month, day))
+                .and_then(|date| {
+                    date.and_hms_micro_opt(
+                        parts[3].value(i) as u32,
+                        parts[4].value(i) as u32,
+                        (micros / 1_000_000 % 60) as u32,
+                        (micros % 1_000_000) as u32,
+                    )
+                })
+                .and_then(|local| {
+                    if micros == 60_000_000 {
+                        local.checked_add_signed(Duration::minutes(1))
+                    } else {
+                        Some(local)
+                    }
+                })
+        } else {
+            None
+        };
+        let timestamp = local.and_then(|local| {
+            timezone.and_then(|(tz, offset)| match tz {
+                Some(tz) => {
+                    match tz.from_local_datetime(&local) {
+                        LocalResult::Single(dt) => Some(dt.timestamp_micros()),
+                        // java.time chooses the earlier offset during an overlap.
+                        LocalResult::Ambiguous(a, b) => Some(a.min(b).timestamp_micros()),
+                        // During a gap, Java shifts forward by the gap's duration. Applying the
+                        // pre-transition offset to the original local time gives the same instant.
+                        LocalResult::None => GapInfo::new(&local, &tz)
+                            .and_then(|gap| gap.begin)
+                            .map(|(_, offset)| {
+                                local.and_utc().timestamp_micros()
+                                    - i64::from(offset.fix().local_minus_utc()) * 1_000_000
+                            }),
+                    }
+                }
+                None => Some(local.and_utc().timestamp_micros() - i64::from(offset) * 1_000_000),
+            })
+        });
+        match timestamp {
+            Some(value) => result.append_value(value),
+            None if !fail_on_error => result.append_null(),
+            None => {
+                return Err(DataFusionError::Execution(
+                    "Invalid value for make_timestamp".to_string(),
+                ));
+            }
+        }
+    }
+    let result: ArrayRef = Arc::new(result.finish());
+    if scalar_result {
+        Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+            &result, 0,
+        )?))
+    } else {
+        Ok(ColumnarValue::Array(result))
+    }
+}
+
 /// Spark `dayofweek()`: Sunday = 1, Monday = 2, ..., Saturday = 7.
 pub fn spark_dayofweek(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let input = resolve_local_date32(args)?;
@@ -804,6 +934,158 @@ mod tests {
     };
 
     use super::*;
+
+    fn make_timestamp_args(parts: [i32; 5], micros: i128, zone: ScalarValue) -> Vec<ColumnarValue> {
+        let mut args: Vec<_> = parts
+            .into_iter()
+            .map(|value| ColumnarValue::Scalar(ScalarValue::Int32(Some(value))))
+            .collect();
+        args.extend([
+            ColumnarValue::Scalar(ScalarValue::Decimal128(Some(micros), 16, 6)),
+            ColumnarValue::Scalar(zone),
+            ColumnarValue::Scalar(ScalarValue::Boolean(Some(false))),
+        ]);
+        args
+    }
+
+    #[test]
+    fn test_make_timestamp_scalar_precision_and_rollover() -> Result<()> {
+        for (parts, micros, offset, expected) in [
+            (
+                [1970, 1, 1, 0, 0],
+                123_456,
+                0,
+                "1970-01-01T00:00:00.123456Z",
+            ),
+            (
+                [1969, 12, 31, 23, 59],
+                59_999_999,
+                0,
+                "1969-12-31T23:59:59.999999Z",
+            ),
+            ([2019, 6, 30, 23, 59], 60_000_000, 0, "2019-07-01T00:00:00Z"),
+            ([2024, 2, 29, 23, 59], 60_000_000, 0, "2024-03-01T00:00:00Z"),
+            ([1970, 1, 1, 0, 0], 0, 19_815, "1969-12-31T18:29:45Z"),
+            ([1970, 1, 1, 0, 0], 0, -64_800, "1970-01-01T18:00:00Z"),
+        ] {
+            let args = make_timestamp_args(parts, micros, ScalarValue::Int32(Some(offset)));
+            let expected = DateTime::parse_from_rfc3339(expected)
+                .expect("valid expected timestamp")
+                .timestamp_micros();
+            assert!(matches!(
+                crate::create_auron_ext_function("Spark_MakeTimestamp", 0)?(&args)?,
+                ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(Some(value), None))
+                    if value == expected
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_make_timestamp_dst_gaps_and_overlaps() -> Result<()> {
+        for (parts, zone, expected) in [
+            (
+                [2024, 3, 10, 2, 30],
+                "America/New_York",
+                "2024-03-10T07:30:00Z",
+            ),
+            (
+                [2024, 11, 3, 1, 30],
+                "America/New_York",
+                "2024-11-03T05:30:00Z",
+            ),
+            (
+                [2024, 10, 6, 2, 15],
+                "Australia/Lord_Howe",
+                "2024-10-05T15:45:00Z",
+            ),
+            (
+                [2011, 12, 30, 12, 0],
+                "Pacific/Apia",
+                "2011-12-30T22:00:00Z",
+            ),
+        ] {
+            let args = make_timestamp_args(parts, 0, ScalarValue::Utf8(Some(zone.to_string())));
+            let expected = DateTime::parse_from_rfc3339(expected)
+                .expect("valid expected timestamp")
+                .timestamp_micros();
+            assert!(matches!(
+                spark_make_timestamp(&args)?,
+                ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(Some(value), None))
+                    if value == expected
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_make_timestamp_arrays_nulls_and_ansi() -> Result<()> {
+        let mut args = make_timestamp_args([1970, 1, 1, 0, 0], 0, ScalarValue::Int32(Some(0)));
+        let seconds = Decimal128Array::from(vec![
+            Some(999),
+            Some(123_456),
+            Some(60_000_000),
+            Some(60_000_001),
+            Some(-1),
+            None,
+            Some(4_294_967_296),
+        ])
+        .with_precision_and_scale(16, 6)?;
+        args[5] = ColumnarValue::Array(Arc::new(seconds.slice(1, 6)));
+        let expected: ArrayRef = Arc::new(arrow::array::TimestampMicrosecondArray::from(vec![
+            Some(123_456),
+            Some(60_000_000),
+            None,
+            None,
+            None,
+            None,
+        ]));
+        assert_eq!(&spark_make_timestamp(&args)?.into_array(6)?, &expected);
+        args[7] = ColumnarValue::Scalar(ScalarValue::Boolean(Some(true)));
+        assert!(spark_make_timestamp(&args).is_err());
+
+        for field in 0..7 {
+            let mut args = make_timestamp_args([2024, 13, 1, 0, 0], 0, ScalarValue::Int32(Some(0)));
+            args[7] = ColumnarValue::Scalar(ScalarValue::Boolean(Some(true)));
+            args[field] = ColumnarValue::Scalar(match field {
+                5 => ScalarValue::Decimal128(None, 16, 6),
+                6 => ScalarValue::Utf8(None),
+                _ => ScalarValue::Int32(None),
+            });
+            assert!(matches!(
+                spark_make_timestamp(&args)?,
+                ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(None, None))
+            ));
+        }
+        for parts in [
+            [2023, 2, 29, 0, 0],
+            [2024, 1, 1, 24, 0],
+            [2024, 1, 1, 0, -1],
+        ] {
+            let mut args = make_timestamp_args(parts, 0, ScalarValue::Int32(Some(0)));
+            assert!(matches!(
+                spark_make_timestamp(&args)?,
+                ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(None, None))
+            ));
+            args[7] = ColumnarValue::Scalar(ScalarValue::Boolean(Some(true)));
+            assert!(spark_make_timestamp(&args).is_err());
+        }
+        args[5] = ColumnarValue::Array(Arc::new(
+            Decimal128Array::from(Vec::<i128>::new()).with_precision_and_scale(16, 6)?,
+        ));
+        assert_eq!(spark_make_timestamp(&args)?.into_array(0)?.len(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_make_timestamp_validates_arguments() {
+        assert!(spark_make_timestamp(&[]).is_err());
+        let mut args = make_timestamp_args([2024, 1, 1, 0, 0], 0, ScalarValue::Int32(Some(0)));
+        args[5] = ColumnarValue::Scalar(ScalarValue::Int32(Some(0)));
+        assert!(spark_make_timestamp(&args).is_err());
+        args[7] = ColumnarValue::Scalar(ScalarValue::Boolean(None));
+        assert!(spark_make_timestamp(&args).is_err());
+    }
 
     #[test]
     fn test_spark_year() -> Result<()> {

@@ -26,7 +26,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.auron.NativeConverters
 import org.apache.spark.sql.auron.util.Using
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Nondeterministic}
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, MakeTimestamp, Nondeterministic, UnsafeProjection}
 import org.apache.spark.sql.execution.auron.arrowio.util.{ArrowUtils, ArrowWriter}
 import org.apache.spark.sql.execution.auron.arrowio.util.ArrowUtils.ROOT_ALLOCATOR
 import org.apache.spark.sql.execution.auron.columnar.ColumnarHelper
@@ -44,14 +44,22 @@ case class SparkAuronUDFWrapperContext(serialized: ByteBuffer)
       bytes
     })
 
+  private val partitionId = Option(TaskContext.get()).map(_.partitionId()).getOrElse(0)
+
   // initialize all nondeterministic children exprs
   expr.foreach {
     case nondeterministic: Nondeterministic =>
-      nondeterministic.initialize(TaskContext.get match {
-        case tc: TaskContext => tc.partitionId()
-        case null => 0
-      })
+      nondeterministic.initialize(partitionId)
     case _ =>
+  }
+
+  // MakeTimestamp.eval truncates decimal seconds to Int microseconds, unlike its generated code.
+  private val makeTimestampProjection = expr match {
+    case _: MakeTimestamp =>
+      val projection = UnsafeProjection.create(Seq(expr))
+      projection.initialize(partitionId)
+      Some(projection)
+    case _ => None
   }
 
   private val dictionaryProvider: DictionaryProvider = new MapDictionaryProvider()
@@ -74,8 +82,12 @@ case class SparkAuronUDFWrapperContext(serialized: ByteBuffer)
       val reusedOutputRow = new GenericInternalRow(Array[Any](null))
       val outputWriter = ArrowWriter.create(outputRoot)
       for (paramsRow <- ColumnarHelper.rootRowsIter(paramsRoot)) {
-        reusedOutputRow.update(0, expr.eval(paramsRow))
-        outputWriter.write(reusedOutputRow)
+        makeTimestampProjection match {
+          case Some(projection) => outputWriter.write(projection(paramsRow))
+          case None =>
+            reusedOutputRow.update(0, expr.eval(paramsRow))
+            outputWriter.write(reusedOutputRow)
+        }
       }
       outputWriter.finish()
 

@@ -2201,6 +2201,257 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  // Spark 3.0/3.1 narrow seconds to decimal(8,6); later versions use decimal(16,6).
+  private def makeTimestampSecondsType: String =
+    if (AuronTestUtils.isSparkV32OrGreater) "decimal(16,6)" else "decimal(8,6)"
+
+  test("make_timestamp preserves precision, nulls and time zones") {
+    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+      withTable("t1") {
+        sql(
+          s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
+        sql("""insert into t1 values
+            |  (1970, 1, 1, 0, 0, 0.123456),
+            |  (1969, 12, 31, 23, 59, 59.999999),
+            |  (2024, 2, 29, 23, 59, 60),
+            |  (9999, 12, 31, 23, 59, 59.999999),
+            |  (9999, 7, 1, 12, 0, 0),
+            |  (1, 1, 1, 0, 0, 0),
+            |  (null, 1, 1, 0, 0, 0),
+            |  (2024, null, 1, 0, 0, 0),
+            |  (2024, 1, null, 0, 0, 0),
+            |  (2024, 1, 1, null, 0, 0),
+            |  (2024, 1, 1, 0, null, 0),
+            |  (2024, 1, 1, 0, 0, null)
+            |""".stripMargin)
+        for (zone <- Seq("UTC", "America/Los_Angeles", "GMT+05:30:15");
+          ansi <- Seq("false", "true")) {
+          withSQLConf(
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone,
+            "spark.sql.ansi.enabled" -> ansi) {
+            val query = "select make_timestamp(y, m, d, h, n, s) from t1"
+            val df = checkSparkAnswerAndOperator(query)
+            val converted = NativeConverters.convertExpr(
+              df.queryExecution.analyzed.expressions.head.children.head)
+            assert(converted.hasCase)
+            assert(
+              converted.getCase
+                .getWhenThenExpr(0)
+                .getThenExpr
+                .getScalarFunction
+                .getName == "Spark_MakeTimestamp")
+            assert(converted.getCase.getElseExpr.hasSparkUdfWrapperExpr)
+            for (explicit <- Seq("UTC", "PST", "GMT+05:30:15", "-18:00")) {
+              checkSparkAnswerAndOperator(
+                s"select make_timestamp(y, m, d, h, n, s, '$explicit') from t1")
+            }
+            checkSparkAnswerAndOperator(
+              "select make_timestamp(y, m, d, h, n, s, cast(null as string)) from t1")
+          }
+        }
+      }
+    }
+  }
+
+  test("make_timestamp follows Spark through DST gaps and overlaps") {
+    withTable("t1") {
+      sql(
+        s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
+      sql("""insert into t1 values
+          |  (2024, 3, 10, 2, 30, 0.123456),
+          |  (2024, 11, 3, 1, 30, 59.999999),
+          |  (2024, 10, 6, 2, 15, 0),
+          |  (2011, 12, 30, 12, 0, 0)
+          |""".stripMargin)
+      for (zone <- Seq("America/New_York", "Australia/Lord_Howe", "Pacific/Apia")) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          checkSparkAnswerAndOperator("select make_timestamp(y, m, d, h, n, s) from t1")
+          checkSparkAnswerAndOperator(s"select make_timestamp(y, m, d, h, n, s, '$zone') from t1")
+        }
+      }
+    }
+  }
+
+  test("make_timestamp invalid fields follow version-specific ANSI behavior") {
+    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+      withTable("t1") {
+        sql(
+          s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
+        sql("""insert into t1 values
+            |  (2023, 2, 29, 0, 0, 0),
+            |  (2024, 13, 1, 0, 0, 0),
+            |  (2024, 1, 1, 24, 0, 0),
+            |  (2024, 1, 1, 0, -1, 0),
+            |  (2024, 1, 1, 0, 0, -0.000001),
+            |  (2024, 1, 1, 0, 0, 60.000001),
+            |  (2024, 1, 1, 0, 0, 61)
+            |""".stripMargin)
+        val query = "select make_timestamp(y, m, d, h, n, s) from t1"
+        checkSparkAnswerAndOperator(query)
+        withSQLConf("spark.sql.ansi.enabled" -> "true") {
+          if (AuronTestUtils.isSparkV31OrGreater) {
+            withSQLConf("spark.auron.enable" -> "false") {
+              intercept[Exception] { sql(query).collect() }
+            }
+            val df = sql(query)
+            val err = intercept[Exception] { df.collect() }
+            assertPlanIsNative(df)
+            assert(allCauseMessages(err).toLowerCase.contains("invalid value for make_timestamp"))
+          } else {
+            checkSparkAnswerAndOperator(query)
+          }
+        }
+      }
+    }
+  }
+
+  test("make_timestamp preserves fallback for row-dependent and legacy time zones") {
+    withTable("t1") {
+      sql("create table t1(y int, tz string) using parquet")
+      sql("insert into t1 values (2024, 'UTC'), (2024, 'PST'), (2024, null)")
+      checkSparkAnswer("select make_timestamp(y, 3, 15, 12, 30, 0, tz) from t1")
+      checkSparkAnswer("select make_timestamp(y, 3, 15, 12, 30, 0, 'SystemV/PST8PDT') from t1")
+      if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.4") {
+        withSQLConf("spark.sql.timestampType" -> "TIMESTAMP_NTZ") {
+          checkSparkAnswer("select make_timestamp(y, 3, 15, 12, 30, 0) from t1")
+        }
+      }
+    }
+  }
+
+  test("make_timestamp preserves ANSI casts and null short circuit") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1(y string, m string) using parquet")
+        val queries = Seq(
+          "select make_timestamp(cast(y as int), cast(m as int), 1, 0, 0, 0, 'UTC') from t1",
+          "select make_timestamp(cast(y as int), " +
+            "cast(java_method('java.lang.String', 'valueOf', 1) as int), " +
+            "1, 0, 0, 0, 'UTC') from t1")
+        for (singleChildFallback <- Seq("false", "true"); query <- queries) {
+          withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> singleChildFallback) {
+            sql("insert overwrite t1 values ('bad', '1')")
+            withSQLConf("spark.auron.enable" -> "false") {
+              intercept[Exception] { sql(query).collect() }
+            }
+            intercept[Exception] { sql(query).collect() }
+            sql("insert overwrite t1 values (null, 'bad'), ('2024', '1')")
+            val df = checkSparkAnswer(query)
+            if (singleChildFallback == "true") {
+              assertPlanIsNative(df)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("make_timestamp preserves ANSI arithmetic in its inputs") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1(y int, a int, b int) using parquet")
+        sql("insert into t1 values (2024, -2147483648, -2147483647)")
+        val query = "select make_timestamp(y, a + b, 1, 0, 0, 0, 'UTC') from t1"
+        withSQLConf("spark.auron.enable" -> "false") {
+          intercept[Exception] { sql(query).collect() }
+        }
+        intercept[Exception] { sql(query).collect() }
+      }
+    }
+  }
+
+  test("make_timestamp year fallback preserves invalid seconds behavior") {
+    withSQLConf(
+      "spark.sql.ansi.enabled" -> "false",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1(y int, s decimal(16,6)) using parquet")
+        sql("insert into t1 values (9999, 4294.967296), (10000, 4294.967296), (2024, 0.123456)")
+        for (zone <- Seq("UTC", "America/Los_Angeles")) {
+          checkSparkAnswerAndOperator(
+            s"select make_timestamp(y, 7, 1, 12, 0, s, '$zone') from t1")
+        }
+      }
+    }
+  }
+
+  test("make_timestamp year boundaries and DST rollover match Spark") {
+    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+      withTable("t1") {
+        sql(
+          s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
+        sql("""insert into t1 values
+            | (1799, 12, 31, 23, 59, 60),
+            | (1800, 1, 1, 0, 0, 0),
+            | (2099, 12, 31, 23, 59, 60),
+            | (2100, 7, 1, 12, 0, 0),
+            | (2024, 3, 10, 1, 59, 60),
+            | (2024, 11, 3, 1, 59, 60),
+            | (null, 13, 1, 24, 60, 61)
+            |""".stripMargin)
+        for (ansi <- Seq("false", "true")) {
+          withSQLConf("spark.sql.ansi.enabled" -> ansi) {
+            checkSparkAnswerAndOperator(
+              "select make_timestamp(y, m, d, h, n, s, 'America/New_York') from t1")
+            checkSparkAnswerAndOperator(
+              "select y from t1 where make_timestamp(y, m, d, h, n, s, " +
+                "'America/New_York') > timestamp'2000-01-01 00:00:00'")
+          }
+        }
+      }
+    }
+  }
+
+  test("make_timestamp named timezone history matches Spark") {
+    withTable("t1") {
+      sql("create table t1(y int, m int, d int, h int) using parquet")
+      sql(
+        "insert into t1 values (1800, 1, 1, 12), (1900, 1, 1, 12), (2024, 3, 1, 0), (2025, 4, 6, 0)")
+      for (zone <- Seq(
+          "Europe/Amsterdam",
+          "Asia/Ho_Chi_Minh",
+          "Asia/Almaty",
+          "America/Coyhaique")) {
+        checkSparkAnswerAndOperator(s"select make_timestamp(y, m, d, h, 0, 0, '$zone') from t1")
+      }
+    }
+  }
+
+  test("make_timestamp invalid timezone follows version-specific ANSI behavior") {
+    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      withTable("t1") {
+        sql("create table t1(y int) using parquet")
+        sql("insert into t1 values (2024), (null)")
+        val query = "select make_timestamp(y, 1, 1, 0, 0, 0, 'invalid/zone') from t1"
+        withSQLConf("spark.sql.ansi.enabled" -> "false") {
+          checkSparkAnswerAndOperator(query)
+        }
+        withSQLConf("spark.sql.ansi.enabled" -> "true") {
+          if (AuronTestUtils.isSparkV31OrGreater) {
+            withSQLConf("spark.auron.enable" -> "false") {
+              intercept[Exception] { sql(query).collect() }
+            }
+            intercept[Exception] { sql(query).collect() }
+          } else {
+            checkSparkAnswerAndOperator(query)
+          }
+        }
+      }
+    }
+  }
+
+  test("try_make_timestamp keeps its own error mode under ANSI") {
+    if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "4.0") {
+      withSQLConf("spark.sql.ansi.enabled" -> "true") {
+        withTable("t1") {
+          sql("create table t1(y int, m int) using parquet")
+          sql("insert into t1 values (2024, 13), (2024, 1), (null, 13)")
+          checkSparkAnswerAndOperator("select try_make_timestamp(y, m, 1, 0, 0, 0) from t1")
+        }
+      }
+    }
+  }
+
   test("months_between function") {
     withSQLConf("spark.sql.session.timeZone" -> "UTC") {
       withTable("t1") {
