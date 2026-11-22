@@ -854,7 +854,7 @@ mod test {
         ]));
         let arg = ColumnarValue::Array(Arc::clone(&list));
         assert!(array_intersect(&[]).is_err());
-        assert!(array_intersect(&[arg.clone()]).is_err());
+        assert!(array_intersect(std::slice::from_ref(&arg)).is_err());
         assert!(array_intersect(&[arg.clone(), arg.clone(), arg.clone()]).is_err());
         assert!(array_intersect(&[arg.clone(), ColumnarValue::Scalar(1.into())]).is_err());
         assert!(array_intersect(&[arg.clone(), ColumnarValue::Array(list.slice(0, 0))]).is_err());
