@@ -225,16 +225,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn equality_respects_parameter_order() {
+    fn equality_respects_parameter_order() -> Result<()> {
         let a: PhysicalExprRef = Arc::new(Column::new("a", 0));
         let b: PhysicalExprRef = Arc::new(Column::new("b", 1));
         let wrapper = |params| {
             SparkUDFWrapperExpr::try_new(vec![0], DataType::Utf8, true, params, String::new())
-                .unwrap()
         };
-        let ab = wrapper(vec![a.clone(), b.clone()]);
+        let ab = wrapper(vec![a.clone(), b.clone()])?;
 
-        assert_eq!(ab, wrapper(vec![a.clone(), b.clone()]));
-        assert_ne!(ab, wrapper(vec![b, a]));
+        assert_eq!(ab, wrapper(vec![a.clone(), b.clone()])?);
+        assert_ne!(ab, wrapper(vec![b, a])?);
+        Ok(())
     }
 }
