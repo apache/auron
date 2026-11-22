@@ -2224,8 +2224,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
             |  (2024, 1, 1, 0, null, 0),
             |  (2024, 1, 1, 0, 0, null)
             |""".stripMargin)
-        for (zone <- Seq("UTC", "America/Los_Angeles", "GMT+05:30:15");
-          ansi <- Seq("false", "true")) {
+        for (zone <- Seq("UTC", "GMT+05:30:15"); ansi <- Seq("false", "true")) {
           withSQLConf(
             SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone,
             "spark.sql.ansi.enabled" -> ansi) {
@@ -2241,7 +2240,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
                 .getScalarFunction
                 .getName == "Spark_MakeTimestamp")
             assert(converted.getCase.getElseExpr.hasSparkUdfWrapperExpr)
-            for (explicit <- Seq("UTC", "PST", "GMT+05:30:15", "-18:00")) {
+            for (explicit <- Seq("UTC", "+05:30", "GMT+05:30:15", "-18:00")) {
               checkSparkAnswerAndOperator(
                 s"select make_timestamp(y, m, d, h, n, s, '$explicit') from t1")
             }
@@ -2260,20 +2259,47 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       sql("""insert into t1 values
           |  (2024, 3, 10, 2, 30, 0.123456),
           |  (2024, 11, 3, 1, 30, 59.999999),
+          |  (2024, 3, 10, 1, 59, 60),
+          |  (2024, 11, 3, 1, 59, 60),
           |  (2024, 10, 6, 2, 15, 0),
           |  (2011, 12, 30, 12, 0, 0)
           |""".stripMargin)
       for (zone <- Seq("America/New_York", "Australia/Lord_Howe", "Pacific/Apia")) {
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
-          checkSparkAnswerAndOperator("select make_timestamp(y, m, d, h, n, s) from t1")
-          checkSparkAnswerAndOperator(s"select make_timestamp(y, m, d, h, n, s, '$zone') from t1")
+          checkSparkAnswer("select make_timestamp(y, m, d, h, n, s) from t1")
+          checkSparkAnswer(s"select make_timestamp(y, m, d, h, n, s, '$zone') from t1")
+        }
+      }
+    }
+  }
+
+  test("make_timestamp uses Spark time zone rules for Vancouver") {
+    withTable("t1") {
+      sql(
+        s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
+      sql("insert into t1 values (2026, 10, 15, 12, 0, 0), (2026, 11, 15, 12, 0, 0)")
+      val queries = Seq(
+        ("America/Vancouver", "select make_timestamp(y, m, d, h, n, s) from t1"),
+        ("UTC", "select make_timestamp(y, m, d, h, n, s, 'America/Vancouver') from t1"))
+      for ((sessionZone, query) <- queries; wrap <- Seq("false", "true")) {
+        withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionZone,
+          "spark.auron.udf.singleChildFallback.enabled" -> wrap) {
+          val df = checkSparkAnswer(query)
+          if (wrap == "true") {
+            assertPlanIsNative(df)
+            val expr = df.queryExecution.analyzed.expressions.head.children.head
+            assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+          }
         }
       }
     }
   }
 
   test("make_timestamp invalid fields follow version-specific ANSI behavior") {
-    withSQLConf("spark.sql.ansi.enabled" -> "false") {
+    withSQLConf(
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+      "spark.sql.ansi.enabled" -> "false") {
       withTable("t1") {
         sql(
           s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
@@ -2367,35 +2393,30 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
       withTable("t1") {
         sql("create table t1(y int, s decimal(16,6)) using parquet")
         sql("insert into t1 values (9999, 4294.967296), (10000, 4294.967296), (2024, 0.123456)")
-        for (zone <- Seq("UTC", "America/Los_Angeles")) {
-          checkSparkAnswerAndOperator(
-            s"select make_timestamp(y, 7, 1, 12, 0, s, '$zone') from t1")
-        }
+        checkSparkAnswerAndOperator("select make_timestamp(y, 7, 1, 12, 0, s, 'UTC') from t1")
       }
     }
   }
 
-  test("make_timestamp year boundaries and DST rollover match Spark") {
+  test("make_timestamp fixed offset year boundaries and rollover match Spark") {
     withSQLConf("spark.sql.ansi.enabled" -> "false") {
       withTable("t1") {
         sql(
           s"create table t1(y int, m int, d int, h int, n int, s $makeTimestampSecondsType) using parquet")
         sql("""insert into t1 values
-            | (1799, 12, 31, 23, 59, 60),
-            | (1800, 1, 1, 0, 0, 0),
-            | (2099, 12, 31, 23, 59, 60),
-            | (2100, 7, 1, 12, 0, 0),
-            | (2024, 3, 10, 1, 59, 60),
-            | (2024, 11, 3, 1, 59, 60),
+            | (0, 12, 31, 23, 59, 60),
+            | (1, 1, 1, 0, 0, 0),
+            | (9999, 12, 31, 23, 59, 60),
+            | (10000, 7, 1, 12, 0, 0),
             | (null, 13, 1, 24, 60, 61)
             |""".stripMargin)
         for (ansi <- Seq("false", "true")) {
           withSQLConf("spark.sql.ansi.enabled" -> ansi) {
             checkSparkAnswerAndOperator(
-              "select make_timestamp(y, m, d, h, n, s, 'America/New_York') from t1")
+              "select make_timestamp(y, m, d, h, n, s, '+05:30') from t1")
             checkSparkAnswerAndOperator(
               "select y from t1 where make_timestamp(y, m, d, h, n, s, " +
-                "'America/New_York') > timestamp'2000-01-01 00:00:00'")
+                "'+05:30') > timestamp'2000-01-01 00:00:00'")
           }
         }
       }
@@ -2412,7 +2433,7 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
           "Asia/Ho_Chi_Minh",
           "Asia/Almaty",
           "America/Coyhaique")) {
-        checkSparkAnswerAndOperator(s"select make_timestamp(y, m, d, h, 0, 0, '$zone') from t1")
+        checkSparkAnswer(s"select make_timestamp(y, m, d, h, 0, 0, '$zone') from t1")
       }
     }
   }
@@ -2442,7 +2463,9 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
 
   test("try_make_timestamp keeps its own error mode under ANSI") {
     if (SparkVersionUtil.SPARK_RUNTIME_VERSION >= "4.0") {
-      withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        "spark.sql.ansi.enabled" -> "true") {
         withTable("t1") {
           sql("create table t1(y int, m int) using parquet")
           sql("insert into t1 values (2024, 13), (2024, 1), (null, 13)")

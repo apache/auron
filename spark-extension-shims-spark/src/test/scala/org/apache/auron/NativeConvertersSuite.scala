@@ -119,13 +119,13 @@ class NativeConvertersSuite
     }
   }
 
-  test("make_timestamp converts session and explicit time zones natively") {
+  test("make_timestamp converts fixed session and explicit time zones natively") {
     for (ansi <- Seq("false", "true")) {
       withSQLConf(
         "spark.auron.enableNativeDateTimeFunctions" -> "true",
         "spark.sql.ansi.enabled" -> ansi,
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
-        for (timezone <- Seq("", ", 'PST'", ", 'GMT+05:30:15'", ", cast(null as string)")) {
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        for (timezone <- Seq("", ", '+05:30'", ", 'GMT+05:30:15'", ", cast(null as string)")) {
           val expr = sql(
             s"select make_timestamp(2024, 3, 15, 12, 30, 45.123456$timezone)").queryExecution.analyzed.expressions.head.children.head
           val converted = NativeConverters.convertExpr(expr)
@@ -141,7 +141,11 @@ class NativeConvertersSuite
     withSQLConf(
       "spark.auron.enableNativeDateTimeFunctions" -> "true",
       "spark.auron.udf.singleChildFallback.enabled" -> "true") {
-      for (timezone <- Seq("cast(id as string)", "'SystemV/PST8PDT'", "'invalid/zone'")) {
+      for (timezone <- Seq(
+          "cast(id as string)",
+          "'PST'",
+          "'SystemV/PST8PDT'",
+          "'invalid/zone'")) {
         val expr = sql(
           s"select make_timestamp(2024, 3, 15, 12, 30, 0, $timezone) from range(1)").queryExecution.analyzed.expressions.head.children.head
         assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
@@ -154,7 +158,7 @@ class NativeConvertersSuite
       "spark.auron.enableNativeDateTimeFunctions" -> "true",
       "spark.auron.udf.singleChildFallback.enabled" -> "true") {
       val expr = sql(
-        "select make_timestamp(y, 7, 1, 12, 0, 0, 'PST') from (select 2024 as y)").queryExecution.analyzed.expressions.head.children.head
+        "select make_timestamp(y, 7, 1, 12, 0, 0, '+05:30') from (select 2024 as y)").queryExecution.analyzed.expressions.head.children.head
       val converted = NativeConverters.convertExpr(expr)
       assert(converted.hasCase)
       assert(
@@ -165,7 +169,7 @@ class NativeConvertersSuite
           .getName == "Spark_MakeTimestamp")
       assert(converted.getCase.getElseExpr.hasSparkUdfWrapperExpr)
       val future = sql(
-        "select make_timestamp(9999, 7, 1, 12, 0, 0, 'PST')").queryExecution.analyzed.expressions.head.children.head
+        "select make_timestamp(10000, 7, 1, 12, 0, 0, '+05:30')").queryExecution.analyzed.expressions.head.children.head
       assert(NativeConverters.convertExpr(future).hasSparkUdfWrapperExpr)
     }
   }

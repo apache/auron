@@ -1539,19 +1539,18 @@ object NativeConverters extends Logging {
     }
     val timezone = expr.timezone.getOrElse(
       Literal(expr.timeZoneId.getOrElse(SQLConf.get.sessionLocalTimeZone)))
-    // Resolve Java aliases once. Row-dependent and unsupported zone IDs retain Spark evaluation.
+    // Resolve Java aliases once. Region rules can differ between the JDK and chrono-tz.
     if (!timezone.foldable) {
       return fallback(expr)
     }
     val tzArg =
       try {
         Option(timezone.eval()).map(_.toString) match {
-          case None => Literal.create(null, StringType)
+          case None => Literal.create(null, IntegerType)
           case Some(value) =>
             DateTimeUtils.getZoneId(value).normalized() match {
               case offset: ZoneOffset => Literal(offset.getTotalSeconds)
-              case zone if zone.getId.startsWith("SystemV/") => return fallback(expr)
-              case zone => Literal(zone.getId)
+              case _ => return fallback(expr)
             }
         }
       } catch {
@@ -1566,9 +1565,8 @@ object NativeConverters extends Logging {
     if (tzArg.value == null) {
       return nativeExpr
     }
-    // chrono-tz expands recurring DST rules only through 2099. Preserve Spark's rules outside
-    // that range, and its extended-year behavior outside the documented range for fixed offsets.
-    val (minYear, maxYear) = if (tzArg.dataType == IntegerType) (1, 9999) else (1800, 2099)
+    // Preserve Spark's extended-year behavior outside the documented range.
+    val (minYear, maxYear) = (1, 9999)
     if (expr.year.foldable) {
       val year = expr.year.eval()
       return if (year == null || (year.asInstanceOf[Int] >= minYear &&
