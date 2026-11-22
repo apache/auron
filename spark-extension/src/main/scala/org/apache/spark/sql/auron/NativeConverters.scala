@@ -308,17 +308,15 @@ object NativeConverters extends Logging {
             error)
       }
     }
-    val preserveFromUnixTimeInputs = fromUnixTimes.nonEmpty
-
     // bind all convertible children
     val convertedChildren = mutable.LinkedHashMap[pb.PhysicalExprNode, BoundReference]()
-    val bound = sparkExpr.mapChildren(_.transformDown {
+    def bind(p: Expression, preserveInputs: Boolean): Expression = p match {
       case p: Literal => p
       // Keep casts and arithmetic in Spark when from_unixtime falls back.
       case p
-          if preserveFromUnixTimeInputs && !p.isInstanceOf[AttributeReference] &&
+          if preserveInputs && !p.isInstanceOf[AttributeReference] &&
             !p.isInstanceOf[BoundReference] =>
-        p
+        p.mapChildren(bind(_, preserveInputs = true))
       case p =>
         try {
           val convertedChild = convertExprWithFallback(p, isPruningExpr = false, fallback)
@@ -327,9 +325,11 @@ object NativeConverters extends Logging {
             convertedChild,
             BoundReference(nextBindIndex, p.dataType, p.nullable))
         } catch {
-          case _: Exception | _: NotImplementedError => p
+          case _: Exception | _: NotImplementedError =>
+            p.mapChildren(bind(_, preserveInputs || p.isInstanceOf[FromUnixTime]))
         }
-    })
+    }
+    val bound = sparkExpr.mapChildren(bind(_, sparkExpr.isInstanceOf[FromUnixTime]))
 
     val paramsSchema = StructType(
       convertedChildren.values

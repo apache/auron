@@ -32,7 +32,7 @@ use auron_jni_bridge::{
 use datafusion::{
     error::Result,
     logical_expr::ColumnarValue,
-    physical_expr::{PhysicalExprRef, physical_exprs_bag_equal},
+    physical_expr::{PhysicalExprRef, physical_exprs_equal},
     physical_expr_common::physical_expr::DynEq,
     physical_plan::PhysicalExpr,
 };
@@ -56,7 +56,7 @@ pub struct SparkUDFWrapperExpr {
 
 impl PartialEq for SparkUDFWrapperExpr {
     fn eq(&self, other: &Self) -> bool {
-        physical_exprs_bag_equal(&self.params, &other.params)
+        physical_exprs_equal(&self.params, &other.params)
             && self.serialized == other.serialized
             && self.return_type == other.return_type
             && self.return_nullable == other.return_nullable
@@ -216,4 +216,25 @@ fn invoke_udf(
         make_array(unsafe { from_ffi(import_ffi_array, &import_ffi_schema)? });
     let import_array = as_struct_array(&import_struct_array).column(0).clone();
     Ok(import_array)
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::physical_expr::expressions::Column;
+
+    use super::*;
+
+    #[test]
+    fn equality_respects_parameter_order() {
+        let a: PhysicalExprRef = Arc::new(Column::new("a", 0));
+        let b: PhysicalExprRef = Arc::new(Column::new("b", 1));
+        let wrapper = |params| {
+            SparkUDFWrapperExpr::try_new(vec![0], DataType::Utf8, true, params, String::new())
+                .unwrap()
+        };
+        let ab = wrapper(vec![a.clone(), b.clone()]);
+
+        assert_eq!(ab, wrapper(vec![a.clone(), b.clone()]));
+        assert_ne!(ab, wrapper(vec![b, a]));
+    }
 }

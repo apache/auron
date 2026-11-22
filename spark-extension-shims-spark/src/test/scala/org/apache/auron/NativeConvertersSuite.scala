@@ -18,7 +18,7 @@ package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Cast, Expression, FromUnixTime, GreaterThan, Literal, Upper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, StringType, StructType}
 
@@ -214,6 +214,28 @@ class NativeConvertersSuite
         assert(wrapper.getParamsCount == 1)
         assert(wrapper.getParams(0).hasColumn)
       }
+    }
+  }
+
+  test("from_unixtime fallback keeps sibling expressions native") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val expr = sql("""select
+          |  format_string('%s %s', from_unixtime(id + 1L, upper(payload)), sha2(payload, 256))
+          |from (select id, cast(id as string) as payload from range(1)) t""".stripMargin).queryExecution.analyzed.expressions.head.children.head
+      val converted = NativeConverters.convertExpr(expr)
+      assert(converted.hasSparkUdfWrapperExpr)
+      val wrapper = converted.getSparkUdfWrapperExpr
+      val (bound, _) = NativeConverters.deserializeExpression[Expression, StructType](
+        wrapper.getSerialized.toByteArray)
+      assert(bound.collect { case e: FromUnixTime => e }.exists { e =>
+        e.sec.isInstanceOf[Add] && e.format.isInstanceOf[Upper]
+      })
+      assert(wrapper.getParamsCount == 3)
+      assert(wrapper.getParams(2).getScalarFunction.getName == "Spark_Sha256")
     }
   }
 

@@ -875,6 +875,21 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("from_unixtime fallback preserves parameter order in the same projection") {
+    withTable("t_from_unixtime_order") {
+      sql("create table t_from_unixtime_order (a bigint, b bigint) using parquet")
+      sql("insert into t_from_unixtime_order values (2, 1)")
+      withSQLConf(
+        "spark.auron.enableNativeDateTimeFunctions" -> "true",
+        "spark.auron.udf.singleChildFallback.enabled" -> "true",
+        "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSparkAnswerAndOperator(
+          "select from_unixtime(a - b), from_unixtime(b - a) from t_from_unixtime_order")
+      }
+    }
+  }
+
   test("from_unixtime Spark fallback preserves ANSI errors in its inputs") {
     withTable("t_from_unixtime_errors") {
       sql("create table t_from_unixtime_errors (seconds bigint, text string) using parquet")
