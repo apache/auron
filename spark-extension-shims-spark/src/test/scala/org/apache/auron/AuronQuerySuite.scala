@@ -1119,11 +1119,11 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
             |""".stripMargin)
           val plan = df.queryExecution.executedPlan
           assert(
-            plan.exists {
+            plan.find {
               case _: NativeBroadcastJoinExec => hint == "BROADCAST"
               case _: NativeShuffledHashJoinBase => hint == "SHUFFLE_HASH"
               case _ => false
-            },
+            }.isDefined,
             plan.toString)
         }
       }
