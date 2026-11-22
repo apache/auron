@@ -17,13 +17,13 @@ use std::{
     fmt::{Debug, Formatter},
     hash::{BuildHasher, Hasher},
     io::{Cursor, Read, Write},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use arrow::{
     array::{
-        Array, ArrayRef, AsArray, BinaryBuilder, BooleanArray, RecordBatch, RecordBatchOptions,
-        UInt32Array,
+        Array, ArrayRef, AsArray, BinaryBuilder, RecordBatch, RecordBatchOptions, UInt32Array,
+        new_null_array,
     },
     datatypes::{DataType, Field, FieldRef, Schema, SchemaRef},
 };
@@ -31,13 +31,14 @@ use datafusion::{common::Result, physical_expr::PhysicalExprRef};
 use datafusion_ext_commons::{
     SliceAsRawBytes, UninitializedInit,
     arrow::{
+        array_size::{BatchSize, max_i32_offset_span},
         coalesce::coalesce_arrays_unchecked,
-        selection::{create_batch_interleaver, take_cols},
+        selection::{create_array_interleaver, take_cols},
     },
     io::{read_len, write_len},
     prefetch_read_data,
     spark_hash::create_hashes,
-    unchecked,
+    suggested_batch_mem_size, unchecked,
 };
 use fearless_simd::{Level, Simd, dispatch, prelude::*, u32x8};
 use itertools::Itertools;
@@ -48,6 +49,7 @@ use unchecked_index::UncheckedIndex;
 // range:  lead=0, value=start, mapped_indices[start-1]=len
 // single: lead=1, value=idx
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct MapValue(u32);
 
 impl MapValue {
@@ -285,17 +287,33 @@ impl Table {
             loop {
                 let group_hashes = u32x8::from_slice(simd, &self.map[e].hashes);
                 let hash_matched = group_hashes.simd_eq(u32x8::splat(simd, hashes[i]));
-                let empty = group_hashes.simd_eq(zeros);
-                let bits = (hash_matched | empty).to_bitmask();
 
-                if bits != 0 {
-                    let pos = bits.trailing_zeros() as usize;
-                    hashes[i] = unsafe {
-                        // safety: transmute MapValue(u32) to u32
-                        std::mem::transmute(self.map[e].values[pos])
-                    };
+                // Fast path: check hash match first (common case).
+                //
+                // Checking the hash-match mask before the empty mask is
+                // valid because of a build-time invariant: within a
+                // `MapValueGroup`, occupied lanes are packed into a prefix —
+                // there is never an empty lane before a later occupied lane.
+                // This holds because insertion always fills the lowest empty
+                // lane (see `create_from_key_columns_and_hashes_impl`), so
+                // the first occupied lane is also the first non-empty lane.
+                // A future change that introduces tombstones/deletes or a
+                // different insertion strategy must preserve this, otherwise
+                // a hash match past a gap would be missed here.
+                let matched_bits = hash_matched.to_bitmask();
+                if matched_bits != 0 {
+                    let pos = matched_bits.trailing_zeros() as usize;
+                    hashes[i] = self.map[e].values[pos].0;
                     break;
                 }
+
+                // Slow path: check empty slot only when no match
+                let empty_bits = group_hashes.simd_eq(zeros).to_bitmask();
+                if empty_bits != 0 {
+                    hashes[i] = MapValue::EMPTY.0;
+                    break;
+                }
+
                 e += 1;
                 e %= 1 << self.map_mod_bits;
             }
@@ -308,18 +326,28 @@ impl Table {
     }
 }
 
-pub struct JoinHashMap {
-    // normally a single batch; may hold multiple un-coalesced batches when a
-    // hybrid-join bucket group is too skewed to safely coalesce into one
-    // `RecordBatch` without risking a >2GB offset overflow on variable-length
-    // columns (see `crate::joins::bucketed_group`).
+/// Build-side data shared by hash joins and nested loop joins. Rows retain their
+/// Arrow batch boundaries so variable-length columns need not be concatenated.
+pub(crate) struct JoinBuildRows {
+    // Raw broadcasts and skewed hybrid groups can span multiple physical batches.
     data_batches: Vec<RecordBatch>,
     // row-count prefix sums over `data_batches`, length == data_batches.len()
     // + 1, used to resolve a global (virtual) row id into (batch_idx,
     // local_row_idx).
     row_offsets: Vec<u32>,
+    offset_spans: OnceLock<Vec<usize>>,
+}
+
+pub struct JoinHashMap {
+    rows: JoinBuildRows,
     key_columns: Vec<ArrayRef>,
     table: Table,
+}
+
+impl std::borrow::Borrow<JoinBuildRows> for JoinHashMap {
+    fn borrow(&self) -> &JoinBuildRows {
+        &self.rows
+    }
 }
 
 // safety: JoinHashMap is Send + Sync
@@ -330,17 +358,6 @@ impl Debug for JoinHashMap {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "JoinHashMap(..)")
     }
-}
-
-fn compute_row_offsets(data_batches: &[RecordBatch]) -> Vec<u32> {
-    let mut offsets = Vec::with_capacity(data_batches.len() + 1);
-    let mut acc = 0u32;
-    offsets.push(acc);
-    for batch in data_batches {
-        acc += batch.num_rows() as u32;
-        offsets.push(acc);
-    }
-    offsets
 }
 
 /// Evaluate `key_exprs` against every batch in `data_batches` and merge each
@@ -395,14 +412,11 @@ impl JoinHashMap {
         data_batches: Vec<RecordBatch>,
         key_exprs: &[PhysicalExprRef],
     ) -> Result<Self> {
-        let key_columns = evaluate_merged_key_columns(&data_batches, key_exprs)?;
-        let num_rows = data_batches.iter().map(|b| b.num_rows()).sum();
-        let table = Table::create_from_key_columns(num_rows, &key_columns)?;
-        let row_offsets = compute_row_offsets(&data_batches);
-
+        let rows = JoinBuildRows::from_batches(data_batches)?;
+        let key_columns = evaluate_merged_key_columns(rows.data_batches(), key_exprs)?;
+        let table = Table::create_from_key_columns(rows.num_rows(), &key_columns)?;
         Ok(Self {
-            data_batches,
-            row_offsets,
+            rows,
             key_columns,
             table,
         })
@@ -415,11 +429,8 @@ impl JoinHashMap {
     ) -> Result<Self> {
         let table =
             Table::create_from_key_columns_and_hashes(data_batch.num_rows(), &key_columns, hashes)?;
-        let row_offsets = compute_row_offsets(std::slice::from_ref(&data_batch));
-
         Ok(Self {
-            data_batches: vec![data_batch],
-            row_offsets,
+            rows: JoinBuildRows::from_batches(vec![data_batch])?,
             key_columns,
             table,
         })
@@ -478,10 +489,8 @@ impl JoinHashMap {
         let table = Table::read_from(&mut Cursor::new(table_bytes))?;
 
         let key_columns = evaluate_merged_key_columns(&data_batches, key_exprs)?;
-        let row_offsets = compute_row_offsets(&data_batches);
         Ok(Self {
-            data_batches,
-            row_offsets,
+            rows: JoinBuildRows::from_batches(data_batches)?,
             key_columns,
             table,
         })
@@ -522,7 +531,7 @@ impl JoinHashMap {
     /// (real SQL null elsewhere) is kept, since there is only one group and
     /// no boundary detection is needed.
     pub fn into_hash_map_batches(self, group_max_bucket: Option<i32>) -> Result<Vec<RecordBatch>> {
-        let schema = join_hash_map_schema(&self.data_batches[0].schema());
+        let schema = join_hash_map_schema(&self.data_schema());
         if self.num_rows() == 0 {
             return Ok(vec![RecordBatch::new_empty(schema)]);
         }
@@ -530,9 +539,9 @@ impl JoinHashMap {
         let mut table_data = vec![];
         self.table.write_to(&mut table_data)?;
 
-        let total_batches = self.data_batches.len();
+        let total_batches = self.rows.data_batches.len();
         let mut output = Vec::with_capacity(total_batches);
-        for (i, data_batch) in self.data_batches.into_iter().enumerate() {
+        for (i, data_batch) in self.rows.data_batches.into_iter().enumerate() {
             let is_last_batch = i == total_batches - 1;
             let mut metadata_col_builder = BinaryBuilder::new();
             for j in 0..data_batch.num_rows() {
@@ -577,11 +586,11 @@ impl JoinHashMap {
     }
 
     pub fn data_schema(&self) -> SchemaRef {
-        self.data_batches[0].schema()
+        self.rows.data_batches[0].schema()
     }
 
     pub fn num_rows(&self) -> usize {
-        *self.row_offsets.last().expect("row_offsets non-empty") as usize
+        self.rows.num_rows()
     }
 
     pub fn key_columns(&self) -> &[ArrayRef] {
@@ -608,8 +617,105 @@ impl JoinHashMap {
         map_value.get_range(self)
     }
 
+    pub fn gather_columns(
+        &self,
+        col_indices: &[usize],
+        row_indices: impl Into<UInt32Array>,
+    ) -> Result<Vec<ArrayRef>> {
+        self.rows.gather_columns(col_indices, row_indices)
+    }
+}
+
+impl JoinBuildRows {
+    pub(crate) fn try_new(mut batches: Vec<RecordBatch>, schema: SchemaRef) -> Result<Self> {
+        batches.retain(|batch| batch.num_rows() > 0);
+        if batches.is_empty() {
+            batches.push(RecordBatch::new_empty(schema.clone()));
+        }
+        let mut rows = Self::from_batches(batches)?;
+        // A single modest batch makes repeated nested-loop gathers contiguous.
+        // Keep larger builds segmented and avoid overflowing nested Arrow offsets.
+        if rows.data_batches.len() > 1 {
+            let mut bytes = 0usize;
+            let mut span = 0usize;
+            let fits = rows.data_batches.iter().all(|batch| {
+                bytes = bytes.saturating_add(batch.get_batch_mem_size());
+                span = span.saturating_add(
+                    batch
+                        .columns()
+                        .iter()
+                        .map(|col| max_i32_offset_span(col.as_ref(), 0..batch.num_rows()))
+                        .max()
+                        .unwrap_or(0),
+                );
+                bytes <= suggested_batch_mem_size() && span <= i32::MAX as usize
+            });
+            if fits && let Ok(batch) = arrow::compute::concat_batches(&schema, &rows.data_batches) {
+                rows.row_offsets = vec![0, rows.num_rows() as u32];
+                rows.data_batches = vec![batch];
+            }
+        }
+        Ok(rows)
+    }
+
+    fn from_batches(data_batches: Vec<RecordBatch>) -> Result<Self> {
+        if data_batches.is_empty() {
+            return datafusion_ext_commons::df_execution_err!("missing build batch schema");
+        }
+        let mut row_offsets = Vec::with_capacity(data_batches.len() + 1);
+        row_offsets.push(0);
+        let mut total = 0u32;
+        for batch in &data_batches {
+            total = u32::try_from(batch.num_rows())
+                .ok()
+                .and_then(|n| total.checked_add(n))
+                .ok_or_else(|| {
+                    datafusion::common::DataFusionError::Execution(
+                        "broadcast join build exceeds the u32 row index limit".into(),
+                    )
+                })?;
+            row_offsets.push(total);
+        }
+        Ok(Self {
+            data_batches,
+            row_offsets,
+            offset_spans: OnceLock::new(),
+        })
+    }
+
+    pub(super) fn data_batches(&self) -> &[RecordBatch] {
+        &self.data_batches
+    }
+
+    pub(crate) fn num_rows(&self) -> usize {
+        *self.row_offsets.last().expect("row_offsets non-empty") as usize
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.num_rows() == 0
+    }
+
+    /// Cache the source spans once across physical batches. A keyless join can
+    /// revisit the same column for every probe row and candidate chunk.
+    pub(super) fn offset_span(&self, col: usize) -> usize {
+        if self.data_batches.len() == 1 {
+            let values = self.data_batches[0].column(col);
+            return max_i32_offset_span(values.as_ref(), 0..values.len());
+        }
+        self.offset_spans.get_or_init(|| {
+            (0..self.data_batches[0].num_columns())
+                .map(|c| {
+                    self.data_batches
+                        .iter()
+                        .map(|b| max_i32_offset_span(b.column(c).as_ref(), 0..b.num_rows()))
+                        .fold(0usize, usize::saturating_add)
+                })
+                .collect()
+        })[col]
+    }
+
     /// Resolve a global (virtual) row id into `(batch_idx, local_row_idx)`.
-    fn resolve_row(&self, global_row_id: u32) -> (usize, usize) {
+    pub(super) fn resolve_row(&self, global_row_id: u32) -> (usize, usize) {
         if self.data_batches.len() == 1 {
             return (0, global_row_id as usize);
         }
@@ -635,57 +741,71 @@ impl JoinHashMap {
     ) -> Result<Vec<ArrayRef>> {
         let row_indices: UInt32Array = row_indices.into();
 
-        if self.data_batches.len() == 1 {
-            let cols: Vec<ArrayRef> = col_indices
+        let take_from = |batch: &RecordBatch, indices: UInt32Array| {
+            let cols = col_indices
                 .iter()
-                .map(|&i| self.data_batches[0].column(i).clone())
-                .collect();
-            return take_cols(&cols, row_indices);
+                .map(|&i| batch.column(i).clone())
+                .collect::<Vec<_>>();
+            take_cols(&cols, indices)
+        };
+        if self.data_batches.len() == 1 {
+            return take_from(&self.data_batches[0], row_indices);
+        }
+        if col_indices.is_empty() {
+            return Ok(vec![]);
         }
 
-        let projected_batches: Vec<RecordBatch> = self
-            .data_batches
+        let Some(min_row) = arrow::compute::min(&row_indices) else {
+            return Ok(col_indices
+                .iter()
+                .map(|&c| {
+                    new_null_array(
+                        self.data_batches[0].column(c).data_type(),
+                        row_indices.len(),
+                    )
+                })
+                .collect());
+        };
+        let max_row = arrow::compute::max(&row_indices).expect("nonempty indices");
+        let first = self.resolve_row(min_row).0;
+        let last = self.resolve_row(max_row).0;
+        if first == last {
+            let base = self.row_offsets[first];
+            let local = if base == 0 {
+                row_indices
+            } else {
+                row_indices.unary(|i| i.wrapping_sub(base))
+            };
+            return take_from(&self.data_batches[first], local);
+        }
+
+        // Candidates usually belong to a small run of batches even for a large broadcast.
+        let batches = &self.data_batches[first..=last];
+        let mut current = first;
+        let pairs = row_indices
             .iter()
-            .map(|batch| {
-                let schema = Arc::new(Schema::new(
-                    col_indices
-                        .iter()
-                        .map(|&i| batch.schema().fields()[i].clone())
-                        .collect::<Vec<_>>(),
-                ));
-                let columns = col_indices
+            .map(|idx| match idx {
+                Some(row) => {
+                    if !(self.row_offsets[current]..self.row_offsets[current + 1]).contains(&row) {
+                        current = self.resolve_row(row).0;
+                    }
+                    (current - first, (row - self.row_offsets[current]) as usize)
+                }
+                None => (batches.len(), 0),
+            })
+            .collect::<Vec<_>>();
+        col_indices
+            .iter()
+            .map(|&c| {
+                let mut arrays = batches
                     .iter()
-                    .map(|&i| batch.column(i).clone())
+                    .map(|b| b.column(c).clone())
                     .collect::<Vec<_>>();
-                Ok(RecordBatch::try_new_with_options(
-                    schema,
-                    columns,
-                    &RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
-                )?)
+                if row_indices.null_count() > 0 {
+                    arrays.push(new_null_array(arrays[0].data_type(), 1));
+                }
+                create_array_interleaver(&arrays, false)?(&pairs)
             })
-            .collect::<Result<Vec<_>>>()?;
-        let interleaver = create_batch_interleaver(&projected_batches, false)?;
-
-        // nulls in `row_indices` (unmatched outer rows) are mapped to a
-        // dummy (0, 0) pair for the interleaver, then masked back to null
-        // below.
-        let pairs: Vec<(usize, usize)> = row_indices
-            .iter()
-            .map(|gid| match gid {
-                Some(gid) => self.resolve_row(gid),
-                None => (0, 0),
-            })
-            .collect();
-        let batch = interleaver(&pairs)?;
-
-        if row_indices.null_count() == 0 {
-            return Ok(batch.columns().to_vec());
-        }
-        let is_null = BooleanArray::from_iter(row_indices.iter().map(|v| Some(v.is_none())));
-        batch
-            .columns()
-            .iter()
-            .map(|col| Ok(arrow::compute::nullif(col, &is_null)?))
             .collect()
     }
 }
@@ -749,7 +869,7 @@ pub fn join_table_field() -> FieldRef {
 /// an extra per-batch piece of information - which bucket group a batch
 /// belongs to - but the broadcast exchange's declared schema on the Scala
 /// side is fixed to `data columns + ~TABLE` (one single binary column,
-/// see `NativeBroadcastExchangeBase.hashMapOutput`), so a separate
+/// see `NativeBroadcastExchangeBase.broadcastSchema (hashed mode)`), so a separate
 /// `~BUCKET_END` column is not an option: whenever a batch produced by the
 /// hybrid-join fallback carried that extra column, reading it back through
 /// the broadcast exchange's IPC round trip (which decodes using the fixed
@@ -928,10 +1048,46 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn gather_nullable_build_rows_across_batches() -> Result<()> {
+        let batches = vec![int32_data_batch(vec![1, 2]), int32_data_batch(vec![3, 4])];
+        let rows = JoinBuildRows::from_batches(batches)?;
+        for (indices, expected) in [
+            (vec![None, Some(3)], vec![None, Some(4)]),
+            (vec![Some(2), None, Some(0)], vec![Some(3), None, Some(1)]),
+            (vec![None, None], vec![None, None]),
+        ] {
+            let cols = rows.gather_columns(&[0], UInt32Array::from(indices))?;
+            assert_eq!(cols[0].as_ref(), &Int32Array::from(expected) as &dyn Array);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reject_build_rows_beyond_u32_limit() -> Result<()> {
+        let schema = Arc::new(Schema::empty());
+        let batch = |rows| {
+            RecordBatch::try_new_with_options(
+                schema.clone(),
+                vec![],
+                &RecordBatchOptions::new().with_row_count(Some(rows)),
+            )
+        };
+        let result = JoinBuildRows::try_new(vec![batch(u32::MAX as usize)?, batch(1)?], schema);
+        assert!(
+            result
+                .err()
+                .expect("overflow must fail")
+                .to_string()
+                .contains("u32 row index limit")
+        );
+        Ok(())
+    }
+
     /// Normal (non hybrid-join) and hybrid-join hash-map-batches must share
     /// *exactly* the same declared schema (`data columns + ~TABLE`) -
     /// otherwise reading them back through the broadcast exchange's fixed
-    /// Scala-declared schema (`NativeBroadcastExchangeBase.hashMapOutput`)
+    /// Scala-declared schema (`NativeBroadcastExchangeBase.broadcastSchema (hashed mode)`)
     /// silently decodes the wrong number of columns and corrupts the whole
     /// IPC stream. See the module-level docs on `encode_metadata`.
     #[test]

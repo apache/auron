@@ -13,9 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::ops::Range;
+
 use arrow::{
-    array::{Array, ArrayData, StructArray},
+    array::{Array, ArrayData, AsArray, StructArray},
     buffer::Buffer,
+    datatypes::{ArrowNativeType, DataType},
     record_batch::RecordBatch,
 };
 
@@ -63,4 +66,77 @@ fn get_array_data_mem_size(array_data: &ArrayData) -> usize {
         mem_size += size_of::<ArrayData>() + get_array_data_mem_size(child);
     }
     mem_size
+}
+
+/// Largest advance of any i32 offset in these rows. String/binary offsets
+/// count bytes, while list/map offsets count entries, even for zero-width
+/// children. Only the two endpoints of each offset buffer are needed.
+pub fn max_i32_offset_span(array: &dyn Array, rows: Range<usize>) -> usize {
+    fn span<T: ArrowNativeType>(offsets: &[T], rows: Range<usize>) -> Range<usize> {
+        offsets[rows.start].as_usize()..offsets[rows.end].as_usize()
+    }
+
+    match array.data_type() {
+        DataType::Utf8 => span(array.as_string::<i32>().value_offsets(), rows).len(),
+        DataType::Binary => span(array.as_binary::<i32>().value_offsets(), rows).len(),
+        DataType::List(_) => {
+            let list = array.as_list::<i32>();
+            let children = span(list.value_offsets(), rows);
+            children
+                .len()
+                .max(max_i32_offset_span(list.values().as_ref(), children))
+        }
+        DataType::Map(_, _) => {
+            let map = array.as_map();
+            let entries = span(map.value_offsets(), rows);
+            entries
+                .len()
+                .max(max_i32_offset_span(map.entries(), entries))
+        }
+        DataType::Struct(_) => array
+            .as_struct()
+            .columns()
+            .iter()
+            .map(|col| max_i32_offset_span(col.as_ref(), rows.clone()))
+            .max()
+            .unwrap_or(0),
+        DataType::LargeList(_) => {
+            let list = array.as_list::<i64>();
+            max_i32_offset_span(list.values().as_ref(), span(list.value_offsets(), rows))
+        }
+        DataType::FixedSizeList(_, size) => {
+            let size = *size as usize;
+            max_i32_offset_span(
+                array.as_fixed_size_list().values().as_ref(),
+                rows.start * size..rows.end * size,
+            )
+        }
+        _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow::{
+        array::{ArrayRef, ListArray, StringArray},
+        buffer::OffsetBuffer,
+        datatypes::Field,
+    };
+
+    use super::*;
+
+    #[test]
+    fn nested_string_offsets_use_the_selected_slice() {
+        let strings: ArrayRef = Arc::new(StringArray::from(vec!["unused", "é", "三", "tail"]));
+        let lists = ListArray::new(
+            Arc::new(Field::new_list_field(DataType::Utf8, true)),
+            OffsetBuffer::from_lengths([1, 2, 1]),
+            strings,
+            None,
+        );
+        assert_eq!(max_i32_offset_span(&lists.slice(1, 2), 0..1), 5);
+        assert_eq!(max_i32_offset_span(&lists, 1..3), 9);
+    }
 }

@@ -507,6 +507,8 @@ message BroadcastJoinExecNode {
   // when true, the output must preserve the probe side's original row
   // ordering even if a hybrid (bucketed hash) join fallback is triggered.
   bool required_reserved_order = 10;
+  // Identity broadcasts carry ordinary rows without the serialized hash-table column.
+  bool broadcast_rows = 11;
 }
 
 message RenameColumnsExecNode {

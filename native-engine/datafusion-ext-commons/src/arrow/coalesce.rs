@@ -29,7 +29,10 @@ use arrow::{
 use arrow_schema::{DataType, SchemaRef};
 use datafusion::common::{DataFusionError, Result};
 
-use crate::{arrow::array_size::BatchSize, batch_size, suggested_batch_mem_size};
+use crate::{
+    arrow::array_size::{BatchSize, max_i32_offset_span},
+    batch_size, suggested_batch_mem_size,
+};
 
 pub struct BatchCoalescer {
     schema: SchemaRef,
@@ -38,6 +41,7 @@ pub struct BatchCoalescer {
     staging_batches: Vec<RecordBatch>,
     staging_num_rows: usize,
     staging_mem_size: usize,
+    staging_offset_span: usize,
     completed_batches: VecDeque<RecordBatch>,
 }
 
@@ -50,6 +54,7 @@ impl BatchCoalescer {
             staging_batches: Vec::new(),
             staging_num_rows: 0,
             staging_mem_size: 0,
+            staging_offset_span: 0,
             completed_batches: VecDeque::new(),
         }
     }
@@ -66,8 +71,25 @@ impl BatchCoalescer {
         if batch.num_rows() == 0 {
             return Ok(());
         }
+        let mem_size = batch.get_batch_mem_size();
+        if self.staging_batches.is_empty()
+            && (batch.num_rows() >= self.batch_size || mem_size > self.batch_mem_size)
+        {
+            self.completed_batches.push_back(batch);
+            return Ok(());
+        }
+        let offset_span = batch
+            .columns()
+            .iter()
+            .map(|col| max_i32_offset_span(col.as_ref(), 0..batch.num_rows()))
+            .max()
+            .unwrap_or(0);
+        if self.staging_offset_span + offset_span > i32::MAX as usize {
+            self.finish_buffered_batch()?;
+        }
+        self.staging_offset_span += offset_span;
         self.staging_num_rows += batch.num_rows();
-        self.staging_mem_size += batch.get_batch_mem_size();
+        self.staging_mem_size += mem_size;
         self.staging_batches.push(batch);
 
         if self.staging_num_rows >= self.batch_size || self.staging_mem_size > self.batch_mem_size {
@@ -93,6 +115,7 @@ impl BatchCoalescer {
         self.completed_batches.push_back(batch);
         self.staging_num_rows = 0;
         self.staging_mem_size = 0;
+        self.staging_offset_span = 0;
         Ok(())
     }
 

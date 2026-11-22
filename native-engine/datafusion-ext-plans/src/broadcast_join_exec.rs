@@ -72,6 +72,7 @@ use crate::{
                 RProbedRightSemiJoiner,
             },
         },
+        bnlj::BnljJoiner,
         bucket_repartitioner::BucketRepartitioner,
         bucketed_group::{
             NUM_BUCKETS, append_bucket_id_column, bucket_schema, remove_last_column,
@@ -80,13 +81,20 @@ use crate::{
         filter_read_columns,
         join_filter::JoinFilter as PreparedJoinFilter,
         join_hash_map::{
-            JoinHashMap, join_data_schema, join_hash_map_schema, peek_is_hybrid_join,
-            split_hash_map_batch_by_group,
+            JoinBuildRows, JoinHashMap, join_data_schema, join_hash_map_schema,
+            peek_is_hybrid_join, split_hash_map_batch_by_group,
         },
         join_utils::{JoinType, JoinType::*},
     },
     sort_exec::create_default_ascending_sort_exec,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuildInput {
+    Local,
+    BroadcastHashMap,
+    BroadcastRows,
+}
 
 #[derive(Debug)]
 pub struct BroadcastJoinExec {
@@ -96,8 +104,8 @@ pub struct BroadcastJoinExec {
     join_type: JoinType,
     broadcast_side: JoinSide,
     schema: SchemaRef,
-    is_built: bool, // true for BroadcastHashJoin, false for ShuffledHashJoin
-    cached_build_hash_map_id: Option<String>,
+    build_input: BuildInput,
+    cached_build_id: Option<String>,
     is_null_aware_anti_join: bool,
     join_filter: Option<JoinFilter>,
     // preserve probe-side row order even when falling back to a hybrid join
@@ -115,7 +123,7 @@ impl BroadcastJoinExec {
         join_type: JoinType,
         broadcast_side: JoinSide,
         is_built: bool,
-        cached_build_hash_map_id: Option<String>,
+        cached_build_id: Option<String>,
         is_null_aware_anti_join: bool,
         join_filter: Option<JoinFilter>,
     ) -> Result<Self> {
@@ -126,14 +134,32 @@ impl BroadcastJoinExec {
             join_type,
             broadcast_side,
             schema,
-            is_built,
-            cached_build_hash_map_id,
+            build_input: if is_built {
+                BuildInput::BroadcastHashMap
+            } else {
+                BuildInput::Local
+            },
+            cached_build_id,
             is_null_aware_anti_join,
             join_filter,
             required_reserved_order: false,
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
         })
+    }
+
+    /// Consume the original Arrow batches supplied by an identity broadcast exchange.
+    pub fn with_broadcast_rows(mut self) -> Result<Self> {
+        if self.build_input == BuildInput::Local
+            || !self.on.is_empty()
+            || self.is_null_aware_anti_join
+        {
+            return df_execution_err!(
+                "broadcast rows require a keyless broadcast nested loop join"
+            );
+        }
+        self.build_input = BuildInput::BroadcastRows;
+        Ok(self)
     }
 
     /// Keep the probe side's row order in the output, even if this join falls
@@ -160,12 +186,16 @@ impl BroadcastJoinExec {
         let left = self.left.schema();
         let right = self.right.schema();
         (
-            if self.is_built && self.broadcast_side == JoinSide::Left {
+            if self.build_input == BuildInput::BroadcastHashMap
+                && self.broadcast_side == JoinSide::Left
+            {
                 join_data_schema(&left)
             } else {
                 left
             },
-            if self.is_built && self.broadcast_side == JoinSide::Right {
+            if self.build_input == BuildInput::BroadcastHashMap
+                && self.broadcast_side == JoinSide::Right
+            {
                 join_data_schema(&right)
             } else {
                 right
@@ -195,17 +225,12 @@ impl BroadcastJoinExec {
             })
             .collect::<Result<_>>()?;
 
+        let (left_data_schema, right_data_schema) = self.data_schemas();
         let projection = JoinProjection::try_new(
             self.join_type,
             &self.schema,
-            &match self.broadcast_side {
-                JoinSide::Left if self.is_built => join_data_schema(&left_schema),
-                _ => left_schema.clone(),
-            },
-            &match self.broadcast_side {
-                JoinSide::Right if self.is_built => join_data_schema(&right_schema),
-                _ => right_schema.clone(),
-            },
+            &left_data_schema,
+            &right_data_schema,
             projection,
         )?;
 
@@ -256,13 +281,13 @@ impl BroadcastJoinExec {
         let left = self.left.clone();
         let right = self.right.clone();
         let broadcast_side = self.broadcast_side;
-        let is_built = self.is_built;
-        let cached_build_hash_map_id = self.cached_build_hash_map_id.clone();
+        let build_input = self.build_input;
+        let cached_build_id = self.cached_build_id.clone();
         let required_reserved_order = self.required_reserved_order;
 
         let exec_ctx_cloned = exec_ctx.clone();
         let output_stream = exec_ctx_cloned.clone().output_with_sender(
-            if is_built {
+            if build_input != BuildInput::Local {
                 "BroadcastJoin"
             } else {
                 "HashJoin"
@@ -274,8 +299,8 @@ impl BroadcastJoinExec {
                     right,
                     join_params,
                     broadcast_side,
-                    cached_build_hash_map_id,
-                    is_built,
+                    cached_build_id,
+                    build_input,
                     required_reserved_order,
                     exec_ctx_cloned,
                     sender,
@@ -338,21 +363,31 @@ impl ExecutionPlan for BroadcastJoinExec {
         self: Arc<Self>,
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        Ok(Arc::new(
-            Self::try_new(
-                self.schema.clone(),
-                children[0].clone(),
-                children[1].clone(),
-                self.on.iter().cloned().collect(),
-                self.join_type,
-                self.broadcast_side,
-                self.is_built,
-                None,
-                self.is_null_aware_anti_join,
-                self.join_filter.clone(),
-            )?
-            .with_required_reserved_order(self.required_reserved_order),
-        ))
+        let same_build = match self.broadcast_side {
+            JoinSide::Left => Arc::ptr_eq(&self.left, &children[0]),
+            JoinSide::Right => Arc::ptr_eq(&self.right, &children[1]),
+            JoinSide::None => false,
+        };
+        let mut plan = Self::try_new(
+            self.schema.clone(),
+            children[0].clone(),
+            children[1].clone(),
+            self.on.clone(),
+            self.join_type,
+            self.broadcast_side,
+            self.build_input != BuildInput::Local,
+            if same_build {
+                self.cached_build_id.clone()
+            } else {
+                None
+            },
+            self.is_null_aware_anti_join,
+            self.join_filter.clone(),
+        )?;
+        plan.build_input = self.build_input;
+        Ok(Arc::new(plan.with_required_reserved_order(
+            self.required_reserved_order,
+        )))
     }
 
     fn execute(
@@ -374,7 +409,7 @@ impl DisplayAs for BroadcastJoinExec {
         write!(
             f,
             "{}",
-            if self.is_built {
+            if self.build_input != BuildInput::Local {
                 "BroadcastJoin"
             } else {
                 "HashJoin"
@@ -389,6 +424,9 @@ fn create_joiner(
     map: Arc<JoinHashMap>,
     sender: Arc<WrappedRecordBatchSender>,
 ) -> Pin<Box<dyn Joiner + Send>> {
+    if join_params.left_keys.is_empty() {
+        return Box::pin(BnljJoiner::new(broadcast_side, join_params, map, sender));
+    }
     match broadcast_side {
         JoinSide::Left => match join_params.join_type {
             Inner => Box::pin(RProbedInnerJoiner::new(join_params, map, sender)),
@@ -416,22 +454,17 @@ fn create_joiner(
     }
 }
 
-async fn execute_join_with_map(
+async fn probe_build(
     probed_plan: Arc<dyn ExecutionPlan>,
-    map: Arc<JoinHashMap>,
-    join_params: JoinParams,
-    broadcast_side: JoinSide,
+    mut joiner: Pin<Box<dyn Joiner + Send>>,
     exec_ctx: Arc<ExecutionContext>,
     probed_side_hash_time: Time,
     probed_side_search_time: Time,
     probed_side_compare_time: Time,
     build_output_time: Time,
-    sender: Arc<WrappedRecordBatchSender>,
 ) -> Result<()> {
     let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
     let _timer = elapsed_compute.timer();
-
-    let mut joiner = create_joiner(broadcast_side, join_params, map, sender);
 
     if !joiner.can_early_stop() {
         let mut probed = exec_ctx.stat_input(exec_ctx.execute(&probed_plan)?);
@@ -905,8 +938,8 @@ async fn execute_join(
     right: Arc<dyn ExecutionPlan>,
     join_params: JoinParams,
     broadcast_side: JoinSide,
-    cached_build_hash_map_id: Option<String>,
-    is_built: bool,
+    cached_build_id: Option<String>,
+    build_input: BuildInput,
     required_reserved_order: bool,
     exec_ctx: Arc<ExecutionContext>,
     sender: Arc<WrappedRecordBatchSender>,
@@ -922,6 +955,21 @@ async fn execute_join(
         JoinSide::Right => (left, right),
         JoinSide::None => unreachable!(),
     };
+    if build_input == BuildInput::BroadcastRows {
+        let rows =
+            collect_broadcast_rows(cached_build_id.as_deref(), &exec_ctx, &built_plan).await?;
+        let joiner = BnljJoiner::new(broadcast_side, join_params, rows, sender);
+        return probe_build(
+            probed_plan,
+            Box::pin(joiner),
+            exec_ctx,
+            probed_side_hash_time,
+            probed_side_search_time,
+            probed_side_compare_time,
+            build_output_time,
+        )
+        .await;
+    }
     let map_keys = match broadcast_side {
         JoinSide::Left => join_params.left_keys.clone(),
         JoinSide::Right => join_params.right_keys.clone(),
@@ -933,7 +981,7 @@ async fn execute_join(
         JoinSide::None => unreachable!(),
     };
 
-    let built_input = if is_built {
+    let built_input = if build_input == BuildInput::BroadcastHashMap {
         exec_ctx.stat_input(exec_ctx.execute(&built_plan)?)
     } else {
         let data_input = exec_ctx.stat_input(exec_ctx.execute(&built_plan)?);
@@ -947,7 +995,7 @@ async fn execute_join(
     };
     let built_collected = collect_join_hash_map(
         Box::pin(built_input.peekable()),
-        cached_build_hash_map_id.filter(|_| is_built),
+        cached_build_id.filter(|_| build_input == BuildInput::BroadcastHashMap),
         &map_keys,
         build_time,
     )
@@ -955,19 +1003,17 @@ async fn execute_join(
 
     match built_collected {
         CollectJoinHashMapResult::Map(map) => {
-            let join_with_map = execute_join_with_map(
+            let joiner = create_joiner(broadcast_side, join_params, map, sender);
+            probe_build(
                 probed_plan,
-                map,
-                join_params,
-                broadcast_side,
+                joiner,
                 exec_ctx,
                 probed_side_hash_time,
                 probed_side_search_time,
                 probed_side_compare_time,
                 build_output_time,
-                sender,
-            );
-            join_with_map.await?;
+            )
+            .await?;
         }
         CollectJoinHashMapResult::BucketedGroups(stream) => {
             let built_input = Box::pin(RecordBatchStreamAdapter::new(
@@ -1000,13 +1046,40 @@ enum CollectJoinHashMapResult {
     BucketedGroups(Pin<Box<Peekable<SendableRecordBatchStream>>>),
 }
 
+async fn collect_broadcast_rows(
+    cached_id: Option<&str>,
+    exec_ctx: &Arc<ExecutionContext>,
+    plan: &Arc<dyn ExecutionPlan>,
+) -> Result<Arc<JoinBuildRows>> {
+    let collect = || async {
+        let input = exec_ctx.stat_input(exec_ctx.execute(plan)?);
+        let schema = input.schema();
+        Ok(Arc::new(JoinBuildRows::try_new(
+            input.try_collect().await?,
+            schema,
+        )?))
+    };
+    let Some(id) = cached_id else {
+        return collect().await;
+    };
+    static ROWS: BuildCache<JoinBuildRows> = OnceCell::new();
+    let slot = cache_slot(&ROWS, id);
+    let mut slot = slot.lock().await;
+    if let Some(rows) = slot.upgrade() {
+        return Ok(rows);
+    }
+    let rows = collect().await?;
+    *slot = Arc::downgrade(&rows);
+    Ok(rows)
+}
+
 async fn collect_join_hash_map(
     input: Pin<Box<Peekable<SendableRecordBatchStream>>>,
-    cached_build_hash_map_id: Option<String>,
+    cached_build_id: Option<String>,
     key_exprs: &[PhysicalExprRef],
     build_time: Time,
 ) -> Result<CollectJoinHashMapResult> {
-    Ok(match cached_build_hash_map_id {
+    Ok(match cached_build_id {
         Some(cached_id) => {
             get_cached_join_hash_map(&cached_id, || async {
                 collect_join_hash_map_without_caching(input, key_exprs, build_time).await
@@ -1075,25 +1148,27 @@ pub trait Joiner {
     fn num_output_rows(&self) -> usize;
 }
 
+type CacheSlot<T> = Arc<tokio::sync::Mutex<Weak<T>>>;
+type BuildCache<T> = OnceCell<Mutex<HashMap<String, CacheSlot<T>>>>;
+
+fn cache_slot<T>(cache: &BuildCache<T>, id: &str) -> CacheSlot<T> {
+    let mut slots = cache.get_or_init(Mutex::default).lock();
+    if let Some(slot) = slots.get(id) {
+        return Arc::clone(slot);
+    }
+    // Keep both in-flight initializers and relations still used by a joiner.
+    slots.retain(|_, slot| {
+        Arc::strong_count(slot) > 1 || slot.try_lock().is_ok_and(|v| v.strong_count() > 0)
+    });
+    slots.entry(id.to_owned()).or_default().clone()
+}
+
 async fn get_cached_join_hash_map<Fut: Future<Output = Result<CollectJoinHashMapResult>> + Send>(
     cached_id: &str,
     init: impl FnOnce() -> Fut,
 ) -> Result<CollectJoinHashMapResult> {
-    type Slot = Arc<tokio::sync::Mutex<Weak<JoinHashMap>>>;
-    static CACHED_JOIN_HASH_MAP: OnceCell<Arc<Mutex<HashMap<String, Slot>>>> = OnceCell::new();
-
-    // remove expire keys and insert new key
-    let slot = {
-        let cached_join_hash_map = CACHED_JOIN_HASH_MAP.get_or_init(|| Arc::default());
-        let mut cached_join_hash_map = cached_join_hash_map.lock();
-
-        cached_join_hash_map.retain(|_, v| Arc::strong_count(v) > 0);
-        cached_join_hash_map
-            .entry(cached_id.to_string())
-            .or_default()
-            .clone()
-    };
-
+    static CACHED_JOIN_HASH_MAP: BuildCache<JoinHashMap> = OnceCell::new();
+    let slot = cache_slot(&CACHED_JOIN_HASH_MAP, cached_id);
     let mut slot = slot.lock().await;
     if let Some(cached) = slot.upgrade() {
         log::info!("got cached broadcast join hash map: ${cached_id}");
