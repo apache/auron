@@ -38,6 +38,7 @@ pub mod join_utils;
 
 // join implementations
 pub mod bhj;
+pub(crate) mod bnlj;
 pub mod bucket_repartitioner;
 pub mod bucketed_group;
 pub mod join_filter;

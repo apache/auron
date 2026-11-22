@@ -16,15 +16,24 @@
  */
 package org.apache.auron
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
 import org.apache.spark.SparkEnv
+import org.apache.spark.TaskContext
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.auron.NativeHelper
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
 import org.apache.spark.sql.execution.SortExec
+import org.apache.spark.sql.execution.auron.plan.NativeBroadcastExchangeExec
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
 
+import org.apache.auron.jni.JniBridge
 import org.apache.auron.util.AuronTestUtils
 
 class AuronBroadcastNestedLoopJoinSuite extends AuronJoinConditionTestBase {
@@ -99,15 +108,34 @@ class AuronBroadcastNestedLoopJoinSuite extends AuronJoinConditionTestBase {
     }
   }
 
-  test("BNLJ count-only projection retains condition columns") {
+  test("BNLJ shares its projected row broadcast with a Spark consumer") {
     withSQLConf("spark.sql.adaptive.enabled" -> "false") {
       withJoinInputs {
-        checkJoinPlan(
-          """
+        val df = checkSparkAnswer("""
             |SELECT /*+ BROADCAST(r) */ COUNT(*)
-            |FROM condition_left l LEFT OUTER JOIN condition_right r ON l.v < r.v
-            |""".stripMargin,
-          _.isInstanceOf[NativeBroadcastJoinExec])
+            |FROM condition_left l LEFT OUTER JOIN condition_right r
+            |ON COALESCE(l.v, 0) < COALESCE(r.v, 0)
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        assert(
+          collectFirst(plan) { case j: NativeBroadcastJoinExec => j }.isDefined,
+          plan.toString)
+        val exchange = collectFirst(plan) { case x: NativeBroadcastExchangeExec => x }.get
+        val reused = ReusedExchangeExec(exchange.output, exchange)
+        assert(exchange.output.length == 1)
+        assert(NativeHelper.executeNative(reused).map(_.numFields).collect().toSet == Set(1))
+        // On a native cache hit the task registers the reader but never opens it.
+        val reader = exchange.doExecuteNative().nativePlanWrapper
+        val unopenedReader = spark.sparkContext
+          .parallelize(Seq(0), 1)
+          .map(_ => reader.plan(null, TaskContext.get()).getIpcReader.getIpcProviderResourceId)
+          .collect()
+          .head
+        assert(JniBridge.getResource(unopenedReader) == null)
+        val rows = reused.executeBroadcast[Array[InternalRow]]().value
+        assert(
+          rows.map(r => if (r.isNullAt(0)) -1 else r.getInt(0)).sorted.toSeq ==
+            Seq(-1, 2, 2, 4, 9, 10))
       }
     }
   }
@@ -128,9 +156,42 @@ class AuronBroadcastNestedLoopJoinSuite extends AuronJoinConditionTestBase {
     }
   }
 
+  test("BNLJ coalesces tiny broadcast partitions while preserving a wide partition") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempView("bnlj_tiny_build") {
+        val wide = new scala.util.Random(0).alphanumeric.take(16384).mkString
+        val build = (0 until 128).map(k => (k, "")) :+ (128 -> wide)
+        spark.sparkContext
+          .parallelize(build, 133)
+          .toDF("k", "payload")
+          .createOrReplaceTempView("bnlj_tiny_build")
+        val df = sql("""
+            |SELECT /*+ BROADCAST(r) */ l.k, r.k, r.payload
+            |FROM VALUES (63), (126) AS l(k) LEFT JOIN bnlj_tiny_build r ON l.k < r.k
+            |""".stripMargin)
+        checkAnswer(
+          df,
+          for (l <- Seq(63, 126); (k, payload) <- build if l < k)
+            yield Row(l, k, payload))
+        val join = collectFirst(df.queryExecution.executedPlan) {
+          case j: NativeBroadcastJoinExec =>
+            j
+        }.get
+        val exchange = Shims.get
+          .getUnderlyingBroadcast(join.right)
+          .asInstanceOf[NativeBroadcastExchangeExec]
+        val blocks = exchange.doExecuteBroadcastNative[Array[Array[Byte]]]().value
+        assert(blocks.length == 2)
+        assert(blocks.last.length > 4096)
+        blocks.foreach { bytes =>
+          assert(ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getInt == bytes.length - 4)
+        }
+      }
+    }
+  }
+
   for ((joinType, buildAlias) <- Seq(("inner", "l"), ("left outer", "r"))) {
-    test(
-      s"BNLJ $joinType building $buildAlias preserves residuals in forced hybrid join fallback") {
+    test(s"BNLJ $joinType building $buildAlias skips hash partitioning at the hybrid threshold") {
       withSparkConf(
         "spark.auron.hybrid.join.enable" -> "true",
         "spark.auron.hybrid.join.rows.threshold" -> "0") {
@@ -146,7 +207,7 @@ class AuronBroadcastNestedLoopJoinSuite extends AuronJoinConditionTestBase {
             val join = collectFirst(plan) { case native: NativeBroadcastJoinExec => native }
             assert(join.isDefined, plan.toString)
             assert(join.get.leftKeys.isEmpty && join.get.rightKeys.isEmpty)
-            assert(join.get.metrics("hybrid_join_time").value > 0)
+            assert(join.get.metrics("hybrid_join_time").value == 0)
             assert(join.get.outputOrdering.isEmpty)
           }
         }
