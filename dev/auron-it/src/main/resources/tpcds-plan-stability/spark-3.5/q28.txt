@@ -1,11 +1,11 @@
 == Physical Plan ==
 AdaptiveSparkPlan (161)
 +- == Final Plan ==
-   CartesianProduct Inner (101)
-   :- CartesianProduct Inner (84)
-   :  :- CartesianProduct Inner (67)
-   :  :  :- CartesianProduct Inner (50)
-   :  :  :  :- CartesianProduct Inner (33)
+   NativeCartesianProduct (101)
+   :- NativeCartesianProduct (84)
+   :  :- NativeCartesianProduct (67)
+   :  :  :- NativeCartesianProduct (50)
+   :  :  :  :- NativeCartesianProduct (33)
    :  :  :  :  :- NativeProject (16)
    :  :  :  :  :  +- NativeHashAggregate (15)
    :  :  :  :  :     +- ShuffleQueryStage (14), Statistics(X)
@@ -320,7 +320,9 @@ Results [3]: [avg(UnscaledValue(ss_list_price#16))#19, count(ss_list_price#16)#2
 Output [3]: [cast((avg(UnscaledValue(ss_list_price#16))#19 / 100.0) as decimal(11,6)) AS B2_LP#22, count(ss_list_price#16)#20 AS B2_CNT#23, count(ss_list_price#16)#21 AS B2_CNTD#24]
 Input [3]: [avg(UnscaledValue(ss_list_price#16))#19, count(ss_list_price#16)#20, count(ss_list_price#16)#21]
 
-(33) CartesianProduct
+(33) NativeCartesianProduct
+Left output [3]: [B1_LP#11, B1_CNT#12, B1_CNTD#13]
+Right output [3]: [B2_LP#22, B2_CNT#23, B2_CNTD#24]
 Join type: Inner
 Join condition: None
 
@@ -402,7 +404,9 @@ Results [3]: [avg(UnscaledValue(ss_list_price#27))#30, count(ss_list_price#27)#3
 Output [3]: [cast((avg(UnscaledValue(ss_list_price#27))#30 / 100.0) as decimal(11,6)) AS B3_LP#33, count(ss_list_price#27)#31 AS B3_CNT#34, count(ss_list_price#27)#32 AS B3_CNTD#35]
 Input [3]: [avg(UnscaledValue(ss_list_price#27))#30, count(ss_list_price#27)#31, count(ss_list_price#27)#32]
 
-(50) CartesianProduct
+(50) NativeCartesianProduct
+Left output [6]: [B1_LP#11, B1_CNT#12, B1_CNTD#13, B2_LP#22, B2_CNT#23, B2_CNTD#24]
+Right output [3]: [B3_LP#33, B3_CNT#34, B3_CNTD#35]
 Join type: Inner
 Join condition: None
 
@@ -484,7 +488,9 @@ Results [3]: [avg(UnscaledValue(ss_list_price#38))#41, count(ss_list_price#38)#4
 Output [3]: [cast((avg(UnscaledValue(ss_list_price#38))#41 / 100.0) as decimal(11,6)) AS B4_LP#44, count(ss_list_price#38)#42 AS B4_CNT#45, count(ss_list_price#38)#43 AS B4_CNTD#46]
 Input [3]: [avg(UnscaledValue(ss_list_price#38))#41, count(ss_list_price#38)#42, count(ss_list_price#38)#43]
 
-(67) CartesianProduct
+(67) NativeCartesianProduct
+Left output [9]: [B1_LP#11, B1_CNT#12, B1_CNTD#13, B2_LP#22, B2_CNT#23, B2_CNTD#24, B3_LP#33, B3_CNT#34, B3_CNTD#35]
+Right output [3]: [B4_LP#44, B4_CNT#45, B4_CNTD#46]
 Join type: Inner
 Join condition: None
 
@@ -566,7 +572,9 @@ Results [3]: [avg(UnscaledValue(ss_list_price#49))#52, count(ss_list_price#49)#5
 Output [3]: [cast((avg(UnscaledValue(ss_list_price#49))#52 / 100.0) as decimal(11,6)) AS B5_LP#55, count(ss_list_price#49)#53 AS B5_CNT#56, count(ss_list_price#49)#54 AS B5_CNTD#57]
 Input [3]: [avg(UnscaledValue(ss_list_price#49))#52, count(ss_list_price#49)#53, count(ss_list_price#49)#54]
 
-(84) CartesianProduct
+(84) NativeCartesianProduct
+Left output [12]: [B1_LP#11, B1_CNT#12, B1_CNTD#13, B2_LP#22, B2_CNT#23, B2_CNTD#24, B3_LP#33, B3_CNT#34, B3_CNTD#35, B4_LP#44, B4_CNT#45, B4_CNTD#46]
+Right output [3]: [B5_LP#55, B5_CNT#56, B5_CNTD#57]
 Join type: Inner
 Join condition: None
 
@@ -648,7 +656,9 @@ Results [3]: [avg(UnscaledValue(ss_list_price#60))#63, count(ss_list_price#60)#6
 Output [3]: [cast((avg(UnscaledValue(ss_list_price#60))#63 / 100.0) as decimal(11,6)) AS B6_LP#66, count(ss_list_price#60)#64 AS B6_CNT#67, count(ss_list_price#60)#65 AS B6_CNTD#68]
 Input [3]: [avg(UnscaledValue(ss_list_price#60))#63, count(ss_list_price#60)#64, count(ss_list_price#60)#65]
 
-(101) CartesianProduct
+(101) NativeCartesianProduct
+Left output [15]: [B1_LP#11, B1_CNT#12, B1_CNTD#13, B2_LP#22, B2_CNT#23, B2_CNTD#24, B3_LP#33, B3_CNT#34, B3_CNTD#35, B4_LP#44, B4_CNT#45, B4_CNTD#46, B5_LP#55, B5_CNT#56, B5_CNTD#57]
+Right output [3]: [B6_LP#66, B6_CNT#67, B6_CNTD#68]
 Join type: Inner
 Join condition: None
 

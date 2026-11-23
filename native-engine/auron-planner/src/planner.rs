@@ -67,6 +67,7 @@ use datafusion_ext_plans::{
     agg_exec::AggExec,
     broadcast_join_build_hash_map_exec::BroadcastJoinBuildHashMapExec,
     broadcast_join_exec::BroadcastJoinExec,
+    cartesian_product_exec::CartesianProductExec,
     debug_exec::DebugExec,
     empty_partitions_exec::EmptyPartitionsExec,
     expand_exec::ExpandExec,
@@ -206,6 +207,21 @@ impl PhysicalPlanner {
                     conf,
                     scan.fs_resource_id.clone(),
                     Some(predicate),
+                )))
+            }
+            PhysicalPlanType::CartesianProduct(cartesian) => {
+                let schema = Arc::new(convert_required!(cartesian.schema)?);
+                let left = convert_box_required!(self, cartesian.left)?;
+                let right = convert_box_required!(self, cartesian.right)?;
+                let filter = self.parse_join_filter(cartesian.filter.as_ref())?;
+                Ok(Arc::new(CartesianProductExec::new(
+                    schema,
+                    left,
+                    right,
+                    cartesian.left_partition as usize,
+                    cartesian.right_partition as usize,
+                    cartesian.num_partitions as usize,
+                    filter,
                 )))
             }
             PhysicalPlanType::HashJoin(hash_join) => {

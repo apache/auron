@@ -1,8 +1,8 @@
 == Physical Plan ==
 AdaptiveSparkPlan (290)
 +- == Final Plan ==
-   * Project (180)
-   +- CartesianProduct Inner (179)
+   NativeProject (180)
+   +- NativeCartesianProduct (179)
       :- NativeProject (104)
       :  +- NativeHashAggregate (103)
       :     +- ShuffleQueryStage (102), Statistics(X)
@@ -1036,11 +1036,13 @@ Results [1]: [sum(UnscaledValue(ss_ext_sales_price#31))#40]
 Output [1]: [MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#31))#40,17,2) AS total#41]
 Input [1]: [sum(UnscaledValue(ss_ext_sales_price#31))#40]
 
-(179) CartesianProduct
+(179) NativeCartesianProduct
+Left output [1]: [promotions#26]
+Right output [1]: [total#41]
 Join type: Inner
 Join condition: None
 
-(180) Project [codegen id : X]
+(180) NativeProject
 Output [3]: [promotions#26, total#41, ((cast(promotions#26 as decimal(15,4)) / cast(total#41 as decimal(15,4))) * 100) AS ((CAST(promotions AS DECIMAL(15,4)) / CAST(total AS DECIMAL(15,4))) * 100)#42]
 Input [2]: [promotions#26, total#41]
 
