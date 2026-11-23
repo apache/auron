@@ -59,15 +59,20 @@ pub enum SemiMode {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct JoinerParams {
     probe_side: ProbeSide,
-    probe_is_join_side: bool,
+    /// Whether the probe side is the outer side of this semi/anti/existence join.
+    ///
+    /// For a left semi, left anti, or existence join the left side is the outer
+    /// side, so this is true when the probe side is also left. For a right
+    /// semi or right anti join the right side is the outer side.
+    is_probe_on_outer_side: bool,
     mode: SemiMode,
 }
 
 impl JoinerParams {
-    const fn new(probe_side: ProbeSide, probe_is_join_side: bool, mode: SemiMode) -> Self {
+    const fn new(probe_side: ProbeSide, is_probe_on_outer_side: bool, mode: SemiMode) -> Self {
         Self {
             probe_side,
-            probe_is_join_side,
+            is_probe_on_outer_side,
             mode,
         }
     }
@@ -176,7 +181,7 @@ impl<const P: i32> SemiJoiner<P> {
             build_indices,
         )?;
         for i in filter.apply_rows(cols, probe_indices.len())? {
-            if get_joiner(P).probe_is_join_side {
+            if get_joiner(P).is_probe_on_outer_side {
                 probed_joined.set(probe_indices[i as usize] as usize, true);
             } else {
                 map_joined.set(build_indices[i as usize] as usize, true);
@@ -209,7 +214,8 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         probed_side_compare_time: &Time,
         build_output_time: &Time,
     ) -> Result<()> {
-        if get_joiner(P).mode == Anti && get_joiner(P).probe_is_join_side && self.map.is_empty() {
+        if get_joiner(P).mode == Anti && get_joiner(P).is_probe_on_outer_side && self.map.is_empty()
+        {
             let _build_output_timer = build_output_time.timer();
             let cols = match get_joiner(P).probe_side {
                 L => self
@@ -271,7 +277,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                 .map(|nb| nb.is_valid(row_idx))
                 .unwrap_or(true);
             if get_joiner(P).mode == Anti
-                && get_joiner(P).probe_is_join_side
+                && get_joiner(P).is_probe_on_outer_side
                 && !map.is_empty()
                 && (!key_is_valid || map.has_null_keys())
                 && self.join_params.is_null_aware_anti_join
@@ -293,7 +299,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                         &[]
                     };
                     for &map_idx in candidates {
-                        if get_joiner(P).probe_is_join_side && probed_joined[row_idx] {
+                        if get_joiner(P).is_probe_on_outer_side && probed_joined[row_idx] {
                             break;
                         }
                         if likely!(eq.eq(row_idx, map_idx as usize)) {
@@ -317,7 +323,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                     map_value if map_value.is_single() => {
                         let map_idx = map_value.get_single();
                         if likely!(eq.eq(row_idx, map_idx as usize)) {
-                            if get_joiner(P).probe_is_join_side {
+                            if get_joiner(P).is_probe_on_outer_side {
                                 probed_joined.set(row_idx, true);
                             } else {
                                 map_joined.set(map_idx as usize, true);
@@ -331,7 +337,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                             .filter(|&map_idx| likely!(eq.eq(row_idx, *map_idx as usize)));
 
                         if let Some(&map_idx) = eqs.next() {
-                            if get_joiner(P).probe_is_join_side {
+                            if get_joiner(P).is_probe_on_outer_side {
                                 probed_joined.set(row_idx, true);
                             } else if !map_joined[map_idx as usize] {
                                 map_joined.set(map_idx as usize, true);
@@ -357,7 +363,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
             map_joined,
         )?;
 
-        if get_joiner(P).probe_is_join_side {
+        if get_joiner(P).is_probe_on_outer_side {
             probed_side_compare_time
                 .exclude_timer_async(async {
                     let _build_output_timer = build_output_time.timer();
@@ -404,7 +410,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
     }
 
     async fn finish(mut self: Pin<&mut Self>, build_output_time: &Time) -> Result<()> {
-        if !get_joiner(P).probe_is_join_side {
+        if !get_joiner(P).is_probe_on_outer_side {
             let _build_output_timer = build_output_time.timer();
             let map_joined = std::mem::take(&mut self.map_joined);
             let bcol_indices = match get_joiner(P).probe_side {
@@ -448,13 +454,13 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
     fn can_early_stop(&self) -> bool {
         if self.join_params.is_null_aware_anti_join
             && get_joiner(P).mode == Anti
-            && get_joiner(P).probe_is_join_side
+            && get_joiner(P).is_probe_on_outer_side
             && self.map.has_null_keys()
         {
             return true;
         }
-        if !get_joiner(P).probe_is_join_side && self.map_joined.all() {
-            // semi join: map is join side and all items are joined
+        if !get_joiner(P).is_probe_on_outer_side && self.map_joined.all() {
+            // semi join: the hash map is the outer side and all items are joined
             return true;
         }
         false
