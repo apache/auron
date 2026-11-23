@@ -86,7 +86,7 @@ jobs:
           submodules: recursive
       - uses: actions/setup-java@v5
         with:
-          distribution: 'adopt-hotspot'
+          distribution: 'temurin'
           java-version: ${{ matrix.javaver }}
           cache: 'maven'
 
