@@ -18,7 +18,8 @@ package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, GreaterThan, LessThanOrEqual, Literal}
+import org.apache.spark.sql.execution.auron.plan.{NativeFilterExec, NativeProjectBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, StringType}
 
@@ -57,6 +58,66 @@ class NativeConvertersSuite
        } else Nil)
     functions.map { function =>
       sql(s"select $function").queryExecution.analyzed.expressions.head.children.head
+    }
+  }
+
+  test("timestamp plus one day preserves local time across daylight saving transitions") {
+    if (AuronTestUtils.isSparkV32OrGreater) {
+      // Keep the timestamp addition above the shuffle so it is evaluated at runtime.
+      val query = """
+        |SELECT ts + INTERVAL '1' DAY AS ts
+        |FROM (
+        |  SELECT /*+ REPARTITION(1) */ ts
+        |  FROM VALUES
+        |    (TIMESTAMP '2024-03-09 12:00:00'),
+        |    (TIMESTAMP '2024-11-02 12:00:00')
+        |  AS t(ts)
+        |)
+        |""".stripMargin
+      for (zone <- Seq("UTC", "America/Los_Angeles"); fallbackEnabled <- Seq("false", "true")) {
+        withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone,
+          "spark.auron.udf.singleChildFallback.enabled" -> fallbackEnabled) {
+          val df = checkSparkAnswer(query)
+          if (zone == "UTC") {
+            val plan = df.queryExecution.executedPlan
+            val project = collectFirst(plan) { case p: NativeProjectBase => p }
+              .getOrElse(fail(plan.toString))
+            val addition = project.expressions
+              .collectFirst { case alias: Alias => alias.child }
+              .getOrElse(fail(project.toString))
+            val native = NativeConverters.convertExpr(addition)
+            assert(native.getBinaryExpr.getOp == "Plus")
+            assert(!native.toString.contains("spark_udf_wrapper_expr"), native)
+          }
+        }
+      }
+    }
+  }
+
+  test("filter evaluates a timestamp bound with a day-time interval literal natively") {
+    if (AuronTestUtils.isSparkV32OrGreater) {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val df = sql("""
+          |SELECT ts
+          |FROM VALUES (array(TIMESTAMP '2026-01-01 12:00:00',
+          |                   TIMESTAMP '2026-01-01 12:00:00.000001',
+          |                   CAST(NULL AS TIMESTAMP))) AS v(samples)
+          |LATERAL VIEW OUTER explode(samples) x AS ts
+          |WHERE ts + INTERVAL '2' MINUTE <= TIMESTAMP '2026-01-01 12:02:00'
+          |""".stripMargin)
+        checkAnswer(df, sql("SELECT TIMESTAMP '2026-01-01 12:00:00'"))
+
+        val plan = df.queryExecution.executedPlan
+        val condition = collectFirst(plan) { case f: NativeFilterExec => f.condition }
+          .getOrElse(fail(plan.toString))
+        val bound = condition
+          .collectFirst { case e: LessThanOrEqual => e }
+          .getOrElse(fail(condition.toString))
+        val native = NativeConverters.convertExpr(bound)
+        assert(native.getBinaryExpr.getL.getBinaryExpr.getOp == "Plus", native)
+        assert(!native.toString.contains("spark_udf_wrapper_expr"), native)
+      }
     }
   }
 
