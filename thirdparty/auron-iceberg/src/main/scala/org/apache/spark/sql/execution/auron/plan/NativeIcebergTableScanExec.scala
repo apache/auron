@@ -224,6 +224,7 @@ case class NativeIcebergTableScanExec(
             .setBaseConf(nativeFileScanConf)
             .setFsResourceId(resourceId)
             .addAllPruningPredicates(pruningPredicates.asJava)
+            .putAllIcebergInitialDefaults(plan.initialDefaults.asJava)
 
           pb.PhysicalPlanNode
             .newBuilder()

@@ -184,6 +184,10 @@ impl PhysicalPlanner {
                     conf,
                     scan.fs_resource_id.clone(),
                     Some(predicate),
+                    scan.iceberg_initial_defaults
+                        .iter()
+                        .map(|(&field_id, value)| Ok((field_id, value.try_into()?)))
+                        .collect::<Result<_, PlanSerDeError>>()?,
                 )))
             }
             PhysicalPlanType::OrcScan(scan) => {
