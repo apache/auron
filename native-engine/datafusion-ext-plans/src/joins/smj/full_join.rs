@@ -388,7 +388,7 @@ impl<const L_OUTER: bool, const R_OUTER: bool> Joiner for FullJoiner<L_OUTER, R_
         cur1: &mut StreamCursor,
         cur2: &mut StreamCursor,
     ) -> Result<()> {
-        let mut merger = GroupMerger::new();
+        let mut merger = GroupMerger::new(L_OUTER, R_OUTER);
 
         while let Some(action) = merger.next(cur1, cur2).await? {
             // Note: the group slices below live inside the merger and are

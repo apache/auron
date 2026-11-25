@@ -50,7 +50,9 @@
 //!
 //! An exhausted side is treated as "unknown, keep reading input", unless its
 //! stream has ended — in which case everything remaining on the other side is
-//! unmatched and emitted at once.
+//! unmatched. Those rows are emitted at once if the joiner needs them (see
+//! [`GroupMerger::new`]); otherwise the merge stops without reading the rest
+//! of the other input.
 //!
 //! # Null keys
 //!
@@ -222,17 +224,29 @@ pub enum GroupAction {
     RightOnly,
 }
 
-#[derive(Default)]
 pub struct GroupMerger {
     l: GroupedSide,
     r: GroupedSide,
     lgroup: Vec<IdxRange>,
     rgroup: Vec<IdxRange>,
+    left_unmatched: bool,
+    right_unmatched: bool,
 }
 
 impl GroupMerger {
-    pub fn new() -> Self {
-        Self::default()
+    /// `left_unmatched` / `right_unmatched` tell whether the joiner needs the
+    /// rows on that side that match nothing. Once one side is exhausted, the
+    /// other side's remaining rows can only be unmatched, so they are not read
+    /// unless needed.
+    pub fn new(left_unmatched: bool, right_unmatched: bool) -> Self {
+        Self {
+            l: GroupedSide::default(),
+            r: GroupedSide::default(),
+            lgroup: vec![],
+            rgroup: vec![],
+            left_unmatched,
+            right_unmatched,
+        }
     }
 
     /// Rows covered by the last [`GroupAction::LeftOnly`] or
@@ -249,14 +263,23 @@ impl GroupMerger {
         &self.rgroup
     }
 
-    /// Reads enough input to decide the next action, or reports both inputs
-    /// exhausted.
+    /// Reads enough input to decide the next action, or reports that the
+    /// remaining input cannot affect the join: both sides are exhausted, or
+    /// one is and the joiner does not need the other side's unmatched rows. A
+    /// side is exhausted once its stream has ended and none of its rows are
+    /// buffered.
     pub async fn next(
         &mut self,
         lcur: &mut StreamCursor,
         rcur: &mut StreamCursor,
     ) -> Result<Option<GroupAction>> {
         loop {
+            let ldone = self.l.is_empty() && lcur.finished();
+            let rdone = self.r.is_empty() && rcur.finished();
+            if (ldone && (rdone || !self.right_unmatched)) || (rdone && !self.left_unmatched) {
+                return Ok(None);
+            }
+
             // Null keys match nothing, so their run needn't be complete or
             // compared to the other side.
             if !self.l.is_empty() && lcur.is_null_key(self.l.head()) {
@@ -271,10 +294,9 @@ impl GroupMerger {
             }
 
             match (self.l.is_empty(), self.r.is_empty()) {
-                (true, true) => match (lcur.finished(), rcur.finished()) {
-                    (true, true) => return Ok(None),
-                    (false, _) => self.l.fill_one_batch(lcur).await?,
-                    (true, false) => self.r.fill_one_batch(rcur).await?,
+                (true, true) => match lcur.finished() {
+                    false => self.l.fill_one_batch(lcur).await?,
+                    true => self.r.fill_one_batch(rcur).await?,
                 },
                 // An exhausted side knows nothing about not-yet-arriving keys,
                 // unless its stream has ended — then everything on the other
@@ -357,6 +379,7 @@ mod tests {
         row::RowConverter,
     };
     use datafusion::{
+        common::DataFusionError,
         physical_expr::{PhysicalSortExpr, expressions::Column},
         physical_plan::metrics::Time,
     };
@@ -372,7 +395,9 @@ mod tests {
     }
 
     /// Builds a cursor from a single Int32 key column; each batch is one Vec.
-    fn cursor(batches: Vec<Vec<Option<i32>>>) -> StreamCursor {
+    /// With `fail_past_end`, reading past the last batch is an error instead
+    /// of the end of the stream.
+    fn cursor(batches: Vec<Vec<Option<i32>>>, fail_past_end: bool) -> StreamCursor {
         let schema = schema();
         let sort_options = SortOptions::default();
         let converter = RowConverter::new(vec![arrow::row::SortField::new_with_options(
@@ -382,7 +407,7 @@ mod tests {
         .expect("valid test sort fields");
 
         let converter = Arc::new(parking_lot::Mutex::new(converter));
-        let batches = batches
+        let mut batches = batches
             .into_iter()
             .map(|values| {
                 let col = Arc::new(Int32Array::from(values)) as ArrayRef;
@@ -401,6 +426,11 @@ mod tests {
                 ))
             })
             .collect::<Vec<_>>();
+        if fail_past_end {
+            batches.push(Err(DataFusionError::Execution(
+                "read past the needed input".to_owned(),
+            )));
+        }
 
         let stream = RecordBatchWithKeyRowsStreamAdapter::new(
             futures::stream::iter(batches),
@@ -414,22 +444,42 @@ mod tests {
             .expect("valid test cursor")
     }
 
-    /// Runs the merge to completion, describing each action by the key values
-    /// it covers.
+    /// Runs the merge to completion with a merger that needs unmatched rows on
+    /// both sides, describing each action by the key values it covers.
     async fn actions(
         lbatches: Vec<Vec<Option<i32>>>,
         rbatches: Vec<Vec<Option<i32>>>,
     ) -> Vec<String> {
-        actions_impl(lbatches, rbatches)
+        actions_impl(lbatches, rbatches, (true, true), (false, false))
             .await
             .expect("test merge succeeds")
+    }
+
+    /// Like [`actions`], with the given [`GroupMerger::new`] flags. A side
+    /// whose `fail_past_end` flag is set fails the merge if it is read past
+    /// its last batch. The cursor fetches one batch ahead of the merger, so
+    /// that last batch is fetched but must never be buffered.
+    async fn stopping_actions(
+        lbatches: Vec<Vec<Option<i32>>>,
+        rbatches: Vec<Vec<Option<i32>>>,
+        unmatched: (bool, bool),
+        fail_past_end: (bool, bool),
+    ) -> Vec<String> {
+        actions_impl(lbatches, rbatches, unmatched, fail_past_end)
+            .await
+            .expect("merge stops before reading unneeded input")
     }
 
     async fn actions_impl(
         lbatches: Vec<Vec<Option<i32>>>,
         rbatches: Vec<Vec<Option<i32>>>,
+        unmatched: (bool, bool),
+        fail_past_end: (bool, bool),
     ) -> Result<Vec<String>> {
-        let (mut lcur, mut rcur) = (cursor(lbatches), cursor(rbatches));
+        let (mut lcur, mut rcur) = (
+            cursor(lbatches, fail_past_end.0),
+            cursor(rbatches, fail_past_end.1),
+        );
         cur_forward!(lcur);
         cur_forward!(rcur);
 
@@ -450,7 +500,7 @@ mod tests {
                 .join(",")
         };
 
-        let mut merger = GroupMerger::new();
+        let mut merger = GroupMerger::new(unmatched.0, unmatched.1);
         let mut out = vec![];
         while let Some(action) = merger.next(&mut lcur, &mut rcur).await? {
             out.push(match action {
@@ -588,7 +638,7 @@ mod tests {
             };
             cur_forward!(lcur);
             cur_forward!(rcur);
-            let mut merger = GroupMerger::new();
+            let mut merger = GroupMerger::new(true, true);
             let mut matched = 0;
             while let Some(action) = merger
                 .next(&mut lcur, &mut rcur)
@@ -628,6 +678,97 @@ mod tests {
         assert_eq!(
             actions(vec![v(&[1, 2, 3, 4, 5, 9])], vec![v(&[5, 9])]).await,
             vec!["L[1,2,3,4]", "B[5|5]", "B[9|9]"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_inner_stops_once_either_side_is_exhausted() {
+        // The left side runs out first. The right side's [6] is fetched ahead
+        // but never buffered.
+        assert_eq!(
+            stopping_actions(
+                vec![v(&[1])],
+                vec![v(&[0, 1]), v(&[5]), v(&[6])],
+                (false, false),
+                (false, true),
+            )
+            .await,
+            vec!["R[0]", "B[1|1]"]
+        );
+        // The right side runs out first.
+        assert_eq!(
+            stopping_actions(
+                vec![v(&[0, 1]), v(&[5]), v(&[6])],
+                vec![v(&[1])],
+                (false, false),
+                (true, false),
+            )
+            .await,
+            vec!["L[0]", "B[1|1]"]
+        );
+        // An empty side stops the merge before any of the other side's rows,
+        // null keys included, are emitted.
+        assert_eq!(
+            stopping_actions(
+                vec![],
+                vec![vec![None, Some(1)], v(&[2])],
+                (false, false),
+                (false, true),
+            )
+            .await,
+            Vec::<String>::new()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_left_unmatched_stops_only_once_left_is_exhausted() {
+        assert_eq!(
+            stopping_actions(
+                vec![v(&[1])],
+                vec![v(&[0, 1]), v(&[5]), v(&[6])],
+                (true, false),
+                (false, true),
+            )
+            .await,
+            vec!["R[0]", "B[1|1]"]
+        );
+        // The left rows left over once the right side is exhausted are still
+        // emitted.
+        assert_eq!(
+            stopping_actions(
+                vec![v(&[0, 1]), v(&[5]), v(&[6])],
+                vec![v(&[1])],
+                (true, false),
+                (false, false),
+            )
+            .await,
+            vec!["L[0]", "B[1|1]", "L[5]", "L[6]"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_right_unmatched_stops_only_once_right_is_exhausted() {
+        assert_eq!(
+            stopping_actions(
+                vec![v(&[0, 1]), v(&[5]), v(&[6])],
+                vec![v(&[1])],
+                (false, true),
+                (true, false),
+            )
+            .await,
+            vec!["L[0]", "B[1|1]"]
+        );
+        // The right rows left over once the left side is exhausted are still
+        // emitted.
+        assert_eq!(
+            stopping_actions(
+                vec![v(&[1])],
+                vec![v(&[0, 1]), v(&[5]), v(&[6])],
+                (false, true),
+                (false, false),
+            )
+            .await,
+            vec!["R[0]", "B[1|1]", "R[5]", "R[6]"]
         );
     }
 }
