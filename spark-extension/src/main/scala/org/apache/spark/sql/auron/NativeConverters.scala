@@ -412,14 +412,14 @@ object NativeConverters extends Logging {
   }
 
   private object TimestampPlusDuration {
-    @sparkver("3.0 / 3.1")
-    def unapply(expr: Expression): Option[(Expression, Literal)] = None
-
-    @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0")
+    @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
     def unapply(add: TimeAdd): Option[(Expression, Literal)] = duration(add)
 
     @sparkver("4.1 / 4.2")
     def unapply(add: TimestampAddInterval): Option[(Expression, Literal)] = duration(add)
+
+    @sparkver("3.0 / 3.1")
+    private val duration: TimeAdd => Option[(Expression, Literal)] = _ => None
 
     @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
     private def duration(
