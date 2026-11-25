@@ -89,9 +89,9 @@ abstract class NativeShuffleExchangeBase(
 
   def nativeSchema: Schema = Util.getNativeSchema(child.output)
 
-  private def nativeHashExprs = outputPartitioning match {
-    case HashPartitioning(expressions, _) =>
-      expressions.map(expr => NativeConverters.convertExpr(expr)).toList
+  private def nativePartitionIdExpr = outputPartitioning match {
+    case partitioning: HashPartitioning =>
+      NativeConverters.convertExpr(partitioning.partitionIdExpression)
     case _ => null
   }
 
@@ -118,7 +118,7 @@ abstract class NativeShuffleExchangeBase(
 
   // check whether native converting is supported
   nativeSchema
-  nativeHashExprs
+  nativePartitionIdExpr
   nativeSortExecNode
 
   protected def doExecuteNonNative(): RDD[InternalRow]
@@ -248,7 +248,7 @@ abstract class NativeShuffleExchangeBase(
     val nativeInputPartitions = nativeInputRDD.partitions.map { p =>
       NativePartition[Partition](p.index, p)
     }
-    val nativeHashExprs = this.nativeHashExprs
+    val nativePartitionIdExpr = this.nativePartitionIdExpr
     val nativeSortExecNode = this.nativeSortExecNode
 
     val nativeShuffleRDD = new NativeRDD(
@@ -274,7 +274,7 @@ abstract class NativeShuffleExchangeBase(
                 PhysicalHashRepartition
                   .newBuilder()
                   .setPartitionCount(numPartitions)
-                  .addAllHashExpr(nativeHashExprs.asJava))
+                  .setPartitionIdExpr(nativePartitionIdExpr))
           case RoundRobinPartitioning(_) =>
             repartitionBuilder
               .setRoundRobinRepartition(

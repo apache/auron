@@ -40,7 +40,7 @@ use crate::{
         timer_helper::TimerHelper,
     },
     shuffle::{
-        Partitioning, evaluate_hashes, evaluate_partition_ids, evaluate_range_partition_ids,
+        Partitioning, evaluate_partition_ids, evaluate_range_partition_ids,
         evaluate_robin_partition_ids, rss::RssWriter,
     },
 };
@@ -302,39 +302,42 @@ fn sort_batches_by_partition_id(
         (partition_id * 1000193 + current_num_rows) % partitioning.partition_count();
 
     // compute partition indices
-    let partition_indices = batches
-        .iter()
-        .enumerate()
-        .flat_map(|(batch_idx, batch)| {
-            let part_ids = match partitioning {
-                Partitioning::HashPartitioning(..) => {
-                    // compute partition indices
-                    let hashes = evaluate_hashes(partitioning, &batch)
-                        .expect(&format!("error evaluating hashes with {partitioning}"));
-                    evaluate_partition_ids(hashes, partitioning.partition_count())
-                }
-                Partitioning::RoundRobinPartitioning(..) => {
-                    let part_ids =
-                        evaluate_robin_partition_ids(partitioning, &batch, round_robin_start_rows);
-                    round_robin_start_rows += batch.num_rows();
-                    round_robin_start_rows %= partitioning.partition_count();
+    let partition_indices =
+        batches
+            .iter()
+            .enumerate()
+            .try_fold(Vec::new(), |mut indices, (batch_idx, batch)| {
+                let part_ids = match partitioning {
+                    Partitioning::HashPartitioning(expr, num_partitions) => {
+                        evaluate_partition_ids(expr, batch, *num_partitions)?
+                    }
+                    Partitioning::RoundRobinPartitioning(..) => {
+                        let part_ids = evaluate_robin_partition_ids(
+                            partitioning,
+                            &batch,
+                            round_robin_start_rows,
+                        );
+                        round_robin_start_rows += batch.num_rows();
+                        round_robin_start_rows %= partitioning.partition_count();
+                        part_ids
+                    }
+                    Partitioning::RangePartitioning(sort_expr, _, bounds) => {
+                        evaluate_range_partition_ids(&batch, sort_expr, bounds)
+                            .expect("failed to evaluate range partition ids")
+                    }
+                    Partitioning::BucketPartitioning(bucket_col_idx, ..) => {
+                        evaluate_bucket_partition_ids(batch, *bucket_col_idx)
+                    }
+                    _ => unreachable!("unsupported partitioning: {:?}", partitioning),
+                };
+                indices.extend(
                     part_ids
-                }
-                Partitioning::RangePartitioning(sort_expr, _, bounds) => {
-                    evaluate_range_partition_ids(&batch, sort_expr, bounds)
-                        .expect("failed to evaluate range partition ids")
-                }
-                Partitioning::BucketPartitioning(bucket_col_idx, ..) => {
-                    evaluate_bucket_partition_ids(batch, *bucket_col_idx)
-                }
-                _ => unreachable!("unsupported partitioning: {:?}", partitioning),
-            };
-            part_ids
-                .into_iter()
-                .enumerate()
-                .map(move |(row_idx, part_id)| (part_id, batch_idx as u32, row_idx as u32))
-        })
-        .collect::<Vec<_>>();
+                        .into_iter()
+                        .enumerate()
+                        .map(move |(row_idx, part_id)| (part_id, batch_idx as u32, row_idx as u32)),
+                );
+                Ok::<_, datafusion::common::DataFusionError>(indices)
+            })?;
 
     radix_sort_and_interleave(&batches, partition_indices, num_partitions)
 }
@@ -457,6 +460,68 @@ mod test {
             num_batches * values.len()
         );
         assert!(buffered_data.staging_batches.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_hash_partition_id_expr() -> Result<()> {
+        use datafusion::{
+            common::ScalarValue,
+            logical_expr::Operator,
+            physical_expr::expressions::{BinaryExpr, Literal},
+        };
+
+        let batch = build_table_i32(
+            ("a", &vec![10, 20, 30, 40]),
+            ("b", &vec![1, 0, 1, 0]),
+            ("c", &vec![0, 0, 0, 0]),
+        )?;
+        let expr = Arc::new(BinaryExpr::new(
+            Arc::new(Column::new("b", 1)),
+            Operator::Plus,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(1)))),
+        ));
+        let partitioning = Partitioning::HashPartitioning(expr, 3);
+        let (offsets, sorted) =
+            sort_batches_by_partition_id(vec![batch.clone(), batch], &partitioning, 0, 0)?;
+        assert_eq!(offsets, vec![0, 0, 4, 8]);
+        let ids = sorted
+            .column(1)
+            .as_primitive::<arrow::datatypes::Int32Type>();
+        for partition in 0..3 {
+            for row in offsets[partition]..offsets[partition + 1] {
+                assert_eq!(ids.value(row as usize) + 1, partition as i32);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_scalar_partition_id_expr() -> Result<()> {
+        use datafusion::{common::ScalarValue, physical_expr::expressions::Literal};
+
+        let batch = build_table_i32(
+            ("a", &vec![10, 20, 30]),
+            ("b", &vec![0, 1, 2]),
+            ("c", &vec![0, 0, 0]),
+        )?;
+        let partitioning =
+            Partitioning::HashPartitioning(Arc::new(Literal::new(ScalarValue::Int32(Some(2)))), 4);
+        let (offsets, sorted) =
+            sort_batches_by_partition_id(vec![batch.clone()], &partitioning, 0, 0)?;
+        assert_eq!(offsets, vec![0, 0, 0, 3, 3]);
+        assert_eq!(sorted.num_rows(), batch.num_rows());
+        for value in [
+            ScalarValue::Int32(Some(-1)),
+            ScalarValue::Int32(Some(4)),
+            ScalarValue::Int32(None),
+            ScalarValue::Int64(Some(0)),
+        ] {
+            let partitioning = Partitioning::HashPartitioning(Arc::new(Literal::new(value)), 4);
+            assert!(
+                sort_batches_by_partition_id(vec![batch.clone()], &partitioning, 0, 0).is_err()
+            );
+        }
         Ok(())
     }
 

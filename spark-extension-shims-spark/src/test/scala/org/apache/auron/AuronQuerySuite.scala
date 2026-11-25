@@ -210,6 +210,29 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  test("hash repartition uses Spark partition id expression") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTable("t_hash_partition") {
+        sql("""
+            |create table t_hash_partition using parquet as
+            |select cast(id - 100 as int) as k, cast(id as string) as s
+            |from range(200)
+            |union all select cast(null as int), cast(null as string)
+            |""".stripMargin)
+        Seq(1, 7, 16).foreach { partitions =>
+          val df = checkSparkAnswerAndOperator(() =>
+            spark
+              .table("t_hash_partition")
+              .repartition(partitions, $"k", $"s")
+              .selectExpr("k", "s", "spark_partition_id() as partition_id"))
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case e: NativeShuffleExchangeExec => e
+          }.isDefined)
+        }
+      }
+    }
+  }
+
   test("repartition over MapType") {
     withTable("t_map") {
       sql("create table t_map using parquet as select map('a', '1', 'b', '2') as data_map")

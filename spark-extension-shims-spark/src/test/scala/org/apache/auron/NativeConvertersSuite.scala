@@ -31,6 +31,48 @@ class NativeConvertersSuite
     with BaseAuronSQLSuite
     with AuronSQLTestHelper {
 
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  private def checkCollationAwareHashConversion(): Unit = {}
+
+  @sparkver("4.0 / 4.1 / 4.2")
+  private def checkCollationAwareHashConversion(): Unit = {
+    import org.apache.spark.sql.catalyst.expressions.CollationAwareMurmur3Hash
+    import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
+
+    for (collation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UTF8_BINARY_RTRIM", "UNICODE")) {
+      val stringType = StringType(collation)
+      val dataTypes = Seq(
+        stringType,
+        ArrayType(stringType),
+        StructType(Seq(StructField("s", stringType))),
+        MapType(StringType, stringType),
+        MapType(stringType, IntegerType),
+        ArrayType(StructType(Seq(StructField("s", stringType)))))
+      for (dataType <- dataTypes; seed <- Seq(42, 7); isPruningExpr <- Seq(false, true)) {
+        val expr = CollationAwareMurmur3Hash(Seq(AttributeReference("key", dataType)()), seed)
+        var fallbackCalled = false
+        val converted = NativeConverters.convertExprWithFallback(
+          expr,
+          isPruningExpr,
+          e => {
+            assert(e == expr)
+            fallbackCalled = true
+            org.apache.auron.protobuf.PhysicalExprNode.getDefaultInstance
+          })
+        if (collation == "UTF8_BINARY" && seed == 42) {
+          assert(!fallbackCalled)
+          assert(converted.getScalarFunction.getName == "Spark_Murmur3Hash")
+        } else {
+          assert(fallbackCalled)
+        }
+      }
+    }
+  }
+
+  test("collation-aware hash conversion preserves binary equality and fallback") {
+    checkCollationAwareHashConversion()
+  }
+
   private def dateTimeExpressions: Seq[Expression] = {
     val functions = Seq(
       "year(date'2024-03-15')",

@@ -707,6 +707,10 @@ class ShimsImpl extends Shims with Logging {
       case e: TaggingExpression =>
         Some(NativeConverters.convertExprWithFallback(e.child, isPruningExpr, fallback))
       case e =>
+        convertCollationAwareMurmur3Hash(e, isPruningExpr, fallback) match {
+          case Some(v) => return Some(v)
+          case None =>
+        }
         convertFloatingArrayNormalization(e, isPruningExpr, fallback) match {
           case Some(v) => return Some(v)
           case None =>
@@ -720,6 +724,46 @@ class ShimsImpl extends Shims with Logging {
           case None =>
         }
         None
+    }
+  }
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  @nowarn("cat=unused")
+  private def convertCollationAwareMurmur3Hash(
+      e: Expression,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = None
+
+  @sparkver("4.0 / 4.1 / 4.2")
+  private def convertCollationAwareMurmur3Hash(
+      e: Expression,
+      isPruningExpr: Boolean,
+      fallback: Expression => pb.PhysicalExprNode): Option[pb.PhysicalExprNode] = {
+    import org.apache.spark.sql.catalyst.expressions.CollationAwareMurmur3Hash
+    import org.apache.spark.sql.types.{MapType, StructType}
+
+    def supportsBinaryEquality(dataType: DataType): Boolean = dataType match {
+      case stringType: StringType => stringType.supportsBinaryEquality
+      case ArrayType(elementType, _) => supportsBinaryEquality(elementType)
+      case MapType(keyType, valueType, _) =>
+        supportsBinaryEquality(keyType) && supportsBinaryEquality(valueType)
+      case structType: StructType =>
+        structType.fields.forall(field => supportsBinaryEquality(field.dataType))
+      case _ => true
+    }
+
+    e match {
+      case hash: CollationAwareMurmur3Hash
+          if hash.seed == 42 && hash.children.forall(child =>
+            supportsBinaryEquality(child.dataType)) =>
+        Some(
+          NativeConverters.buildExtScalarFunctionNode(
+            "Spark_Murmur3Hash",
+            hash.children,
+            IntegerType,
+            isPruningExpr,
+            fallback))
+      case _ => None
     }
   }
 

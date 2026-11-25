@@ -703,8 +703,8 @@ message PhysicalSingleRepartition {
 }
 
 message PhysicalHashRepartition {
-  repeated PhysicalExprNode hash_expr = 1;
   uint64 partition_count = 2;
+  PhysicalExprNode partition_id_expr = 3;
 }
 
 message PhysicalRoundRobinRepartition {

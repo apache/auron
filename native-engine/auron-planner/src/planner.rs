@@ -1221,12 +1221,13 @@ impl PhysicalPlanner {
                     Ok(Some(Partitioning::SinglePartitioning()))
                 }
                 RepartitionType::HashRepartition(hash_part) => {
-                    // let hash_part = p.hash_repartition;
-                    let expr = hash_part
-                        .hash_expr
-                        .iter()
-                        .map(|e| self.try_parse_physical_expr(e, &input.schema()))
-                        .collect::<Result<Vec<PhysicalExprRef>, _>>()?;
+                    let expr = self.try_parse_physical_expr(
+                        hash_part
+                            .partition_id_expr
+                            .as_ref()
+                            .ok_or_else(|| proto_error("Missing partition_id_expr"))?,
+                        &input.schema(),
+                    )?;
                     Ok(Some(Partitioning::HashPartitioning(
                         expr,
                         hash_part
