@@ -52,15 +52,15 @@ abstract class NativeCollectLimitBase(limit: Int, offset: Int, override val chil
   }
 
   override def doExecuteNative(): NativeRDD = {
-    val partial = Shims.get.createNativeLocalLimitExec(limit, child)
-    if (!partial.outputPartitioning.isInstanceOf[UnknownPartitioning]
-      && partial.outputPartitioning.numPartitions <= 1) {
-      return NativeHelper.executeNative(partial)
-    }
-
-    // merge all LocalLimit child partitions into a single partition
-    val shuffled = Shims.get.createNativeShuffleExchangeExec(SinglePartition, partial)
-    val singlePartitionRDD = NativeHelper.executeNative(shuffled)
+    val singlePartitionInput =
+      if (!child.outputPartitioning.isInstanceOf[UnknownPartitioning]
+        && child.outputPartitioning.numPartitions <= 1) {
+        child
+      } else {
+        val partial = Shims.get.createNativeLocalLimitExec(limit, child)
+        Shims.get.createNativeShuffleExchangeExec(SinglePartition, partial)
+      }
+    val singlePartitionRDD = NativeHelper.executeNative(singlePartitionInput)
     val nativePartitions = singlePartitionRDD.partitions.map { p =>
       NativePartition[Partition](p.index, p)
     }

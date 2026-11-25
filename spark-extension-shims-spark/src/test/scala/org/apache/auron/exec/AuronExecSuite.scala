@@ -91,6 +91,22 @@ class AuronExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("CollectLimit with offset on a single partition RDD") {
+    if (AuronTestUtils.isSparkV34OrGreater) {
+      withTempView("t1") {
+        spark.range(0, 10, 1, 1).repartition(1).createOrReplaceTempView("t1")
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          val df = sql("SELECT id FROM t1 LIMIT 3 OFFSET 2")
+          val limit = collectFirst(df.queryExecution.executedPlan) {
+            case e: NativeCollectLimitExec => e
+          }.get
+          assert(limit.child.outputPartitioning.numPartitions == 1)
+          assert(df.queryExecution.toRdd.map(_.getLong(0)).collect().toSeq == Seq(2L, 3L, 4L))
+        }
+      }
+    }
+  }
+
   test("GlobalLimit and LocalLimit") {
     withTempView("t1") {
       sql("create table if not exists t1(id INT) using parquet")
@@ -169,6 +185,22 @@ class AuronExecSuite extends AuronQueryTest with BaseAuronSQLSuite {
               e
             }.size == 1)
           }
+        }
+      }
+    }
+  }
+
+  test("TakeOrderedAndProject with offset on a single partition RDD") {
+    if (AuronTestUtils.isSparkV34OrGreater) {
+      withTempView("t1") {
+        spark.range(0, 10, 1, 1).repartition(1).createOrReplaceTempView("t1")
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          val df = sql("SELECT id FROM t1 ORDER BY id DESC LIMIT 3 OFFSET 2")
+          val topN = collectFirst(df.queryExecution.executedPlan) {
+            case e: NativeTakeOrderedExec => e
+          }.get
+          assert(topN.child.outputPartitioning.numPartitions == 1)
+          assert(df.queryExecution.toRdd.map(_.getLong(0)).collect().toSeq == Seq(7L, 6L, 5L))
         }
       }
     }
