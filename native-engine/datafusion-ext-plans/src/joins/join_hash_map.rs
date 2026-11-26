@@ -1551,7 +1551,7 @@ mod tests {
                 int32_data_batch(vec![]),
             ],
         ] {
-            let map = JoinHashMap::create_from_data_batches(batches, &[key.clone()])?;
+            let map = JoinHashMap::create_from_data_batches(batches, std::slice::from_ref(&key))?;
             let empty = map.gather_lazy_columns(&[0], UInt32Array::from(Vec::<u32>::new()))?;
             assert_eq!(empty[0].materialize()?.len(), 0);
             assert!(
