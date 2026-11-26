@@ -1209,6 +1209,87 @@ mod fuzztest {
     use super::*;
     use crate::joins::bucketed_group::{BucketGroupBuilder, append_bucket_id_column};
 
+    #[tokio::test]
+    async fn no_valid_build_keys_skip_probe_key_evaluation() -> Result<()> {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        use arrow::array::AsArray;
+        use datafusion::{
+            common::config::ConfigOptions,
+            logical_expr::{Volatility, create_udf},
+            physical_expr::ScalarFunctionExpr,
+        };
+
+        MemManager::init(1000000);
+        let schema = Arc::new(Schema::new(vec![Field::new("k", DataType::Int32, true)]));
+        let built =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(Int32Array::from(vec![None]))])?;
+        let probed = RecordBatch::try_new(
+            schema.clone(),
+            vec![Arc::new(Int32Array::from(vec![None, Some(1)]))],
+        )?;
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let evaluations = Arc::new(AtomicUsize::new(0));
+        let observed = evaluations.clone();
+        let udf = create_udf(
+            "count_probe_keys",
+            vec![DataType::Int32],
+            DataType::Int32,
+            Volatility::Volatile,
+            Arc::new(move |args| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                Ok(args[0].clone())
+            }),
+        );
+        let probe_key: PhysicalExprRef = Arc::new(ScalarFunctionExpr::try_new(
+            Arc::new(udf),
+            vec![key.clone()],
+            &schema,
+            Arc::<ConfigOptions>::default(),
+        )?);
+        for build_rows in [0, 1] {
+            let built = built.slice(0, build_rows);
+            for jt in [Inner, LeftSemi, LeftAnti, Full, Existence] {
+                let output_schema = if jt == Existence {
+                    Arc::new(Schema::new(vec![
+                        schema.field(0).clone(),
+                        Field::new("exists", DataType::Boolean, false),
+                    ]))
+                } else {
+                    Arc::new(build_join_schema(&schema, &schema, &jt.try_into()?).0)
+                };
+                let join = BroadcastJoinExec::try_new(
+                    output_schema,
+                    memory(probed.clone()),
+                    memory(built.clone()),
+                    vec![(probe_key.clone(), key.clone())],
+                    jt,
+                    JoinSide::Right,
+                    false,
+                    None,
+                    false,
+                    None,
+                )?;
+                let output = collect(join.execute(0, SessionContext::new().task_ctx())?).await?;
+                let expected = match jt {
+                    Inner | LeftSemi => 0,
+                    Full => probed.num_rows() + build_rows,
+                    _ => probed.num_rows(),
+                };
+                assert_eq!(output.iter().map(|b| b.num_rows()).sum::<usize>(), expected);
+                if jt == Existence {
+                    assert!(
+                        output
+                            .iter()
+                            .all(|b| b.column(1).as_boolean().true_count() == 0)
+                    );
+                }
+                assert_eq!(evaluations.load(Ordering::Relaxed), 0);
+            }
+        }
+        Ok(())
+    }
+
     fn gen_batch(prefix: &str, rng: &mut impl Rng, n: usize, key_range: i32) -> RecordBatch {
         let schema = Arc::new(Schema::new(vec![
             Field::new(format!("{prefix}k"), DataType::Int32, true),

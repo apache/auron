@@ -288,6 +288,24 @@ impl<const P: i32> Joiner for FullJoiner<P> {
         let batch_size = self.join_params.batch_size.max(1);
         let mut probed_joined =
             bitvec![0; if get_joiner(P).probe_side_outer { probed_batch.num_rows() } else { 0 }];
+        if self.map.is_all_nulls() {
+            if get_joiner(P).probe_side_outer {
+                for start in (0..probed_batch.num_rows()).step_by(batch_size) {
+                    let end = (start + batch_size).min(probed_batch.num_rows());
+                    self.as_mut()
+                        .flush_hash_joined(
+                            &probed_batch,
+                            start..end,
+                            &mut probed_joined,
+                            vec![],
+                            vec![],
+                            build_output_time,
+                        )
+                        .await?;
+                }
+            }
+            return Ok(());
+        }
         let probed_key_columns = self.create_probed_key_columns(&probed_batch)?;
         let probed_hashes = probed_side_hash_time
             .with_timer(|| join_create_hashes(probed_batch.num_rows(), &probed_key_columns));

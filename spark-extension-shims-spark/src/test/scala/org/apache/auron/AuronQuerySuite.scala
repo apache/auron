@@ -1121,6 +1121,38 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  for (hint <- Seq("BROADCAST", "SHUFFLE_HASH");
+    key <- Seq(
+      "named_struct('id', id, 'v', NULL)",
+      "CASE id WHEN 0 THEN array() WHEN 1 THEN array(NULL) ELSE array(NULL, NULL) END",
+      "named_struct('a', IF(id = 0, NULL, 0), 'b', IF(id = 0, 0, NULL))",
+      "array(IF(id = 0, NULL, 0), IF(id = 0, 0, NULL))")) {
+    test(s"$hint join with nested NULLs in $key") {
+      withSQLConf(
+        "spark.sql.adaptive.enabled" -> "false",
+        "spark.sql.shuffle.partitions" -> "2") {
+        withTable("void_join_left", "void_join_right") {
+          sql("CREATE TABLE void_join_left USING parquet AS SELECT id FROM range(4)")
+          sql("CREATE TABLE void_join_right USING parquet AS SELECT id FROM range(3)")
+          val df = checkSparkAnswer(s"""
+            |WITH l AS (SELECT id, $key AS k FROM void_join_left),
+            |     r AS (SELECT id, $key AS k FROM void_join_right)
+            |SELECT /*+ $hint(r) */ l.id, r.id
+            |FROM l LEFT JOIN r ON l.k = r.k
+            |""".stripMargin)
+          val plan = df.queryExecution.executedPlan
+          assert(
+            plan.find {
+              case _: NativeBroadcastJoinExec => hint == "BROADCAST"
+              case _: NativeShuffledHashJoinBase => hint == "SHUFFLE_HASH"
+              case _ => false
+            }.isDefined,
+            plan.toString)
+        }
+      }
+    }
+  }
+
   test("left join with NOT IN subquery should filter NULL values") {
     // This test verifies the fix for the NULL handling issue in Anti join.
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {

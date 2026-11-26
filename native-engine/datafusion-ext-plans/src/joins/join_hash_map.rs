@@ -1032,6 +1032,23 @@ mod tests {
     }
 
     #[test]
+    fn void_keys_have_no_valid_items() -> Result<()> {
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("k", DataType::Null, true)])),
+            vec![Arc::new(arrow::array::NullArray::new(2))],
+        )?;
+        let map = JoinHashMap::create_from_data_batch(batch, std::slice::from_ref(&key))?;
+        assert_eq!(map.num_rows(), 2);
+        assert!(map.is_all_nulls());
+        let loaded =
+            JoinHashMap::load_from_hash_map_batches(map.into_hash_map_batches(None)?, &[key])?;
+        assert_eq!(loaded.num_rows(), 2);
+        assert!(loaded.is_all_nulls());
+        Ok(())
+    }
+
+    #[test]
     fn gather_nullable_build_rows_across_batches() -> Result<()> {
         let batches = vec![int32_data_batch(vec![1, 2]), int32_data_batch(vec![3, 4])];
         let rows = JoinBuildRows::from_batches(batches)?;
