@@ -62,7 +62,6 @@ pub struct SortMergeJoinExec {
     join_type: JoinType,
     sort_options: Vec<SortOptions>,
     join_filter: Option<JoinFilter>,
-    join_params: OnceCell<JoinParams>,
     schema: SchemaRef,
     metrics: ExecutionPlanMetricsSet,
     props: OnceCell<Arc<PlanProperties>>,
@@ -86,7 +85,6 @@ impl SortMergeJoinExec {
             join_type,
             sort_options,
             join_filter,
-            join_params: OnceCell::new(),
             metrics: ExecutionPlanMetricsSet::new(),
             props: OnceCell::new(),
         })
@@ -151,10 +149,7 @@ impl SortMergeJoinExec {
         context: Arc<TaskContext>,
         projection: Vec<usize>,
     ) -> Result<SendableRecordBatchStream> {
-        let mut join_params = self
-            .join_params
-            .get_or_try_init(|| self.create_join_params(&projection))?
-            .clone();
+        let mut join_params = self.create_join_params(&projection)?;
         let exec_ctx = ExecutionContext::new(
             context,
             partition,
