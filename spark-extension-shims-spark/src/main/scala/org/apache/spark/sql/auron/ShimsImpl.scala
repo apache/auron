@@ -96,6 +96,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeUnionBase
 import org.apache.spark.sql.execution.auron.plan.NativeUnionExec
 import org.apache.spark.sql.execution.auron.plan.NativeWindowBase
 import org.apache.spark.sql.execution.auron.plan.NativeWindowExec
+import org.apache.spark.sql.execution.auron.plan.Util
 import org.apache.spark.sql.execution.auron.shuffle.{AuronBlockStoreShuffleReaderBase, AuronRssShuffleManagerBase, RssPartitionWriterBase}
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -543,6 +544,10 @@ class ShimsImpl extends Shims with Logging {
       case plan: NativeSupports => plan.executeNative()
       case plan if isAQEShuffleRead(plan) => executeNativeAQEShuffleReader(plan)
       case plan: QueryStageExec => executeNative(plan.plan)
+      // Spark can reuse an exchange after native conversion, giving this consumer new exprIds.
+      case ReusedExchangeExec(output, exchange: NativeSupports) if output != exchange.output =>
+        val newNames = output.map(Util.getFieldNameByExprId)
+        createNativeRenameColumnsExec(exchange, newNames).executeNative()
       case plan: ReusedExchangeExec => executeNative(plan.child)
       case _ =>
         throw new SparkException(s"Underlying plan is not NativeSupports: ${plan}")
