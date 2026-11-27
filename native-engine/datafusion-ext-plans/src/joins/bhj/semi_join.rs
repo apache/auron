@@ -22,20 +22,24 @@ use std::{
 };
 
 use arrow::{
-    array::{ArrayRef, BooleanArray, RecordBatch, RecordBatchOptions},
+    array::{ArrayRef, BooleanArray, Int32Array, UInt32Array},
     buffer::NullBuffer,
 };
 use async_trait::async_trait;
 use bitvec::{bitvec, prelude::BitVec};
 use datafusion::{common::Result, physical_plan::metrics::Time};
-use datafusion_ext_commons::{
-    arrow::{eq_comparator::EqComparator, selection::take_cols},
-    likely,
-};
+use datafusion_ext_commons::{arrow::eq_comparator::EqComparator, likely};
 
 use crate::{
     broadcast_join_exec::Joiner,
-    common::{execution_context::WrappedRecordBatchSender, timer_helper::TimerHelper},
+    common::{
+        execution_context::WrappedLazyBatchSender,
+        lazy::{
+            ColumnBatch, LazyBatch, LazyBatchRef, LazyColumnRef, column, evaluate_columns,
+            take_lazy_columns,
+        },
+        timer_helper::TimerHelper,
+    },
     joins::{
         JoinParams,
         bhj::{
@@ -113,7 +117,7 @@ const fn get_joiner(p: i32) -> JoinerParams {
 
 pub struct SemiJoiner<const P: i32> {
     join_params: JoinParams,
-    output_sender: Arc<WrappedRecordBatchSender>,
+    output_sender: Arc<WrappedLazyBatchSender>,
     map_joined: BitVec,
     map: Arc<JoinHashMap>,
     output_rows: AtomicUsize,
@@ -123,7 +127,7 @@ impl<const P: i32> SemiJoiner<P> {
     pub fn new(
         join_params: JoinParams,
         map: Arc<JoinHashMap>,
-        output_sender: Arc<WrappedRecordBatchSender>,
+        output_sender: Arc<WrappedLazyBatchSender>,
     ) -> Self {
         let map_joined = bitvec![0; map.num_rows()];
         Self {
@@ -135,27 +139,19 @@ impl<const P: i32> SemiJoiner<P> {
         }
     }
 
-    fn create_probed_key_columns(&self, probed_batch: &RecordBatch) -> Result<Vec<ArrayRef>> {
+    fn create_probed_key_columns(&self, probed_batch: &dyn LazyBatch) -> Result<Vec<ArrayRef>> {
         let probed_key_exprs = match get_joiner(P).probe_side {
             L => &self.join_params.left_keys,
             R => &self.join_params.right_keys,
         };
-        let probed_key_columns: Vec<ArrayRef> = probed_key_exprs
-            .iter()
-            .map(|expr| {
-                Ok(expr
-                    .evaluate(probed_batch)?
-                    .into_array(probed_batch.num_rows())?)
-            })
-            .collect::<Result<_>>()?;
-        Ok(probed_key_columns)
+        evaluate_columns(probed_batch, probed_key_exprs)
     }
 
     /// Accumulate match bits across candidate chunks, including chunks that
     /// split a row.
     fn filter_joined(
         &self,
-        probed_batch: &RecordBatch,
+        probed_batch: &dyn LazyBatch,
         probe_indices: &mut Vec<u32>,
         build_indices: &mut Vec<u32>,
         probed_joined: &mut BitVec,
@@ -167,7 +163,7 @@ impl<const P: i32> SemiJoiner<P> {
         let Some(filter) = &self.join_params.residual_filter else {
             return Ok(());
         };
-        let cols = filter_cols(
+        let (cols, _) = filter_cols(
             filter,
             get_joiner(P).probe_side,
             probed_batch,
@@ -187,12 +183,9 @@ impl<const P: i32> SemiJoiner<P> {
         Ok(())
     }
 
-    async fn flush(&self, cols: Vec<ArrayRef>, num_rows: usize) -> Result<()> {
-        let output_batch = RecordBatch::try_new_with_options(
-            self.join_params.projection.schema.clone(),
-            cols,
-            &RecordBatchOptions::new().with_row_count(Some(num_rows)),
-        )?;
+    async fn flush(&self, cols: Vec<LazyColumnRef>, num_rows: usize) -> Result<()> {
+        let output_batch =
+            ColumnBatch::try_new(self.join_params.projection.schema.clone(), cols, num_rows)?;
         self.output_rows.fetch_add(output_batch.num_rows(), Relaxed);
         self.output_sender.send(output_batch).await;
         Ok(())
@@ -203,7 +196,7 @@ impl<const P: i32> SemiJoiner<P> {
 impl<const P: i32> Joiner for SemiJoiner<P> {
     async fn join(
         mut self: Pin<&mut Self>,
-        probed_batch: RecordBatch,
+        probed_batch: LazyBatchRef,
         probed_side_hash_time: &Time,
         probed_side_search_time: &Time,
         probed_side_compare_time: &Time,
@@ -211,18 +204,15 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
     ) -> Result<()> {
         if get_joiner(P).mode == Anti && get_joiner(P).probe_is_join_side && self.map.is_empty() {
             let _build_output_timer = build_output_time.timer();
-            let cols = match get_joiner(P).probe_side {
-                L => self
-                    .join_params
-                    .projection
-                    .project_left(probed_batch.columns()),
-                R => self
-                    .join_params
-                    .projection
-                    .project_right(probed_batch.columns()),
-            };
+            let pprojected = match get_joiner(P).probe_side {
+                L => &self.join_params.projection.left,
+                R => &self.join_params.projection.right,
+            }
+            .iter()
+            .map(|&i| probed_batch.get_column(i))
+            .collect::<Result<Vec<_>>>()?;
             return build_output_time
-                .exclude_timer_async(self.flush(cols, probed_batch.num_rows()))
+                .exclude_timer_async(self.flush(pprojected, probed_batch.num_rows()))
                 .await;
         }
 
@@ -232,7 +222,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
             std::mem::transmute::<_, &mut BitVec>(&mut self.map_joined)
         };
 
-        let probed_key_columns = self.create_probed_key_columns(&probed_batch)?;
+        let probed_key_columns = self.create_probed_key_columns(probed_batch.as_ref())?;
         let probed_hashes = probed_side_hash_time
             .with_timer(|| join_create_hashes(probed_batch.num_rows(), &probed_key_columns));
 
@@ -302,7 +292,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                         }
                         if probe_indices.len() >= batch_size {
                             self.filter_joined(
-                                &probed_batch,
+                                probed_batch.as_ref(),
                                 &mut probe_indices,
                                 &mut build_indices,
                                 &mut probed_joined,
@@ -350,7 +340,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
         }
 
         self.filter_joined(
-            &probed_batch,
+            probed_batch.as_ref(),
             &mut probe_indices,
             &mut build_indices,
             &mut probed_joined,
@@ -362,25 +352,27 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                 .exclude_timer_async(async {
                     let _build_output_timer = build_output_time.timer();
                     let pprojected = match get_joiner(P).probe_side {
-                        L => self
-                            .join_params
-                            .projection
-                            .project_left(probed_batch.columns()),
-                        R => self
-                            .join_params
-                            .projection
-                            .project_right(probed_batch.columns()),
-                    };
+                        L => &self.join_params.projection.left,
+                        R => &self.join_params.projection.right,
+                    }
+                    .iter()
+                    .map(|&i| probed_batch.get_column(i))
+                    .collect::<Result<Vec<_>>>()?;
                     let (pcols, num_rows) = match get_joiner(P).mode {
                         Semi | Anti => {
                             let probed_indices = probed_joined
                                 .into_iter()
                                 .enumerate()
                                 .filter(|(_, joined)| (get_joiner(P).mode == Semi) ^ !joined)
-                                .map(|(idx, _)| idx as u32)
-                                .collect::<Vec<_>>();
+                                .map(|(idx, _)| idx as i32)
+                                .collect::<Int32Array>();
                             let num_rows = probed_indices.len();
-                            (take_cols(&pprojected, probed_indices)?, num_rows)
+                            let pcols = if num_rows == probed_batch.num_rows() {
+                                pprojected
+                            } else {
+                                take_lazy_columns(&pprojected, &probed_indices)?
+                            };
+                            (pcols, num_rows)
                         }
                         Existence => {
                             let num_rows = probed_joined.len();
@@ -389,7 +381,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                             ));
                             let mut cols = pprojected;
                             if let Some(pos) = self.join_params.projection.existence_output {
-                                cols.insert(pos, exists_col);
+                                cols.insert(pos, column(exists_col));
                             }
                             (cols, num_rows)
                         }
@@ -421,7 +413,7 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                         .collect::<Vec<_>>();
                     let num_rows = map_indices.len();
                     (
-                        self.map.gather_columns(bcol_indices, map_indices)?,
+                        self.map.gather_lazy_columns(bcol_indices, map_indices)?,
                         num_rows,
                     )
                 }
@@ -431,9 +423,9 @@ impl<const P: i32> Joiner for SemiJoiner<P> {
                         map_joined.into_iter().collect::<Vec<_>>(),
                     ));
                     let all_indices: Vec<u32> = (0..num_rows as u32).collect();
-                    let mut cols = self.map.gather_columns(bcol_indices, all_indices)?;
+                    let mut cols = self.map.gather_lazy_columns(bcol_indices, all_indices)?;
                     if let Some(pos) = self.join_params.projection.existence_output {
-                        cols.insert(pos, exists_col);
+                        cols.insert(pos, column(exists_col));
                     }
                     (cols, num_rows)
                 }

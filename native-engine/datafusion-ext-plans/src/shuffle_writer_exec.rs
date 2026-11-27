@@ -36,7 +36,10 @@ use datafusion_ext_commons::df_execution_err;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    common::execution_context::ExecutionContext,
+    common::{
+        execution_context::ExecutionContext,
+        optimized_batch::{ExecuteOptimizedProps, into_lazy_stream},
+    },
     shuffle::{
         Partitioning, ShuffleRepartitioner, single_repartitioner::SingleShuffleRepartitioner,
         sort_repartitioner::SortShuffleRepartitioner,
@@ -170,7 +173,10 @@ impl ExecutionPlan for ShuffleWriterExec {
             p => unreachable!("unsupported partitioning: {:?}", p),
         };
 
-        let input = exec_ctx.execute_with_input_stats(&input)?;
+        let input = into_lazy_stream(exec_ctx.execute_optimized(
+            &input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         repartitioner.execute(exec_ctx, input)
     }
 

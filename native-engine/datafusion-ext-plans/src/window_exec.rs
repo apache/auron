@@ -37,7 +37,10 @@ use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    common::execution_context::{ExecutionContext, WrappedRecordBatchSender},
+    common::{
+        execution_context::{ExecutionContext, WrappedRecordBatchSender},
+        optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+    },
     window::{WindowExpr, WindowFunctionProcessor, window_context::WindowContext},
 };
 
@@ -195,7 +198,10 @@ impl ExecutionPlan for WindowExec {
         // need complete partition context, such as cume_dist, are handled in
         // execute_window().
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         let coalesced = exec_ctx.coalesce_with_default_batch_size(input);
         let window_ctx = self.context.clone();
         execute_window(coalesced, exec_ctx, window_ctx)

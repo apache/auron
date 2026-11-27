@@ -22,13 +22,16 @@ use arrow::{
     row::{Row, RowConverter, Rows},
 };
 use arrow_schema::DataType;
-use datafusion::{common::Result, physical_plan::metrics::Time};
+use datafusion::{
+    common::{DataFusionError, Result},
+    physical_plan::metrics::Time,
+};
 use datafusion_ext_commons::arrow::selection::take_batch;
 use futures::StreamExt;
 
 use crate::{
     common::{
-        key_rows_output::SendableRecordBatchWithKeyRowsStream, row_null_checker::RowNullChecker,
+        optimized_batch::SendableOptimizedBatchStream, row_null_checker::RowNullChecker,
         timer_helper::TimerHelper,
     },
     joins::Idx,
@@ -37,7 +40,7 @@ use crate::{
 /// Optimized StreamCursor that uses pre-computed key rows to avoid redundant
 /// key conversion
 pub struct StreamCursor {
-    stream: SendableRecordBatchWithKeyRowsStream,
+    stream: SendableOptimizedBatchStream,
     key_null_checker: RowNullChecker,
     poll_time: Time,
 
@@ -53,7 +56,7 @@ pub struct StreamCursor {
 
 impl StreamCursor {
     pub fn try_new(
-        stream: SendableRecordBatchWithKeyRowsStream,
+        stream: SendableOptimizedBatchStream,
         poll_time: Time,
         key_data_types: &[DataType],
     ) -> Result<Self> {
@@ -69,6 +72,9 @@ impl StreamCursor {
         let key_null_checker = RowNullChecker::new(
             &stream
                 .keys()
+                .ok_or_else(|| {
+                    DataFusionError::Execution("sort-merge join input has no keys".into())
+                })?
                 .iter()
                 .zip(key_data_types)
                 .map(|(k, dt)| (dt.clone(), k.options))
@@ -104,22 +110,36 @@ impl StreamCursor {
         let should_load_next_batch = self.cur_idx.0 >= self.batches.len();
         if should_load_next_batch {
             Some(Box::pin(async move {
-                while let Some(batch_with_keys) = self
+                while let Some((batch_with_keys, batch)) = self
                     .poll_time
-                    .with_timer_async(async { self.stream.next().await.transpose() })
+                    .with_timer_async(async {
+                        self.stream
+                            .next()
+                            .await
+                            .transpose()?
+                            .map(|batch| {
+                                let materialized = batch.as_lazy_batch().materialize()?;
+                                Ok::<_, DataFusionError>((batch, materialized))
+                            })
+                            .transpose()
+                    })
                     .await?
                 {
-                    if batch_with_keys.batch.num_rows() == 0 {
+                    let key_rows = batch_with_keys.key_rows().ok_or_else(|| {
+                        DataFusionError::Execution(
+                            "sort-merge join input batch has no key rows".into(),
+                        )
+                    })?;
+                    if batch.num_rows() == 0 {
                         continue;
                     }
 
-                    let keys = batch_with_keys.key_rows.clone();
+                    let keys = key_rows.rows.clone();
                     let key_has_nulls = Some(
                         self.key_null_checker
-                            .has_nulls(&keys, &batch_with_keys.key_row_converter.lock()),
+                            .has_nulls(&keys, &key_rows.rows_converter),
                     )
                     .filter(|nb| nb.null_count() > 0);
-                    let batch = batch_with_keys.batch;
 
                     self.batches.push(batch);
                     self.key_has_nulls.push(key_has_nulls);

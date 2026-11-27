@@ -16,8 +16,9 @@
 pub mod cached_exprs_evaluator;
 pub mod column_pruning;
 pub mod execution_context;
-pub mod key_rows_output;
+pub mod lazy;
 pub mod offsetted;
+pub mod optimized_batch;
 pub mod row_null_checker;
 pub mod stream_exec;
 pub mod timer_helper;

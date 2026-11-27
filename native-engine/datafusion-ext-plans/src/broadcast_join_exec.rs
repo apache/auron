@@ -29,6 +29,7 @@ use arrow::{
 };
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
+use auron_jni_bridge::conf::{self, BooleanConf, IntConf};
 use auron_memmgr::MemManager;
 use datafusion::{
     common::{JoinSide, Result, Statistics},
@@ -53,8 +54,12 @@ use parking_lot::Mutex;
 use crate::{
     broadcast_join_build_hash_map_exec::execute_build_hash_map,
     common::{
-        column_pruning::ExecuteWithColumnPruning,
-        execution_context::{ExecutionContext, WrappedRecordBatchSender},
+        execution_context::{ExecutionContext, WrappedLazyBatchSender},
+        lazy::{
+            LazyBatchRef, LazyBatchStreamAdapter, SendableLazyBatchStream, concat_batches,
+            materialize_stream,
+        },
+        optimized_batch::{ExecuteOptimizedProps, into_lazy_stream, materialize_optimized_stream},
         stream_exec::create_record_batch_stream_exec,
         timer_helper::TimerHelper,
     },
@@ -258,6 +263,20 @@ impl BroadcastJoinExec {
         context: Arc<TaskContext>,
         projection: Vec<usize>,
     ) -> Result<SendableRecordBatchStream> {
+        Ok(materialize_stream(self.execute_optimized(
+            partition,
+            context,
+            Some(projection),
+        )?))
+    }
+
+    pub fn execute_optimized(
+        &self,
+        partition: usize,
+        context: Arc<TaskContext>,
+        projection: Option<Vec<usize>>,
+    ) -> Result<SendableLazyBatchStream> {
+        let projection = projection.unwrap_or_else(|| (0..self.schema.fields().len()).collect());
         let mut join_params = self.create_join_params(&projection)?;
         let exec_ctx = ExecutionContext::new(
             context,
@@ -286,7 +305,7 @@ impl BroadcastJoinExec {
         let required_reserved_order = self.required_reserved_order;
 
         let exec_ctx_cloned = exec_ctx.clone();
-        let output_stream = exec_ctx_cloned.clone().output_with_sender(
+        let output_stream = exec_ctx_cloned.clone().output_lazy_with_sender(
             if build_input != BuildInput::Local {
                 "BroadcastJoin"
             } else {
@@ -307,18 +326,7 @@ impl BroadcastJoinExec {
                 )
             },
         );
-        Ok(exec_ctx.coalesce_with_default_batch_size(output_stream))
-    }
-}
-
-impl ExecuteWithColumnPruning for BroadcastJoinExec {
-    fn execute_projected(
-        &self,
-        partition: usize,
-        context: Arc<TaskContext>,
-        projection: &[usize],
-    ) -> Result<SendableRecordBatchStream> {
-        self.execute_with_projection(partition, context, projection.to_vec())
+        Ok(output_stream)
     }
 }
 
@@ -422,12 +430,18 @@ fn create_joiner(
     broadcast_side: JoinSide,
     join_params: JoinParams,
     map: Arc<JoinHashMap>,
-    sender: Arc<WrappedRecordBatchSender>,
-) -> Pin<Box<dyn Joiner + Send>> {
+    sender: Arc<WrappedLazyBatchSender>,
+) -> Result<Pin<Box<dyn Joiner + Send>>> {
     if join_params.left_keys.is_empty() {
-        return Box::pin(BnljJoiner::new(broadcast_side, join_params, map, sender));
+        let rows = Arc::new(map.materialized_build_rows()?);
+        return Ok(Box::pin(BnljJoiner::new(
+            broadcast_side,
+            join_params,
+            rows,
+            sender,
+        )));
     }
-    match broadcast_side {
+    Ok(match broadcast_side {
         JoinSide::Left => match join_params.join_type {
             Inner => Box::pin(RProbedInnerJoiner::new(join_params, map, sender)),
             Left => Box::pin(RProbedLeftJoiner::new(join_params, map, sender)),
@@ -451,7 +465,7 @@ fn create_joiner(
             Existence => Box::pin(LProbedExistenceJoiner::new(join_params, map, sender)),
         },
         JoinSide::None => unreachable!(),
-    }
+    })
 }
 
 async fn probe_build(
@@ -467,7 +481,10 @@ async fn probe_build(
     let _timer = elapsed_compute.timer();
 
     if !joiner.can_early_stop() {
-        let mut probed = exec_ctx.stat_input(exec_ctx.execute(&probed_plan)?);
+        let mut probed = into_lazy_stream(exec_ctx.execute_optimized(
+            &probed_plan,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         while !joiner.can_early_stop()
             && let Some(batch) = exec_ctx
                 .baseline_metrics()
@@ -514,7 +531,7 @@ async fn execute_join_with_hybrid_join(
     probed_side_search_time: Time,
     probed_side_compare_time: Time,
     build_output_time: Time,
-    sender: Arc<WrappedRecordBatchSender>,
+    sender: Arc<WrappedLazyBatchSender>,
 ) -> Result<()> {
     let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
     let _timer = elapsed_compute.timer();
@@ -548,22 +565,31 @@ async fn execute_join_with_hybrid_join(
     };
 
     if !required_reserved_order {
-        return run_hybrid_join(
-            probed_plan,
-            built,
-            join_params,
-            broadcast_side,
-            map_keys,
-            probe_keys,
-            false,
-            exec_ctx,
-            probed_side_hash_time,
-            probed_side_search_time,
-            probed_side_compare_time,
-            build_output_time,
-            sender,
-        )
-        .await;
+        let run_ctx = exec_ctx.clone();
+        let mut output = materialize_stream(exec_ctx.output_lazy_with_sender(
+            "HybridJoin",
+            move |collector| {
+                run_hybrid_join(
+                    probed_plan,
+                    built,
+                    join_params,
+                    broadcast_side,
+                    map_keys,
+                    probe_keys,
+                    false,
+                    run_ctx,
+                    probed_side_hash_time,
+                    probed_side_search_time,
+                    probed_side_compare_time,
+                    build_output_time,
+                    collector,
+                )
+            },
+        ));
+        while let Some(batch) = output.next().await.transpose()? {
+            sender.send(Arc::new(batch)).await;
+        }
+        return Ok(());
     }
 
     // Sort the ~ROW_NUM-carrying output back into probe order with a
@@ -573,25 +599,27 @@ async fn execute_join_with_hybrid_join(
     // columns silently corrupts past arrow's 2GB offset limit.
     let augmented_schema = join_params.projection.schema.clone();
     let exec_ctx_join = exec_ctx.clone();
-    let unsorted_stream = exec_ctx
-        .with_new_output_schema(augmented_schema)
-        .output_with_sender("HybridJoin", move |collector| {
-            run_hybrid_join(
-                probed_plan,
-                built,
-                join_params,
-                broadcast_side,
-                map_keys,
-                probe_keys,
-                true,
-                exec_ctx_join,
-                probed_side_hash_time,
-                probed_side_search_time,
-                probed_side_compare_time,
-                build_output_time,
-                collector,
-            )
-        });
+    let unsorted_stream = materialize_stream(
+        exec_ctx
+            .with_new_output_schema(augmented_schema)
+            .output_lazy_with_sender("HybridJoin", move |collector| {
+                run_hybrid_join(
+                    probed_plan,
+                    built,
+                    join_params,
+                    broadcast_side,
+                    map_keys,
+                    probe_keys,
+                    true,
+                    exec_ctx_join,
+                    probed_side_hash_time,
+                    probed_side_search_time,
+                    probed_side_compare_time,
+                    build_output_time,
+                    collector,
+                )
+            }),
+    );
 
     let unsorted_exec = create_record_batch_stream_exec(unsorted_stream, exec_ctx.partition_id())?;
     let row_num_col: PhysicalExprRef = Arc::new(Column::new(ROW_NUM_COLUMN_NAME, row_num_col_idx));
@@ -618,7 +646,10 @@ async fn execute_join_with_hybrid_join(
                     .map(|(_, col)| col.clone())
                     .collect();
                 sender
-                    .send(RecordBatch::try_new(output_schema.clone(), data_columns)?)
+                    .send(Arc::new(RecordBatch::try_new(
+                        output_schema.clone(),
+                        data_columns,
+                    )?))
                     .await;
             }
             Result::<()>::Ok(())
@@ -642,7 +673,7 @@ async fn run_hybrid_join(
     probed_side_search_time: Time,
     probed_side_compare_time: Time,
     build_output_time: Time,
-    sender: Arc<WrappedRecordBatchSender>,
+    sender: Arc<WrappedLazyBatchSender>,
 ) -> Result<()> {
     // hash-map-batch schema (data columns + ~TABLE) for the empty
     // JoinHashMap used by the probe-only tail group.
@@ -663,7 +694,10 @@ async fn run_hybrid_join(
         bucket_schema(&probed_schema)
     };
     let mut next_row_num = 0u64;
-    let mut bucketed_probe_input = exec_ctx.execute(&probed_plan)?.map(move |batch| {
+    let mut bucketed_probe_input = materialize_optimized_stream(
+        exec_ctx.execute_optimized(&probed_plan, &ExecuteOptimizedProps::default())?,
+    )
+    .map(move |batch| {
         batch.and_then(|batch| {
             let batch = if required_reserved_order {
                 append_row_num_column(batch, &mut next_row_num)?
@@ -734,7 +768,7 @@ async fn run_hybrid_join(
         if join_params.is_null_aware_anti_join && map.has_null_keys() {
             return Ok(());
         }
-        let mut joiner = create_joiner(broadcast_side, join_params.clone(), map, sender.clone());
+        let mut joiner = create_joiner(broadcast_side, join_params.clone(), map, sender.clone())?;
 
         // probe data left over from the previous group, if it belongs here
         if let Some(pending) = pending_probe.take() {
@@ -744,7 +778,7 @@ async fn run_hybrid_join(
                 joiner
                     .as_mut()
                     .join(
-                        remove_last_column(lo),
+                        Arc::new(remove_last_column(lo)),
                         &probed_side_hash_time,
                         &probed_side_search_time,
                         &probed_side_compare_time,
@@ -768,7 +802,7 @@ async fn run_hybrid_join(
                         joiner
                             .as_mut()
                             .join(
-                                remove_last_column(lo),
+                                Arc::new(remove_last_column(lo)),
                                 &probed_side_hash_time,
                                 &probed_side_search_time,
                                 &probed_side_compare_time,
@@ -796,13 +830,13 @@ async fn run_hybrid_join(
     // still be visited once, to preserve outer/anti/existence semantics.
     if pending_probe.is_some() || !probe_exhausted {
         let empty_map = Arc::new(JoinHashMap::create_empty(hash_map_schema, &map_keys)?);
-        let mut joiner = create_joiner(broadcast_side, join_params, empty_map, sender);
+        let mut joiner = create_joiner(broadcast_side, join_params, empty_map, sender)?;
 
         if let Some(pending) = pending_probe.take() {
             joiner
                 .as_mut()
                 .join(
-                    remove_last_column(pending),
+                    Arc::new(remove_last_column(pending)),
                     &probed_side_hash_time,
                     &probed_side_search_time,
                     &probed_side_compare_time,
@@ -816,7 +850,7 @@ async fn run_hybrid_join(
                     joiner
                         .as_mut()
                         .join(
-                            remove_last_column(batch),
+                            Arc::new(remove_last_column(batch)),
                             &probed_side_hash_time,
                             &probed_side_search_time,
                             &probed_side_compare_time,
@@ -942,7 +976,7 @@ async fn execute_join(
     build_input: BuildInput,
     required_reserved_order: bool,
     exec_ctx: Arc<ExecutionContext>,
-    sender: Arc<WrappedRecordBatchSender>,
+    sender: Arc<WrappedLazyBatchSender>,
 ) -> Result<()> {
     let build_time = exec_ctx.register_timer_metric("build_hash_map_time");
     let probed_side_hash_time = exec_ctx.register_timer_metric("probed_side_hash_time");
@@ -981,29 +1015,24 @@ async fn execute_join(
         JoinSide::None => unreachable!(),
     };
 
-    let built_input = if build_input == BuildInput::BroadcastHashMap {
-        exec_ctx.stat_input(exec_ctx.execute(&built_plan)?)
+    let built_collected = if build_input == BuildInput::BroadcastHashMap {
+        let built_input = exec_ctx.stat_input(materialize_optimized_stream(
+            exec_ctx.execute_optimized(&built_plan, &ExecuteOptimizedProps::default())?,
+        ));
+        collect_join_hash_map(
+            Box::pin(built_input.peekable()),
+            cached_build_id,
+            &map_keys,
+            build_time,
+        )
+        .await?
     } else {
-        let data_input = exec_ctx.stat_input(exec_ctx.execute(&built_plan)?);
-        let built_schema = join_hash_map_schema(&data_input.schema());
-        execute_build_hash_map(
-            data_input,
-            map_keys.clone(),
-            exec_ctx.with_new_output_schema(built_schema),
-            build_time.clone(),
-        )?
+        collect_lazy_build(built_plan, &map_keys, exec_ctx.clone(), build_time).await?
     };
-    let built_collected = collect_join_hash_map(
-        Box::pin(built_input.peekable()),
-        cached_build_id.filter(|_| build_input == BuildInput::BroadcastHashMap),
-        &map_keys,
-        build_time,
-    )
-    .await?;
 
     match built_collected {
         CollectJoinHashMapResult::Map(map) => {
-            let joiner = create_joiner(broadcast_side, join_params, map, sender);
+            let joiner = create_joiner(broadcast_side, join_params, map, sender)?;
             probe_build(
                 probed_plan,
                 joiner,
@@ -1041,6 +1070,56 @@ async fn execute_join(
     Ok(())
 }
 
+async fn collect_lazy_build(
+    plan: Arc<dyn ExecutionPlan>,
+    keys: &[PhysicalExprRef],
+    exec_ctx: Arc<ExecutionContext>,
+    build_time: Time,
+) -> Result<CollectJoinHashMapResult> {
+    let mut input = into_lazy_stream(exec_ctx.execute_optimized(
+        &plan,
+        &ExecuteOptimizedProps::default().with_input_stats(true),
+    )?);
+    let schema = input.schema();
+    let hybrid_enabled = conf::HYBRID_JOIN_ENABLE.value().unwrap_or(false);
+    let row_threshold = conf::HYBRID_JOIN_ROWS_THRESHOLD.value().unwrap_or(i32::MAX) as usize;
+    let mem_threshold = conf::HYBRID_JOIN_MEM_SIZE_THRESHOLD
+        .value()
+        .unwrap_or(i32::MAX) as usize;
+    let mut batches = Vec::new();
+    let mut rows = 0usize;
+    let mut bytes = 0usize;
+    while let Some(batch) = build_time
+        .exclude_timer_async(input.next())
+        .await
+        .transpose()?
+    {
+        rows = rows.saturating_add(batch.num_rows());
+        bytes = bytes.saturating_add(batch.get_estimated_materialized_mem_size());
+        batches.push(batch);
+        if hybrid_enabled && (rows > row_threshold || bytes > mem_threshold) {
+            let replay = LazyBatchStreamAdapter::new(
+                schema.clone(),
+                futures::stream::iter(batches.into_iter().map(Ok)).chain(input),
+            );
+            let built_schema = join_hash_map_schema(&schema);
+            let built = execute_build_hash_map(
+                materialize_stream(Box::pin(replay)),
+                keys.to_vec(),
+                exec_ctx.with_new_output_schema(built_schema),
+                build_time.clone(),
+            )?;
+            return collect_join_hash_map(Box::pin(built.peekable()), None, keys, build_time).await;
+        }
+    }
+    build_time.with_timer(|| {
+        let batch = concat_batches(schema, &batches)?;
+        Ok(CollectJoinHashMapResult::Map(Arc::new(
+            JoinHashMap::create_from_lazy_batches(vec![batch], keys)?,
+        )))
+    })
+}
+
 enum CollectJoinHashMapResult {
     Map(Arc<JoinHashMap>),
     BucketedGroups(Pin<Box<Peekable<SendableRecordBatchStream>>>),
@@ -1052,7 +1131,9 @@ async fn collect_broadcast_rows(
     plan: &Arc<dyn ExecutionPlan>,
 ) -> Result<Arc<JoinBuildRows>> {
     let collect = || async {
-        let input = exec_ctx.stat_input(exec_ctx.execute(plan)?);
+        let input = exec_ctx.stat_input(materialize_optimized_stream(
+            exec_ctx.execute_optimized(plan, &ExecuteOptimizedProps::default())?,
+        ));
         let schema = input.schema();
         Ok(Arc::new(JoinBuildRows::try_new(
             input.try_collect().await?,
@@ -1132,7 +1213,7 @@ async fn collect_join_hash_map_without_caching(
 pub trait Joiner {
     async fn join(
         self: Pin<&mut Self>,
-        probed_batch: RecordBatch,
+        probed_batch: LazyBatchRef,
         probed_side_hash_time: &Time,
         probed_side_search_time: &Time,
         probed_side_compare_time: &Time,
@@ -1547,6 +1628,178 @@ mod fuzztest {
             }
         }
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn lazy_hash_join_project_chain_preserves_payload_source() -> Result<()> {
+        for broadcast in [false, true] {
+            run_lazy_hash_join_project_chain(broadcast).await?;
+        }
+        Ok(())
+    }
+
+    async fn run_lazy_hash_join_project_chain(broadcast: bool) -> Result<()> {
+        use crate::project_exec::ProjectExec;
+
+        let left = gen_batch("l", &mut rand::rngs::StdRng::seed_from_u64(9), 8, 1);
+        let matched_left = left
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("keys")
+            .iter()
+            .filter(|key| *key == Some(0))
+            .count();
+        let right = batch_for_lazy_chain("r", vec![0, 0], vec![41, 42])?;
+        let mut sources = vec![right.column(1).clone()];
+        let right_schema = right.schema();
+        let right = if broadcast {
+            let other = batch_for_lazy_chain("r", vec![0], vec![43])?;
+            sources.push(other.column(1).clone());
+            let key: PhysicalExprRef = Arc::new(Column::new("rk", 0));
+            let batches = JoinHashMap::create_from_data_batches(vec![right, other], &[key])?
+                .into_hash_map_batches(None)?;
+            Arc::new(TestMemoryExec::try_new(
+                &[batches],
+                join_hash_map_schema(&right_schema),
+                None,
+            )?) as Arc<dyn ExecutionPlan>
+        } else {
+            memory(right)
+        };
+        let schema = Arc::new(
+            build_join_schema(
+                &left.schema(),
+                &right_schema,
+                &datafusion::logical_expr::JoinType::Inner,
+            )
+            .0,
+        );
+        let first: Arc<dyn ExecutionPlan> = Arc::new(BroadcastJoinExec::try_new(
+            schema,
+            memory(left),
+            right,
+            vec![(
+                Arc::new(Column::new("lk", 0)),
+                Arc::new(Column::new("rk", 0)),
+            )],
+            JoinType::Inner,
+            JoinSide::Right,
+            broadcast,
+            None,
+            false,
+            None,
+        )?);
+        let project: Arc<dyn ExecutionPlan> = Arc::new(ProjectExec::try_new(
+            vec![
+                (Arc::new(Column::new("lk", 0)), "key".to_owned()),
+                (Arc::new(Column::new("rv", 3)), "payload".to_owned()),
+            ],
+            first,
+        )?);
+        for build_project in [false, true] {
+            let third = batch_for_lazy_chain("t", vec![0], vec![7])?;
+            let (left, right, on, payload_index, side) = if build_project {
+                (
+                    memory(third),
+                    project.clone(),
+                    vec![(
+                        Arc::new(Column::new("tk", 0)) as PhysicalExprRef,
+                        Arc::new(Column::new("key", 0)) as PhysicalExprRef,
+                    )],
+                    3,
+                    JoinSide::Right,
+                )
+            } else {
+                (
+                    project.clone(),
+                    memory(third),
+                    vec![(
+                        Arc::new(Column::new("key", 0)) as PhysicalExprRef,
+                        Arc::new(Column::new("tk", 0)) as PhysicalExprRef,
+                    )],
+                    1,
+                    JoinSide::Right,
+                )
+            };
+            let output_schema = Arc::new(
+                build_join_schema(
+                    &left.schema(),
+                    &right.schema(),
+                    &datafusion::logical_expr::JoinType::Inner,
+                )
+                .0,
+            );
+            let second = BroadcastJoinExec::try_new(
+                output_schema,
+                left,
+                right,
+                on,
+                JoinType::Inner,
+                side,
+                false,
+                None,
+                false,
+                None,
+            )?;
+            let mut output = second.execute_optimized(0, SessionContext::new().task_ctx(), None)?;
+            let mut rows = 0;
+            let mut values_seen = Vec::new();
+            let mut payloads = Vec::new();
+            while let Some(batch) = output.next().await.transpose()? {
+                let payload = batch.get_column(payload_index)?;
+                for source in &sources {
+                    assert!(Arc::strong_count(source) > 1);
+                }
+                let materialized = payload.materialize()?;
+                let values = materialized
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .expect("payload type");
+                assert!(values.iter().flatten().all(|v| (41..=43).contains(&v)));
+                values_seen.extend(values.iter().map(|value| value.expect("matched payload")));
+                rows += batch.num_rows();
+                payloads.push(payload);
+            }
+            drop(output);
+            drop(second);
+            let mut expected = (0..matched_left)
+                .flat_map(|_| {
+                    if broadcast {
+                        vec![41, 42, 43]
+                    } else {
+                        vec![41, 42]
+                    }
+                })
+                .collect::<Vec<_>>();
+            values_seen.sort_unstable();
+            expected.sort_unstable();
+            assert_eq!(values_seen, expected);
+            assert_eq!(rows, matched_left * if broadcast { 3 } else { 2 });
+            let counts = sources.iter().map(Arc::strong_count).collect::<Vec<_>>();
+            drop(payloads);
+            for (source, count) in sources.iter().zip(counts) {
+                // memoized payload columns replace their lazy source at first
+                // materialization, so dropping the column references afterwards
+                // must not change the source refcount
+                assert_eq!(Arc::strong_count(source), count);
+            }
+        }
+        Ok(())
+    }
+
+    fn batch_for_lazy_chain(prefix: &str, keys: Vec<i32>, values: Vec<i32>) -> Result<RecordBatch> {
+        RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new(format!("{prefix}k"), DataType::Int32, true),
+                Field::new(format!("{prefix}v"), DataType::Int32, true),
+            ])),
+            vec![
+                Arc::new(Int32Array::from(keys)),
+                Arc::new(Int32Array::from(values)),
+            ],
+        )
+        .map_err(Into::into)
     }
 
     #[tokio::test]

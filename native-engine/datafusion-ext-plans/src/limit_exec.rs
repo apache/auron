@@ -36,7 +36,10 @@ use datafusion::{
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug)]
 pub struct LimitExec {
@@ -115,7 +118,10 @@ impl ExecutionPlan for LimitExec {
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         if self.offset == 0 {
             execute_limit(input, self.limit, exec_ctx)
         } else {

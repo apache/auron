@@ -35,7 +35,10 @@ use datafusion::{
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug, Clone)]
 pub struct RenameColumnsExec {
@@ -128,7 +131,9 @@ impl ExecutionPlan for RenameColumnsExec {
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
-        let input = exec_ctx.execute(&self.input)?;
+        let input = materialize_optimized_stream(
+            exec_ctx.execute_optimized(&self.input, &ExecuteOptimizedProps::default())?,
+        );
         let output = input.map(move |batch| {
             let input_batch = batch?;
             let output_batch = RecordBatch::try_new_with_options(

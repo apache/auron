@@ -24,7 +24,7 @@ use std::{
 };
 
 use arrow::{
-    array::{RecordBatch, RecordBatchOptions},
+    array::RecordBatch,
     datatypes::SchemaRef,
     row::{RowConverter, SortField},
 };
@@ -56,15 +56,24 @@ use tokio::{
 };
 
 use crate::{
+    broadcast_join_exec::BroadcastJoinExec,
     common::{
-        column_pruning::{ExecuteWithColumnPruning, extend_projection_by_expr},
-        key_rows_output::{
-            RecordBatchWithKeyRows, RecordBatchWithKeyRowsStream,
-            RecordBatchWithKeyRowsStreamAdapter, SendableRecordBatchWithKeyRowsStream,
+        column_pruning::extend_projection_by_expr,
+        lazy::{
+            LazyBatchRef, LazyBatchStreamAdapter, SendableLazyBatchStream, evaluate_columns,
+            wrap_stream,
+        },
+        optimized_batch::{
+            ExecuteOptimizedProps, KeyRows, OptimizedBatch, OptimizedBatchStreamAdapter,
+            SendableOptimizedBatchStream,
         },
         timer_helper::TimerHelper,
     },
+    filter_exec::FilterExec,
+    flink::kafka_scan_exec::KafkaScanExec,
+    project_exec::ProjectExec,
     sort_exec::SortExec,
+    sort_merge_join_exec::SortMergeJoinExec,
 };
 
 pub struct ExecutionContext {
@@ -209,161 +218,212 @@ impl ExecutionContext {
         })
     }
 
-    pub fn execute_with_input_stats(
+    pub fn execute_optimized(
         self: &Arc<Self>,
         input: &Arc<dyn ExecutionPlan>,
-    ) -> Result<SendableRecordBatchStream> {
-        let executed = self.execute(input)?;
-        Ok(self.stat_input(executed))
-    }
-
-    pub fn execute_projected_with_input_stats(
-        self: &Arc<Self>,
-        input: &Arc<dyn ExecutionPlan>,
-        projection: &[usize],
-    ) -> Result<SendableRecordBatchStream> {
-        let executed = self.execute_projected(input, projection)?;
-        Ok(self.stat_input(executed))
-    }
-
-    pub fn execute(
-        self: &Arc<Self>,
-        input: &Arc<dyn ExecutionPlan>,
-    ) -> Result<SendableRecordBatchStream> {
-        input.execute(self.partition_id, self.task_ctx.clone())
-    }
-
-    pub fn execute_with_key_rows_output(
-        self: &Arc<Self>,
-        input: &Arc<dyn ExecutionPlan>,
-        keys: &[PhysicalSortExpr],
-    ) -> Result<SendableRecordBatchWithKeyRowsStream> {
-        if let Ok(sort) = downcast_any_dyn!(input, SortExec)
+        opts: &ExecuteOptimizedProps,
+    ) -> Result<SendableOptimizedBatchStream> {
+        let stream = if let Some(keys) = opts.key_rows()
+            && let Ok(sort) = downcast_any_dyn!(input, SortExec)
             && keys == sort.sort_exprs()
         {
-            return sort.execute_with_key_rows(self.partition_id, self.task_ctx.clone());
-        }
-
-        let output_schema = self.output_schema();
-        let key_converter = Arc::new(Mutex::new(RowConverter::new(
-            keys.iter()
-                .map(|k| {
-                    Ok(SortField::new_with_options(
-                        k.expr.data_type(&output_schema)?,
-                        k.options,
-                    ))
+            match opts.projection() {
+                Some(projection) => sort.execute_projected_with_key_rows(
+                    self.partition_id,
+                    self.task_ctx.clone(),
+                    projection,
+                )?,
+                None => sort.execute_with_key_rows(self.partition_id, self.task_ctx.clone())?,
+            }
+        } else {
+            let input_schema = input.schema();
+            let output_schema = match opts.projection() {
+                Some(projection) => Arc::new(input_schema.project(projection)?),
+                None => input_schema.clone(),
+            };
+            let mut projection = opts.projection().map(<[usize]>::to_vec);
+            let mut key_exprs = vec![];
+            let converter = opts
+                .key_rows()
+                .map(|keys| {
+                    key_exprs = keys
+                        .iter()
+                        .map(|key| match &mut projection {
+                            Some(projection) => extend_projection_by_expr(projection, &key.expr),
+                            None => key.expr.clone(),
+                        })
+                        .collect();
+                    let fields = keys
+                        .iter()
+                        .map(|key| {
+                            Ok(SortField::new_with_options(
+                                key.expr.data_type(&input_schema)?,
+                                key.options,
+                            ))
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok::<_, DataFusionError>(Arc::new(RowConverter::new(fields)?))
                 })
-                .collect::<Result<_>>()?,
-        )?));
-        let key_exprs = keys.iter().map(|k| k.expr.clone()).collect::<Vec<_>>();
-
-        let elapsed_compute = self.baseline_metrics.elapsed_compute().clone();
-        let input = self.execute(input)?;
-        let with_key_stream = input.map(move |r| {
-            r.and_then(|batch| {
-                let _timer = elapsed_compute.timer();
-                let keys = key_exprs
-                    .iter()
-                    .map(|k| {
-                        k.evaluate(&batch)
-                            .and_then(|r| r.into_array(batch.num_rows()))
+                .transpose()?;
+            let lazy = self.execute_lazy(input, projection.as_deref())?;
+            let output_projection = opts
+                .projection()
+                .map(|projection| (0..projection.len()).collect::<Vec<_>>());
+            let elapsed_compute = self.baseline_metrics.elapsed_compute().clone();
+            Box::pin(OptimizedBatchStreamAdapter::new(
+                lazy.map(move |batch| {
+                    batch.and_then(|batch| {
+                        let _timer = elapsed_compute.timer();
+                        let key_rows = converter
+                            .as_ref()
+                            .map(|converter| {
+                                let columns = evaluate_columns(batch.as_ref(), &key_exprs)?;
+                                let rows = if key_exprs.is_empty() {
+                                    let parser = converter.parser();
+                                    let mut rows = converter.empty_rows(batch.num_rows(), 0);
+                                    for _ in 0..batch.num_rows() {
+                                        rows.push(parser.parse(&[]));
+                                    }
+                                    rows
+                                } else {
+                                    converter.convert_columns(&columns)?
+                                };
+                                Ok::<_, DataFusionError>(KeyRows {
+                                    rows: Arc::new(rows),
+                                    rows_converter: converter.clone(),
+                                })
+                            })
+                            .transpose()?;
+                        let batch = match &output_projection {
+                            Some(projection) => batch.project(projection)?,
+                            None => batch,
+                        };
+                        Ok(OptimizedBatch::new(batch, key_rows))
                     })
-                    .collect::<Result<Vec<_>>>()?;
-                let key_rows = key_converter.lock().convert_columns(&keys)?;
-                Ok(RecordBatchWithKeyRows::new(
-                    batch,
-                    Arc::new(key_rows),
-                    key_converter.clone(),
-                ))
-            })
-        });
-        Ok(Box::pin(RecordBatchWithKeyRowsStreamAdapter::new(
-            with_key_stream,
-            output_schema,
-            keys.to_vec(),
-        )))
+                }),
+                output_schema,
+                opts.key_rows().map(<[PhysicalSortExpr]>::to_vec),
+            )) as SendableOptimizedBatchStream
+        };
+        Ok(if opts.input_stats() {
+            self.stat_input_optimized(stream)
+        } else {
+            stream
+        })
     }
 
-    pub fn execute_projected_with_key_rows_output(
+    fn execute_lazy(
         self: &Arc<Self>,
         input: &Arc<dyn ExecutionPlan>,
-        keys: &[PhysicalSortExpr],
-        projection: &[usize],
-    ) -> Result<SendableRecordBatchWithKeyRowsStream> {
-        if let Ok(sort) = downcast_any_dyn!(input, SortExec)
-            && keys == sort.sort_exprs()
-        {
-            return sort.execute_projected_with_key_rows(
+        projection: Option<&[usize]>,
+    ) -> Result<SendableLazyBatchStream> {
+        if let Ok(project) = downcast_any_dyn!(input, ProjectExec) {
+            return project.execute_optimized(
                 self.partition_id,
                 self.task_ctx.clone(),
-                projection,
+                projection.map(<[usize]>::to_vec),
             );
         }
-
-        let input_schema = input.schema();
-        let key_converter = Arc::new(Mutex::new(RowConverter::new(
-            keys.iter()
-                .map(|k| {
-                    Ok(SortField::new_with_options(
-                        k.expr.data_type(&input_schema)?,
-                        k.options,
-                    ))
-                })
-                .collect::<Result<_>>()?,
-        )?));
-
-        let projection = projection.to_vec();
-        let mut projection_with_keys = projection.clone();
-        let key_exprs = keys
-            .iter()
-            .map(|k| extend_projection_by_expr(&mut projection_with_keys, &k.expr))
-            .collect::<Vec<_>>();
-
-        let elapsed_compute = self.baseline_metrics.elapsed_compute().clone();
-        let input = self.execute_projected(input, &projection_with_keys)?;
-        let projected_schema = Arc::new(Schema::new(
-            input.schema().fields()[..projection.len()].to_vec(),
-        ));
-
-        let projected_schema_cloned = projected_schema.clone();
-        let with_key_stream = input.map(move |r| {
-            r.and_then(|mut batch| {
-                let _timer = elapsed_compute.timer();
-                let keys = key_exprs
-                    .iter()
-                    .map(|k| {
-                        k.evaluate(&batch)
-                            .and_then(|r| r.into_array(batch.num_rows()))
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                let key_rows = key_converter.lock().convert_columns(&keys)?;
-                if projection.len() < projection_with_keys.len() {
-                    batch = RecordBatch::try_new_with_options(
-                        projected_schema_cloned.clone(),
-                        batch.columns()[..projection.len()].to_vec(),
-                        &RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
-                    )?;
-                }
-                Ok(RecordBatchWithKeyRows::new(
-                    batch,
-                    Arc::new(key_rows),
-                    key_converter.clone(),
+        if let Ok(filter) = downcast_any_dyn!(input, FilterExec) {
+            return filter.execute_optimized(
+                self.partition_id,
+                self.task_ctx.clone(),
+                projection.map(<[usize]>::to_vec),
+            );
+        }
+        if let Ok(join) = downcast_any_dyn!(input, BroadcastJoinExec) {
+            return join.execute_optimized(
+                self.partition_id,
+                self.task_ctx.clone(),
+                projection.map(<[usize]>::to_vec),
+            );
+        }
+        if let Ok(join) = downcast_any_dyn!(input, SortMergeJoinExec) {
+            return Ok(wrap_stream(join.execute_optimized(
+                self.partition_id,
+                self.task_ctx.clone(),
+                projection.map(<[usize]>::to_vec),
+            )?));
+        }
+        if let Ok(scan) = downcast_any_dyn!(input, KafkaScanExec) {
+            return Ok(wrap_stream(scan.execute_optimized(
+                self.partition_id,
+                self.task_ctx.clone(),
+                projection.map(<[usize]>::to_vec),
+            )?));
+        }
+        let lazy = wrap_stream(input.execute(self.partition_id, self.task_ctx.clone())?);
+        Ok(match projection {
+            Some(projection) => {
+                let schema = Arc::new(input.schema().project(projection)?);
+                let projection = projection.to_vec();
+                Box::pin(LazyBatchStreamAdapter::new(
+                    schema,
+                    lazy.map(move |batch| batch.and_then(|batch| batch.project(&projection))),
                 ))
-            })
-        });
-        Ok(Box::pin(RecordBatchWithKeyRowsStreamAdapter::new(
-            with_key_stream,
-            projected_schema,
-            keys.to_vec(),
-        )))
+            }
+            None => lazy,
+        })
     }
 
-    pub fn execute_projected(
+    fn stat_input_optimized(
         self: &Arc<Self>,
-        input: &Arc<dyn ExecutionPlan>,
-        projection: &[usize],
-    ) -> Result<SendableRecordBatchStream> {
-        input.execute_projected(self.partition_id, self.task_ctx.clone(), projection)
+        input: SendableOptimizedBatchStream,
+    ) -> SendableOptimizedBatchStream {
+        let statistics = self.input_stat_metrics.get_or_init(|| {
+            InputBatchStatistics::from_metrics_set_and_auron_conf(
+                self.execution_plan_metrics(),
+                self.partition_id,
+            )
+            .expect("error creating input batch statistics")
+        });
+        if let Some(statistics) = statistics.clone() {
+            let schema = input.schema();
+            let keys = input.keys().map(<[PhysicalSortExpr]>::to_vec);
+            return Box::pin(OptimizedBatchStreamAdapter::new(
+                input.inspect(move |result| {
+                    if let Ok(batch) = result {
+                        let batch = batch.as_lazy_batch();
+                        statistics.input_batch_count.add(1);
+                        statistics
+                            .input_batch_mem_size
+                            .add(batch.get_estimated_materialized_mem_size());
+                        statistics.input_row_count.add(batch.num_rows());
+                    }
+                }),
+                schema,
+                keys,
+            ));
+        }
+        input
+    }
+
+    pub fn stat_input_lazy(
+        self: &Arc<Self>,
+        input: SendableLazyBatchStream,
+    ) -> SendableLazyBatchStream {
+        let statistics = self.input_stat_metrics.get_or_init(|| {
+            InputBatchStatistics::from_metrics_set_and_auron_conf(
+                self.execution_plan_metrics(),
+                self.partition_id,
+            )
+            .expect("error creating input batch statistics")
+        });
+        if let Some(statistics) = statistics.clone() {
+            return Box::pin(LazyBatchStreamAdapter::new(
+                input.schema(),
+                input.inspect(move |result| {
+                    if let Ok(batch) = result {
+                        statistics.input_batch_count.add(1);
+                        statistics
+                            .input_batch_mem_size
+                            .add(batch.get_estimated_materialized_mem_size());
+                        statistics.input_row_count.add(batch.num_rows());
+                    }
+                }),
+            ));
+        }
+        input
     }
 
     pub fn stat_input(
@@ -435,6 +495,17 @@ impl ExecutionContext {
         })
     }
 
+    pub fn output_lazy_with_sender<Fut: Future<Output = Result<()>> + Send>(
+        self: &Arc<Self>,
+        desc: &'static str,
+        output: impl FnOnce(Arc<WrappedLazyBatchSender>) -> Fut + Send + 'static,
+    ) -> SendableLazyBatchStream {
+        Box::pin(LazyBatchStreamAdapter::new(
+            self.output_schema.clone(),
+            self.output_with_sender_impl::<LazyBatchRef, _>(desc, output),
+        ))
+    }
+
     pub fn output_with_sender<Fut: Future<Output = Result<()>> + Send>(
         self: &Arc<Self>,
         desc: &'static str,
@@ -446,46 +517,17 @@ impl ExecutionContext {
         ))
     }
 
-    pub fn output_with_sender_with_key_rows<Fut: Future<Output = Result<()>> + Send>(
+    pub fn output_optimized_with_sender<Fut: Future<Output = Result<()>> + Send>(
         self: &Arc<Self>,
         desc: &'static str,
         keys: &[PhysicalSortExpr],
-        output: impl FnOnce(Arc<WrappedRecordBatchWithKeyRowsSender>) -> Fut + Send + 'static,
-    ) -> SendableRecordBatchWithKeyRowsStream {
-        struct RecordBatchWithKeyRowsStreamAdapter {
-            stream: Pin<Box<dyn Stream<Item = Result<RecordBatchWithKeyRows>> + Send>>,
-            schema: SchemaRef,
-            keys: Vec<PhysicalSortExpr>,
-        }
-
-        impl Stream for RecordBatchWithKeyRowsStreamAdapter {
-            type Item = Result<RecordBatchWithKeyRows>;
-
-            fn poll_next(
-                mut self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
-            ) -> Poll<Option<Self::Item>> {
-                self.stream.poll_next_unpin(cx)
-            }
-        }
-
-        impl RecordBatchWithKeyRowsStream for RecordBatchWithKeyRowsStreamAdapter {
-            fn schema(&self) -> SchemaRef {
-                self.schema.clone()
-            }
-
-            fn keys(&self) -> &[PhysicalSortExpr] {
-                &self.keys
-            }
-        }
-
-        Box::pin(RecordBatchWithKeyRowsStreamAdapter {
-            stream: Box::pin({
-                self.output_with_sender_impl::<RecordBatchWithKeyRows, _>(desc, output)
-            }),
-            schema: self.output_schema.clone(),
-            keys: keys.to_vec(),
-        })
+        output: impl FnOnce(Arc<WrappedOptimizedBatchSender>) -> Fut + Send + 'static,
+    ) -> SendableOptimizedBatchStream {
+        Box::pin(OptimizedBatchStreamAdapter::new(
+            self.output_with_sender_impl::<OptimizedBatch, _>(desc, output),
+            self.output_schema.clone(),
+            Some(keys.to_vec()),
+        ))
     }
 
     fn output_with_sender_impl<
@@ -629,32 +671,30 @@ fn working_senders() -> &'static Mutex<Vec<Weak<dyn WrappedSenderTrait>>> {
 }
 
 pub trait RecordBatchWithPayload: Unpin + Send + 'static {
-    fn batch(&self) -> &RecordBatch;
     fn is_empty(&self) -> bool;
 }
 
 impl RecordBatchWithPayload for RecordBatch {
-    fn batch(&self) -> &RecordBatch {
-        self
-    }
-
     fn is_empty(&self) -> bool {
         self.num_rows() == 0
     }
 }
 
-impl RecordBatchWithPayload for RecordBatchWithKeyRows {
-    fn batch(&self) -> &RecordBatch {
-        &self.batch
-    }
-
+impl RecordBatchWithPayload for OptimizedBatch {
     fn is_empty(&self) -> bool {
-        self.batch.num_rows() == 0
+        self.as_lazy_batch().num_rows() == 0
     }
 }
 
+impl RecordBatchWithPayload for LazyBatchRef {
+    fn is_empty(&self) -> bool {
+        self.num_rows() == 0
+    }
+}
+
+pub type WrappedLazyBatchSender = WrappedSender<LazyBatchRef>;
 pub type WrappedRecordBatchSender = WrappedSender<RecordBatch>;
-pub type WrappedRecordBatchWithKeyRowsSender = WrappedSender<RecordBatchWithKeyRows>;
+pub type WrappedOptimizedBatchSender = WrappedSender<OptimizedBatch>;
 
 pub trait WrappedSenderTrait: Send + Sync {
     fn as_any(&self) -> &dyn Any;
@@ -730,6 +770,13 @@ pub fn cancel_all_tasks(task_ctx: &Arc<TaskContext>) {
         .into_iter()
         .filter(|wrapped| match wrapped.upgrade() {
             Some(wrapped) if Arc::ptr_eq(&wrapped.exec_ctx().task_ctx, task_ctx) => {
+                if let Ok(wrapped) = downcast_any!(wrapped, WrappedLazyBatchSender) {
+                    wrapped
+                        .sender
+                        .try_send(df_execution_err!("task completed/cancelled"))
+                        .unwrap_or_default();
+                    return false;
+                }
                 if let Ok(wrapped) = downcast_any!(wrapped, WrappedRecordBatchSender) {
                     wrapped
                         .sender
@@ -737,7 +784,7 @@ pub fn cancel_all_tasks(task_ctx: &Arc<TaskContext>) {
                         .unwrap_or_default();
                     return false;
                 }
-                if let Ok(wrapped) = downcast_any!(wrapped, WrappedRecordBatchWithKeyRowsSender) {
+                if let Ok(wrapped) = downcast_any!(wrapped, WrappedOptimizedBatchSender) {
                     wrapped
                         .sender
                         .try_send(df_execution_err!("task completed/cancelled"))
@@ -755,12 +802,336 @@ pub fn cancel_all_tasks(task_ctx: &Arc<TaskContext>) {
 #[cfg(test)]
 mod tests {
     use arrow::{
-        array::{BinaryArray, Int64Array, StringArray},
+        array::{ArrayRef, BinaryArray, Int32Array, Int64Array, StringArray},
         datatypes::{DataType, Field},
     };
+    use datafusion::prelude::SessionContext;
     use futures::TryStreamExt;
 
     use super::*;
+    use crate::common::{
+        lazy::{ColumnBatch, LazyColumn, column},
+        optimized_batch::materialize_optimized_stream,
+        stream_exec::create_record_batch_stream_exec,
+    };
+
+    fn optimized_test_batch() -> Result<RecordBatch> {
+        Ok(RecordBatch::try_new(
+            Arc::new(Schema::new_with_metadata(
+                vec![
+                    Field::new("key", DataType::Int32, true),
+                    Field::new("value", DataType::Utf8, false),
+                ],
+                [("source".to_owned(), "optimized-test".to_owned())].into(),
+            )),
+            vec![
+                Arc::new(Int32Array::from(vec![Some(3), None, Some(1)])),
+                Arc::new(StringArray::from(vec!["c", "b", "a"])),
+            ],
+        )?)
+    }
+
+    fn optimized_test_plan(batch: RecordBatch) -> Result<Arc<dyn ExecutionPlan>> {
+        create_record_batch_stream_exec(
+            Box::pin(RecordBatchStreamAdapter::new(
+                batch.schema(),
+                futures::stream::iter(vec![Ok(batch)]),
+            )),
+            0,
+        )
+    }
+
+    fn optimized_test_keys() -> Vec<PhysicalSortExpr> {
+        vec![PhysicalSortExpr {
+            expr: Arc::new(datafusion::physical_expr::expressions::Column::new(
+                "key", 0,
+            )),
+            options: arrow::compute::SortOptions {
+                descending: true,
+                nulls_first: false,
+            },
+        }]
+    }
+
+    #[tokio::test]
+    async fn optimized_projection_keys_stats_combinations() -> Result<()> {
+        let batch = optimized_test_batch()?;
+        for projection in [None, Some(vec![1]), Some(vec![1, 1]), Some(vec![])] {
+            for keys in [None, Some(vec![]), Some(optimized_test_keys())] {
+                for with_input_stats in [false, true] {
+                    let plan = optimized_test_plan(batch.clone())?;
+                    let expected = match &projection {
+                        Some(projection) => batch.project(projection)?,
+                        None => batch.clone(),
+                    };
+                    let ctx = ExecutionContext::new(
+                        SessionContext::new().task_ctx(),
+                        0,
+                        Arc::new(Schema::empty()),
+                        &ExecutionPlanMetricsSet::new(),
+                    );
+                    let statistics =
+                        InputBatchStatistics::from_metrics_set(ctx.execution_plan_metrics(), 0);
+                    assert!(ctx.input_stat_metrics.set(Some(statistics.clone())).is_ok());
+                    let stream = ctx.execute_optimized(
+                        &plan,
+                        &ExecuteOptimizedProps::default()
+                            .with_optional_projection(projection.clone())
+                            .with_input_stats(with_input_stats)
+                            .with_optional_key_rows(keys.clone()),
+                    )?;
+                    assert_eq!(stream.schema(), expected.schema());
+                    assert_eq!(stream.keys(), keys.as_deref());
+                    let output: Vec<_> = stream.try_collect().await?;
+                    assert_eq!(output.len(), 1);
+                    let output = &output[0];
+                    assert_eq!(output.as_lazy_batch().materialize()?, expected);
+                    assert_eq!(output.key_rows().is_some(), keys.is_some());
+                    if let Some(key_rows) = output.key_rows() {
+                        assert_eq!(key_rows.rows.num_rows(), batch.num_rows());
+                        if keys.as_ref().is_some_and(|keys| !keys.is_empty()) {
+                            let expected_rows = key_rows
+                                .rows_converter
+                                .convert_columns(&[batch.column(0).clone()])?;
+                            for row in 0..batch.num_rows() {
+                                assert_eq!(key_rows.rows.row(row), expected_rows.row(row));
+                            }
+                        } else {
+                            assert!(key_rows.rows.iter().all(|row| row.as_ref().is_empty()));
+                        }
+                    }
+                    assert_eq!(
+                        statistics.input_batch_count.value(),
+                        usize::from(with_input_stats)
+                    );
+                    assert_eq!(
+                        statistics.input_row_count.value(),
+                        if with_input_stats {
+                            batch.num_rows()
+                        } else {
+                            0
+                        }
+                    );
+                    assert_eq!(
+                        statistics.input_batch_mem_size.value(),
+                        if with_input_stats {
+                            output.as_lazy_batch().get_estimated_materialized_mem_size()
+                        } else {
+                            0
+                        }
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn optimized_sort_shortcut_preserves_keys_and_final_stats() -> Result<()> {
+        auron_memmgr::MemManager::init(100);
+        let batch = optimized_test_batch()?;
+        for projection in [None, Some(vec![1]), Some(vec![])] {
+            let keys = optimized_test_keys();
+            let sort: Arc<dyn ExecutionPlan> = Arc::new(SortExec::new(
+                optimized_test_plan(batch.clone())?,
+                keys.clone(),
+                None,
+                0,
+            ));
+            let ctx = ExecutionContext::new(
+                SessionContext::new().task_ctx(),
+                0,
+                sort.schema(),
+                &ExecutionPlanMetricsSet::new(),
+            );
+            let statistics =
+                InputBatchStatistics::from_metrics_set(ctx.execution_plan_metrics(), 0);
+            assert!(ctx.input_stat_metrics.set(Some(statistics.clone())).is_ok());
+            let stream = ctx.execute_optimized(
+                &sort,
+                &ExecuteOptimizedProps::default()
+                    .with_optional_projection(projection.clone())
+                    .with_input_stats(true)
+                    .with_key_rows(keys.clone()),
+            )?;
+            let expected_schema = match &projection {
+                Some(projection) => Arc::new(batch.schema().project(projection)?),
+                None => batch.schema(),
+            };
+            assert_eq!(stream.schema(), expected_schema);
+            assert_eq!(stream.keys(), Some(keys.as_slice()));
+            let output: Vec<_> = stream.try_collect().await?;
+            let mut rows = 0;
+            let mut bytes = 0;
+            for output in &output {
+                let batch = output.as_lazy_batch();
+                assert_eq!(batch.schema(), expected_schema);
+                rows += batch.num_rows();
+                bytes += batch.get_estimated_materialized_mem_size();
+                let keys = output.key_rows().expect("sort must return key rows");
+                assert_eq!(keys.rows.num_rows(), batch.num_rows());
+                assert!(
+                    keys.rows
+                        .iter()
+                        .zip(keys.rows.iter().skip(1))
+                        .all(|(a, b)| a <= b)
+                );
+            }
+            assert_eq!(rows, batch.num_rows());
+            assert_eq!(statistics.input_row_count.value(), rows);
+            assert_eq!(statistics.input_batch_count.value(), output.len());
+            assert_eq!(statistics.input_batch_mem_size.value(), bytes);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn optimized_smj_supports_repeated_projections_and_key_rows() -> Result<()> {
+        use datafusion::physical_plan::test::TestMemoryExec;
+
+        auron_memmgr::MemManager::init(100);
+        let left_batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("left_key", DataType::Int32, false),
+                Field::new("left_value", DataType::Utf8, false),
+            ])),
+            vec![
+                Arc::new(Int32Array::from(vec![1, 2])),
+                Arc::new(StringArray::from(vec!["a", "b"])),
+            ],
+        )?;
+        let right_batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("right_key", DataType::Int32, false),
+                Field::new("right_value", DataType::Utf8, false),
+            ])),
+            vec![
+                Arc::new(Int32Array::from(vec![1, 2])),
+                Arc::new(StringArray::from(vec!["c", "d"])),
+            ],
+        )?;
+        let left: Arc<dyn ExecutionPlan> = Arc::new(TestMemoryExec::try_new(
+            &[vec![left_batch.clone()]],
+            left_batch.schema(),
+            None,
+        )?);
+        let right: Arc<dyn ExecutionPlan> = Arc::new(TestMemoryExec::try_new(
+            &[vec![right_batch.clone()]],
+            right_batch.schema(),
+            None,
+        )?);
+        let schema = Arc::new(Schema::new_with_metadata(
+            left_batch
+                .schema()
+                .fields()
+                .iter()
+                .chain(right_batch.schema().fields().iter())
+                .cloned()
+                .collect::<Vec<_>>(),
+            [("source".to_owned(), "smj-projection".to_owned())].into(),
+        ));
+        let plan: Arc<dyn ExecutionPlan> = Arc::new(SortMergeJoinExec::try_new(
+            schema.clone(),
+            left,
+            right,
+            vec![(
+                Arc::new(datafusion::physical_expr::expressions::Column::new(
+                    "left_key", 0,
+                )),
+                Arc::new(datafusion::physical_expr::expressions::Column::new(
+                    "right_key",
+                    0,
+                )),
+            )],
+            crate::joins::join_utils::JoinType::Inner,
+            None,
+            vec![arrow::compute::SortOptions::default()],
+        )?);
+        let expected = RecordBatch::try_new(
+            schema,
+            left_batch
+                .columns()
+                .iter()
+                .chain(right_batch.columns())
+                .cloned()
+                .collect(),
+        )?;
+        let ctx = ExecutionContext::new(
+            SessionContext::new().task_ctx(),
+            0,
+            plan.schema(),
+            &ExecutionPlanMetricsSet::new(),
+        );
+        for projection in [
+            vec![1],
+            vec![3],
+            vec![1, 1],
+            vec![3, 1, 3, 0],
+            vec![],
+            vec![0, 1, 2, 3],
+        ] {
+            for with_keys in [false, true] {
+                let mut props =
+                    ExecuteOptimizedProps::default().with_projection(projection.clone());
+                if with_keys {
+                    props = props.with_key_rows(vec![PhysicalSortExpr::new(
+                        Arc::new(datafusion::physical_expr::expressions::Column::new(
+                            "left_key", 0,
+                        )),
+                        arrow::compute::SortOptions::default(),
+                    )]);
+                }
+                let stream = ctx.execute_optimized(&plan, &props)?;
+                assert_eq!(stream.schema(), expected.project(&projection)?.schema());
+                let batches: Vec<_> = stream.try_collect().await?;
+                assert_eq!(batches.len(), 1);
+                assert_eq!(
+                    batches[0].as_lazy_batch().materialize()?,
+                    expected.project(&projection)?
+                );
+                assert_eq!(batches[0].key_rows().is_some(), with_keys);
+                if let Some(keys) = batches[0].key_rows() {
+                    let expected_rows = keys
+                        .rows_converter
+                        .convert_columns(&[left_batch.column(0).clone()])?;
+                    assert_eq!(keys.rows.row(0), expected_rows.row(0));
+                    assert_eq!(keys.rows.row(1), expected_rows.row(1));
+                }
+            }
+        }
+        assert!(
+            ctx.execute_optimized(
+                &plan,
+                &ExecuteOptimizedProps::default().with_projection(vec![4])
+            )
+            .is_err()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn optimized_materialization_preserves_empty_projection_rows() -> Result<()> {
+        let batch = optimized_test_batch()?;
+        let plan = optimized_test_plan(batch.clone())?;
+        let ctx = ExecutionContext::new(
+            SessionContext::new().task_ctx(),
+            0,
+            batch.schema(),
+            &ExecutionPlanMetricsSet::new(),
+        );
+        let output: Vec<_> = materialize_optimized_stream(
+            ctx.execute_optimized(
+                &plan,
+                &ExecuteOptimizedProps::default()
+                    .with_projection(vec![])
+                    .with_key_rows(optimized_test_keys()),
+            )?,
+        )
+        .try_collect()
+        .await?;
+        assert_eq!(output, vec![batch.project(&[])?]);
+        Ok(())
+    }
 
     async fn coalesce(batches: Vec<RecordBatch>) -> Result<Vec<RecordBatch>> {
         let schema = batches[0].schema();
@@ -865,6 +1236,102 @@ mod tests {
         let expected = arrow::compute::concat_batches(&first.schema(), &input)?;
         let output = coalesce(input).await?;
         assert_eq!(output, vec![expected]);
+        Ok(())
+    }
+
+    fn sampled_batch() -> Result<LazyBatchRef> {
+        let value = "x".repeat(datafusion_ext_commons::suggested_batch_mem_size() / 1024 + 1);
+        let source: ArrayRef = Arc::new(StringArray::from(vec![value.as_str(); 1024]));
+        let selected = column(source).take_lazy(&Int32Array::from(vec![0]))?;
+        ColumnBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("value", arrow::datatypes::DataType::Utf8, false),
+                Field::new("duplicate", arrow::datatypes::DataType::Utf8, false),
+            ])),
+            vec![selected.clone(), selected],
+            1,
+        )
+    }
+
+    #[tokio::test]
+    async fn optimized_sender_keeps_nonempty_zero_column_batches() -> Result<()> {
+        let source = optimized_test_batch()?;
+        let batch: LazyBatchRef = Arc::new(source.project(&[])?);
+        let ctx = ExecutionContext::new(
+            SessionContext::new().task_ctx(),
+            0,
+            batch.schema(),
+            &ExecutionPlanMetricsSet::new(),
+        );
+        let expected = batch.clone();
+        let stream =
+            ctx.output_optimized_with_sender("OptimizedTest", &[], move |sender| async move {
+                sender
+                    .send(OptimizedBatch::new(
+                        Arc::new(RecordBatch::new_empty(batch.schema())),
+                        None,
+                    ))
+                    .await;
+                sender.send(OptimizedBatch::new(batch, None)).await;
+                Ok(())
+            });
+        assert_eq!(stream.keys(), Some([].as_slice()));
+        let output: Vec<_> = stream.try_collect().await?;
+        assert_eq!(output.len(), 1);
+        assert!(Arc::ptr_eq(output[0].as_lazy_batch(), &expected));
+        assert_eq!(output[0].as_lazy_batch().num_rows(), source.num_rows());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn optimized_stats_preserve_lazy_estimates_without_materialization() -> Result<()> {
+        let batch = sampled_batch()?;
+        assert!(!batch.get_column(0)?.is_materialized());
+        let expected = batch.get_estimated_materialized_mem_size();
+        let ctx = ExecutionContext::new(
+            SessionContext::new().task_ctx(),
+            0,
+            batch.schema(),
+            &ExecutionPlanMetricsSet::new(),
+        );
+        let statistics = InputBatchStatistics::from_metrics_set(ctx.execution_plan_metrics(), 0);
+        assert!(ctx.input_stat_metrics.set(Some(statistics.clone())).is_ok());
+        let stream = Box::pin(OptimizedBatchStreamAdapter::new(
+            futures::stream::iter(vec![Ok(OptimizedBatch::new(batch.clone(), None))]),
+            batch.schema(),
+            None,
+        ));
+        let output: Vec<_> = ctx.stat_input_optimized(stream).try_collect().await?;
+        assert_eq!(output.len(), 1);
+        assert!(Arc::ptr_eq(output[0].as_lazy_batch(), &batch));
+        assert!(!batch.get_column(0)?.is_materialized());
+        assert_eq!(statistics.input_batch_mem_size.value(), expected);
+        assert_eq!(statistics.input_batch_count.value(), 1);
+        assert_eq!(statistics.input_row_count.value(), batch.num_rows());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn lazy_input_metrics_record_materialized_estimates() -> Result<()> {
+        let batch = sampled_batch()?;
+        let ctx = ExecutionContext::new(
+            SessionContext::new().task_ctx(),
+            0,
+            batch.schema(),
+            &ExecutionPlanMetricsSet::new(),
+        );
+        let statistics = InputBatchStatistics::from_metrics_set(ctx.execution_plan_metrics(), 0);
+        assert!(ctx.input_stat_metrics.set(Some(statistics.clone())).is_ok());
+        let expected = batch.get_estimated_materialized_mem_size();
+        let stream = Box::pin(LazyBatchStreamAdapter::new(
+            batch.schema(),
+            futures::stream::iter(vec![Ok(batch)]),
+        ));
+        let output: Vec<_> = ctx.stat_input_lazy(stream).try_collect().await?;
+        assert_eq!(output.len(), 1);
+        assert_eq!(statistics.input_batch_mem_size.value(), expected);
+        assert_eq!(statistics.input_batch_count.value(), 1);
+        assert_eq!(statistics.input_row_count.value(), 1);
         Ok(())
     }
 }

@@ -49,7 +49,10 @@ use futures::StreamExt;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug)]
 pub struct ParquetSinkExec {
@@ -147,7 +150,10 @@ impl ExecutionPlan for ParquetSinkExec {
             &self.props,
         )?);
 
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         execute_parquet_sink(parquet_sink_context, input, exec_ctx)
     }
 

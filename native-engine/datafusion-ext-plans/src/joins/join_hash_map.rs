@@ -22,12 +22,16 @@ use std::{
 
 use arrow::{
     array::{
-        Array, ArrayRef, AsArray, BinaryBuilder, RecordBatch, RecordBatchOptions, UInt32Array,
-        new_null_array,
+        Array, ArrayRef, AsArray, BinaryBuilder, Int32Array, RecordBatch, RecordBatchOptions,
+        UInt32Array, new_null_array,
     },
+    buffer::ScalarBuffer,
     datatypes::{DataType, Field, FieldRef, Schema, SchemaRef},
 };
-use datafusion::{common::Result, physical_expr::PhysicalExprRef};
+use datafusion::{
+    common::{DataFusionError, Result},
+    physical_expr::PhysicalExprRef,
+};
 use datafusion_ext_commons::{
     SliceAsRawBytes, UninitializedInit,
     arrow::{
@@ -44,6 +48,35 @@ use fearless_simd::{Level, Simd, dispatch, prelude::*, u32x8};
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use unchecked_index::UncheckedIndex;
+
+use crate::common::lazy::{
+    LazyBatchRef, LazyColumnRef, concat_batches_lazy, evaluate_columns, take_columns,
+    take_lazy_columns,
+};
+
+/// Zero-copy reinterpret of u32 global row ids as i32 row indices. Row
+/// spaces are int-bounded (Spark row ids), so values always fit.
+pub fn i32_row_indices(indices: &UInt32Array) -> Int32Array {
+    Int32Array::new(
+        ScalarBuffer::new(indices.values().inner().clone(), 0, indices.len()),
+        indices.nulls().cloned(),
+    )
+}
+
+fn is_identity_u32(indices: &UInt32Array, len: usize) -> bool {
+    if indices.len() != len || indices.null_count() != 0 {
+        return false;
+    }
+    // cheap first/last rejection before the full scan
+    if len > 0 && (indices.value(0) != 0 || indices.value(len - 1) != (len - 1) as u32) {
+        return false;
+    }
+    indices
+        .values()
+        .iter()
+        .enumerate()
+        .all(|(row, &index)| index as usize == row)
+}
 
 // empty:  lead=0, value=0
 // range:  lead=0, value=start, mapped_indices[start-1]=len
@@ -339,15 +372,11 @@ pub(crate) struct JoinBuildRows {
 }
 
 pub struct JoinHashMap {
-    rows: JoinBuildRows,
+    data_batches: Vec<LazyBatchRef>,
+    build_batch: LazyBatchRef,
+    row_offsets: Vec<u32>,
     key_columns: Vec<ArrayRef>,
     table: Table,
-}
-
-impl std::borrow::Borrow<JoinBuildRows> for JoinHashMap {
-    fn borrow(&self) -> &JoinBuildRows {
-        &self.rows
-    }
 }
 
 // safety: JoinHashMap is Send + Sync
@@ -360,6 +389,17 @@ impl Debug for JoinHashMap {
     }
 }
 
+fn compute_row_offsets(data_batches: &[LazyBatchRef]) -> Vec<u32> {
+    let mut offsets = Vec::with_capacity(data_batches.len() + 1);
+    let mut acc = 0u32;
+    offsets.push(acc);
+    for batch in data_batches {
+        acc += batch.num_rows() as u32;
+        offsets.push(acc);
+    }
+    offsets
+}
+
 /// Evaluate `key_exprs` against every batch in `data_batches` and merge each
 /// key column into a single flat `ArrayRef` spanning all batches (using the
 /// same global row-id numbering as `row_offsets`).
@@ -370,28 +410,26 @@ impl Debug for JoinHashMap {
 /// still applies here. This is treated as an out-of-scope, extremely rare
 /// edge case (real-world join keys are not multi-GB blobs).
 fn evaluate_merged_key_columns(
-    data_batches: &[RecordBatch],
+    data_batches: &[LazyBatchRef],
     key_exprs: &[PhysicalExprRef],
 ) -> Result<Vec<ArrayRef>> {
-    if data_batches.len() == 1 {
-        return key_exprs
-            .iter()
-            .map(|expr| {
-                Ok(expr
-                    .evaluate(&data_batches[0])?
-                    .into_array(data_batches[0].num_rows())?)
-            })
-            .collect();
-    }
-    key_exprs
+    let per_batch = data_batches
         .iter()
-        .map(|expr| {
-            let per_batch: Vec<ArrayRef> = data_batches
+        .map(|batch| evaluate_columns(batch.as_ref(), key_exprs))
+        .collect::<Result<Vec<_>>>()?;
+    if per_batch.len() == 1 {
+        return per_batch
+            .into_iter()
+            .next()
+            .ok_or_else(|| DataFusionError::Internal("missing join keys".to_owned()));
+    }
+    (0..key_exprs.len())
+        .map(|i| {
+            let arrays = per_batch
                 .iter()
-                .map(|batch| Ok(expr.evaluate(batch)?.into_array(batch.num_rows())?))
-                .collect::<Result<_>>()?;
-            let data_type = per_batch[0].data_type().clone();
-            Ok(coalesce_arrays_unchecked(&data_type, &per_batch))
+                .map(|cols| cols[i].clone())
+                .collect::<Vec<_>>();
+            Ok(coalesce_arrays_unchecked(arrays[0].data_type(), &arrays))
         })
         .collect()
 }
@@ -412,11 +450,37 @@ impl JoinHashMap {
         data_batches: Vec<RecordBatch>,
         key_exprs: &[PhysicalExprRef],
     ) -> Result<Self> {
-        let rows = JoinBuildRows::from_batches(data_batches)?;
-        let key_columns = evaluate_merged_key_columns(rows.data_batches(), key_exprs)?;
-        let table = Table::create_from_key_columns(rows.num_rows(), &key_columns)?;
+        Self::create_from_lazy_batches(
+            data_batches
+                .into_iter()
+                .map(|batch| Arc::new(batch) as LazyBatchRef)
+                .collect(),
+            key_exprs,
+        )
+    }
+
+    pub fn create_from_lazy_batches(
+        data_batches: Vec<LazyBatchRef>,
+        key_exprs: &[PhysicalExprRef],
+    ) -> Result<Self> {
+        if data_batches.is_empty() {
+            return Err(DataFusionError::Execution(
+                "join hash map requires at least one batch to determine its schema".to_string(),
+            ));
+        }
+        let row_offsets = compute_row_offsets(&data_batches);
+        let num_rows = *row_offsets
+            .last()
+            .ok_or_else(|| DataFusionError::Internal("missing join row offsets".to_owned()))?
+            as usize;
+        let key_columns = evaluate_merged_key_columns(&data_batches, key_exprs)?;
+        let table = Table::create_from_key_columns(num_rows, &key_columns)?;
+
+        let build_batch = concat_batches_lazy(data_batches[0].schema(), &data_batches)?;
         Ok(Self {
-            rows,
+            data_batches,
+            build_batch,
+            row_offsets,
             key_columns,
             table,
         })
@@ -429,8 +493,14 @@ impl JoinHashMap {
     ) -> Result<Self> {
         let table =
             Table::create_from_key_columns_and_hashes(data_batch.num_rows(), &key_columns, hashes)?;
+        let data_batches = vec![Arc::new(data_batch) as LazyBatchRef];
+        let row_offsets = compute_row_offsets(&data_batches);
+
+        let build_batch = concat_batches_lazy(data_batches[0].schema(), &data_batches)?;
         Ok(Self {
-            rows: JoinBuildRows::from_batches(vec![data_batch])?,
+            data_batches,
+            build_batch,
+            row_offsets,
             key_columns,
             table,
         })
@@ -488,9 +558,17 @@ impl JoinHashMap {
         let table_bytes = table_bytes.expect("first hash-map-batch must carry table bytes");
         let table = Table::read_from(&mut Cursor::new(table_bytes))?;
 
+        let data_batches = data_batches
+            .into_iter()
+            .map(|batch| Arc::new(batch) as LazyBatchRef)
+            .collect::<Vec<_>>();
+        let row_offsets = compute_row_offsets(&data_batches);
         let key_columns = evaluate_merged_key_columns(&data_batches, key_exprs)?;
+        let build_batch = concat_batches_lazy(data_batches[0].schema(), &data_batches)?;
         Ok(Self {
-            rows: JoinBuildRows::from_batches(data_batches)?,
+            data_batches,
+            build_batch,
+            row_offsets,
             key_columns,
             table,
         })
@@ -539,9 +617,10 @@ impl JoinHashMap {
         let mut table_data = vec![];
         self.table.write_to(&mut table_data)?;
 
-        let total_batches = self.rows.data_batches.len();
+        let total_batches = self.data_batches.len();
         let mut output = Vec::with_capacity(total_batches);
-        for (i, data_batch) in self.rows.data_batches.into_iter().enumerate() {
+        for (i, data_batch) in self.data_batches.into_iter().enumerate() {
+            let data_batch = data_batch.materialize()?;
             let is_last_batch = i == total_batches - 1;
             let mut metadata_col_builder = BinaryBuilder::new();
             for j in 0..data_batch.num_rows() {
@@ -585,12 +664,21 @@ impl JoinHashMap {
         Ok(output)
     }
 
+    pub(crate) fn materialized_build_rows(&self) -> Result<JoinBuildRows> {
+        let data_batches = self
+            .data_batches
+            .iter()
+            .map(|batch| batch.materialize())
+            .collect::<Result<Vec<_>>>()?;
+        JoinBuildRows::from_batches(data_batches)
+    }
+
     pub fn data_schema(&self) -> SchemaRef {
-        self.rows.data_batches[0].schema()
+        self.data_batches[0].schema()
     }
 
     pub fn num_rows(&self) -> usize {
-        self.rows.num_rows()
+        *self.row_offsets.last().expect("row_offsets non-empty") as usize
     }
 
     pub fn key_columns(&self) -> &[ArrayRef] {
@@ -622,7 +710,31 @@ impl JoinHashMap {
         col_indices: &[usize],
         row_indices: impl Into<UInt32Array>,
     ) -> Result<Vec<ArrayRef>> {
-        self.rows.gather_columns(col_indices, row_indices)
+        let row_indices = row_indices.into();
+        let columns = col_indices
+            .iter()
+            .map(|&index| self.build_batch.get_column(index))
+            .collect::<Result<Vec<_>>>()?;
+        take_columns(&columns, &i32_row_indices(&row_indices))
+    }
+
+    pub fn gather_lazy_columns(
+        &self,
+        col_indices: &[usize],
+        row_indices: impl Into<UInt32Array>,
+    ) -> Result<Vec<LazyColumnRef>> {
+        let row_indices = row_indices.into();
+        if is_identity_u32(&row_indices, self.num_rows()) {
+            return col_indices
+                .iter()
+                .map(|&index| self.build_batch.get_column(index))
+                .collect();
+        }
+        let indices = i32_row_indices(&row_indices);
+        let selected = self.build_batch.take(Some(col_indices), &indices)?;
+        (0..col_indices.len())
+            .map(|index| selected.get_column(index))
+            .collect()
     }
 }
 
@@ -1018,12 +1130,29 @@ pub fn split_hash_map_batch_by_group(batch: RecordBatch) -> Result<Vec<(i32, Rec
 #[cfg(test)]
 mod tests {
     use arrow::{
-        array::Int32Array,
+        array::{Int32Array, StringArray},
         datatypes::{DataType, Field, Schema},
     };
     use datafusion::physical_expr::expressions::Column;
 
     use super::*;
+    use crate::common::lazy::{ColumnBatch, column};
+
+    #[test]
+    fn is_identity_u32_rejects_quickly_and_exactly() {
+        assert!(is_identity_u32(&UInt32Array::from(vec![0, 1, 2]), 3));
+        assert!(is_identity_u32(&UInt32Array::from(Vec::<u32>::new()), 0));
+        // first mismatch
+        assert!(!is_identity_u32(&UInt32Array::from(vec![1, 1, 2]), 3));
+        // last mismatch
+        assert!(!is_identity_u32(&UInt32Array::from(vec![0, 1, 3]), 3));
+        // middle mismatch only
+        assert!(!is_identity_u32(&UInt32Array::from(vec![0, 5, 2]), 3));
+        // length mismatch
+        assert!(!is_identity_u32(&UInt32Array::from(vec![0, 1]), 3));
+        // nulls are never identity
+        assert!(!is_identity_u32(&UInt32Array::from(vec![Some(0), None]), 2));
+    }
 
     fn int32_data_batch(values: Vec<i32>) -> RecordBatch {
         let schema = Arc::new(Schema::new(vec![Field::new("k", DataType::Int32, true)]));
@@ -1064,6 +1193,76 @@ mod tests {
                 .to_string()
                 .contains("u32 row index limit")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn loading_broadcast_batches_preserves_multiple_sources() -> Result<()> {
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("k", DataType::Int32, true),
+            Field::new("payload", DataType::Utf8, true),
+        ]));
+        let sources: [ArrayRef; 2] = [
+            Arc::new(StringArray::from(vec![Some("a"), None])),
+            Arc::new(StringArray::from(vec![Some("c"), Some("d")])),
+        ];
+        let data_batches = vec![
+            RecordBatch::try_new(
+                schema.clone(),
+                vec![Arc::new(Int32Array::from(vec![10, 20])), sources[0].clone()],
+            )?,
+            RecordBatch::try_new(
+                schema,
+                vec![Arc::new(Int32Array::from(vec![30, 40])), sources[1].clone()],
+            )?,
+        ];
+        let batches = JoinHashMap::create_from_data_batches(
+            data_batches.clone(),
+            std::slice::from_ref(&key),
+        )?
+        .into_hash_map_batches(None)?;
+        assert_eq!(batches.len(), 2);
+        let map = JoinHashMap::load_from_hash_map_batches(batches, std::slice::from_ref(&key))?;
+        assert_eq!(map.data_batches.len(), 2);
+        assert!(!map.build_batch.is_materialized());
+        assert!(!map.gather_lazy_columns(&[1], vec![0, 1, 2, 3])?[0].is_materialized());
+        for (batch, source) in map.data_batches.iter().zip(&sources) {
+            assert_eq!(
+                batch.get_column(1)?.materialize()?.to_data(),
+                source.to_data()
+            );
+        }
+        let counts = sources.iter().map(Arc::strong_count).collect::<Vec<_>>();
+        let first = map.gather_lazy_columns(&[1], vec![3, 0])?;
+        for (source, count) in sources.iter().zip(counts) {
+            assert_eq!(Arc::strong_count(source), count);
+        }
+        let second = map.gather_lazy_columns(&[1], vec![2, 1])?;
+        let counts = sources.iter().map(Arc::strong_count).collect::<Vec<_>>();
+        let taken = take_lazy_columns(&first, &Int32Array::from(vec![Some(1), None, Some(0)]))?;
+
+        for (source, count) in sources.iter().zip(counts) {
+            assert_eq!(Arc::strong_count(source), count);
+        }
+        drop(map);
+        assert_eq!(
+            first[0].materialize()?.as_string::<i32>(),
+            &StringArray::from(vec!["d", "a"])
+        );
+        assert_eq!(
+            second[0].materialize()?.as_string::<i32>(),
+            &StringArray::from(vec![Some("c"), None])
+        );
+        assert_eq!(
+            taken[0].materialize()?.as_string::<i32>(),
+            &StringArray::from(vec![Some("a"), None, Some("d")])
+        );
+        let hybrid =
+            JoinHashMap::create_from_data_batches(data_batches, std::slice::from_ref(&key))?
+                .into_hash_map_batches(Some(1))?;
+        let hybrid = JoinHashMap::load_from_hash_map_batches(hybrid, &[key])?;
+        assert_eq!(hybrid.data_batches.len(), 2);
         Ok(())
     }
 
@@ -1161,6 +1360,215 @@ mod tests {
         let columns = map.gather_columns(&[], vec![Some(0), Some(2), None])?;
         assert!(columns.is_empty());
         assert_eq!(map.num_rows(), 3);
+        Ok(())
+    }
+
+    #[test]
+    fn gather_plain_multi_batch_columns_share_output_keys() -> Result<()> {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("k", DataType::Int32, true),
+            Field::new("payload", DataType::Utf8, true),
+        ]));
+        let batches = vec![
+            RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int32Array::from(vec![10, 20])),
+                    Arc::new(StringArray::from(vec!["a", "b"])),
+                ],
+            )?,
+            RecordBatch::try_new(
+                schema,
+                vec![
+                    Arc::new(Int32Array::from(vec![30])),
+                    Arc::new(StringArray::from(vec!["c"])),
+                ],
+            )?,
+        ];
+        let sources = batches
+            .iter()
+            .map(|batch| batch.columns().to_vec())
+            .collect::<Vec<_>>();
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let map = JoinHashMap::create_from_data_batches(batches, &[key])?;
+        for _ in 0..3 {
+            let counts = sources
+                .iter()
+                .map(|sources| sources.iter().map(Arc::strong_count).collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+            let output =
+                map.gather_lazy_columns(&[0, 1], UInt32Array::from(vec![Some(2), None, Some(0)]))?;
+            for (batch_sources, counts) in sources.iter().zip(counts) {
+                for (source, count) in batch_sources.iter().zip(counts) {
+                    assert_eq!(Arc::strong_count(source), count);
+                }
+            }
+            assert_eq!(
+                output[0]
+                    .materialize()?
+                    .as_primitive::<arrow::datatypes::Int32Type>(),
+                &Int32Array::from(vec![Some(30), None, Some(10)])
+            );
+            assert_eq!(
+                output[1].materialize()?.as_string::<i32>(),
+                &StringArray::from(vec![Some("c"), None, Some("a")])
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gather_identity_reuses_payload_buffers() -> Result<()> {
+        let batch = int32_data_batch(vec![10, 20, 30]);
+        let source = batch.column(0).clone();
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let map = JoinHashMap::create_from_data_batch(batch, &[key])?;
+        let cols = map.gather_lazy_columns(&[0, 0], vec![0, 1, 2])?;
+        for col in cols {
+            assert!(Arc::ptr_eq(&source, &col.materialize()?));
+        }
+        for indices in [
+            UInt32Array::from(vec![2, 1, 0]),
+            UInt32Array::from(vec![Some(0), None, Some(2)]),
+        ] {
+            assert_eq!(
+                map.gather_lazy_columns(&[0], indices.clone())?[0]
+                    .materialize()?
+                    .to_data(),
+                arrow::compute::take(source.as_ref(), &indices, None)?.to_data()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gather_lazy_columns_preserves_shared_source() -> Result<()> {
+        let source: ArrayRef = Arc::new(Int32Array::from(vec![Some(10), None, Some(30), Some(40)]));
+        let schema = int32_data_batch(vec![]).schema();
+        let batches = vec![
+            ColumnBatch::try_new(
+                schema.clone(),
+                vec![column(source.clone()).take_lazy(&Int32Array::from(vec![
+                    Some(2),
+                    None,
+                    Some(0),
+                ]))?],
+                3,
+            )?,
+            ColumnBatch::try_new(
+                schema,
+                vec![column(source.clone()).take_lazy(&Int32Array::from(vec![3, 1]))?],
+                2,
+            )?,
+        ];
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let map = JoinHashMap::create_from_lazy_batches(batches, &[key])?;
+        let gathered = map.gather_lazy_columns(
+            &[0],
+            UInt32Array::from(vec![Some(3), Some(0), None, Some(1), Some(4), Some(2)]),
+        )?;
+        drop(map);
+        assert_eq!(Arc::strong_count(&source), 1);
+        assert_eq!(
+            gathered[0]
+                .materialize()?
+                .as_primitive::<arrow::datatypes::Int32Type>(),
+            &Int32Array::from(vec![Some(40), Some(30), None, None, None, Some(10)]),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn gather_lazy_columns_retains_source_metadata() -> Result<()> {
+        let source: ArrayRef = Arc::new(Int32Array::from(vec![10, 20]));
+        let schema = int32_data_batch(vec![]).schema();
+        let batches = vec![
+            ColumnBatch::try_new(schema.clone(), vec![column(source.clone())], 2)?,
+            ColumnBatch::try_new(
+                schema,
+                vec![column(source.clone()).take_lazy(&Int32Array::from(vec![1, 0]))?],
+                2,
+            )?,
+            Arc::new(int32_data_batch(vec![30])) as LazyBatchRef,
+        ];
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let map = JoinHashMap::create_from_lazy_batches(batches, &[key])?;
+        let gathered = map.gather_lazy_columns(&[0], UInt32Array::from(vec![0, 2, 3]))?;
+        drop(map);
+        assert_eq!(Arc::strong_count(&source), 1);
+        assert_eq!(
+            gathered[0]
+                .materialize()?
+                .as_primitive::<arrow::datatypes::Int32Type>(),
+            &Int32Array::from(vec![10, 20, 10])
+        );
+        drop(gathered);
+        assert_eq!(Arc::strong_count(&source), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn gather_lazy_columns_interleaves_selected_sources() -> Result<()> {
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        let batches = vec![
+            int32_data_batch(vec![10, 20]),
+            int32_data_batch(vec![30, 40]),
+        ];
+        let sources = batches
+            .iter()
+            .map(|batch| batch.column(0).clone())
+            .collect::<Vec<_>>();
+        let map = JoinHashMap::create_from_data_batches(batches, &[key])?;
+        let indices = UInt32Array::from(vec![Some(3), None, Some(0), Some(2), Some(3)]);
+        let gathered = map.gather_lazy_columns(&[0], indices.clone())?;
+
+        for source in &sources {
+            assert!(Arc::strong_count(source) > 1);
+        }
+        let expected = Int32Array::from(vec![Some(40), None, Some(10), Some(30), Some(40)]);
+        assert_eq!(
+            gathered[0]
+                .materialize()?
+                .as_primitive::<arrow::datatypes::Int32Type>(),
+            &expected
+        );
+        assert_eq!(
+            map.gather_columns(&[0], indices)?[0].as_primitive::<arrow::datatypes::Int32Type>(),
+            &expected
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn gather_lazy_columns_handles_empty_and_null_only_selections() -> Result<()> {
+        let key: PhysicalExprRef = Arc::new(Column::new("k", 0));
+        for batches in [
+            vec![int32_data_batch(vec![])],
+            vec![int32_data_batch(vec![]), int32_data_batch(vec![])],
+            vec![
+                int32_data_batch(vec![]),
+                int32_data_batch(vec![10]),
+                int32_data_batch(vec![]),
+            ],
+        ] {
+            let map = JoinHashMap::create_from_data_batches(batches, std::slice::from_ref(&key))?;
+            let empty = map.gather_lazy_columns(&[0], UInt32Array::from(Vec::<u32>::new()))?;
+            assert_eq!(empty[0].materialize()?.len(), 0);
+            assert!(
+                map.gather_lazy_columns(&[], UInt32Array::from(vec![None]))?
+                    .is_empty()
+            );
+            let nulls = map.gather_lazy_columns(&[0], UInt32Array::from(vec![None, None]))?;
+            assert_eq!(nulls[0].materialize()?.null_count(), 2);
+            if !map.is_empty() {
+                assert_eq!(
+                    map.gather_columns(&[0], UInt32Array::from(vec![0]))?[0]
+                        .as_primitive::<arrow::datatypes::Int32Type>(),
+                    &Int32Array::from(vec![10])
+                );
+            }
+        }
+        assert!(JoinHashMap::create_from_lazy_batches(vec![], &[key]).is_err());
         Ok(())
     }
 

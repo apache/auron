@@ -37,7 +37,11 @@ use futures::{StreamExt, TryStreamExt, stream::once};
 use jni::objects::{GlobalRef, JObject};
 use once_cell::sync::OnceCell;
 
-use crate::common::{execution_context::ExecutionContext, timer_helper::TimerHelper};
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+    timer_helper::TimerHelper,
+};
 
 #[derive(Debug)]
 pub struct IpcWriterExec {
@@ -119,7 +123,10 @@ impl ExecutionPlan for IpcWriterExec {
                 jni_new_string!(&self.ipc_consumer_resource_id)?.as_obj()) -> JObject
         )?;
         let ipc_consumer = jni_new_global_ref!(ipc_consumer_local.as_obj())?;
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         let coalesced = exec_ctx.coalesce_with_default_batch_size(input);
 
         Ok(Box::pin(RecordBatchStreamAdapter::new(

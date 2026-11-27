@@ -69,10 +69,12 @@ use parking_lot::Mutex;
 
 use crate::common::{
     execution_context::{
-        ExecutionContext, WrappedRecordBatchSender, WrappedRecordBatchWithKeyRowsSender,
-        WrappedSenderTrait,
+        ExecutionContext, WrappedOptimizedBatchSender, WrappedRecordBatchSender, WrappedSenderTrait,
     },
-    key_rows_output::{RecordBatchWithKeyRows, SendableRecordBatchWithKeyRowsStream},
+    optimized_batch::{
+        ExecuteOptimizedProps, KeyRows, OptimizedBatch, SendableOptimizedBatchStream,
+        materialize_optimized_stream,
+    },
     timer_helper::TimerHelper,
 };
 
@@ -262,7 +264,10 @@ impl SortExec {
         let sorter = self.init_sorter(exec_ctx.clone(), projection)?;
 
         let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         let mut coalesced = exec_ctx.coalesce_with_default_batch_size(input);
 
         // Implement proper key rows output by using the existing sorter with key rows
@@ -291,7 +296,7 @@ impl SortExec {
         &self,
         partition: usize,
         context: Arc<TaskContext>,
-    ) -> Result<SendableRecordBatchWithKeyRowsStream> {
+    ) -> Result<SendableOptimizedBatchStream> {
         let projection: Vec<usize> = (0..self.schema().fields().len()).collect();
         self.execute_projected_with_key_rows(partition, context, &projection)
     }
@@ -302,19 +307,22 @@ impl SortExec {
         partition: usize,
         context: Arc<TaskContext>,
         projection: &[usize],
-    ) -> Result<SendableRecordBatchWithKeyRowsStream> {
+    ) -> Result<SendableOptimizedBatchStream> {
         let output_schema = Arc::new(self.schema().project(projection)?);
         let exec_ctx =
             ExecutionContext::new(context.clone(), partition, output_schema, &self.metrics);
         let sorter = self.init_sorter(exec_ctx.clone(), projection)?;
 
         let elapsed_compute = exec_ctx.baseline_metrics().elapsed_compute().clone();
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         let mut coalesced = exec_ctx.coalesce_with_default_batch_size(input);
 
         // Implement proper key rows output by using the existing sorter with key rows
         // support
-        let output = exec_ctx.clone().output_with_sender_with_key_rows(
+        let output = exec_ctx.clone().output_optimized_with_sender(
             "Sort",
             &self.exprs,
             move |sender| async move {
@@ -841,18 +849,20 @@ async fn send_output_batch(
     if let Ok(sender) = downcast_any!(sender, WrappedRecordBatchSender) {
         let batch = prune_sort_keys_from_batch.restore(pruned_batch, key_collector)?;
         sender.send(batch).await
-    } else if let Ok(sender) = downcast_any!(sender, WrappedRecordBatchWithKeyRowsSender) {
+    } else if let Ok(sender) = downcast_any!(sender, WrappedOptimizedBatchSender) {
         let key_rows = Arc::new(key_collector.into_rows(
             pruned_batch.num_rows(),
-            &prune_sort_keys_from_batch.sort_row_converter.lock(),
+            &prune_sort_keys_from_batch.sort_row_converter,
         )?);
         let batch =
             prune_sort_keys_from_batch.restore_from_existed_key_rows(pruned_batch, &key_rows)?;
         sender
-            .send(RecordBatchWithKeyRows::new(
-                batch,
-                key_rows,
-                prune_sort_keys_from_batch.sort_row_converter.clone(),
+            .send(OptimizedBatch::new(
+                Arc::new(batch),
+                Some(KeyRows {
+                    rows: key_rows,
+                    rows_converter: prune_sort_keys_from_batch.sort_row_converter.clone(),
+                }),
             ))
             .await;
     }
@@ -1172,7 +1182,7 @@ impl PrimitiveSortKey {
 
 struct PruneSortKeysFromBatch {
     input_projection: Vec<usize>,
-    sort_row_converter: Arc<Mutex<RowConverter>>,
+    sort_row_converter: Arc<RowConverter>,
     key_exprs: Vec<PhysicalSortExpr>,
     key_cols: HashSet<usize>,
     restored_col_mappers: Vec<ColMapper>,
@@ -1193,7 +1203,7 @@ impl PruneSortKeysFromBatch {
         input_projection: &[usize],
         exprs: &[PhysicalSortExpr],
     ) -> Result<Self> {
-        let sort_row_converter = Arc::new(Mutex::new(RowConverter::new(
+        let sort_row_converter = Arc::new(RowConverter::new(
             exprs
                 .iter()
                 .map(|expr: &PhysicalSortExpr| {
@@ -1203,7 +1213,7 @@ impl PruneSortKeysFromBatch {
                     ))
                 })
                 .collect::<Result<Vec<SortField>>>()?,
-        )?));
+        )?);
         let input_projected_schema = Arc::new(input_schema.project(input_projection)?);
 
         let mut relation = vec![];
@@ -1314,7 +1324,7 @@ impl PruneSortKeysFromBatch {
                     .and_then(|cv| cv.into_array(batch.num_rows()))
             })
             .collect::<Result<_>>()?;
-        let key_rows = self.sort_row_converter.lock().convert_columns(&key_cols)?;
+        let key_rows = self.sort_row_converter.convert_columns(&key_cols)?;
 
         let retained_cols = batch
             .project(&self.input_projection)?
@@ -1339,7 +1349,7 @@ impl PruneSortKeysFromBatch {
         key_collector: KC,
     ) -> Result<RecordBatch> {
         let num_rows = pruned_batch.num_rows();
-        let key_rows = key_collector.into_rows(num_rows, &self.sort_row_converter.lock())?;
+        let key_rows = key_collector.into_rows(num_rows, &self.sort_row_converter)?;
         self.restore_from_existed_key_rows(pruned_batch, &key_rows)
     }
 
@@ -1360,7 +1370,7 @@ impl PruneSortKeysFromBatch {
                 ColMapper::FromKey(idx) => {
                     let sort_row_converter = self.sort_row_converter.clone();
                     let key_cols = key_cols.get_or_try_init(move || {
-                        sort_row_converter.lock().convert_rows(key_rows.iter())
+                        sort_row_converter.convert_rows(key_rows.iter())
                     })?;
                     restored_fields.push(key_cols[idx].clone());
                 }
@@ -1571,7 +1581,6 @@ mod test {
         physical_plan::{ExecutionPlan, common, test::TestMemoryExec},
         prelude::SessionContext,
     };
-    use futures::TryStreamExt;
 
     use super::common_prefix_len;
     use crate::sort_exec::SortExec;
@@ -1694,10 +1703,9 @@ mod test {
         let output = sort.execute_projected_with_key_rows(0, task_ctx, &[1])?;
         assert_eq!(output.schema().fields().len(), 1);
         assert_eq!(output.schema().field(0).name(), "value");
-        let batches = output
-            .map_ok(|batch| batch.batch)
-            .try_collect::<Vec<_>>()
-            .await?;
+        let batches =
+            common::collect(crate::common::optimized_batch::materialize_optimized_stream(output))
+                .await?;
         let expected = vec![
             "+-------+",
             "| value |",

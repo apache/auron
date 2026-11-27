@@ -30,7 +30,7 @@ use super::output::{
 };
 use crate::{
     broadcast_join_exec::Joiner,
-    common::execution_context::WrappedRecordBatchSender,
+    common::{execution_context::WrappedLazyBatchSender, lazy::LazyBatchRef},
     joins::{JoinParams, join_hash_map::JoinBuildRows, join_utils::JoinType},
 };
 
@@ -76,7 +76,7 @@ impl PairIndices {
 pub(crate) struct BnljJoiner {
     params: JoinParams,
     build: Arc<dyn Borrow<JoinBuildRows> + Send + Sync>,
-    sender: Arc<WrappedRecordBatchSender>,
+    sender: Arc<WrappedLazyBatchSender>,
     probe_left: bool,
     output: Output,
     can_match: bool,
@@ -89,7 +89,7 @@ impl BnljJoiner {
         broadcast_side: JoinSide,
         mut params: JoinParams,
         build: Arc<dyn Borrow<JoinBuildRows> + Send + Sync>,
-        sender: Arc<WrappedRecordBatchSender>,
+        sender: Arc<WrappedLazyBatchSender>,
     ) -> Self {
         let rows = build.as_ref().borrow();
         let probe_left = broadcast_side == JoinSide::Right;
@@ -288,7 +288,7 @@ impl BnljJoiner {
 impl Joiner for BnljJoiner {
     async fn join(
         self: Pin<&mut Self>,
-        probe: RecordBatch,
+        probe: LazyBatchRef,
         _: &Time,
         _: &Time,
         _: &Time,
@@ -296,6 +296,7 @@ impl Joiner for BnljJoiner {
     ) -> Result<()> {
         let this = self.get_mut();
         let _output_timer = timer.timer();
+        let probe = probe.materialize()?;
         let probe_rows = probe.num_rows();
         if probe_rows == 0 {
             return Ok(());
