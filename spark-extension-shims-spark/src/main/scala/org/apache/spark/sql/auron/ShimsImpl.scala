@@ -884,6 +884,12 @@ class ShimsImpl extends Shims with Logging {
     expr.asInstanceOf[NextDay].failOnError
   }
 
+  @sparkver("3.0")
+  override def hasNaNAwareArraySetOps: Boolean = false
+
+  @sparkver("3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  override def hasNaNAwareArraySetOps: Boolean = true
+
   override def convertMoreAggregateExpr(e: AggregateExpression): Option[pb.PhysicalExprNode] = {
     e.aggregateFunction match {
       case First(child, ignoresNull) =>

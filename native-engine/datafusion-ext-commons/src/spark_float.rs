@@ -13,7 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::Arc};
+
+use arrow::{
+    array::{ArrayRef, Float32Array, Float64Array},
+    compute::kernels::arity::unary,
+    datatypes::{DataType, Float32Type, Float64Type},
+};
+use datafusion::common::Result;
+
+use crate::downcast_any;
 
 pub fn spark_float_cmp<T: num::Float>(left: T, right: T) -> Ordering {
     // Spark places all NaNs last and treats signed zeros as equal.
@@ -28,8 +37,31 @@ pub fn spark_float_cmp<T: num::Float>(left: T, right: T) -> Ordering {
     }
 }
 
+pub fn canonical_nan<T: num::Float>(v: T) -> T {
+    if v.is_nan() { T::nan() } else { v }
+}
+
+/// Replaces every NaN bit pattern with the canonical NaN, like Spark does when
+/// hashing floats. Signed zeros stay distinct. Non-float arrays are returned
+/// unchanged.
+pub fn canonicalize_nans(values: &ArrayRef) -> Result<ArrayRef> {
+    Ok(match values.data_type() {
+        DataType::Float32 => Arc::new(unary::<_, _, Float32Type>(
+            downcast_any!(values, Float32Array)?,
+            canonical_nan,
+        )),
+        DataType::Float64 => Arc::new(unary::<_, _, Float64Type>(
+            downcast_any!(values, Float64Array)?,
+            canonical_nan,
+        )),
+        _ => Arc::clone(values),
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use arrow::array::{Array, Int32Array};
+
     use super::*;
 
     fn check_spark_float_cmp<T: num::Float + std::fmt::Debug>(nan: T) {
@@ -64,5 +96,32 @@ mod tests {
     #[test]
     fn test_spark_float_cmp_f64() {
         check_spark_float_cmp(f64::from_bits(0x7ff8_0000_0000_0001));
+    }
+
+    #[test]
+    fn test_canonicalize_nans() -> Result<()> {
+        let values: ArrayRef = Arc::new(Float64Array::from(vec![
+            Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+            Some(-0.0),
+            None,
+            Some(1.5),
+        ]));
+        let result = canonicalize_nans(&values)?;
+        let result = downcast_any!(&result, Float64Array)?;
+        assert_eq!(result.value(0).to_bits(), f64::NAN.to_bits());
+        assert_eq!(result.value(1).to_bits(), (-0.0f64).to_bits());
+        assert!(result.is_null(2));
+        assert_eq!(result.value(3), 1.5);
+
+        let floats: ArrayRef = Arc::new(Float32Array::from(vec![f32::from_bits(0x7fc0_0001)]));
+        let result = canonicalize_nans(&floats)?;
+        assert_eq!(
+            downcast_any!(&result, Float32Array)?.value(0).to_bits(),
+            f32::NAN.to_bits()
+        );
+
+        let ints: ArrayRef = Arc::new(Int32Array::from(vec![1]));
+        assert!(Arc::ptr_eq(&canonicalize_nans(&ints)?, &ints));
+        Ok(())
     }
 }
