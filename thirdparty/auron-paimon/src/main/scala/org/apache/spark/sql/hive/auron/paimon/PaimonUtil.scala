@@ -20,6 +20,7 @@ import java.util.{HashMap => JHashMap}
 
 import org.apache.paimon.CoreOptions
 import org.apache.paimon.catalog.CatalogContext
+import org.apache.paimon.fs.Path
 import org.apache.paimon.options.Options
 import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.table.FileStoreTableFactory
@@ -57,4 +58,12 @@ object PaimonUtil extends Logging {
       parquetFormat
     }
   }
+
+  /**
+   * Value of the `__paimon_file_path` metadata column for a data file. Paimon 1.4
+   * (apache/paimon#7098) changed it from `path.toUri.toString` to `path.toString`. Both differ
+   * only for paths with characters that need escaping (e.g. a `%` in a partition value), so the
+   * format is chosen at build time by the Paimon version the module is compiled against.
+   */
+  def metadataFilePath(path: Path): String = PaimonFilePathFormat.format(path)
 }
