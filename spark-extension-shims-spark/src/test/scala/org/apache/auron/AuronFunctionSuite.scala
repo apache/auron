@@ -902,6 +902,42 @@ class AuronFunctionSuite extends AuronQueryTest with BaseAuronSQLSuite {
     }
   }
 
+  test("date_trunc function in non-UTC session timezones") {
+    withTable("t1") {
+      sql("create table t1(c string, f string) using parquet")
+      sql("""insert into t1 values
+          |  ('2026-09-13', 'week'),
+          |  ('2026-09-14', 'week'),
+          |  ('2026-09-21', 'WEEK'),
+          |  ('2026-01-01', 'yyyy'),
+          |  ('2026-03-01 00:30:00', 'MM'),
+          |  ('2026-09-14 23:59:59', 'dd'),
+          |  ('2026-09-16 13:45:30.123456', 'MILLISECOND'),
+          |  ('2018-11-04 12:00:00', 'day'),
+          |  ('2026-09-16 13:45:30', 'bogus'),
+          |  ('2026-09-16 13:45:30', null),
+          |  (null, 'day')
+          |""".stripMargin)
+      // Asia/Shanghai is the timezone from issue #2590; America/Sao_Paulo
+      // skipped midnight on 2018-11-04; +05:30 is a fixed offset
+      for (tz <- Seq(
+          "UTC",
+          "Asia/Shanghai",
+          "America/Los_Angeles",
+          "America/Sao_Paulo",
+          "+05:30")) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+          checkSparkAnswerAndOperator("""select
+              |  c,
+              |  date_trunc('week', c), date_trunc('day', c), date_trunc('month', c),
+              |  date_trunc('quarter', c), date_trunc('year', c), date_trunc('hour', c),
+              |  date_trunc(f, c)
+              |from t1""".stripMargin)
+        }
+      }
+    }
+  }
+
   test("next_day function") {
     withTable("t1") {
       sql("create table t1(start_date date, weekday string) using parquet")

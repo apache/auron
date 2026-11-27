@@ -27,6 +27,7 @@ mod flink_datetime;
 mod spark_array;
 mod spark_check_overflow;
 mod spark_crypto;
+mod spark_date_trunc;
 mod spark_dates;
 pub mod spark_get_json_object;
 mod spark_hash;
@@ -97,6 +98,7 @@ pub fn create_auron_ext_function(
         "Spark_Quarter" => shared_function!(spark_dates::spark_quarter),
         "Spark_LastDay" => shared_function!(spark_dates::spark_last_day),
         "Spark_Trunc" => shared_function!(spark_dates::spark_trunc),
+        "Spark_DateTrunc" => shared_function!(spark_date_trunc::spark_date_trunc),
         "Spark_NextDay" => shared_function!(spark_dates::spark_next_day),
         "Spark_DateDiff" => shared_function!(spark_dates::spark_datediff),
         "Spark_DateAdd" => shared_function!(spark_dates::spark_date_add),

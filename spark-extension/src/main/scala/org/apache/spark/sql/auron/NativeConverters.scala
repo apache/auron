@@ -944,7 +944,13 @@ object NativeConverters extends Logging {
       case e: StringReplace =>
         buildScalarFunction(pb.ScalarFunction.Replace, e.children, e.dataType)
       case e: TruncTimestamp =>
-        buildScalarFunction(pb.ScalarFunction.DateTrunc, e.children, e.dataType)
+        // truncate in the session timezone, like Spark; offset zone ids are
+        // normalized to "+hh:mm" form
+        val tz = Literal.create(e.zoneId.normalized().getId, StringType)
+        buildExtScalarFunction(
+          "Spark_DateTrunc",
+          e.format :: e.timestamp :: tz :: Nil,
+          e.dataType)
       case e: TruncDate =>
         buildExtScalarFunction("Spark_Trunc", e.children, e.dataType)
 
