@@ -80,7 +80,7 @@ import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-import org.apache.auron.{protobuf => pb}
+import org.apache.auron.{protobuf => pb, sparkver}
 import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
 import org.apache.auron.util.SparkVersionUtil
@@ -338,6 +338,13 @@ object NativeConverters extends Logging {
       return convertExprWithFallback(sparkExpr, isPruningExpr = false, fallbackToError)
     }
 
+    // Convert timestamp addition before probing its interval literal in isolation.
+    sparkExpr match {
+      case TimestampPlusDuration(timestamp, micros) =>
+        return buildTimestampPlusDuration(convertExpr(timestamp), micros)
+      case _ =>
+    }
+
     try {
       // get number of inconvertible children
       var numInconvertibleChildren = 0
@@ -404,6 +411,47 @@ object NativeConverters extends Logging {
     buildFn(pb.PhysicalExprNode.newBuilder()).build()
   }
 
+  private object TimestampPlusDuration {
+    @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 4.0")
+    def unapply(add: TimeAdd): Option[(Expression, Literal)] = duration(add)
+
+    @sparkver("4.1 / 4.2")
+    def unapply(add: TimestampAddInterval): Option[(Expression, Literal)] = duration(add)
+
+    @sparkver("3.0 / 3.1")
+    private val duration: TimeAdd => Option[(Expression, Literal)] = _ => None
+
+    @sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+    private def duration(
+        add: BinaryExpression with TimeZoneAwareExpression): Option[(Expression, Literal)] = {
+      import org.apache.spark.sql.types.DayTimeIntervalType
+
+      add.right match {
+        // Spark adds whole days in local time. They have a fixed duration in fixed-offset zones.
+        case Literal(value, _: DayTimeIntervalType)
+            if add.left.dataType == TimestampType && add.timeZoneId.isDefined &&
+              add.zoneId.getRules.isFixedOffset =>
+          Some((add.left, Literal(value, LongType)))
+        case _ => None
+      }
+    }
+  }
+
+  private def buildTimestampPlusDuration(
+      timestamp: pb.PhysicalExprNode,
+      micros: Literal): pb.PhysicalExprNode = {
+    val duration = buildExprNode { builder =>
+      builder.setCast(
+        pb.PhysicalCastNode
+          .newBuilder()
+          .setExpr(convertExpr(micros))
+          .setArrowType(pb.ArrowType.newBuilder().setDURATION(pb.TimeUnit.Microsecond)))
+    }
+    buildExprNode(
+      _.setBinaryExpr(
+        pb.PhysicalBinaryExprNode.newBuilder().setL(timestamp).setR(duration).setOp("Plus")))
+  }
+
   def convertExprWithFallback(
       sparkExpr: Expression,
       isPruningExpr: Boolean,
@@ -423,6 +471,9 @@ object NativeConverters extends Logging {
           if !nativeDateTimeFunctionsEnabled =>
         fallback(e)
       case e: NativeExprWrapperBase => e.wrapped
+      case TimestampPlusDuration(timestamp, micros) =>
+        val nativeTimestamp = convertExprWithFallback(timestamp, isPruningExpr, fallback)
+        buildTimestampPlusDuration(nativeTimestamp, micros)
       case e: Literal =>
         val schema = StructType(Seq(StructField("", e.dataType, e.nullable)))
         val row = InternalRow(e.eval(null))
