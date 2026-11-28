@@ -19,6 +19,7 @@ package org.apache.auron
 import org.apache.spark.sql.{AuronQueryTest, Row}
 import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
+import org.apache.spark.sql.execution.auron.plan.NativeAggBase
 import org.apache.spark.sql.execution.auron.plan.NativeFilterBase
 import org.apache.spark.sql.execution.auron.plan.NativeOrcScanBase
 import org.apache.spark.sql.execution.auron.plan.NativeParquetScanBase
@@ -1334,6 +1335,23 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
         |  COUNT(*) FILTER (WHERE is_vip = true)          AS cnt_vip_star,
         |  COUNT(quantity) FILTER (WHERE amount > 150)    AS cnt_qty
         |FROM t_filter_agg_2289""".stripMargin)
+    }
+  }
+
+  Seq("l.amount", "l.amount + 1").foreach { amount =>
+    test(s"aggregate filters resolve same-named join columns with SUM($amount)") {
+      withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+        val df = checkSparkAnswer(s"""
+          |SELECT /*+ BROADCAST(r) */
+          |  SUM($amount) FILTER (WHERE l.flag AND l.amount > 0),
+          |  SUM(l.amount) FILTER (WHERE r.flag)
+          |FROM VALUES (1, 10, true), (2, 20, false), (3, -5, true) AS l(k, amount, flag)
+          |JOIN VALUES (1, false), (2, true), (3, false) AS r(k, flag) ON l.k = r.k
+          |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        assert(plan.find(_.isInstanceOf[NativeBroadcastJoinExec]).isDefined)
+        assert(plan.find(_.isInstanceOf[NativeAggBase]).isDefined)
+      }
     }
   }
 

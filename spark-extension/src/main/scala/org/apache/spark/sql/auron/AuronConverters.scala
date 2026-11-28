@@ -1399,23 +1399,33 @@ object AuronConverters extends Logging {
   }
 
   /**
-   * Bind filter expressions in AggregateExpression to the actual child output attributes. This is
-   * needed because Spark 3.0's AggregateExpression does not have withNewChildrenInternal, so
-   * filter expressions may retain stale exprIds after optimizer transformations. We match by
-   * (name, dataType) and replace with the child's AttributeReference.
+   * Bind aggregate filter references by exprId. Spark 3.0 may retain stale exprIds in filters
+   * after optimizer transformations, so allow a unique match by name and data type as a fallback.
    */
+  private def aggregateFilterAttributeResolver(
+      childOutput: Seq[Attribute]): AttributeReference => Attribute = {
+    lazy val attrsByExprId = childOutput.map(a => a.exprId -> a).toMap
+    lazy val attrsByNameAndType = childOutput.groupBy(a => (a.name, a.dataType))
+    ar =>
+      attrsByExprId.getOrElse(
+        ar.exprId,
+        attrsByNameAndType.get((ar.name, ar.dataType)) match {
+          case Some(Seq(attr)) => attr
+          case Some(_) =>
+            throw new IllegalArgumentException(s"Ambiguous aggregate filter attribute: $ar")
+          case None => ar
+        })
+  }
+
   private def bindAggregateFilters(
       aggregateExprs: Seq[AggregateExpression],
       childOutput: Seq[Attribute]): Seq[AggregateExpression] = {
-    val attrMap = childOutput.map(a => (a.name, a.dataType) -> a).toMap
+    val resolveAttribute = aggregateFilterAttributeResolver(childOutput)
     aggregateExprs.map { expr =>
       expr.filter match {
         case Some(filterExpr) =>
           val newFilter = filterExpr.transform { case ar: AttributeReference =>
-            attrMap.get((ar.name, ar.dataType)) match {
-              case Some(newAttr) => newAttr
-              case None => ar
-            }
+            resolveAttribute(ar)
           }
           if (newFilter.eq(filterExpr)) {
             expr
@@ -1446,7 +1456,7 @@ object AuronConverters extends Logging {
       return None
     }
 
-    val projections = mutable.LinkedHashMap[Expression, AttributeReference]()
+    val projections = mutable.LinkedHashMap[Expression, Attribute]()
     val transformedGroupingExprs = groupingExprs.map {
       case e @ Alias(_: Literal, _) => e
       case e =>
@@ -1465,35 +1475,20 @@ object AuronConverters extends Logging {
         .asInstanceOf[AggregateFunction])
     }
 
-    // Ensure that AttributeReferences used in FILTER predicates are also included in the
-    // projection. Without this, the projection child would not output the filter column, causing
-    // bindAggregateFilters to fail (the column would be absent from child.output) and the native
-    // side to raise a SchemaError when resolving the filter expression against input_schema.
-    //
-    // We resolve each filter AttributeReference against childOutput by (name, dataType) to obtain
-    // the canonical Attribute (with the correct exprId), then add it to projections unchanged so
-    // that the downstream ProjectExec can actually evaluate it from exec.child.
-    val childAttrMap = childOutput.map(a => (a.name, a.dataType) -> a).toMap
-    aggregateExprs.foreach { expr =>
-      Shims.get.getAggregateExpressionFilter(expr).foreach {
-        _.foreach {
-          case ar: AttributeReference =>
-            val resolved = childAttrMap.getOrElse((ar.name, ar.dataType), ar)
-            projections.getOrElseUpdate(
-              resolved,
-              AttributeReference(
-                resolved.name,
-                resolved.dataType,
-                resolved.nullable,
-                resolved.metadata)(resolved.exprId, resolved.qualifier))
-          case _ =>
+    val resolveAttribute = aggregateFilterAttributeResolver(childOutput)
+    val projectedAggExprs = transformedAggExprs.map { expr =>
+      expr.filter.fold(expr) { predicate =>
+        val filter = predicate.transform { case ar: AttributeReference =>
+          val attr = resolveAttribute(ar)
+          projections.getOrElseUpdate(attr, attr)
         }
+        expr.copy(filter = Some(filter))
       }
     }
 
     Some(
       (
-        transformedAggExprs.toList,
+        projectedAggExprs.toList,
         transformedGroupingExprs.toList,
         projections.map(kv => Alias(kv._1, kv._2.name)(kv._2.exprId)).toList))
   }
