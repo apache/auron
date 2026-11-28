@@ -18,7 +18,10 @@ use std::{
     fs,
     fs::{File, OpenOptions},
     io::{BufReader, BufWriter, Cursor, Read, Seek, Write},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::Duration,
 };
 
@@ -180,13 +183,14 @@ struct OnHeapSpill(Arc<RawOnHeapSpill>, SpillMetrics);
 impl OnHeapSpill {
     fn try_new(hsm: LocalRef, spill_metrics: &SpillMetrics) -> Result<Self> {
         let spill_id = jni_call!(AuronOnHeapSpillManager(hsm.as_obj()).newSpill() -> i32)?;
-        Ok(Self(
-            Arc::new(RawOnHeapSpill {
-                hsm: jni_new_global_ref!(hsm.as_obj())?,
-                spill_id,
-            }),
-            spill_metrics.clone(),
-        ))
+        let raw_spill = RawOnHeapSpill {
+            hsm: jni_new_global_ref!(hsm.as_obj())?,
+            spill_id,
+            recorded_disk_usage: AtomicU64::new(0),
+            recorded_disk_iotime: AtomicU64::new(0),
+        };
+        spill_metrics.mem_spill_count.add(1);
+        Ok(Self(Arc::new(raw_spill), spill_metrics.clone()))
     }
 
     fn get_disk_usage(&self) -> Result<u64> {
@@ -253,19 +257,35 @@ impl Read for OnHeapSpill {
 
 impl Drop for OnHeapSpill {
     fn drop(&mut self) {
-        self.1.mem_spill_count.add(1);
-        self.1
-            .disk_spill_size
-            .add(self.get_disk_usage().unwrap_or(0) as usize);
-        self.1
-            .disk_spill_iotime
-            .add_duration(Duration::from_nanos(self.get_disk_iotime().unwrap_or(0)));
+        let disk_usage = self.get_disk_usage().unwrap_or(0);
+        let prev_disk_usage = self
+            .0
+            .recorded_disk_usage
+            .fetch_max(disk_usage, Ordering::Relaxed);
+        if disk_usage > prev_disk_usage {
+            self.1
+                .disk_spill_size
+                .add((disk_usage - prev_disk_usage) as usize);
+        }
+
+        let disk_iotime = self.get_disk_iotime().unwrap_or(0);
+        let prev_disk_iotime = self
+            .0
+            .recorded_disk_iotime
+            .fetch_max(disk_iotime, Ordering::Relaxed);
+        if disk_iotime > prev_disk_iotime {
+            self.1
+                .disk_spill_iotime
+                .add_duration(Duration::from_nanos(disk_iotime - prev_disk_iotime));
+        }
     }
 }
 
 struct RawOnHeapSpill {
     hsm: GlobalRef,
     spill_id: i32,
+    recorded_disk_usage: AtomicU64,
+    recorded_disk_iotime: AtomicU64,
 }
 
 impl Drop for RawOnHeapSpill {
