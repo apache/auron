@@ -29,9 +29,7 @@ import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.Shims
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.NullsFirst
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -43,9 +41,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 
 import org.apache.auron.metric.SparkMetricNode
 import org.apache.auron.protobuf.FetchLimit
-import org.apache.auron.protobuf.PhysicalExprNode
 import org.apache.auron.protobuf.PhysicalPlanNode
-import org.apache.auron.protobuf.PhysicalSortExprNode
 import org.apache.auron.protobuf.SortExecNode
 
 abstract class NativeTakeOrderedBase(
@@ -65,18 +61,7 @@ abstract class NativeTakeOrderedBase(
   override def outputPartitioning: Partitioning = SinglePartition
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
-  private def nativeSortExprs = sortOrder.map { sortOrder =>
-    PhysicalExprNode
-      .newBuilder()
-      .setSort(
-        PhysicalSortExprNode
-          .newBuilder()
-          .setExpr(NativeConverters.convertExpr(sortOrder.child))
-          .setAsc(sortOrder.direction == Ascending)
-          .setNullsFirst(sortOrder.nullOrdering == NullsFirst)
-          .build())
-      .build()
-  }
+  private def nativeSortExprs = sortOrder.map(NativeConverters.convertSortOrder)
 
   override def executeCollect(): Array[InternalRow] = {
     val partial = Shims.get.createNativePartialTakeOrderedExec(limit, sortOrder, child, metrics)
@@ -167,18 +152,7 @@ abstract class NativePartialTakeOrderedBase(
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  private def nativeSortExprs = sortOrder.map { sortOrder =>
-    PhysicalExprNode
-      .newBuilder()
-      .setSort(
-        PhysicalSortExprNode
-          .newBuilder()
-          .setExpr(NativeConverters.convertExpr(sortOrder.child))
-          .setAsc(sortOrder.direction == Ascending)
-          .setNullsFirst(sortOrder.nullOrdering == NullsFirst)
-          .build())
-      .build()
-  }
+  private def nativeSortExprs = sortOrder.map(NativeConverters.convertSortOrder)
 
   // check whether native converting is supported
   nativeSortExprs

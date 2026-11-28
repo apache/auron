@@ -329,6 +329,19 @@ object NativeConverters extends Logging {
       .build()
   }
 
+  def convertSortOrder(sortOrder: SortOrder): pb.PhysicalExprNode = {
+    pb.PhysicalExprNode
+      .newBuilder()
+      .setSort(
+        pb.PhysicalSortExprNode
+          .newBuilder()
+          .setExpr(convertExpr(sortOrder.child))
+          .setAsc(sortOrder.direction == Ascending)
+          .setNullsFirst(sortOrder.nullOrdering == NullsFirst)
+          .build())
+      .build()
+  }
+
   def convertExpr(sparkExpr: Expression): pb.PhysicalExprNode = {
     def fallbackToError: Expression => pb.PhysicalExprNode = { e =>
       throw new NotImplementedError(s"unsupported expression: (${e.getClass}) $e")
