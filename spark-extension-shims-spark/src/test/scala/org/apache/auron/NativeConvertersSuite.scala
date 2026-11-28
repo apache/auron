@@ -18,9 +18,9 @@ package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Cast, Expression, FromUnixTime, GreaterThan, Literal, Upper}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, StringType, StructType}
 
 import org.apache.auron.protobuf.ScalarFunction
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
@@ -92,6 +92,7 @@ class NativeConvertersSuite
       "date_sub(date'2024-03-15', 1)",
       "add_months(date'2024-03-15', 1)",
       "months_between(timestamp'2024-03-15 14:30:45', timestamp'2024-02-15 14:30:45')",
+      "from_unixtime(0)",
       "date_trunc('day', timestamp'2024-03-15 14:30:45')") ++
       (if (AuronTestUtils.isSparkV30OrGreater) Seq("make_date(2024, 3, 15)") else Nil) ++
       (if (AuronTestUtils.isSparkV31OrGreater) {
@@ -169,6 +170,160 @@ class NativeConvertersSuite
     val scalarFn = childExpr.getScalarFunction
     assert(scalarFn.getFun == ScalarFunction.Trim)
     assert(scalarFn.getArgsCount == 1 && scalarFn.getArgs(0).hasLiteral)
+  }
+
+  private def fromUnixTimeExpression(call: String): Expression =
+    sql(s"select $call from range(1)").queryExecution.analyzed.expressions.head.children.head
+
+  test("from_unixtime guards column values and directly converts safe constants") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.sql.legacy.timeParserPolicy" -> "CORRECTED") {
+      for (zone <- Seq("UTC", "+08:00", "UTC-07:00", "GMT+8");
+        format <- Seq("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", "yyyyMMdd")) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          val guarded =
+            NativeConverters.convertExpr(fromUnixTimeExpression(s"from_unixtime(id, '$format')"))
+          assert(guarded.hasCase)
+          val native = guarded.getCase.getWhenThenExpr(1).getThenExpr
+          assert(native.getScalarFunction.getName == "Spark_FromUnixTime")
+          assert(guarded.getCase.getElseExpr.hasSparkUdfWrapperExpr)
+          val constant =
+            NativeConverters.convertExpr(fromUnixTimeExpression(s"from_unixtime(-1L, '$format')"))
+          assert(constant.getScalarFunction.getName == "Spark_FromUnixTime")
+        }
+      }
+    }
+  }
+
+  test("from_unixtime falls back outside the supported format policy timezone and inputs") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.sql.legacy.timeParserPolicy" -> "EXCEPTION",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val calls = Seq(
+        "from_unixtime(id, cast(id as string))",
+        "from_unixtime(id, 'yyyy')",
+        "from_unixtime(id, '')",
+        "from_unixtime(cast(id as double))",
+        "from_unixtime(cast(cast(id as string) as bigint))",
+        "from_unixtime(id + 1)",
+        "from_unixtime(9223372036854775807L)",
+        "from_unixtime(-9223372036854775808L)")
+      calls.foreach { call =>
+        assert(NativeConverters.convertExpr(fromUnixTimeExpression(call)).hasSparkUdfWrapperExpr)
+      }
+      for (zone <- Seq("Asia/Shanghai", "America/Los_Angeles", "PST")) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          assert(
+            NativeConverters
+              .convertExpr(fromUnixTimeExpression("from_unixtime(id)"))
+              .hasSparkUdfWrapperExpr)
+        }
+      }
+      for (policy <- Seq("LEGACY", "legacy")) {
+        withSQLConf("spark.sql.legacy.timeParserPolicy" -> policy) {
+          assert(
+            NativeConverters
+              .convertExpr(fromUnixTimeExpression("from_unixtime(id)"))
+              .hasSparkUdfWrapperExpr)
+        }
+      }
+    }
+  }
+
+  test("from_unixtime keeps unsafe casts inside Spark fallback") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      for (call <- Seq(
+          "from_unixtime(cast(cast(id as string) as bigint))",
+          "concat(from_unixtime(cast(cast(id as string) as bigint)), 'suffix')")) {
+        val converted = NativeConverters.convertExpr(fromUnixTimeExpression(call))
+        val fallback = if (converted.hasSparkUdfWrapperExpr) {
+          converted
+        } else {
+          converted.getScalarFunction.getArgs(0)
+        }
+        assert(fallback.hasSparkUdfWrapperExpr)
+        val wrapper = fallback.getSparkUdfWrapperExpr
+        val (bound, _) = NativeConverters.deserializeExpression[Expression, StructType](
+          wrapper.getSerialized.toByteArray)
+        assert(bound.find(_.isInstanceOf[Cast]).isDefined)
+        assert(wrapper.getParamsCount == 1)
+        assert(wrapper.getParams(0).hasColumn)
+      }
+    }
+  }
+
+  test("from_unixtime fallback keeps sibling expressions native") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val expr = sql("""select
+          |  format_string('%s %s', from_unixtime(id + 1L, upper(payload)), sha2(payload, 256))
+          |from (select id, cast(id as string) as payload from range(1)) t""".stripMargin).queryExecution.analyzed.expressions.head.children.head
+      val converted = NativeConverters.convertExpr(expr)
+      assert(converted.hasSparkUdfWrapperExpr)
+      val wrapper = converted.getSparkUdfWrapperExpr
+      val (bound, _) = NativeConverters.deserializeExpression[Expression, StructType](
+        wrapper.getSerialized.toByteArray)
+      assert(bound.collect { case e: FromUnixTime => e }.exists { e =>
+        e.sec.isInstanceOf[Add] && e.format.isInstanceOf[Upper]
+      })
+      assert(wrapper.getParamsCount == 3)
+      assert(wrapper.getParams(2).getScalarFunction.getName == "Spark_Sha256")
+    }
+  }
+
+  test("from_unixtime invalid or null constant formats require Spark operator fallback") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      for (call <- Seq(
+          "from_unixtime(id, 'invalid')",
+          "concat(from_unixtime(id, 'invalid'), 'suffix')",
+          "from_unixtime(id, cast(null as string))",
+          "concat(from_unixtime(id, cast(null as string)), 'suffix')")) {
+        val error = intercept[UnsupportedOperationException] {
+          NativeConverters.convertExpr(fromUnixTimeExpression(call))
+        }
+        assert(error.getMessage.contains("constant format requires Spark execution"))
+      }
+    }
+  }
+
+  test("from_unixtime column guards require expression fallback and skip pruning conversion") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.udf.singleChildFallback.enabled" -> "false",
+      "spark.sql.legacy.timeParserPolicy" -> "CORRECTED",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val expr = fromUnixTimeExpression("from_unixtime(id)")
+      intercept[NotImplementedError](NativeConverters.convertExpr(expr))
+      assert(
+        NativeConverters
+          .convertExpr(fromUnixTimeExpression("from_unixtime(0)"))
+          .hasScalarFunction)
+      withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+        var fallbackCalled = false
+        NativeConverters.convertExprWithFallback(
+          expr,
+          isPruningExpr = true,
+          _ => {
+            fallbackCalled = true
+            org.apache.auron.protobuf.PhysicalExprNode.getDefaultInstance
+          })
+        assert(fallbackCalled)
+      }
+    }
   }
 
   private def assertNonTrimmedCast(rawValue: String, targetType: DataType): Unit = {
