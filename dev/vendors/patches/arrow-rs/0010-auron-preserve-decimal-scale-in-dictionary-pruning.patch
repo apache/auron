@@ -1,0 +1,54 @@
+From: Ma Zhengxuan <1319614897@qq.com>
+Subject: [PATCH] auron: preserve decimal scale in dictionary pruning
+
+Dictionary values are unscaled integers. Widen them without rescaling before
+restoring the decimal precision and scale from the Parquet column descriptor.
+
+---
+diff --git a/parquet/src/auron.rs b/parquet/src/auron.rs
+index 2c86f04..f527015 100644
+--- a/parquet/src/auron.rs
++++ b/parquet/src/auron.rs
+@@ -3,11 +3,12 @@ use std::sync::{Arc, Mutex};
+ use bytes::Bytes;
+ use zstd::zstd_safe::WriteBuf;
+ use arrow_array::*;
++use arrow_array::cast::AsArray;
+ use arrow_schema::DataType;
+ use crate::arrow::async_reader::AsyncFileReader;
+ use crate::arrow::array_reader::byte_array::ByteArrayDecoderPlain;
+ use crate::arrow::buffer::offset_buffer::OffsetBuffer;
+-use crate::basic::{Encoding, PageType};
++use crate::basic::{ConvertedType, Encoding, PageType};
+ use crate::column::page::{Page, PageReader};
+ use crate::column::reader::{ColumnReader, get_column_reader};
+ use crate::data_type::*;
+@@ -94,9 +95,25 @@ pub fn get_dictionary_for_pruning<T: AsyncFileReader + Send + 'static>(
+                         column_metadata.column_descr().type_length());
+                     dict_decoder.set_data(buf, num_values as usize)?;
+                     dict_decoder.get(&mut dict_values)?;
+-                    Ok(Some(
+-                        Arc::new(<$array_type>::from_iter_values(dict_values))
+-                    ))
++                    let dict_values: ArrayRef =
++                        Arc::new(<$array_type>::from_iter_values(dict_values));
++                    let descriptor = column_metadata.column_descr();
++                    if descriptor.converted_type() == ConvertedType::DECIMAL {
++                        // Widen unscaled integers at scale zero, then attach the file's scale.
++                        let unscaled = arrow_cast::cast(
++                            &dict_values,
++                            &DataType::Decimal128(38, 0),
++                        )?;
++                        let decimal = unscaled.as_primitive::<arrow_array::types::Decimal128Type>()
++                            .clone()
++                            .with_precision_and_scale(
++                                descriptor.type_precision() as u8,
++                                descriptor.type_scale() as i8,
++                            )?;
++                        Ok(Some(Arc::new(decimal) as ArrayRef))
++                    } else {
++                        Ok(Some(dict_values))
++                    }
+                 }
+                 _ => {
+                     Ok(None)
