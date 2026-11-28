@@ -37,7 +37,7 @@ use datafusion::{
         metrics::{ExecutionPlanMetricsSet, MetricsSet},
     },
 };
-use datafusion_ext_commons::{batch_size, downcast_any};
+use datafusion_ext_commons::{batch_size, downcast_any, downcast_any_dyn};
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
@@ -49,7 +49,11 @@ use crate::{
         agg_table::{AggTable, OwnedKey},
         spark_udaf_wrapper::SparkUDAFWrapper,
     },
-    common::{execution_context::ExecutionContext, timer_helper::TimerHelper},
+    common::{
+        execution_context::ExecutionContext,
+        optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+        timer_helper::TimerHelper,
+    },
     expand_exec::ExpandExec,
     project_exec::ProjectExec,
     sort_exec::create_default_ascending_sort_exec,
@@ -60,7 +64,7 @@ pub struct AggExec {
     input: Arc<dyn ExecutionPlan>,
     agg_ctx: Arc<AggContext>,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl AggExec {
@@ -73,9 +77,9 @@ impl AggExec {
     ) -> Result<Self> {
         // do not trigger partial skipping if input is ExpandExec
         let is_expand_agg = match &input {
-            e if downcast_any!(e, ExpandExec).is_ok() => true,
-            e if downcast_any!(e, ProjectExec).is_ok() => {
-                downcast_any!(&e.children()[0], ExpandExec).is_ok()
+            e if downcast_any_dyn!(e, ExpandExec).is_ok() => true,
+            e if downcast_any_dyn!(e, ProjectExec).is_ok() => {
+                downcast_any_dyn!(&e.children()[0], ExpandExec).is_ok()
             }
             _ => false,
         };
@@ -103,23 +107,28 @@ impl ExecutionPlan for AggExec {
         "AggExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.agg_ctx.output_schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -151,10 +160,6 @@ impl ExecutionPlan for AggExec {
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
     }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
-    }
 }
 
 impl DisplayAs for AggExec {
@@ -169,7 +174,10 @@ fn execute_agg(
     agg_ctx: Arc<AggContext>,
 ) -> Result<SendableRecordBatchStream> {
     if agg_ctx.groupings.is_empty() {
-        let input = exec_ctx.execute_with_input_stats(&input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         return execute_agg_no_grouping(input, exec_ctx, agg_ctx);
     }
 
@@ -194,15 +202,25 @@ fn execute_agg(
                     Some(exec_ctx.execution_plan_metrics().clone()),
                     false, // do not record output metric
                 );
-                let input_sorted = exec_ctx.clone().execute(&input_sort_exec)?;
+                let input_sorted = materialize_optimized_stream(
+                    exec_ctx
+                        .clone()
+                        .execute_optimized(&input_sort_exec, &ExecuteOptimizedProps::default())?,
+                );
                 execute_agg_sorted(input_sorted, exec_ctx.clone(), agg_ctx)?
             } else {
-                let input = exec_ctx.execute_with_input_stats(&input)?;
+                let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+                    &input,
+                    &ExecuteOptimizedProps::default().with_input_stats(true),
+                )?);
                 execute_agg_with_grouping_hash(input, exec_ctx, agg_ctx)?
             }
         }
         AggExecMode::SortAgg => {
-            let input = exec_ctx.execute_with_input_stats(&input)?;
+            let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+                &input,
+                &ExecuteOptimizedProps::default().with_input_stats(true),
+            )?);
             execute_agg_sorted(input, exec_ctx, agg_ctx)?
         }
     })
@@ -354,7 +372,7 @@ fn execute_agg_sorted(
                     staging_keys.clear();
                     staging_acc_table.resize(0);
                     exec_ctx.baseline_metrics().record_output(num_rows);
-                    sender.send((batch)).await;
+                    sender.send(batch).await;
                 }};
             }
 
@@ -391,7 +409,7 @@ fn execute_agg_sorted(
                             batch_range_start = batch_range_end;
                             flush_staging!();
                         }
-                        staging_keys.push(OwnedKey::from(grouping_row.as_ref()));
+                        staging_keys.push(OwnedKey::from_slice_copy(grouping_row.as_ref()));
                     }
                     acc_indices.push(staging_keys.len() - 1);
                     batch_range_end += 1;
@@ -839,7 +857,7 @@ mod fuzztest {
                 // will trigger spill
                 let key = (rand::random::<u32>() % 1_000_000) as i64;
                 let val = (rand::random::<u32>() % 1_000_000) as f64;
-                let test_null = rand::random::<u32>() % 1000 == 0;
+                let test_null = rand::random::<u32>().is_multiple_of(1000);
 
                 key_builder.append_value(key);
                 if !test_null {

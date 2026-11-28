@@ -1,0 +1,18 @@
+diff --git a/datafusion/datasource/src/table_schema.rs b/datafusion/datasource/src/table_schema.rs
+index f1cb86e..20a5f56 100644
+--- a/datafusion/datasource/src/table_schema.rs
++++ b/datafusion/datasource/src/table_schema.rs
+@@ -315,7 +315,12 @@ impl TableSchemaBuilder {
+         );
+ 
+         let mut builder = SchemaBuilder::from(self.file_schema.as_ref());
+-        builder.extend(self.table_partition_cols.iter().cloned());
++        // auron: allow nullable parquet scan partition key
++        builder.extend(
++            self.table_partition_cols
++                .iter()
++                .map(|f| Arc::new(f.as_ref().clone().with_nullable(true))),
++        );
+         let (table_schema, schema_without_virtual_columns) =
+             if self.virtual_columns.is_empty() {
+                 let schema = Arc::new(builder.finish());

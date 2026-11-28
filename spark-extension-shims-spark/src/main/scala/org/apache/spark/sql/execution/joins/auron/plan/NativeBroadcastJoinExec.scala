@@ -37,7 +37,8 @@ case class NativeBroadcastJoinExec(
     override val joinType: JoinType,
     override val condition: Option[Expression],
     broadcastSide: JoinBuildSide,
-    isNullAwareAntiJoin: Boolean)
+    isNullAwareAntiJoin: Boolean,
+    requiredReservedOrder: Boolean)
     extends NativeBroadcastJoinBase(
       left,
       right,
@@ -47,13 +48,17 @@ case class NativeBroadcastJoinExec(
       joinType,
       condition,
       broadcastSide,
-      isNullAwareAntiJoin)
+      isNullAwareAntiJoin,
+      requiredReservedOrder)
     with HashJoin {
 
-  // Keyless joins and SMJ fallback cannot guarantee the original probe ordering.
+  // Keyless joins cannot guarantee the original probe ordering. Hybrid join fallback no
+  // longer breaks probe ordering when requiredReservedOrder is set, since the native
+  // operator reserves it internally in that case (see auron.proto's
+  // BroadcastJoinExecNode.required_reserved_order), so only fall back to Nil otherwise.
   override def outputOrdering: Seq[SortOrder] = {
-    if ((leftKeys.isEmpty && rightKeys.isEmpty) || SparkAuronConfiguration.SMJ_FALLBACK_ENABLE
-        .get()) {
+    if ((leftKeys.isEmpty && rightKeys.isEmpty) ||
+      (!requiredReservedOrder && SparkAuronConfiguration.HYBRID_JOIN_ENABLE.get())) {
       Nil
     } else {
       super.outputOrdering
@@ -77,10 +82,15 @@ case class NativeBroadcastJoinExec(
   override def requiredChildDistribution
       : List[org.apache.spark.sql.catalyst.plans.physical.Distribution] = {
     import org.apache.spark.sql.catalyst.plans.physical.BroadcastDistribution
+    import org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode
     import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
     import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 
-    def mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAware = false)
+    def mode = if (leftKeys.isEmpty && rightKeys.isEmpty) {
+      IdentityBroadcastMode
+    } else {
+      HashedRelationBroadcastMode(buildBoundKeys, isNullAware = false)
+    }
     broadcastSide match {
       case JoinBuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil

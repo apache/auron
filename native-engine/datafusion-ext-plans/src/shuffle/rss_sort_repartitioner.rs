@@ -15,7 +15,6 @@
 
 use std::sync::Weak;
 
-use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
 use auron_jni_bridge::{
     conf,
@@ -23,15 +22,17 @@ use auron_jni_bridge::{
 };
 use auron_memmgr::{MemConsumer, MemConsumerInfo, MemManager};
 use datafusion::{common::Result, physical_plan::metrics::Time};
-use datafusion_ext_commons::arrow::array_size::BatchSize;
 use futures::lock::Mutex;
 use jni::objects::GlobalRef;
 use once_cell::sync::OnceCell;
 
-use crate::shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData};
+use crate::{
+    common::lazy::LazyBatchRef,
+    shuffle::{Partitioning, ShuffleRepartitioner, buffered_data::BufferedData},
+};
 
 pub struct RssSortShuffleRepartitioner {
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     data: Mutex<BufferedData>,
     rss: GlobalRef,
 }
@@ -44,7 +45,7 @@ impl RssSortShuffleRepartitioner {
         output_io_time: Time,
     ) -> Self {
         Self {
-            mem_consumer_info: None,
+            mem_consumer_info: OnceCell::new(),
             data: Mutex::new(BufferedData::new(
                 partitioning,
                 partition_id,
@@ -61,14 +62,14 @@ impl MemConsumer for RssSortShuffleRepartitioner {
         "RssSortShuffleRepartitioner"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {
@@ -91,9 +92,10 @@ impl Drop for RssSortShuffleRepartitioner {
 
 #[async_trait]
 impl ShuffleRepartitioner for RssSortShuffleRepartitioner {
-    async fn insert_batch(&self, input: RecordBatch) -> Result<()> {
+    async fn insert_batch(&self, input: LazyBatchRef) -> Result<()> {
         // update memory usage before adding to buffered data
-        let mem_used = self.data.lock().await.mem_used() + input.get_batch_mem_size() * 2;
+        let mem_used =
+            self.data.lock().await.mem_used() + input.get_estimated_materialized_mem_size() * 2;
         self.update_mem_used(mem_used).await?;
 
         // add batch to buffered data

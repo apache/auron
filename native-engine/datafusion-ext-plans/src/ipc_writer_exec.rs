@@ -37,14 +37,18 @@ use futures::{StreamExt, TryStreamExt, stream::once};
 use jni::objects::{GlobalRef, JObject};
 use once_cell::sync::OnceCell;
 
-use crate::common::{execution_context::ExecutionContext, timer_helper::TimerHelper};
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+    timer_helper::TimerHelper,
+};
 
 #[derive(Debug)]
 pub struct IpcWriterExec {
     input: Arc<dyn ExecutionPlan>,
     ipc_consumer_resource_id: String,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl IpcWriterExec {
@@ -70,23 +74,28 @@ impl ExecutionPlan for IpcWriterExec {
         "IpcWriterExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -114,7 +123,10 @@ impl ExecutionPlan for IpcWriterExec {
                 jni_new_string!(&self.ipc_consumer_resource_id)?.as_obj()) -> JObject
         )?;
         let ipc_consumer = jni_new_global_ref!(ipc_consumer_local.as_obj())?;
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         let coalesced = exec_ctx.coalesce_with_default_batch_size(input);
 
         Ok(Box::pin(RecordBatchStreamAdapter::new(
@@ -125,10 +137,6 @@ impl ExecutionPlan for IpcWriterExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 

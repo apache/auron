@@ -32,12 +32,15 @@ use datafusion::{
         metrics::{ExecutionPlanMetricsSet, MetricsSet, Time},
     },
 };
-use datafusion_ext_commons::{arrow::cast::cast, downcast_any};
+use datafusion_ext_commons::{arrow::cast::cast, downcast_any, downcast_any_dyn};
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    common::execution_context::{ExecutionContext, WrappedRecordBatchSender},
+    common::{
+        execution_context::{ExecutionContext, WrappedRecordBatchSender},
+        optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+    },
     window::{WindowExpr, WindowFunctionProcessor, window_context::WindowContext},
 };
 
@@ -46,7 +49,7 @@ pub struct WindowExec {
     input: Arc<dyn ExecutionPlan>,
     context: Arc<WindowContext>,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl WindowExec {
@@ -122,23 +125,28 @@ impl ExecutionPlan for WindowExec {
         "WindowExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.context.output_schema.clone()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -165,7 +173,7 @@ impl ExecutionPlan for WindowExec {
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
         // Combining group limit filtering requires exactly one rank-like output column.
-        if let Ok(window_group_limit) = downcast_any!(&self.input, WindowExec)
+        if let Ok(window_group_limit) = downcast_any_dyn!(&self.input, WindowExec)
             && window_group_limit.window_context().group_limit.is_some()
             && self.context.window_exprs.len() == 1
             && self.context.window_exprs[0].is_rank_like()
@@ -190,7 +198,10 @@ impl ExecutionPlan for WindowExec {
         // need complete partition context, such as cume_dist, are handled in
         // execute_window().
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         let coalesced = exec_ctx.coalesce_with_default_batch_size(input);
         let window_ctx = self.context.clone();
         execute_window(coalesced, exec_ctx, window_ctx)
@@ -198,10 +209,6 @@ impl ExecutionPlan for WindowExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 

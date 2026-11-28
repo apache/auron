@@ -13,8 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(get_mut_unchecked)]
-
 mod mem_manager;
 pub mod metrics;
 pub mod runtime_mem_manager;

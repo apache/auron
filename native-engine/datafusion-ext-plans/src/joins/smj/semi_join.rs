@@ -35,13 +35,13 @@ use crate::{
     sort_merge_join_exec::Joiner,
 };
 
-#[derive(std::marker::ConstParamTy, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SemiJoinSide {
     L,
     R,
 }
 
-#[derive(std::marker::ConstParamTy, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct JoinerParams {
     join_side: SemiJoinSide,
     semi: bool,
@@ -58,7 +58,7 @@ impl JoinerParams {
 /// Only one side is emitted, and each row at most once, so the merge result
 /// boils down to one question: Did this row match? Semi join keeps matched
 /// rows, anti join keeps unmatched rows.
-pub struct SemiJoiner<const P: JoinerParams> {
+pub struct SemiJoiner<const P: i32> {
     join_params: JoinParams,
     output_sender: Arc<WrappedRecordBatchSender>,
     /// Rows already decided for output by this join
@@ -76,17 +76,27 @@ pub struct SemiJoiner<const P: JoinerParams> {
     output_rows: usize,
 }
 
-const LEFT_SEMI: JoinerParams = JoinerParams::new(L, true);
-const LEFT_ANTI: JoinerParams = JoinerParams::new(L, false);
-const RIGHT_SEMI: JoinerParams = JoinerParams::new(R, true);
-const RIGHT_ANTI: JoinerParams = JoinerParams::new(R, false);
+const LEFT_SEMI: i32 = 0;
+const LEFT_ANTI: i32 = 1;
+const RIGHT_SEMI: i32 = 2;
+const RIGHT_ANTI: i32 = 3;
 
 pub type LeftSemiJoiner = SemiJoiner<LEFT_SEMI>;
 pub type LeftAntiJoiner = SemiJoiner<LEFT_ANTI>;
 pub type RightSemiJoiner = SemiJoiner<RIGHT_SEMI>;
 pub type RightAntiJoiner = SemiJoiner<RIGHT_ANTI>;
 
-impl<const P: JoinerParams> SemiJoiner<P> {
+const fn get_joiner(p: i32) -> JoinerParams {
+    match p {
+        LEFT_SEMI => JoinerParams::new(L, true),
+        LEFT_ANTI => JoinerParams::new(L, false),
+        RIGHT_SEMI => JoinerParams::new(R, true),
+        RIGHT_ANTI => JoinerParams::new(R, false),
+        _ => unreachable!(),
+    }
+}
+
+impl<const P: i32> SemiJoiner<P> {
     pub fn new(join_params: JoinParams, output_sender: Arc<WrappedRecordBatchSender>) -> Self {
         Self {
             join_params,
@@ -125,7 +135,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
         // Only this join's own side is queried, so the opposite side's position array
         // is never read
         let result = pending.evaluate(&join_filter, cur1.batches(), cur2.batches(), |run| {
-            let (positions, shift) = match P.join_side {
+            let (positions, shift) = match get_joiner(P).join_side {
                 L => (run.lpos, run.lbase),
                 R => (run.rpos, run.rbase),
             };
@@ -147,7 +157,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
         debug_assert!(self.pending.is_empty());
         let this = self.get_mut();
         for (&idx, &matched) in this.rows.iter().zip(&this.matched) {
-            if matched == P.semi {
+            if matched == get_joiner(P).semi {
                 this.indices.push(idx);
             }
         }
@@ -171,7 +181,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
         let output_timer = output_time.timer();
 
         let projection = &self.join_params.projection;
-        let cols = match P.join_side {
+        let cols = match get_joiner(P).join_side {
             L => {
                 let batch_interleaver = create_batch_interleaver(cur1.batches(), false)?;
                 let cols = batch_interleaver(&indices)?;
@@ -228,12 +238,12 @@ impl<const P: JoinerParams> SemiJoiner<P> {
         lranges: &[IdxRange],
         rranges: &[IdxRange],
     ) -> Result<()> {
-        let own_ranges = match P.join_side {
+        let own_ranges = match get_joiner(P).join_side {
             L => lranges,
             R => rranges,
         };
         if self.join_params.residual_filter.is_none() {
-            return match P.semi {
+            return match get_joiner(P).semi {
                 true => self.push(cur1, cur2, own_ranges).await,
                 false => Ok(()),
             };
@@ -246,7 +256,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
         self.matched.resize(num_rows, false);
 
         for block in product_blocks(lranges, rranges, chunk_size) {
-            let (offset, len) = match P.join_side {
+            let (offset, len) = match get_joiner(P).join_side {
                 L => (block.loffset, block.lrange.len()),
                 R => (block.roffset, block.rrange.len()),
             };
@@ -290,7 +300,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
         side: SemiJoinSide,
         ranges: &[IdxRange],
     ) -> Result<()> {
-        if side != P.join_side || P.semi {
+        if side != get_joiner(P).join_side || get_joiner(P).semi {
             return Ok(());
         }
         if self.join_params.residual_filter.is_none() {
@@ -328,7 +338,7 @@ impl<const P: JoinerParams> SemiJoiner<P> {
 }
 
 #[async_trait]
-impl<const P: JoinerParams> Joiner for SemiJoiner<P> {
+impl<const P: i32> Joiner for SemiJoiner<P> {
     async fn join(
         mut self: Pin<&mut Self>,
         cur1: &mut StreamCursor,

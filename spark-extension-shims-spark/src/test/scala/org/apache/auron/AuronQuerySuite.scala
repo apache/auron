@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeBase
 import org.apache.spark.sql.execution.auron.plan.NativeShuffleExchangeExec
 import org.apache.spark.sql.execution.auron.plan.NativeSortMergeJoinBase
 import org.apache.spark.sql.execution.joins.auron.plan.NativeBroadcastJoinExec
+import org.apache.spark.sql.types.{IntegerType, NullType, StructType}
 
 import org.apache.auron.jni.JniBridge
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
@@ -163,7 +164,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test select multiple spark ext functions with the same signature") {
-    withSQLConf("spark.auron.udf.singleChildFallback.enabled" -> "true") {
+    withSQLConf(
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t1") {
         sql("create table t1 using parquet as select '2024-12-18' as event_time")
         checkSparkAnswerAndOperator("select year(event_time), month(event_time) from t1")
@@ -204,6 +207,29 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
       assert(!nativeShuffleRDD.nativePlanWrapper.p.getClass.getDeclaredFields.exists { field =>
         classOf[NativeShuffleExchangeBase].isAssignableFrom(field.getType)
       })
+    }
+  }
+
+  test("hash repartition uses Spark partition id expression") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTable("t_hash_partition") {
+        sql("""
+            |create table t_hash_partition using parquet as
+            |select cast(id - 100 as int) as k, cast(id as string) as s
+            |from range(200)
+            |union all select cast(null as int), cast(null as string)
+            |""".stripMargin)
+        Seq(1, 7, 16).foreach { partitions =>
+          val df = checkSparkAnswerAndOperator(() =>
+            spark
+              .table("t_hash_partition")
+              .repartition(partitions, $"k", $"s")
+              .selectExpr("k", "s", "spark_partition_id() as partition_id"))
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case e: NativeShuffleExchangeExec => e
+          }.isDefined)
+        }
+      }
     }
   }
 
@@ -345,12 +371,20 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
           SparkAuronConfiguration.ORC_FORCE_POSITIONAL_EVOLUTION.key -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
-            Seq[(Integer, Integer, Integer)]((1, 2, 1), (3, 4, 2), (5, 6, 3), (null, null, 4))
+            Seq[(Integer, Integer, Integer)](
+              (1, 2, 1),
+              (3, 4, 2),
+              (5, 6, 3),
+              (null, null, 4),
+              (7, 8, null))
               .toDF("c1", "c2", "p")
               .write
               .partitionBy("p")
               .orc(path)
             checkSparkAnswerAndOperator(() => spark.read.orc(path))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).select("p", "c2", "c1"))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).select("p"))
+            checkSparkAnswerAndOperator(() => spark.read.orc(path).selectExpr("count(*)"))
 
             withTable("t") {
               sql(s"""
@@ -361,6 +395,7 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
                      |""".stripMargin)
               sql("MSCK REPAIR TABLE t")
               checkSparkAnswerAndOperator(() => spark.table("t"))
+              checkSparkAnswerAndOperator(() => spark.table("t").select("p", "c2", "c3"))
             }
           }
         }
@@ -475,7 +510,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with hour function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_hour") {
         sql("""
               |create table t_hour using parquet as
@@ -497,7 +534,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with minute function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_minute") {
         sql("""
               |create table t_minute using parquet as
@@ -518,7 +557,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("test filter with second function") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_second") {
         sql("""
               |create table t_second using parquet as
@@ -540,7 +581,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
 
   // For Date input: hour/minute/second should all be 0
   test("timeparts on Date input return zeros") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_date_parts") {
         sql(
           "create table t_date_parts using parquet as select date'2024-12-18' as d union all select date'2024-12-19'")
@@ -557,7 +600,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("hour/minute/second respect timezone via from_utc_timestamp") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_tz") {
         // Construct: UTC 1970-01-01 00:00:00 → Asia/Shanghai => local 08:00:00
         sql("""
@@ -574,7 +619,9 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("minute/second with non-whole-hour offsets") {
-    withEnvConf("spark.auron.datetime.extract.enabled" -> "true") {
+    withEnvConf(
+      "spark.auron.datetime.extract.enabled" -> "true",
+      "spark.auron.enableNativeDateTimeFunctions" -> "true") {
       withTable("t_tz2") {
         sql("""
               |create table t_tz2 using parquet as
@@ -1118,18 +1165,94 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
   }
 
   test("NOT IN subquery with NULL values") {
-    val row = identity[(java.lang.Integer, java.lang.Integer)] _
-    Seq(row((1, 1)), row((2, 2)), row((3, null)))
-      .toDF("a", "b")
-      .createOrReplaceTempView("tbl")
-    val df = checkSparkAnswer("select * from tbl where a not in (select b from tbl)")
+    withSparkConf(
+      "spark.auron.hybrid.join.enable" -> "true",
+      "spark.auron.hybrid.join.rows.threshold" -> "0",
+      "spark.auron.hybrid.join.group.mem.threshold" -> "1") {
+      val row = identity[(java.lang.Integer, java.lang.Integer)] _
+      Seq(row((1, 1)), row((2, 2)), row((3, null)))
+        .toDF("a", "b")
+        .createOrReplaceTempView("tbl")
+      val df = checkSparkAnswer("select * from tbl where a not in (select b from tbl)")
 
-    // Spark 3.0: NOT IN subquery is converted to BroadcastNestedLoopJoinExec, and falls back due to unsupported join condition
-    if (AuronTestUtils.isSparkV31OrGreater) {
-      assert(collectFirst(df.queryExecution.executedPlan) { case bhj: NativeBroadcastJoinExec =>
-        assert(bhj.isNullAwareAntiJoin)
-        bhj
-      }.isDefined)
+      // Spark 3.0: NOT IN uses BroadcastNestedLoopJoinExec and falls back.
+      if (AuronTestUtils.isSparkV31OrGreater) {
+        assert(collectFirst(df.queryExecution.executedPlan) { case bhj: NativeBroadcastJoinExec =>
+          assert(bhj.isNullAwareAntiJoin)
+          assert(bhj.metrics("hybrid_join_time").value > 0)
+          bhj
+        }.isDefined)
+      }
+    }
+  }
+
+  test("NOT IN subquery with VOID join keys") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempView("not_in_void_keys") {
+        spark
+          .createDataFrame(
+            java.util.Arrays.asList(Row(null)),
+            new StructType().add("k", NullType))
+          .createOrReplaceTempView("not_in_void_keys")
+        val df = sql("""
+            |SELECT k FROM not_in_void_keys
+            |WHERE k NOT IN (SELECT k FROM not_in_void_keys)
+            |""".stripMargin)
+        checkAnswer(df, Seq.empty)
+        if (AuronTestUtils.isSparkV31OrGreater) {
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+          }.isDefined)
+        }
+      }
+    }
+  }
+
+  test("NOT IN subquery with VOID keys and runtime empty build") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempView("not_in_empty_void_build") {
+        spark
+          .createDataFrame(
+            java.util.Arrays.asList(Row(null, 1), Row(null, 2)),
+            new StructType().add("k", NullType).add("id", IntegerType))
+          .createOrReplaceTempView("not_in_empty_void_build")
+        val df = sql("""
+            |SELECT id, k FROM not_in_empty_void_build
+            |WHERE k NOT IN (SELECT k FROM not_in_empty_void_build WHERE id < 0)
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, null), Row(2, null)))
+        if (AuronTestUtils.isSparkV31OrGreater) {
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+          }.isDefined)
+        }
+      }
+    }
+  }
+
+  test("NOT IN subquery with runtime empty build retains NULL probe rows") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      withTempPath { path =>
+        withTempView("not_in_empty_build") {
+          Seq[java.lang.Integer](null, 1, 2).toDF("k").write.parquet(path.getCanonicalPath)
+          spark.read
+            .parquet(path.getCanonicalPath)
+            .createOrReplaceTempView("not_in_empty_build")
+
+          val df = checkSparkAnswer("""
+              |SELECT k FROM not_in_empty_build
+              |WHERE k NOT IN (SELECT k FROM not_in_empty_build WHERE k < 0)
+              |""".stripMargin)
+          checkAnswer(df, Seq(Row(null), Row(1), Row(2)))
+
+          // Spark 3.0 uses BroadcastNestedLoopJoinExec and falls back.
+          if (AuronTestUtils.isSparkV31OrGreater) {
+            assert(collectFirst(df.queryExecution.executedPlan) {
+              case bhj: NativeBroadcastJoinExec if bhj.isNullAwareAntiJoin => bhj
+            }.isDefined)
+          }
+        }
+      }
     }
   }
 

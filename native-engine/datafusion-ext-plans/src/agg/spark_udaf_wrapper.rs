@@ -35,6 +35,7 @@ use datafusion::{
     physical_expr::PhysicalExprRef,
 };
 use datafusion_ext_commons::{
+    arrow::ffi::export_ffi_array,
     downcast_any,
     io::{read_len, write_len},
 };
@@ -114,7 +115,7 @@ impl SparkUDAFWrapper {
             &RecordBatchOptions::new().with_row_count(Some(params_batch_num_rows)),
         )?;
         let batch_struct_array = StructArray::from(params_batch);
-        let mut export_ffi_batch_array = FFI_ArrowArray::new(&batch_struct_array.to_data());
+        let mut export_ffi_batch_array = export_ffi_array(&batch_struct_array);
 
         // create zipped indices (using cached indices array)
         let zipped_indices_array = cache.get_or_try_init(move || {
@@ -396,7 +397,7 @@ impl AccColumn for AccUDAFBufferRowsColumn {
     fn unfreeze_from_arrays(&mut self, arrays: &[ArrayRef]) -> Result<()> {
         assert_eq!(self.num_records(), 0, "expect empty AccColumn");
         let num_rows = arrays[0].len();
-        let ffi_imported_rows = FFI_ArrowArray::new(&arrays[0].to_data());
+        let ffi_imported_rows = export_ffi_array(arrays[0].as_ref());
         let rows = jni_call!(SparkUDAFWrapperContext(self.jcontext.as_obj())
             .importRows(&ffi_imported_rows as *const FFI_ArrowArray as i64) -> JObject)?;
         self.obj = jni_new_global_ref!(rows.as_obj())?;

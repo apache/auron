@@ -25,7 +25,8 @@ import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
 import org.apache.auron.spark.ui.AuronPlanDiagnosticEvent
 
-class AuronSQLAppStatusStore(store: KVStore) extends Logging {
+class AuronSQLAppStatusStore(store: KVStore, liveStore: => Option[SQLAppStatusStore] = None)
+    extends Logging {
 
   private val sparkStore = new SQLAppStatusStore(store)
 
@@ -49,8 +50,9 @@ class AuronSQLAppStatusStore(store: KVStore) extends Logging {
 
   def metrics(id: Long): Seq[(String, String, String)] = {
     try {
-      val values = sparkStore.executionMetrics(id)
-      sparkStore
+      val sqlStore = liveStore.getOrElse(sparkStore)
+      val values = sqlStore.executionMetrics(id)
+      sqlStore
         .planGraph(id)
         .allNodes
         .flatMap { node =>

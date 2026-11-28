@@ -40,11 +40,11 @@ index 037accdbe..41cef1bba 100644
 +# 	branch = main
 diff --git a/datafusion-testing b/datafusion-testing
 deleted file mode 160000
-index e9f9e22cc..000000000
+index 13bbae387..000000000
 --- a/datafusion-testing
 +++ /dev/null
 @@ -1 +0,0 @@
--Subproject commit e9f9e22ccf09145a7368f80fd6a871f11e2b4481
+-Subproject commit 13bbae38776c2bfbc1fab1be7e7220222d4284bf
 diff --git a/parquet-testing b/parquet-testing
 deleted file mode 160000
 index 107b36603..000000000
@@ -54,11 +54,11 @@ index 107b36603..000000000
 -Subproject commit 107b36603e051aee26bd93e04b871034f6c756c0
 diff --git a/testing b/testing
 deleted file mode 160000
-index d2a137123..000000000
+index 7df2b70ba..000000000
 --- a/testing
 +++ /dev/null
 @@ -1 +0,0 @@
--Subproject commit d2a13712303498963395318a4eb42872e66aead7
--- 
+-Subproject commit 7df2b70baf4f081ebf8e0c6bd22745cf3cbfd824
+--
 2.50.1
 

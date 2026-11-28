@@ -1,22 +1,11 @@
-From 0f9132f81a3a6d69ed2b893a5bc5d7820f819a4d Mon Sep 17 00:00:00 2001
-From: zhangli20 <zhangli20@kuaishou.com>
-Date: Mon, 16 Sep 2024 00:16:57 +0800
-Subject: [PATCH] auron: expose fields of AsyncReader/ArrowReaderBuilder to
- public
-
----
- parquet/src/arrow/arrow_reader/mod.rs | 22 +++++++++++-----------
- parquet/src/arrow/async_reader/mod.rs |  2 +-
- 2 files changed, 12 insertions(+), 12 deletions(-)
-
 diff --git a/parquet/src/arrow/arrow_reader/mod.rs b/parquet/src/arrow/arrow_reader/mod.rs
-index 9127423ef..027b62b44 100644
+index 2517e89..b6ce6fb 100644
 --- a/parquet/src/arrow/arrow_reader/mod.rs
 +++ b/parquet/src/arrow/arrow_reader/mod.rs
-@@ -91,27 +91,27 @@ pub mod statistics;
- /// [`StatisticsConverter`]: statistics::StatisticsConverter
- /// [Querying Parquet with Millisecond Latency]: https://arrow.apache.org/blog/2022/12/26/querying-parquet-with-millisecond-latency/
- pub struct ArrowReaderBuilder<T> {
+@@ -120,33 +120,33 @@ pub struct ArrowReaderBuilder<T> {
+     ///
+     /// [`ParquetPushDecoderBuilder`]: crate::arrow::push_decoder::ParquetPushDecoderBuilder
+     /// [`PushDecoderInput`]: crate::arrow::push_decoder::PushDecoderInput
 -    pub(crate) input: T,
 +    pub input: T,
  
@@ -44,27 +33,20 @@ index 9127423ef..027b62b44 100644
 -    pub(crate) selection: Option<RowSelection>,
 +    pub selection: Option<RowSelection>,
  
+-    pub(crate) row_selection_policy: RowSelectionPolicy,
++    pub row_selection_policy: RowSelectionPolicy,
+ 
 -    pub(crate) limit: Option<usize>,
 +    pub limit: Option<usize>,
  
 -    pub(crate) offset: Option<usize>,
 +    pub offset: Option<usize>,
+ 
+-    pub(crate) metrics: ArrowReaderMetrics,
++    pub metrics: ArrowReaderMetrics,
+ 
+-    pub(crate) max_predicate_cache_size: usize,
++    pub max_predicate_cache_size: usize,
  }
  
  impl<T: Debug> Debug for ArrowReaderBuilder<T> {
-diff --git a/parquet/src/arrow/async_reader/mod.rs b/parquet/src/arrow/async_reader/mod.rs
-index 248de5be3..b9152f924 100644
---- a/parquet/src/arrow/async_reader/mod.rs
-+++ b/parquet/src/arrow/async_reader/mod.rs
-@@ -215,7 +215,7 @@ impl ArrowReaderMetadata {
- ///
- /// Allows sharing the same builder for both the sync and async versions, whilst also not
- /// breaking the pre-existing ParquetRecordBatchStreamBuilder API
--pub struct AsyncReader<T>(T);
-+pub struct AsyncReader<T>(pub T);
- 
- /// A builder for reading parquet files from an `async` source as  [`ParquetRecordBatchStream`]
- ///
--- 
-2.50.1
-

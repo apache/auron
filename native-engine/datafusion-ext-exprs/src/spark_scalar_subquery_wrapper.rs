@@ -83,20 +83,9 @@ impl PartialEq for SparkScalarSubqueryWrapperExpr {
     }
 }
 
-impl DynEq for SparkScalarSubqueryWrapperExpr {
-    fn dyn_eq(&self, other: &dyn Any) -> bool {
-        other
-            .downcast_ref::<Self>()
-            .map(|other| other.eq(self))
-            .unwrap_or(false)
-    }
-}
+impl Eq for SparkScalarSubqueryWrapperExpr {}
 
 impl PhysicalExpr for SparkScalarSubqueryWrapperExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, _: &Schema) -> Result<DataType> {
         Ok(self.return_type.clone())
     }

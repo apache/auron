@@ -22,15 +22,15 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
 };
 use datafusion::{
-    common::{Column, Result, ScalarValue},
+    common::{Column, Result, ScalarValue, pruning::PruningStatistics},
     logical_expr::Operator,
     physical_expr::{
-        PhysicalExpr,
+        PhysicalExpr, PhysicalExprSimplifier,
         expressions::{BinaryExpr, Column as PhysicalColumn, Literal},
-        simplifier::PhysicalExprSimplifier,
     },
-    physical_optimizer::pruning::{PruningPredicate, PruningStatistics},
 };
+
+use datafusion_pruning::PruningPredicateBuilder;
 
 struct DecimalStatistics {
     values: ArrayRef,
@@ -55,7 +55,7 @@ impl PruningStatistics for DecimalStatistics {
         None
     }
 
-    fn row_counts(&self, _: &Column) -> Option<ArrayRef> {
+    fn row_counts(&self) -> Option<ArrayRef> {
         None
     }
 
@@ -95,7 +95,9 @@ fn decimal_equality_as_range_uses_only_min_max() -> Result<()> {
         let upper = Arc::new(BinaryExpr::new(column, Operator::LtEq, literal));
         let expression = Arc::new(BinaryExpr::new(lower, Operator::And, upper));
         let expression = PhysicalExprSimplifier::new(&schema).simplify(expression)?;
-        let predicate = PruningPredicate::try_new(expression, Arc::clone(&schema))?;
+        let predicate = PruningPredicateBuilder::new()
+            .with_file_schema(Arc::clone(&schema))
+            .try_build(expression)?;
         assert!(predicate.literal_guarantees().is_empty());
         assert_eq!(
             predicate.prune(&statistics)?,

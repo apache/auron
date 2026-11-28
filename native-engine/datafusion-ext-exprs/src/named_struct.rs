@@ -71,10 +71,6 @@ impl PartialEq for NamedStructExpr {
 }
 
 impl PhysicalExpr for NamedStructExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
         Ok(self.return_type.clone())
     }

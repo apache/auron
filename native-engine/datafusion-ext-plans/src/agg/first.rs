@@ -118,7 +118,7 @@ impl Agg for AggFirst {
                     ((acc_idx, partial_arg_idx) in (acc_idx, partial_arg_idx)) => {
                         if flag_accs.value(acc_idx).is_none() {
                             if partial_arg.is_valid(partial_arg_idx) {
-                                value_accs.set_value(acc_idx, Some(AccBytes::from(partial_arg.value(partial_arg_idx).as_ref())));
+                                value_accs.set_value(acc_idx, Some(AccBytes::from_slice_copy(partial_arg.value(partial_arg_idx).as_ref())));
                                 flag_accs.set_value(acc_idx, Some(true));
                             } else {
                                 value_accs.set_value(acc_idx, None);

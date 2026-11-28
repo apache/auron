@@ -184,7 +184,7 @@ impl<P: AggMaxMinParams> Agg for AggMaxMin<P> {
                         if let Some(w) = accs.value(acc_idx) && w.as_ref().partial_cmp(partial_value.as_ref()) == Some(P::ORD) {
                             continue;
                         }
-                        accs.set_value(acc_idx, Some(AccBytes::from(partial_value)));
+                        accs.set_value(acc_idx, Some(AccBytes::from_slice_copy(partial_value)));
                     }
                 }
             }};

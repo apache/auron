@@ -18,15 +18,146 @@ package org.apache.auron
 
 import org.apache.spark.sql.AuronQueryTest
 import org.apache.spark.sql.auron.NativeConverters
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GreaterThan, Literal}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, StringType}
 
 import org.apache.auron.protobuf.ScalarFunction
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
+import org.apache.auron.util.AuronTestUtils
 
 class NativeConvertersSuite
     extends AuronQueryTest
     with BaseAuronSQLSuite
     with AuronSQLTestHelper {
+
+  @sparkver("3.0 / 3.1 / 3.2 / 3.3 / 3.4 / 3.5")
+  private def checkCollationAwareHashConversion(): Unit = {}
+
+  @sparkver("4.0 / 4.1 / 4.2")
+  private def checkCollationAwareHashConversion(): Unit = {
+    import org.apache.spark.sql.catalyst.expressions.CollationAwareMurmur3Hash
+    import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
+
+    for (collation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UTF8_BINARY_RTRIM", "UNICODE")) {
+      val stringType = StringType(collation)
+      val dataTypes = Seq(
+        stringType,
+        ArrayType(stringType),
+        StructType(Seq(StructField("s", stringType))),
+        MapType(StringType, stringType),
+        MapType(stringType, IntegerType),
+        ArrayType(StructType(Seq(StructField("s", stringType)))))
+      for (dataType <- dataTypes; seed <- Seq(42, 7); isPruningExpr <- Seq(false, true)) {
+        val expr = CollationAwareMurmur3Hash(Seq(AttributeReference("key", dataType)()), seed)
+        var fallbackCalled = false
+        val converted = NativeConverters.convertExprWithFallback(
+          expr,
+          isPruningExpr,
+          e => {
+            assert(e == expr)
+            fallbackCalled = true
+            org.apache.auron.protobuf.PhysicalExprNode.getDefaultInstance
+          })
+        if (collation == "UTF8_BINARY" && seed == 42) {
+          assert(!fallbackCalled)
+          assert(converted.getScalarFunction.getName == "Spark_Murmur3Hash")
+        } else {
+          assert(fallbackCalled)
+        }
+      }
+    }
+  }
+
+  test("collation-aware hash conversion preserves binary equality and fallback") {
+    checkCollationAwareHashConversion()
+  }
+
+  private def dateTimeExpressions: Seq[Expression] = {
+    val functions = Seq(
+      "year(date'2024-03-15')",
+      "month(date'2024-03-15')",
+      "dayofmonth(date'2024-03-15')",
+      "dayofyear(date'2024-03-15')",
+      "dayofweek(date'2024-03-15')",
+      "weekofyear(date'2024-03-15')",
+      "quarter(date'2024-03-15')",
+      "hour(timestamp'2024-03-15 14:30:45')",
+      "minute(timestamp'2024-03-15 14:30:45')",
+      "second(timestamp'2024-03-15 14:30:45')",
+      "last_day(date'2024-03-15')",
+      "next_day(date'2024-03-15', 'MON')",
+      "datediff(date'2024-03-15', date'2024-03-01')",
+      "date_add(date'2024-03-15', 1)",
+      "date_sub(date'2024-03-15', 1)",
+      "add_months(date'2024-03-15', 1)",
+      "months_between(timestamp'2024-03-15 14:30:45', timestamp'2024-02-15 14:30:45')",
+      "date_trunc('day', timestamp'2024-03-15 14:30:45')") ++
+      (if (AuronTestUtils.isSparkV30OrGreater) Seq("make_date(2024, 3, 15)") else Nil) ++
+      (if (AuronTestUtils.isSparkV31OrGreater) {
+         Seq("unix_date(date'2024-03-15')", "date_from_unix_date(1)")
+       } else Nil)
+    functions.map { function =>
+      sql(s"select $function").queryExecution.analyzed.expressions.head.children.head
+    }
+  }
+
+  test("datetime native conversion is disabled by default") {
+    assert(!SparkAuronConfiguration.ENABLE_NATIVE_DATETIME_FUNCTIONS.defaultValue())
+    assert(!NativeConverters.nativeDateTimeFunctionsEnabled)
+    withSQLConf(
+      "spark.auron.udf.singleChildFallback.enabled" -> "true",
+      "spark.auron.datetime.extract.enabled" -> "true") {
+      dateTimeExpressions.foreach { expr =>
+        assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+      }
+    }
+  }
+
+  test("datetime expressions fall back for regular and pruning conversion when disabled") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "false",
+      "spark.auron.datetime.extract.enabled" -> "true") {
+      for (expr <- dateTimeExpressions; isPruningExpr <- Seq(false, true)) {
+        var fallbackCalled = false
+        NativeConverters.convertExprWithFallback(
+          expr,
+          isPruningExpr,
+          e => {
+            assert(e == expr)
+            fallbackCalled = true
+            org.apache.auron.protobuf.PhysicalExprNode.getDefaultInstance
+          })
+        assert(fallbackCalled)
+      }
+      assert(NativeConverters.convertExpr(Literal(1)).hasLiteral)
+    }
+  }
+
+  test("datetime expressions keep their native conversion when enabled") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.datetime.extract.enabled" -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      dateTimeExpressions.foreach { expr =>
+        val converted = NativeConverters.convertExpr(expr)
+        assert(converted.hasScalarFunction || converted.hasTryCast)
+      }
+    }
+  }
+
+  test("datetime master switch does not override the time-part extract switch") {
+    withSQLConf(
+      "spark.auron.enableNativeDateTimeFunctions" -> "true",
+      "spark.auron.datetime.extract.enabled" -> "false",
+      "spark.auron.udf.singleChildFallback.enabled" -> "true") {
+      dateTimeExpressions
+        .filter(e => Seq("Hour", "Minute", "Second").contains(e.getClass.getSimpleName))
+        .foreach { expr =>
+          assert(NativeConverters.convertExpr(expr).hasSparkUdfWrapperExpr)
+        }
+    }
+  }
 
   private def assertTrimmedCast(rawValue: String, targetType: DataType): Unit = {
     val expr = Cast(Literal.create(rawValue, StringType), targetType)

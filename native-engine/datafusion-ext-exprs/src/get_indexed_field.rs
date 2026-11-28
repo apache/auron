@@ -63,10 +63,6 @@ impl std::fmt::Display for GetIndexedFieldExpr {
 }
 
 impl PhysicalExpr for GetIndexedFieldExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, input_schema: &Schema) -> Result<DataType> {
         let data_type = self.arg.data_type(input_schema)?;
         let field = get_indexed_field(&data_type, &self.key)?;

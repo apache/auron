@@ -28,6 +28,7 @@ import org.apache.spark.sql.auron.NativeRDD
 import org.apache.spark.sql.auron.NativeSupports
 import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight, JoinBuildSide}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.RightOuter
 import org.apache.spark.sql.execution.BinaryExecNode
@@ -36,6 +37,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 
 import org.apache.auron.{protobuf => pb}
 import org.apache.auron.metric.SparkMetricNode
+import org.apache.auron.spark.configuration.SparkAuronConfiguration
 
 abstract class NativeShuffledHashJoinBase(
     override val left: SparkPlan,
@@ -44,7 +46,8 @@ abstract class NativeShuffledHashJoinBase(
     rightKeys: Seq[Expression],
     joinType: JoinType,
     condition: Option[Expression],
-    buildSide: JoinBuildSide)
+    buildSide: JoinBuildSide,
+    requiredReservedOrder: Boolean)
     extends BinaryExecNode
     with NativeSupports {
 
@@ -61,7 +64,8 @@ abstract class NativeShuffledHashJoinBase(
           "probed_side_search_time",
           "probed_side_compare_time",
           "build_output_time",
-          "fallback_sort_merge_join_time",
+          "hybrid_join_time",
+          "reserve_order_sort_time",
           "input_batch_count",
           "input_batch_mem_size",
           "input_row_count"))
@@ -94,6 +98,19 @@ abstract class NativeShuffledHashJoinBase(
   }
 
   protected def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression]
+
+  // Keyless joins cannot guarantee the original probe ordering. Hybrid join fallback no
+  // longer breaks probe ordering when requiredReservedOrder is set, since the native
+  // operator reserves it internally in that case (see auron.proto's
+  // HashJoinExecNode.required_reserved_order), so only fall back to Nil otherwise.
+  protected def reservedOutputOrdering(computeOrdering: => Seq[SortOrder]): Seq[SortOrder] = {
+    if ((leftKeys.isEmpty && rightKeys.isEmpty) ||
+      (!requiredReservedOrder && SparkAuronConfiguration.HYBRID_JOIN_ENABLE.get())) {
+      Nil
+    } else {
+      computeOrdering
+    }
+  }
 
   // check whether native converting is supported
   nativeSchema
@@ -145,6 +162,7 @@ abstract class NativeShuffledHashJoinBase(
           .setJoinType(nativeJoinType)
           .addAllOn(nativeJoinOn.asJava)
           .setBuildSide(nativeBuildSide)
+          .setRequiredReservedOrder(requiredReservedOrder)
         nativeJoinFilter.foreach(hashJoinExec.setFilter)
         pb.PhysicalPlanNode.newBuilder().setHashJoin(hashJoinExec).build()
       },

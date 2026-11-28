@@ -89,6 +89,8 @@ object NativeConverters extends Logging {
   def udfJsonEnabled: Boolean = SparkAuronConfiguration.UDF_JSON_ENABLED.get()
   def udfBrickHouseEnabled: Boolean = SparkAuronConfiguration.UDF_BRICKHOUSE_ENABLED.get()
   def decimalArithOpEnabled: Boolean = SparkAuronConfiguration.DECIMAL_ARITH_OP_ENABLED.get()
+  def nativeDateTimeFunctionsEnabled: Boolean =
+    SparkAuronConfiguration.ENABLE_NATIVE_DATETIME_FUNCTIONS.get()
   def datetimeExtractEnabled: Boolean = SparkAuronConfiguration.DATETIME_EXTRACT_ENABLED.get()
   def castTrimStringEnabled: Boolean = SparkAuronConfiguration.CAST_STRING_TRIM_ENABLE.get()
   def singleChildFallbackEnabled: Boolean =
@@ -428,6 +430,11 @@ object NativeConverters extends Logging {
       this.buildExtScalarFunctionNode(_, _, _, isPruningExpr, fallback)
 
     sparkExpr match {
+      case e @ (_: Year | _: Month | _: DayOfMonth | _: DayOfYear | _: DayOfWeek | _: WeekOfYear |
+          _: Quarter | _: Hour | _: Minute | _: Second | _: LastDay | _: NextDay | _: DateDiff |
+          _: DateAdd | _: DateSub | _: AddMonths | _: MonthsBetween | _: TruncTimestamp)
+          if !nativeDateTimeFunctionsEnabled =>
+        fallback(e)
       case e: NativeExprWrapperBase => e.wrapped
       case e: Literal =>
         val schema = StructType(Seq(StructField("", e.dataType, e.nullable)))
@@ -776,6 +783,12 @@ object NativeConverters extends Logging {
           }
         }
 
+      case e: Pmod if e.dataType == IntegerType && (e.right match {
+            case Literal(n: Int, IntegerType) => n > 0
+            case _ => false
+          }) =>
+        buildExtScalarFunction("Spark_Pmod", e.children, e.dataType)
+
       case e: Remainder =>
         val lhs = e.left
         val rhs = e.right
@@ -846,7 +859,7 @@ object NativeConverters extends Logging {
         buildBinaryExprNode(lhs, castIfNecessary(rhs, lhs.dataType), "BitwiseShiftRight")
 
       // builtin scalar functions
-      case e: Sqrt => buildScalarFunction(pb.ScalarFunction.Sqrt, e.children, e.dataType)
+      case e: Sqrt => buildExtScalarFunction("Spark_Sqrt", e.children, e.dataType)
       case e: Sin => buildScalarFunction(pb.ScalarFunction.Sin, e.children, e.dataType)
       case e: Cos => buildScalarFunction(pb.ScalarFunction.Cos, e.children, e.dataType)
       case e: Tan => buildScalarFunction(pb.ScalarFunction.Tan, e.children, e.dataType)
@@ -855,7 +868,7 @@ object NativeConverters extends Logging {
       case e: Acosh => buildScalarFunction(pb.ScalarFunction.Acosh, e.children, e.dataType)
       case e: Atan => buildScalarFunction(pb.ScalarFunction.Atan, e.children, e.dataType)
       case e: Exp => buildScalarFunction(pb.ScalarFunction.Exp, e.children, e.dataType)
-      case e: MakeDate =>
+      case e: MakeDate if nativeDateTimeFunctionsEnabled =>
         buildExtScalarFunction(
           "Spark_MakeDate",
           e.children :+ Literal(Shims.get.getMakeDateFailOnError(e)),
@@ -916,20 +929,18 @@ object NativeConverters extends Logging {
             }
           }
           .getOrElse(fallback(e))
-      case e: Round =>
-        e.scale match {
-          case Literal(n: Int, _) =>
-            buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(n.toLong)), e.dataType)
-          case _ =>
-            buildExtScalarFunction("Spark_Round", Seq(e.child, Literal(0L)), e.dataType)
-        }
-
-      case e: BRound =>
-        e.scale match {
-          case Literal(n: Int, _) =>
-            buildExtScalarFunction("Spark_BRound", Seq(e.child, Literal(n.toLong)), e.dataType)
-          case _ =>
-            buildExtScalarFunction("Spark_BRound", Seq(e.child, Literal(0L)), e.dataType)
+      case e @ (_: Round | _: BRound) =>
+        val scale = e.children(1).eval()
+        if (scale == null) {
+          convertExprWithFallback(Literal.create(null, e.dataType), isPruningExpr, fallback)
+        } else {
+          buildExtScalarFunction(
+            if (e.isInstanceOf[BRound]) "Spark_BRound" else "Spark_Round",
+            Seq(
+              e.children.head,
+              Literal.create(scale, IntegerType),
+              Literal(Shims.get.getRoundFailOnError(e))),
+            e.dataType)
         }
 
       case e: Signum => buildScalarFunction(pb.ScalarFunction.Signum, e.children, e.dataType)
@@ -940,7 +951,7 @@ object NativeConverters extends Logging {
       case e: Ascii => buildScalarFunction(pb.ScalarFunction.Ascii, e.children, e.dataType)
       case e: BitLength =>
         buildScalarFunction(pb.ScalarFunction.BitLength, e.children, e.dataType)
-      case e: Chr => buildScalarFunction(pb.ScalarFunction.Chr, e.children, e.dataType)
+      case e: Chr => buildExtScalarFunction("Spark_Chr", e.children, e.dataType)
       case e: StringTranslate =>
         buildScalarFunction(pb.ScalarFunction.Translate, e.children, e.dataType)
       case e: StringReplace =>
@@ -1238,6 +1249,14 @@ object NativeConverters extends Logging {
       case e: ArrayContains
           if e.right.dataType.isInstanceOf[AtomicType] && isTypeSupported(e.right.dataType) =>
         buildExtScalarFunction("Spark_ArrayContains", e.children, e.dataType)
+      case e: ArraysOverlap if isTypeSupported(e.left.dataType) && (e.left.dataType match {
+            // Spark 3.0's interpreted and code-generated paths compare floats differently.
+            case ArrayType(FloatType | DoubleType, _) =>
+              SparkVersionUtil.SPARK_RUNTIME_VERSION >= "3.1"
+            case ArrayType(_: AtomicType, _) => true
+            case _ => false
+          }) =>
+        buildExtScalarFunction("Spark_ArraysOverlap", e.children, e.dataType)
       case e: Flatten => buildExtScalarFunction("Spark_ArrayFlatten", e.children, e.dataType)
       case e: MapFromEntries =>
         buildExtScalarFunction(

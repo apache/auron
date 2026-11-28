@@ -25,9 +25,7 @@ use std::{
 };
 
 use arrow::{
-    array::ArrayRef,
-    error::Result as ArrowResult,
-    record_batch::RecordBatch,
+    array::{Array, ArrayRef, Int32Array},
     row::{Row, RowConverter, Rows, SortField},
 };
 use async_trait::async_trait;
@@ -38,11 +36,14 @@ use datafusion::{
     physical_expr::{PhysicalExprRef, PhysicalSortExpr},
     physical_plan::SendableRecordBatchStream,
 };
-use datafusion_ext_commons::{arrow::array_size::BatchSize, spark_hash::create_murmur3_hashes};
+use datafusion_ext_commons::df_execution_err;
 use futures::StreamExt;
 use parking_lot::Mutex as SyncMutex;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    lazy::{LazyBatch, LazyBatchRef, SendableLazyBatchStream, evaluate_columns},
+};
 
 pub mod single_repartitioner;
 pub mod sort_repartitioner;
@@ -53,8 +54,12 @@ pub mod rss_single_repartitioner;
 pub mod rss_sort_repartitioner;
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds #[must_use] to methods returning futures"
+)]
 pub trait ShuffleRepartitioner: Send + Sync {
-    async fn insert_batch(&self, input: RecordBatch) -> Result<()>;
+    async fn insert_batch(&self, input: LazyBatchRef) -> Result<()>;
     async fn shuffle_write(&self) -> Result<()>;
 }
 
@@ -62,10 +67,10 @@ impl dyn ShuffleRepartitioner {
     pub fn execute(
         self: Arc<Self>,
         exec_ctx: Arc<ExecutionContext>,
-        input: SendableRecordBatchStream,
+        input: SendableLazyBatchStream,
     ) -> Result<SendableRecordBatchStream> {
         let data_size_counter = exec_ctx.register_counter_metric("data_size");
-        let mut coalesced = exec_ctx.coalesce_with_default_batch_size(input);
+        let mut coalesced = input;
 
         // process all input batches
         Ok(exec_ctx
@@ -76,7 +81,7 @@ impl dyn ShuffleRepartitioner {
                 while let Some(batch) = coalesced.next().await.transpose()? {
                     let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
                     let batch_num_rows = batch.num_rows();
-                    let batch_mem_size = batch.get_batch_mem_size();
+                    let batch_mem_size = batch.get_estimated_materialized_mem_size();
                     if batches_num_rows.load(SeqCst) == 0 {
                         log::info!(
                             "start shuffle writing, first batch num_rows={}, mem_size={}",
@@ -115,11 +120,19 @@ pub enum Partitioning {
     RoundRobinPartitioning(usize),
     /// Allocate rows based on a hash of one of more expressions and the
     /// specified number of partitions
-    HashPartitioning(Vec<PhysicalExprRef>, usize),
+    HashPartitioning(PhysicalExprRef, usize),
     /// Single partitioning scheme with a known number of partitions
     SinglePartitioning(),
     /// Range partitioning
     RangePartitioning(Vec<PhysicalSortExpr>, usize, Arc<Rows>),
+    /// Each row's partition (bucket) id has already been computed and
+    /// appended as an `Int32` column at `.0` (see
+    /// `joins::bucketed_group::append_bucket_id_column`); this variant just
+    /// reads that column directly instead of hashing/evaluating expressions.
+    /// Used by [`crate::joins::bucket_repartitioner::BucketRepartitioner`] to
+    /// reuse [`BufferedData`](buffered_data::BufferedData)'s radix-sort-based
+    /// grouping for hybrid (bucketed hash) join.
+    BucketPartitioning(usize, usize),
 }
 
 impl Partitioning {
@@ -129,6 +142,7 @@ impl Partitioning {
         match self {
             RoundRobinPartitioning(n) | HashPartitioning(_, n) | RangePartitioning(_, n, _) => *n,
             SinglePartitioning() => 1,
+            BucketPartitioning(_, num_buckets) => *num_buckets,
         }
     }
 }
@@ -137,13 +151,8 @@ impl fmt::Display for Partitioning {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Partitioning::RoundRobinPartitioning(size) => write!(f, "RoundRobinBatch({size})"),
-            Partitioning::HashPartitioning(phy_exprs, size) => {
-                let phy_exprs_str = phy_exprs
-                    .iter()
-                    .map(|e| format!("{e}"))
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                write!(f, "Hash([{phy_exprs_str}], {size})")
+            Partitioning::HashPartitioning(expr, size) => {
+                write!(f, "Hash({expr}, {size})")
             }
             Partitioning::SinglePartitioning() => {
                 write!(f, "SinglePartitioning()")
@@ -156,40 +165,42 @@ impl fmt::Display for Partitioning {
                     .join(", ");
                 write!(f, "Range([{phy_exprs_str}], {size}, {bounds:?})")
             }
+            Partitioning::BucketPartitioning(bucket_col_idx, num_buckets) => {
+                write!(f, "Bucket(col={bucket_col_idx}, {num_buckets})")
+            }
         }
     }
 }
 
-fn evaluate_hashes(partitioning: &Partitioning, batch: &RecordBatch) -> ArrowResult<Vec<i32>> {
-    match partitioning {
-        Partitioning::HashPartitioning(exprs, _) => {
-            let arrays = exprs
-                .iter()
-                .map(|expr| Ok(expr.evaluate(batch)?.into_array(batch.num_rows())?))
-                .collect::<Result<Vec<_>>>()?;
-
-            // compute hash array, use identical seed as spark hash partition
-            Ok(create_murmur3_hashes(arrays[0].len(), &arrays, 42))
-        }
-        _ => unreachable!("unsupported partitioning: {:?}", partitioning),
+fn evaluate_partition_ids(
+    expr: &PhysicalExprRef,
+    batch: &dyn LazyBatch,
+    num_partitions: usize,
+) -> Result<Vec<u32>> {
+    let array = evaluate_columns(batch, std::slice::from_ref(expr))?.remove(0);
+    let ids = array
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .ok_or_else(|| DataFusionError::Execution("partition_id_expr must return Int32".into()))?;
+    if ids.null_count() != 0 {
+        return df_execution_err!("partition_id_expr returned null partition ids");
     }
-}
-
-fn evaluate_partition_ids(mut hashes: Vec<i32>, num_partitions: usize) -> Vec<u32> {
-    // evaluate part_id = pmod(hash, num_partitions)
-    for h in &mut hashes {
-        *h = h.rem_euclid(num_partitions as i32);
-    }
-
-    unsafe {
-        // safety: transmute Vec<i32> to Vec<u32>
-        std::mem::transmute(hashes)
-    }
+    ids.values()
+        .iter()
+        .map(|&id| {
+            if id < 0 || id as usize >= num_partitions {
+                return df_execution_err!(
+                    "partition_id_expr returned invalid partition id {id} for {num_partitions} partitions"
+                );
+            }
+            Ok(id as u32)
+        })
+        .collect()
 }
 
 fn evaluate_robin_partition_ids(
     partitioning: &Partitioning,
-    batch: &RecordBatch,
+    batch: &dyn LazyBatch,
     start_rows: usize,
 ) -> Vec<u32> {
     let partition_num = partitioning.partition_count();
@@ -202,7 +213,7 @@ fn evaluate_robin_partition_ids(
 }
 
 fn evaluate_range_partition_ids(
-    batch: &RecordBatch,
+    batch: &dyn LazyBatch,
     sort_expr: &Vec<PhysicalSortExpr>,
     bound_rows: &Arc<Rows>,
 ) -> Result<Vec<u32>> {
@@ -220,14 +231,13 @@ fn evaluate_range_partition_ids(
             .collect::<Result<Vec<SortField>>>()?,
     )?));
 
-    let key_cols: Vec<ArrayRef> = sort_expr
-        .iter()
-        .map(|expr| {
-            expr.expr
-                .evaluate(&batch)
-                .and_then(|cv| cv.into_array(batch.num_rows()))
-        })
-        .collect::<Result<_>>()?;
+    let key_cols: Vec<ArrayRef> = evaluate_columns(
+        batch,
+        &sort_expr
+            .iter()
+            .map(|expr| expr.expr.clone())
+            .collect::<Vec<_>>(),
+    )?;
     let key_rows = sort_row_converter.lock().convert_columns(&key_cols)?;
     let mut vec_u32 = Vec::with_capacity(num_rows);
     for key_row in key_rows.iter() {

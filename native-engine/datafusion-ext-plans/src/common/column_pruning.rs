@@ -20,50 +20,16 @@ use std::{
     sync::Arc,
 };
 
-use arrow::record_batch::RecordBatch;
 use datafusion::{
     common::{
         Result,
         tree_node::{Transformed, TreeNode},
     },
-    execution::{SendableRecordBatchStream, TaskContext},
     physical_expr::{PhysicalExprRef, expressions::Column, utils::collect_columns},
-    physical_plan::{ExecutionPlan, stream::RecordBatchStreamAdapter},
 };
-use datafusion_ext_commons::downcast_any;
-use futures::StreamExt;
+use datafusion_ext_commons::downcast_any_dyn;
 use itertools::Itertools;
 use parking_lot::Mutex;
-
-pub trait ExecuteWithColumnPruning {
-    fn execute_projected(
-        &self,
-        partition: usize,
-        context: Arc<TaskContext>,
-        projection: &[usize],
-    ) -> Result<SendableRecordBatchStream>;
-}
-
-impl ExecuteWithColumnPruning for dyn ExecutionPlan {
-    fn execute_projected(
-        &self,
-        partition: usize,
-        context: Arc<TaskContext>,
-        projection: &[usize],
-    ) -> Result<SendableRecordBatchStream> {
-        if projection.iter().enumerate().all(|(i, &proj)| proj == i) {
-            return self.execute(partition, context);
-        }
-        let projection = projection.to_vec();
-        let schema = Arc::new(self.schema().project(&projection)?);
-        let stream =
-            self.execute(partition, context)?
-                .map(move |batch_result: Result<RecordBatch>| {
-                    batch_result.and_then(|batch| Ok(batch.project(&projection)?))
-                });
-        Ok(Box::pin(RecordBatchStreamAdapter::new(schema, stream)))
-    }
-}
 
 pub fn prune_columns(exprs: &[PhysicalExprRef]) -> Result<(Vec<PhysicalExprRef>, Vec<usize>)> {
     let required_columns: Vec<Column> = exprs
@@ -97,7 +63,7 @@ pub fn extend_projection_by_expr(
     expr.clone()
         .transform_down(&|node: PhysicalExprRef| {
             Ok(Transformed::yes(
-                if let Ok(column) = downcast_any!(node, Column) {
+                if let Ok(column) = downcast_any_dyn!(node, Column) {
                     let mut projection = projection.lock();
                     if let Some(existed_idx) =
                         projection.iter().position(|&idx| idx == column.index())
@@ -121,7 +87,7 @@ pub fn map_columns(expr: &PhysicalExprRef, mapping: &HashMap<usize, usize>) -> P
     expr.clone()
         .transform_down(&|node: PhysicalExprRef| {
             Ok(Transformed::yes(
-                if let Ok(column) = downcast_any!(node, Column) {
+                if let Ok(column) = downcast_any_dyn!(node, Column) {
                     let mapped_idx = mapping[&column.index()];
                     Arc::new(Column::new(column.name(), mapped_idx))
                 } else {

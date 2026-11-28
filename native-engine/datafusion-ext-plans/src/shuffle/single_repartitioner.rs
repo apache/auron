@@ -19,14 +19,16 @@ use std::{
     sync::Arc,
 };
 
-use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
 use datafusion::{common::Result, physical_plan::metrics::Time};
 use datafusion_ext_commons::io::ipc_compression::IpcCompressionWriter;
 use tokio::sync::Mutex;
 
 use crate::{
-    common::timer_helper::{TimedWriter, TimerHelper},
+    common::{
+        lazy::LazyBatchRef,
+        timer_helper::{TimedWriter, TimerHelper},
+    },
     shuffle::{ShuffleRepartitioner, open_shuffle_file},
 };
 
@@ -63,7 +65,8 @@ impl SingleShuffleRepartitioner {
 
 #[async_trait]
 impl ShuffleRepartitioner for SingleShuffleRepartitioner {
-    async fn insert_batch(&self, input: RecordBatch) -> Result<()> {
+    async fn insert_batch(&self, input: LazyBatchRef) -> Result<()> {
+        let input = input.materialize()?;
         let mut output_data = self.output_data.lock().await;
         let output_writer = self.get_output_writer(&mut output_data)?;
         output_writer.write_batch(input.num_rows(), input.columns())?;

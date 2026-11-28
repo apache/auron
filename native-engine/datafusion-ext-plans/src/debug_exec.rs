@@ -31,14 +31,17 @@ use datafusion::{
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug)]
 pub struct DebugExec {
     input: Arc<dyn ExecutionPlan>,
     debug_id: String,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl DebugExec {
@@ -64,23 +67,28 @@ impl ExecutionPlan for DebugExec {
         "DebugExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -105,11 +113,13 @@ impl ExecutionPlan for DebugExec {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
         let debug_id = self.debug_id.clone();
 
-        let mut input = exec_ctx.execute(&self.input)?;
+        let mut input = materialize_optimized_stream(
+            exec_ctx.execute_optimized(&self.input, &ExecuteOptimizedProps::default())?,
+        );
         Ok(
             exec_ctx.output_with_sender("Debug", move |sender| async move {
                 while let Some(batch) = input.next().await.transpose()? {
-                    let table_str = pretty_format_batches(&[batch.clone()])?
+                    let table_str = pretty_format_batches(std::slice::from_ref(&batch))?
                         .to_string()
                         .replace('\n', &format!("\n{debug_id} - "));
                     log::info!("DebugExec(partition={partition}):\n{table_str}");
@@ -122,9 +132,5 @@ impl ExecutionPlan for DebugExec {
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }

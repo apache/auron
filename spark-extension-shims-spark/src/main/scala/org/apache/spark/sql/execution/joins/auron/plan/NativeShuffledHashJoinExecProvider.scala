@@ -38,10 +38,12 @@ case object NativeShuffledHashJoinExecProvider {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeShuffledHashJoinBase = {
 
     import org.apache.spark.rdd.RDD
     import org.apache.spark.sql.catalyst.InternalRow
+    import org.apache.spark.sql.catalyst.expressions.SortOrder
     import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 
     case class NativeShuffledHashJoinExec(
@@ -52,7 +54,8 @@ case object NativeShuffledHashJoinExecProvider {
         override val joinType: JoinType,
         override val condition: Option[Expression],
         buildSide: JoinBuildSide,
-        skewJoin: Boolean)
+        skewJoin: Boolean,
+        requiredReservedOrder: Boolean)
         extends NativeShuffledHashJoinBase(
           left,
           right,
@@ -60,10 +63,13 @@ case object NativeShuffledHashJoinExecProvider {
           rightKeys,
           joinType,
           condition,
-          buildSide)
+          buildSide,
+          requiredReservedOrder)
         with org.apache.spark.sql.execution.joins.ShuffledJoin {
 
       override def isSkewJoin: Boolean = false
+
+      override def outputOrdering: Seq[SortOrder] = reservedOutputOrdering(super.outputOrdering)
 
       override def supportCodegen: Boolean = false
 
@@ -94,7 +100,8 @@ case object NativeShuffledHashJoinExecProvider {
       joinType,
       condition,
       buildSide,
-      isSkewJoin)
+      isSkewJoin,
+      requiredReservedOrder)
   }
 
   @nowarn("cat=unused") // Some params temporarily unused
@@ -107,7 +114,8 @@ case object NativeShuffledHashJoinExecProvider {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeShuffledHashJoinBase = {
 
     import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
     import org.apache.spark.sql.catalyst.expressions.SortOrder
@@ -120,7 +128,8 @@ case object NativeShuffledHashJoinExecProvider {
         rightKeys: Seq[Expression],
         joinType: JoinType,
         override val condition: Option[Expression],
-        buildSide: JoinBuildSide)
+        buildSide: JoinBuildSide,
+        requiredReservedOrder: Boolean)
         extends NativeShuffledHashJoinBase(
           left,
           right,
@@ -128,13 +137,14 @@ case object NativeShuffledHashJoinExecProvider {
           rightKeys,
           joinType,
           condition,
-          buildSide)
+          buildSide,
+          requiredReservedOrder)
         with org.apache.spark.sql.execution.joins.ShuffledJoin {
 
       override def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression] =
         HashJoin.rewriteKeyExpr(exprs)
 
-      override def outputOrdering: Seq[SortOrder] = {
+      override def outputOrdering: Seq[SortOrder] = reservedOutputOrdering {
         import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 
         // Spark 3.1 HashJoin rejects these build sides; native SHJ supports them without ordering.
@@ -165,7 +175,15 @@ case object NativeShuffledHashJoinExecProvider {
 
       override def nodeName: String = "NativeShuffledHashJoin"
     }
-    NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, condition, buildSide)
+    NativeShuffledHashJoinExec(
+      left,
+      right,
+      leftKeys,
+      rightKeys,
+      joinType,
+      condition,
+      buildSide,
+      requiredReservedOrder)
   }
 
   @nowarn("cat=unused") // Some params temporarily unused
@@ -178,10 +196,13 @@ case object NativeShuffledHashJoinExecProvider {
       joinType: JoinType,
       condition: Option[Expression],
       buildSide: JoinBuildSide,
-      isSkewJoin: Boolean): NativeShuffledHashJoinBase = {
+      isSkewJoin: Boolean,
+      requiredReservedOrder: Boolean): NativeShuffledHashJoinBase = {
 
     import org.apache.spark.sql.auron.join.JoinBuildSides.{JoinBuildLeft, JoinBuildRight}
     import org.apache.spark.sql.catalyst.expressions.Attribute
+    import org.apache.spark.sql.catalyst.expressions.SortOrder
+    import org.apache.spark.sql.catalyst.plans.physical.Partitioning
     import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 
     case class NativeShuffledHashJoinExec(
@@ -191,7 +212,8 @@ case object NativeShuffledHashJoinExecProvider {
         rightKeys: Seq[Expression],
         joinType: JoinType,
         condition: Option[Expression],
-        buildSide: JoinBuildSide)
+        buildSide: JoinBuildSide,
+        requiredReservedOrder: Boolean)
         extends NativeShuffledHashJoinBase(
           left,
           right,
@@ -199,7 +221,8 @@ case object NativeShuffledHashJoinExecProvider {
           rightKeys,
           joinType,
           condition,
-          buildSide) {
+          buildSide,
+          requiredReservedOrder) {
 
       private def shj: ShuffledHashJoinExec = {
         val sparkBuildSide = buildSide match {
@@ -221,14 +244,23 @@ case object NativeShuffledHashJoinExecProvider {
       override def rewriteKeyExprToLong(exprs: Seq[Expression]): Seq[Expression] =
         HashJoin.rewriteKeyExpr(exprs)
 
-      override val (outputPartitioning, outputOrdering) =
-        (shj.outputPartitioning, shj.outputOrdering)
+      override val outputPartitioning: Partitioning = shj.outputPartitioning
+
+      override def outputOrdering: Seq[SortOrder] = reservedOutputOrdering(shj.outputOrdering)
 
       override def withNewChildren(newChildren: Seq[SparkPlan]): SparkPlan =
         copy(left = newChildren(0), right = newChildren(1))
 
       override def nodeName: String = "NativeShuffledHashJoin"
     }
-    NativeShuffledHashJoinExec(left, right, leftKeys, rightKeys, joinType, condition, buildSide)
+    NativeShuffledHashJoinExec(
+      left,
+      right,
+      leftKeys,
+      rightKeys,
+      joinType,
+      condition,
+      buildSide,
+      requiredReservedOrder)
   }
 }

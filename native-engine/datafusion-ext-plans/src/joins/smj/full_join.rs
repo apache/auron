@@ -359,12 +359,13 @@ impl<const L_OUTER: bool, const R_OUTER: bool> FullJoiner<L_OUTER, R_OUTER> {
         rranges: &[IdxRange],
     ) -> Result<()> {
         // Fast path for one-to-one join.
-        if let ([lrange], [rrange]) = (lranges, rranges) {
-            if lrange.len() == 1 && rrange.len() == 1 {
-                self.lindices.push((lrange.batch_idx, lrange.start));
-                self.rindices.push((rrange.batch_idx, rrange.start));
-                return Ok(());
-            }
+        if let ([lrange], [rrange]) = (lranges, rranges)
+            && lrange.len() == 1
+            && rrange.len() == 1
+        {
+            self.lindices.push((lrange.batch_idx, lrange.start));
+            self.rindices.push((rrange.batch_idx, rrange.start));
+            return Ok(());
         }
 
         let rnum = ranges_num_rows(rranges);

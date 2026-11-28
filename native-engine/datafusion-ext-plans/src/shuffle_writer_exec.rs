@@ -36,7 +36,10 @@ use datafusion_ext_commons::df_execution_err;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    common::execution_context::ExecutionContext,
+    common::{
+        execution_context::ExecutionContext,
+        optimized_batch::{ExecuteOptimizedProps, into_lazy_stream},
+    },
     shuffle::{
         Partitioning, ShuffleRepartitioner, single_repartitioner::SingleShuffleRepartitioner,
         sort_repartitioner::SortShuffleRepartitioner,
@@ -54,7 +57,7 @@ pub struct ShuffleWriterExec {
     output_data_file: String,
     output_index_file: String,
     metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl DisplayAs for ShuffleWriterExec {
@@ -69,23 +72,28 @@ impl ExecutionPlan for ShuffleWriterExec {
         "ShuffleWriterExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 physical_plan::Partitioning::UnknownPartitioning(1),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -165,16 +173,15 @@ impl ExecutionPlan for ShuffleWriterExec {
             p => unreachable!("unsupported partitioning: {:?}", p),
         };
 
-        let input = exec_ctx.execute_with_input_stats(&input)?;
+        let input = into_lazy_stream(exec_ctx.execute_optimized(
+            &input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         repartitioner.execute(exec_ctx, input)
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        self.input.partition_statistics(None)
     }
 }
 

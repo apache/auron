@@ -18,7 +18,6 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
 use auron_memmgr::{
     MemConsumer, MemConsumerInfo, MemManager,
@@ -29,12 +28,14 @@ use datafusion::{
     common::{DataFusionError, Result},
     physical_plan::metrics::Time,
 };
-use datafusion_ext_commons::{arrow::array_size::BatchSize, df_execution_err};
+use datafusion_ext_commons::df_execution_err;
 use futures::lock::Mutex;
+use once_cell::sync::OnceCell;
 
 use crate::{
     common::{
         execution_context::ExecutionContext,
+        lazy::LazyBatchRef,
         offsetted::{Offsetted, OffsettedMergeIterator},
         timer_helper::TimerHelper,
     },
@@ -43,7 +44,7 @@ use crate::{
 
 pub struct SortShuffleRepartitioner {
     exec_ctx: Arc<ExecutionContext>,
-    mem_consumer_info: Option<Weak<MemConsumerInfo>>,
+    mem_consumer_info: OnceCell<Weak<MemConsumerInfo>>,
     output_data_file: String,
     output_index_file: String,
     data: Mutex<BufferedData>,
@@ -64,7 +65,7 @@ impl SortShuffleRepartitioner {
         let num_output_partitions = partitioning.partition_count();
         Self {
             exec_ctx,
-            mem_consumer_info: None,
+            mem_consumer_info: OnceCell::new(),
             output_data_file,
             output_index_file,
             data: Mutex::new(BufferedData::new(
@@ -85,14 +86,14 @@ impl MemConsumer for SortShuffleRepartitioner {
         "SortShuffleRepartitioner"
     }
 
-    fn set_consumer_info(&mut self, consumer_info: Weak<MemConsumerInfo>) {
-        self.mem_consumer_info = Some(consumer_info);
+    fn set_consumer_info(&self, consumer_info: Weak<MemConsumerInfo>) {
+        self.mem_consumer_info
+            .set(consumer_info)
+            .expect("consumer info already set");
     }
 
     fn get_consumer_info(&self) -> &Weak<MemConsumerInfo> {
-        self.mem_consumer_info
-            .as_ref()
-            .expect("consumer info not set")
+        self.mem_consumer_info.get().expect("consumer info not set")
     }
 
     async fn spill(&self) -> Result<()> {
@@ -121,9 +122,10 @@ impl Drop for SortShuffleRepartitioner {
 
 #[async_trait]
 impl ShuffleRepartitioner for SortShuffleRepartitioner {
-    async fn insert_batch(&self, input: RecordBatch) -> Result<()> {
+    async fn insert_batch(&self, input: LazyBatchRef) -> Result<()> {
         // update memory usage before adding to buffered data
-        let mem_used = self.data.lock().await.mem_used() + input.get_batch_mem_size() * 2;
+        let mem_used =
+            self.data.lock().await.mem_used() + input.get_estimated_materialized_mem_size() * 2;
         self.update_mem_used(mem_used).await?;
 
         // add batch to buffered data

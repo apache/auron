@@ -1,26 +1,62 @@
-From 308b3c77cd28c654a84b38df46871cf0a88444f3 Mon Sep 17 00:00:00 2001
-From: zhangli20 <zhangli20@kuaishou.com>
-Date: Sun, 15 Sep 2024 21:24:51 +0800
-Subject: [PATCH] auron: fix 'Statistics null count is negative (-1)' error
-
----
- parquet/src/file/statistics.rs | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
-
+diff --git a/parquet/src/arrow/arrow_reader/statistics.rs b/parquet/src/arrow/arrow_reader/statistics.rs
+index c096448..fb16deb 100644
+--- a/parquet/src/arrow/arrow_reader/statistics.rs
++++ b/parquet/src/arrow/arrow_reader/statistics.rs
+@@ -1569,7 +1569,7 @@ impl<'a> StatisticsConverter<'a> {
+         Ok(Self {
+             parquet_column_index: parquet_index,
+             arrow_field,
+-            missing_null_counts_as_zero: true,
++            missing_null_counts_as_zero: false, // auron: do not treat missing null counts as zero
+             physical_type: parquet_index.map(|idx| parquet_schema.column(idx).physical_type()),
+         })
+     }
+diff --git a/parquet/src/file/metadata/thrift/mod.rs b/parquet/src/file/metadata/thrift/mod.rs
+index d5a0112..a5c6761 100644
+--- a/parquet/src/file/metadata/thrift/mod.rs
++++ b/parquet/src/file/metadata/thrift/mod.rs
+@@ -193,18 +193,8 @@ fn convert_stats(
+     Ok(match thrift_stats {
+         Some(stats) => {
+             // Generic null count.
+-            let null_count = stats
+-                .null_count
+-                .map(|null_count| {
+-                    if null_count < 0 {
+-                        return Err(general_err!(
+-                            "Statistics null count is negative {}",
+-                            null_count
+-                        ));
+-                    }
+-                    Ok(null_count as u64)
+-                })
+-                .transpose()?;
++            // auron: use try_from to silently discard invalid (negative) null counts
++            let null_count = stats.null_count.and_then(|value| u64::try_from(value).ok());
+             // Generic distinct count (count of distinct values occurring)
+             let distinct_count = stats.distinct_count.map(|value| value as u64);
+             // Whether or not statistics use deprecated min/max fields.
 diff --git a/parquet/src/file/statistics.rs b/parquet/src/file/statistics.rs
-index b7522a76f..b7849e4f9 100644
+index 9682fd5..19e385e 100644
 --- a/parquet/src/file/statistics.rs
 +++ b/parquet/src/file/statistics.rs
-@@ -129,7 +129,8 @@ pub fn from_thrift(
-             // Number of nulls recorded, when it is not available, we just mark it as 0.
-             // TODO this should be `None` if there is no information about NULLS.
-             // see https://github.com/apache/arrow-rs/pull/6216/files
--            let null_count = stats.null_count.unwrap_or(0);
-+            let null_count = stats.null_count.unwrap_or(0)
-+                .max(0); // auron - fix 'Statistics null count is negative (-1)' error
- 
-             if null_count < 0 {
-                 return Err(ParquetError::General(format!(
--- 
-2.50.1
-
+@@ -126,17 +126,8 @@ pub(crate) fn from_thrift_page_stats(
+     Ok(match thrift_stats {
+         Some(stats) => {
+             // Generic null count.
+-            let null_count = stats
+-                .null_count
+-                .map(|null_count| {
+-                    if null_count < 0 {
+-                        return Err(ParquetError::General(format!(
+-                            "Statistics null count is negative {null_count}",
+-                        )));
+-                    }
+-                    Ok(null_count as u64)
+-                })
+-                .transpose()?;
++            // auron: use try_from to silently discard invalid (negative) null counts
++            let null_count = stats.null_count.and_then(|value| u64::try_from(value).ok());
+             // Generic distinct count (count of distinct values occurring)
+             let distinct_count = stats.distinct_count.map(|value| value as u64);
+             // Whether or not statistics use deprecated min/max fields.

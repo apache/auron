@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.execution.auron.shuffle
 
+import java.util.concurrent.ConcurrentHashMap
+
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager.canUseBatchFetch
 import org.apache.spark.sql.execution.auron.shuffle.AuronShuffleDependency.isArrowShuffle
+import org.apache.spark.util.collection.OpenHashSet
 
 import org.apache.auron.sparkver
 
@@ -42,6 +45,8 @@ class AuronShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
 
   override val shuffleBlockResolver: ShuffleBlockResolver =
     sortShuffleManager.shuffleBlockResolver
+
+  private val arrowShuffleMapTaskIds = new ConcurrentHashMap[Int, OpenHashSet[Long]]()
 
   /**
    * (override) Obtains a [[ShuffleHandle]] to pass to tasks.
@@ -217,6 +222,13 @@ class AuronShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
 
     if (isArrowShuffle(handle)) {
+      val mapTaskIds = arrowShuffleMapTaskIds
+        .computeIfAbsent(handle.shuffleId, _ => new OpenHashSet[Long](16))
+      mapTaskIds.synchronized {
+        // AuronShuffleWriter truncates mapId to Int when resolving the output file name,
+        // record the same value so that the file can be located on cleanup.
+        mapTaskIds.add(mapId.toInt.toLong)
+      }
       new AuronShuffleWriter(metrics)
     } else {
       sortShuffleManager.getWriter(handle, mapId, context, metrics)
@@ -225,6 +237,14 @@ class AuronShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
+    Option(arrowShuffleMapTaskIds.remove(shuffleId)).foreach { mapTaskIds =>
+      val resolver = shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
+      mapTaskIds.synchronized {
+        mapTaskIds.iterator.foreach { mapTaskId =>
+          resolver.removeDataByMap(shuffleId, mapTaskId.toInt)
+        }
+      }
+    }
     sortShuffleManager.unregisterShuffle(shuffleId)
   }
 

@@ -36,7 +36,10 @@ use datafusion::{
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug)]
 pub struct LimitExec {
@@ -44,7 +47,7 @@ pub struct LimitExec {
     limit: usize,
     offset: usize,
     pub metrics: ExecutionPlanMetricsSet,
-    props: OnceCell<PlanProperties>,
+    props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl LimitExec {
@@ -70,23 +73,28 @@ impl ExecutionPlan for LimitExec {
         "LimitExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -110,22 +118,15 @@ impl ExecutionPlan for LimitExec {
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
         let exec_ctx = ExecutionContext::new(context, partition, self.schema(), &self.metrics);
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         if self.offset == 0 {
             execute_limit(input, self.limit, exec_ctx)
         } else {
             execute_limit_with_offset(input, self.limit, self.offset, exec_ctx)
         }
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        Statistics::with_fetch(
-            self.input.partition_statistics(None)?,
-            self.schema(),
-            Some(self.limit),
-            self.offset,
-            1,
-        )
     }
 }
 
@@ -205,7 +206,7 @@ mod test {
     use auron_memmgr::MemManager;
     use datafusion::{
         assert_batches_eq,
-        common::{Result, stats::Precision},
+        common::Result,
         physical_plan::{ExecutionPlan, common, test::TestMemoryExec},
         prelude::SessionContext,
     };
@@ -261,7 +262,7 @@ mod test {
         let task_ctx = session_ctx.task_ctx();
         let output = limit_exec.execute(0, task_ctx)?;
         let batches = common::collect(output).await?;
-        let row_count = limit_exec.statistics()?.num_rows;
+        let row_count: usize = batches.iter().map(RecordBatch::num_rows).sum();
 
         let expected = vec![
             "+---+---+---+",
@@ -272,7 +273,7 @@ mod test {
             "+---+---+---+",
         ];
         assert_batches_eq!(expected, &batches);
-        assert_eq!(row_count, Precision::Exact(2));
+        assert_eq!(row_count, 2);
         Ok(())
     }
 

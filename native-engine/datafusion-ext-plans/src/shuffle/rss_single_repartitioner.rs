@@ -16,12 +16,15 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use datafusion::{arrow::record_batch::RecordBatch, common::Result, physical_plan::metrics::Time};
+use datafusion::{common::Result, physical_plan::metrics::Time};
 use datafusion_ext_commons::{df_execution_err, io::ipc_compression::IpcCompressionWriter};
 use jni::objects::GlobalRef;
 use parking_lot::Mutex;
 
-use crate::shuffle::{ShuffleRepartitioner, rss::RssWriter};
+use crate::{
+    common::lazy::LazyBatchRef,
+    shuffle::{ShuffleRepartitioner, rss::RssWriter},
+};
 
 pub struct RssSingleShuffleRepartitioner {
     rss_partition_writer: Arc<Mutex<IpcCompressionWriter<RssWriter>>>,
@@ -42,10 +45,11 @@ impl RssSingleShuffleRepartitioner {
 
 #[async_trait]
 impl ShuffleRepartitioner for RssSingleShuffleRepartitioner {
-    async fn insert_batch(&self, input: RecordBatch) -> Result<()> {
+    async fn insert_batch(&self, input: LazyBatchRef) -> Result<()> {
         let rss_partition_writer = self.rss_partition_writer.clone();
         let output_io_time = self.output_io_time.clone();
         tokio::task::spawn_blocking(move || {
+            let input = input.materialize()?;
             let _output_io_timer = output_io_time.timer();
             rss_partition_writer
                 .lock()

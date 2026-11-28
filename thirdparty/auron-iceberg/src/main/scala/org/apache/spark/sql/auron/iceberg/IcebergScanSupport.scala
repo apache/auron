@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, Decimal, DecimalType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType, Decimal, DecimalType, StringType, StructField, StructType}
 
 import org.apache.auron.{protobuf => pb}
 
@@ -114,7 +114,10 @@ object IcebergScanSupport extends Logging {
     }
 
     val isChangelogScan = scan.getClass.getName == SparkChangelogScanClassName
-    if (collectUnsupportedMetadataColumns(scan.readSchema, isChangelogScan).nonEmpty) {
+    // shortcut: also exclude files with IDs until native scans can honor name mapping.
+    if (AuronIcebergSourceUtil.hasNameMapping(scan.asInstanceOf[AnyRef])) {
+      Some("Iceberg name mapping (schema.name-mapping.default) is not supported by native scans.")
+    } else if (collectUnsupportedMetadataColumns(scan.readSchema, isChangelogScan).nonEmpty) {
       Some("Has per-row materialization (for example _pos).")
     } else {
       val unsupportedFields = collectUnsupportedDataTypeFields(scan.readSchema, isChangelogScan)
@@ -166,12 +169,12 @@ object IcebergScanSupport extends Logging {
     val scan = exec.scan
     val scanClassName = scan.getClass.getName
     // Only handle Iceberg scans; other sources must stay on Spark's path.
-    if (scanClassName == SparkChangelogScanClassName) {
-      return planChangelogScan(exec, scan, useRuntimeFilters)
+    if (!isIcebergScan(scan) || fallbackReason(exec).nonEmpty) {
+      return None
     }
 
-    if (!AuronIcebergSourceUtil.getClassOfSparkBatchQueryScan.isInstance(scan)) {
-      return None
+    if (scanClassName == SparkChangelogScanClassName) {
+      return planChangelogScan(exec, scan, useRuntimeFilters)
     }
 
     planFileScan(exec, scan, scanClassName, useRuntimeFilters)
@@ -373,7 +376,11 @@ object IcebergScanSupport extends Logging {
           logWarning(s"Failed to inspect Iceberg schema history for $scanClassName.", t)
           return None
       }
-    assert(!renameOrDrop.nested, "Nested Iceberg rename or drop is not supported.")
+    // Iceberg's required schema includes columns used only by filters.
+    // shortcut: keep complex projections on Spark until nested field-ID resolution is supported.
+    assert(
+      !renameOrDrop.nested || fileSchema.fields.forall(_.dataType.isInstanceOf[AtomicType]),
+      "Nested Iceberg rename or drop is not supported for complex projections.")
 
     val missingFieldIds =
       fileSchema.fields.filterNot(field => fieldIdsByName.contains(field.name)).map(_.name)

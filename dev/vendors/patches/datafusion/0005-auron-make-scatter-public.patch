@@ -1,14 +1,5 @@
-From b781bce65fef561bb3e4006c874d8f88291b637d Mon Sep 17 00:00:00 2001
-From: zhangli20 <zhangli20@kuaishou.com>
-Date: Mon, 16 Sep 2024 10:04:54 +0800
-Subject: [PATCH] auron: make scatter() public
-
----
- datafusion/physical-expr-common/src/physical_expr.rs | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
-
 diff --git a/datafusion/physical-expr-common/src/physical_expr.rs b/datafusion/physical-expr-common/src/physical_expr.rs
-index b4cb08715..a328f146e 100644
+index 59393e7..2c508ef 100644
 --- a/datafusion/physical-expr-common/src/physical_expr.rs
 +++ b/datafusion/physical-expr-common/src/physical_expr.rs
 @@ -21,7 +21,7 @@ use std::fmt::{Debug, Display, Formatter};
@@ -18,8 +9,5 @@ index b4cb08715..a328f146e 100644
 -use crate::utils::scatter;
 +pub use crate::utils::scatter;
  
- use arrow::array::BooleanArray;
+ use arrow::array::{Array, ArrayRef, BooleanArray, new_empty_array};
  use arrow::compute::filter_record_batch;
--- 
-2.50.1
-

@@ -68,10 +68,6 @@ impl std::fmt::Display for GetMapValueExpr {
 }
 
 impl PhysicalExpr for GetMapValueExpr {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn data_type(&self, input_schema: &Schema) -> Result<DataType> {
         let data_type = self.arg.data_type(input_schema)?;
         get_data_type_field(&data_type).map(|f| f.data_type().clone())
@@ -203,7 +199,7 @@ mod test {
             Arc::new(Field::new(
                 "entries",
                 entry_struct.data_type().clone(),
-                true,
+                false,
             )),
             false,
         );

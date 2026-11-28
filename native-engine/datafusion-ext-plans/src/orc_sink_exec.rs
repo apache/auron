@@ -48,7 +48,10 @@ use once_cell::sync::OnceCell;
 use orc_rust::ArrowWriterBuilder;
 use tokio::sync::oneshot;
 
-use crate::common::execution_context::ExecutionContext;
+use crate::common::{
+    execution_context::ExecutionContext,
+    optimized_batch::{ExecuteOptimizedProps, materialize_optimized_stream},
+};
 
 #[derive(Debug)]
 pub struct OrcSinkExec {
@@ -58,7 +61,7 @@ pub struct OrcSinkExec {
     schema: SchemaRef,
     props: Vec<(String, String)>,
     metrics: ExecutionPlanMetricsSet,
-    plan_props: OnceCell<PlanProperties>,
+    plan_props: OnceCell<Arc<PlanProperties>>,
 }
 
 impl OrcSinkExec {
@@ -92,23 +95,28 @@ impl ExecutionPlan for OrcSinkExec {
         "OrcSinkExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.input.schema()
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         self.plan_props.get_or_init(|| {
-            PlanProperties::new(
+            Arc::new(PlanProperties::new(
                 EquivalenceProperties::new(self.schema()),
                 self.input.output_partitioning().clone(),
                 EmissionType::Both,
                 Boundedness::Bounded,
-            )
+            ))
         })
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(
+            &Arc<dyn datafusion::physical_expr::PhysicalExpr>,
+        ) -> Result<datafusion::common::tree_node::TreeNodeRecursion>,
+    ) -> Result<datafusion::common::tree_node::TreeNodeRecursion> {
+        Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -146,16 +154,15 @@ impl ExecutionPlan for OrcSinkExec {
             &self.props,
         )?);
 
-        let input = exec_ctx.execute_with_input_stats(&self.input)?;
+        let input = materialize_optimized_stream(exec_ctx.execute_optimized(
+            &self.input,
+            &ExecuteOptimizedProps::default().with_input_stats(true),
+        )?);
         execute_orc_sink(orc_sink_context, input, exec_ctx)
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
         Some(self.metrics.clone_inner())
-    }
-
-    fn statistics(&self) -> Result<Statistics> {
-        todo!()
     }
 }
 

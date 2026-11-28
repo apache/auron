@@ -35,7 +35,7 @@ use datafusion::{
 use crate::{
     common::{
         execution_context::{ExecutionContext, WrappedRecordBatchSender},
-        key_rows_output::{RecordBatchWithKeyRows, RecordBatchWithKeyRowsStreamAdapter},
+        optimized_batch::{KeyRows, OptimizedBatch, OptimizedBatchStreamAdapter},
     },
     cur_forward,
     joins::{
@@ -67,36 +67,75 @@ fn batch(prefix: &str, keys: &[i32], values: &[i32]) -> RecordBatch {
 
 fn cursor(batch: RecordBatch, input_batch_size: usize, read: &[usize]) -> StreamCursor {
     let schema = batch.schema();
-    let converter = Arc::new(parking_lot::Mutex::new(
+    let converter = Arc::new(
         RowConverter::new(vec![SortField::new(DataType::Int32)]).expect("valid test sort fields"),
-    ));
+    );
     let batches = (0..batch.num_rows())
         .step_by(input_batch_size)
         .map(|start| {
             let batch = batch.slice(start, input_batch_size.min(batch.num_rows() - start));
             let rows = Arc::new(
                 converter
-                    .lock()
                     .convert_columns(&[batch.column(0).clone()])
                     .expect("valid test key columns"),
             );
-            Ok(RecordBatchWithKeyRows::new(
-                batch.project(read).expect("valid test projection"),
-                rows,
-                converter.clone(),
+            Ok(OptimizedBatch::new(
+                Arc::new(batch.project(read).expect("valid test projection")),
+                Some(KeyRows {
+                    rows,
+                    rows_converter: converter.clone(),
+                }),
             ))
         })
         .collect::<Vec<_>>();
-    let stream = RecordBatchWithKeyRowsStreamAdapter::new(
+    let stream = OptimizedBatchStreamAdapter::new(
         futures::stream::iter(batches),
         Arc::new(schema.project(read).expect("valid test projection")),
-        vec![PhysicalSortExpr::new(
+        Some(vec![PhysicalSortExpr::new(
             Arc::new(Column::new(schema.field(0).name(), 0)),
             SortOptions::default(),
-        )],
+        )]),
     );
     StreamCursor::try_new(Box::pin(stream), Time::default(), &[DataType::Int32])
         .expect("valid test cursor")
+}
+
+#[test]
+fn test_cursor_rejects_stream_without_keys() {
+    let schema = batch("l", &[1], &[10]).schema();
+    let stream = OptimizedBatchStreamAdapter::new(
+        futures::stream::empty::<Result<OptimizedBatch>>(),
+        schema,
+        None,
+    );
+    let result = StreamCursor::try_new(Box::pin(stream), Time::default(), &[DataType::Int32]);
+    assert!(matches!(
+        result,
+        Err(datafusion::common::DataFusionError::Execution(message))
+            if message == "sort-merge join input has no keys"
+    ));
+}
+
+#[tokio::test]
+async fn test_cursor_rejects_batch_without_key_rows() -> Result<()> {
+    let batch = batch("l", &[1], &[10]);
+    let schema = batch.schema();
+    let stream = OptimizedBatchStreamAdapter::new(
+        futures::stream::iter(vec![Ok(OptimizedBatch::new(Arc::new(batch), None))]),
+        schema,
+        Some(vec![PhysicalSortExpr::new(
+            Arc::new(Column::new("lk", 0)),
+            SortOptions::default(),
+        )]),
+    );
+    let mut cursor = StreamCursor::try_new(Box::pin(stream), Time::default(), &[DataType::Int32])?;
+    let result = cursor.next().expect("first batch requires polling").await;
+    assert!(matches!(
+        result,
+        Err(datafusion::common::DataFusionError::Execution(message))
+            if message == "sort-merge join input batch has no key rows"
+    ));
+    Ok(())
 }
 
 async fn run(
@@ -324,7 +363,6 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
     };
 
     use crate::{
-        common::column_pruning::ExecuteWithColumnPruning,
         joins::{ColumnIndex, JoinFilter as CompactJoinFilter},
         sort_merge_join_exec::SortMergeJoinExec,
     };
@@ -492,7 +530,7 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                         Field::new("lv", DataType::Int32, true),
                     ])),
                 };
-                let join = SortMergeJoinExec::try_new(
+                let join: Arc<dyn ExecutionPlan> = Arc::new(SortMergeJoinExec::try_new(
                     schema,
                     left,
                     right,
@@ -503,8 +541,9 @@ async fn test_compact_residual_filter_all_join_types_and_projections() -> Result
                     join_type,
                     Some(filter),
                     vec![SortOptions::default()],
-                )?;
-                let batches = collect(join.execute_projected(
+                )?);
+                let batches = collect(crate::joins::test::execute_projected(
+                    &join,
                     0,
                     SessionContext::new().task_ctx(),
                     &projection,

@@ -31,10 +31,18 @@ import org.apache.spark.util.Utils
 
 import org.apache.auron.configuration.AuronConfiguration
 import org.apache.auron.spark.configuration.SparkAuronConfiguration
-import org.apache.auron.spark.ui.{AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
+import org.apache.auron.spark.ui.{AuronFallbackReason, AuronPlanDiagnosticEvent, AuronPlanDiagnosticNode}
 
 /** Diagnostics must neither mutate Spark's operator IDs nor prevent query execution. */
 object AuronPlanDiagnostics extends Logging {
+  @org.apache.auron.sparkver("3.0 / 3.1")
+  private def isAdaptiveShuffleReader(plan: SparkPlan): Boolean =
+    plan.isInstanceOf[org.apache.spark.sql.execution.adaptive.CustomShuffleReaderExec]
+
+  @org.apache.auron.sparkver("3.2 / 3.3 / 3.4 / 3.5 / 4.0 / 4.1 / 4.2")
+  private def isAdaptiveShuffleReader(plan: SparkPlan): Boolean =
+    plan.isInstanceOf[org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec]
+
   private val configurationKeys = Seq(
     "spark.auron.enabled",
     "spark.auron.enable",
@@ -57,13 +65,20 @@ object AuronPlanDiagnostics extends Logging {
       if (visited.put(p, java.lang.Boolean.TRUE) != null) {
         return
       }
-      val reason = p.getTagValue(AuronConvertStrategy.neverConvertReasonTag).getOrElse("")
+      val reason =
+        if (p.getTagValue(AuronConvertStrategy.convertToNonNativeTag).contains(true)) {
+          p.getTagValue(AuronConvertStrategy.convertToNonNativeReasonTag)
+            .getOrElse(AuronFallbackReason.keptOnJvm)
+        } else {
+          p.getTagValue(AuronConvertStrategy.neverConvertReasonTag).getOrElse("")
+        }
       val status = p match {
         case _: AuronConverters.ForceNativeExecutionWrapperBase => "Wrapper"
         case _: NativeSupports => "Native"
         case _: AdaptiveSparkPlanExec | _: QueryStageExec | _: ReusedExchangeExec |
             _: ReusedSubqueryExec | _: InputAdapter | _: WholeStageCodegenExec =>
           "Wrapper"
+        case _ if isAdaptiveShuffleReader(p) => "Wrapper"
         case _ if reason.nonEmpty => "Fallback"
         case _ => "Spark (no reason recorded)"
       }

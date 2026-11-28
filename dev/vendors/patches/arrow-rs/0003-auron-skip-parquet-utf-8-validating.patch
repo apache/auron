@@ -1,19 +1,8 @@
-From 0ed0f11556f78301050d71d4c40b77d46ecba52a Mon Sep 17 00:00:00 2001
-From: zhangli20 <zhangli20@kuaishou.com>
-Date: Sun, 15 Sep 2024 21:14:08 +0800
-Subject: [PATCH] auron: skip parquet utf-8 validating
-
----
- arrow-array/src/types.rs                  | 40 +++++++++++------------
- arrow-data/src/data.rs                    |  4 +--
- parquet/src/arrow/buffer/offset_buffer.rs | 27 ++++++++-------
- 3 files changed, 37 insertions(+), 34 deletions(-)
-
 diff --git a/arrow-array/src/types.rs b/arrow-array/src/types.rs
-index 3d8cfcdb1..605dc10d6 100644
+index a8de926..7e3c53f 100644
 --- a/arrow-array/src/types.rs
 +++ b/arrow-array/src/types.rs
-@@ -1409,26 +1409,26 @@ impl<O: OffsetSizeTrait> ByteArrayType for GenericStringType<O> {
+@@ -1668,26 +1668,26 @@ impl<O: OffsetSizeTrait> ByteArrayType for GenericStringType<O> {
      };
  
      fn validate(offsets: &OffsetBuffer<Self::Offset>, values: &Buffer) -> Result<(), ArrowError> {
@@ -61,10 +50,10 @@ index 3d8cfcdb1..605dc10d6 100644
      }
  }
 diff --git a/arrow-data/src/data.rs b/arrow-data/src/data.rs
-index 4c117184d..1d7a39e9d 100644
+index 2c9dfe6..d119012 100644
 --- a/arrow-data/src/data.rs
 +++ b/arrow-data/src/data.rs
-@@ -1300,8 +1300,8 @@ impl ArrayData {
+@@ -1485,8 +1485,8 @@ impl ArrayData {
      /// 1. Union type_ids are valid see [#85](https://github.com/apache/arrow-rs/issues/85)
      pub fn validate_values(&self) -> Result<(), ArrowError> {
          match &self.data_type {
@@ -76,10 +65,10 @@ index 4c117184d..1d7a39e9d 100644
              DataType::LargeBinary => self.validate_offsets_full::<i64>(self.buffers[1].len()),
              DataType::BinaryView => {
 diff --git a/parquet/src/arrow/buffer/offset_buffer.rs b/parquet/src/arrow/buffer/offset_buffer.rs
-index 5051dce12..802df6ed0 100644
+index ab67694..7c8e793 100644
 --- a/parquet/src/arrow/buffer/offset_buffer.rs
 +++ b/parquet/src/arrow/buffer/offset_buffer.rs
-@@ -60,17 +60,18 @@ impl<I: OffsetSizeTrait> OffsetBuffer<I> {
+@@ -62,17 +62,18 @@ impl<I: OffsetSizeTrait> OffsetBuffer<I> {
      /// UTF-8. This should be done by calling [`Self::check_valid_utf8`] after
      /// all data has been written
      pub fn try_push(&mut self, data: &[u8], validate_utf8: bool) -> Result<()> {
@@ -109,7 +98,7 @@ index 5051dce12..802df6ed0 100644
  
          self.values.extend_from_slice(data);
  
-@@ -118,7 +119,9 @@ impl<I: OffsetSizeTrait> OffsetBuffer<I> {
+@@ -126,7 +127,9 @@ impl<I: OffsetSizeTrait> OffsetBuffer<I> {
      ///
      /// [`Self::try_push`] can perform this validation check on insertion
      pub fn check_valid_utf8(&self, start_offset: usize) -> Result<()> {
@@ -120,6 +109,3 @@ index 5051dce12..802df6ed0 100644
      }
  
      /// Converts this into an [`ArrayRef`] with the provided `data_type` and `null_buffer`
--- 
-2.50.1
-

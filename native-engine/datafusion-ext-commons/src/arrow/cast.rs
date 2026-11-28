@@ -40,6 +40,7 @@ pub fn cast_impl(
         (&t1, t2) if t1 == t2 => make_array(array.to_data()),
 
         (_, &DataType::Null) => Arc::new(NullArray::new(array.len())),
+        (&DataType::Null, _) => new_null_array(cast_type, array.len()),
 
         // spark compatible str to int
         (&DataType::Utf8, to_dt) if to_dt.is_signed_integer() => {

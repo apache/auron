@@ -104,7 +104,7 @@ pub fn array_union(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
     let offsets = OffsetBuffer::new(ScalarBuffer::from(offset_buffer));
     let values = match scalars.into_iter().flatten().collect::<Vec<_>>() {
-        scalars if !scalars.is_empty() => ScalarValue::iter_to_array(scalars.into_iter())?,
+        scalars if !scalars.is_empty() => ScalarValue::iter_to_array(scalars)?,
         _empty => Arc::new(ListArray::new_null(
             Arc::new(Field::new_list_field(inner_dt.clone(), true)),
             0,

@@ -1,0 +1,286 @@
+diff --git a/datafusion/common/src/scalar/mod.rs b/datafusion/common/src/scalar/mod.rs
+index 90982ea..b198c44 100644
+--- a/datafusion/common/src/scalar/mod.rs
++++ b/datafusion/common/src/scalar/mod.rs
+@@ -864,47 +864,91 @@ fn partial_cmp_list(arr1: &dyn Array, arr2: &dyn Array) -> Option<Ordering> {
+     Some(arr1.len().cmp(&arr2.len()))
+ }
+ 
+-fn flatten<'a>(array: &'a StructArray, columns: &mut Vec<&'a ArrayRef>) {
+-    for i in 0..array.num_columns() {
+-        let column = array.column(i);
+-        if let Some(nested_struct) = column.as_any().downcast_ref::<StructArray>() {
+-            // If it's a nested struct, recursively expand
+-            flatten(nested_struct, columns);
+-        } else {
+-            // If it's a primitive type, add directly
+-            columns.push(column);
++fn spark_cmp_scalar(left: &ScalarValue, right: &ScalarValue) -> Option<Ordering> {
++    match (left.is_null(), right.is_null()) {
++        (true, true) => return Some(Ordering::Equal),
++        (true, false) => return Some(Ordering::Less),
++        (false, true) => return Some(Ordering::Greater),
++        (false, false) => {}
++    }
++
++    match (left, right) {
++        (ScalarValue::Float16(Some(l)), ScalarValue::Float16(Some(r))) => {
++            Some(spark_cmp_float((*l).to_f64(), (*r).to_f64()))
++        }
++        (ScalarValue::Float32(Some(l)), ScalarValue::Float32(Some(r))) => {
++            Some(spark_cmp_float(f64::from(*l), f64::from(*r)))
++        }
++        (ScalarValue::Float64(Some(l)), ScalarValue::Float64(Some(r))) => {
++            Some(spark_cmp_float(*l, *r))
++        }
++        (ScalarValue::List(l), ScalarValue::List(r)) => {
++            spark_cmp_list(l.as_ref(), r.as_ref())
+         }
++        (ScalarValue::LargeList(l), ScalarValue::LargeList(r)) => {
++            spark_cmp_list(l.as_ref(), r.as_ref())
++        }
++        (ScalarValue::FixedSizeList(l), ScalarValue::FixedSizeList(r)) => {
++            spark_cmp_list(l.as_ref(), r.as_ref())
++        }
++        (ScalarValue::ListView(l), ScalarValue::ListView(r)) => {
++            spark_cmp_list(l.as_ref(), r.as_ref())
++        }
++        (ScalarValue::LargeListView(l), ScalarValue::LargeListView(r)) => {
++            spark_cmp_list(l.as_ref(), r.as_ref())
++        }
++        (ScalarValue::Dictionary(_, l), ScalarValue::Dictionary(_, r))
++        | (ScalarValue::RunEndEncoded(_, _, l), ScalarValue::RunEndEncoded(_, _, r)) => {
++            spark_cmp_scalar(l, r)
++        }
++        _ => left.partial_cmp(right),
+     }
+ }
+ 
+-pub fn partial_cmp_struct(s1: &StructArray, s2: &StructArray) -> Option<Ordering> {
+-    if s1.len() != s2.len() {
+-        return None;
++fn spark_cmp_float(left: f64, right: f64) -> Ordering {
++    if left == right || (left.is_nan() && right.is_nan()) {
++        Ordering::Equal
++    } else if left.is_nan() {
++        Ordering::Greater
++    } else if right.is_nan() {
++        Ordering::Less
++    } else {
++        left.partial_cmp(&right).unwrap()
+     }
++}
+ 
+-    if s1.data_type() != s2.data_type() {
+-        return None;
++fn spark_cmp_list(left: &dyn Array, right: &dyn Array) -> Option<Ordering> {
++    let left = first_array_for_list(left);
++    let right = first_array_for_list(right);
++    for index in 0..left.len().min(right.len()) {
++        let left_value = ScalarValue::try_from_array(&left, index).ok()?;
++        let right_value = ScalarValue::try_from_array(&right, index).ok()?;
++        let ordering = spark_cmp_scalar(&left_value, &right_value)?;
++        if ordering != Ordering::Equal {
++            return Some(ordering);
++        }
+     }
++    Some(left.len().cmp(&right.len()))
++}
+ 
+-    let mut expanded_columns1 = Vec::with_capacity(s1.num_columns());
+-    let mut expanded_columns2 = Vec::with_capacity(s2.num_columns());
+-
+-    flatten(s1, &mut expanded_columns1);
+-    flatten(s2, &mut expanded_columns2);
+-
+-    for col_index in 0..expanded_columns1.len() {
+-        let arr1 = expanded_columns1[col_index];
+-        let arr2 = expanded_columns2[col_index];
+-
+-        let lt_res = arrow::compute::kernels::cmp::lt(arr1, arr2).ok()?;
+-        let eq_res = arrow::compute::kernels::cmp::eq(arr1, arr2).ok()?;
++pub fn partial_cmp_struct(s1: &StructArray, s2: &StructArray) -> Option<Ordering> {
++    if s1.len() != s2.len() || s1.data_type() != s2.data_type() {
++        return None;
++    }
+ 
+-        for j in 0..lt_res.len() {
+-            if lt_res.is_valid(j) && lt_res.value(j) {
+-                return Some(Ordering::Less);
+-            }
+-            if eq_res.is_valid(j) && !eq_res.value(j) {
+-                return Some(Ordering::Greater);
++    for row in 0..s1.len() {
++        match (s1.is_null(row), s2.is_null(row)) {
++            (true, true) => continue,
++            (true, false) => return Some(Ordering::Less),
++            (false, true) => return Some(Ordering::Greater),
++            (false, false) => {}
++        }
++        for (left, right) in s1.columns().iter().zip(s2.columns()) {
++            let left_value = ScalarValue::try_from_array(left, row).ok()?;
++            let right_value = ScalarValue::try_from_array(right, row).ok()?;
++            let ordering = spark_cmp_scalar(&left_value, &right_value)?;
++            if ordering != Ordering::Equal {
++                return Some(ordering);
+             }
+         }
+     }
+@@ -6027,6 +6071,157 @@ mod tests {
+     use insta::assert_snapshot;
+     use rand::Rng;
+ 
++    fn spark_test_struct(values: Vec<ScalarValue>) -> ScalarValue {
++        values
++            .into_iter()
++            .enumerate()
++            .fold(ScalarStructBuilder::new(), |builder, (index, value)| {
++                builder.with_scalar(
++                    Field::new(index.to_string(), value.data_type(), true),
++                    value,
++                )
++            })
++            .build()
++            .unwrap()
++    }
++
++    fn assert_spark_struct_cmp(
++        left: ScalarValue,
++        right: ScalarValue,
++        expected: Ordering,
++    ) {
++        assert_eq!(left.partial_cmp(&right), Some(expected));
++        assert_eq!(right.partial_cmp(&left), Some(expected.reverse()));
++    }
++
++    #[test]
++    fn test_spark_struct_cmp_nulls() {
++        let left = spark_test_struct(vec![
++            ScalarValue::Int32(None),
++            ScalarValue::Int32(Some(5)),
++        ]);
++        let right = spark_test_struct(vec![
++            ScalarValue::Int32(Some(3)),
++            ScalarValue::Int32(Some(2)),
++        ]);
++        assert_spark_struct_cmp(left.clone(), right, Ordering::Less);
++        assert_spark_struct_cmp(left.clone(), left.clone(), Ordering::Equal);
++        let null = ScalarValue::try_from(&left.data_type()).unwrap();
++        assert_spark_struct_cmp(null.clone(), left, Ordering::Less);
++        assert_spark_struct_cmp(null.clone(), null, Ordering::Equal);
++    }
++
++    #[test]
++    fn test_spark_struct_cmp_nested_nulls() {
++        let inner = spark_test_struct(vec![ScalarValue::Int32(None)]);
++        let null = ScalarValue::try_from(&inner.data_type()).unwrap();
++        assert_spark_struct_cmp(
++            spark_test_struct(vec![null, ScalarValue::Int32(Some(5))]),
++            spark_test_struct(vec![inner, ScalarValue::Int32(Some(2))]),
++            Ordering::Less,
++        );
++    }
++
++    #[test]
++    fn test_spark_struct_cmp_floats() {
++        let cases = [
++            (-0.0, 0.0, Ordering::Equal),
++            (f64::NEG_INFINITY, f64::INFINITY, Ordering::Less),
++            (f64::INFINITY, f64::NAN, Ordering::Less),
++            (f64::NAN, -f64::NAN, Ordering::Equal),
++        ];
++        for (left, right, expected) in cases {
++            assert_spark_struct_cmp(
++                spark_test_struct(vec![ScalarValue::Float64(Some(left))]),
++                spark_test_struct(vec![ScalarValue::Float64(Some(right))]),
++                expected,
++            );
++            assert_spark_struct_cmp(
++                spark_test_struct(vec![ScalarValue::Float32(Some(left as f32))]),
++                spark_test_struct(vec![ScalarValue::Float32(Some(right as f32))]),
++                expected,
++            );
++        }
++        assert_spark_struct_cmp(
++            spark_test_struct(vec![
++                ScalarValue::Float64(Some(-0.0)),
++                ScalarValue::Int32(Some(5)),
++            ]),
++            spark_test_struct(vec![
++                ScalarValue::Float64(Some(0.0)),
++                ScalarValue::Int32(Some(2)),
++            ]),
++            Ordering::Greater,
++        );
++    }
++
++    #[test]
++    fn test_spark_struct_cmp_lists() {
++        let list = |values: Vec<Option<f64>>| {
++            ScalarValue::List(Arc::new(
++                ListArray::from_iter_primitive::<Float64Type, _, _>([Some(values)]),
++            ))
++        };
++        let cases = [
++            (
++                vec![None, Some(5.0)],
++                vec![Some(3.0), Some(2.0)],
++                Ordering::Less,
++            ),
++            (vec![Some(1.0)], vec![Some(1.0), None], Ordering::Less),
++            (vec![Some(2.0)], vec![Some(1.0)], Ordering::Greater),
++            (vec![Some(-0.0)], vec![Some(0.0)], Ordering::Equal),
++            (
++                vec![Some(f64::NAN)],
++                vec![Some(f64::INFINITY)],
++                Ordering::Greater,
++            ),
++            (vec![], vec![], Ordering::Equal),
++        ];
++        for (left, right, expected) in cases {
++            assert_spark_struct_cmp(
++                spark_test_struct(vec![list(left)]),
++                spark_test_struct(vec![list(right)]),
++                expected,
++            );
++        }
++        let left = SingleRowListArrayBuilder::new(
++            spark_test_struct(vec![ScalarValue::Int32(None)])
++                .to_array()
++                .unwrap(),
++        )
++        .build_list_scalar();
++        let right = SingleRowListArrayBuilder::new(
++            spark_test_struct(vec![ScalarValue::Int32(Some(1))])
++                .to_array()
++                .unwrap(),
++        )
++        .build_list_scalar();
++        assert_spark_struct_cmp(
++            spark_test_struct(vec![left.clone()]),
++            spark_test_struct(vec![right.clone()]),
++            Ordering::Less,
++        );
++        let left =
++            SingleRowListArrayBuilder::new(left.to_array().unwrap()).build_list_scalar();
++        let right =
++            SingleRowListArrayBuilder::new(right.to_array().unwrap()).build_list_scalar();
++        assert_spark_struct_cmp(
++            spark_test_struct(vec![left]),
++            spark_test_struct(vec![right]),
++            Ordering::Less,
++        );
++    }
++
++    #[test]
++    fn test_spark_struct_cmp_type_mismatch() {
++        assert_eq!(
++            spark_test_struct(vec![ScalarValue::Int32(Some(1))])
++                .partial_cmp(&spark_test_struct(vec![ScalarValue::Int64(Some(1))])),
++            None,
++        );
++    }
++
+     #[test]
+     fn test_scalar_value_from_for_map() {
+         let string_builder = StringBuilder::new();

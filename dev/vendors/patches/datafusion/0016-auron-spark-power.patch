@@ -1,0 +1,143 @@
+diff --git a/datafusion/spark/src/function/math/pow.rs b/datafusion/spark/src/function/math/pow.rs
+index 8655d71..747978c 100644
+--- a/datafusion/spark/src/function/math/pow.rs
++++ b/datafusion/spark/src/function/math/pow.rs
+@@ -20,10 +20,8 @@
+ //! Unlike the default DataFusion (PostgreSQL) implementation, Spark returns
+ //! `Infinity` for `pow(0, <negative>)` rather than raising an error.
+
+-use std::sync::Arc;
+-
+-use arrow::array::{Array, ArrayRef, Float64Array};
+ use arrow::datatypes::DataType;
++use arrow::datatypes::Float64Type;
+
+ use datafusion_common::utils::take_function_args;
+ use datafusion_common::{Result, ScalarValue};
+@@ -31,6 +29,7 @@ use datafusion_expr::{
+     ColumnarValue, Documentation, ScalarFunctionArgs, ScalarUDFImpl, Signature,
+ };
+ use datafusion_functions::math::power::PowerFunc;
++use datafusion_functions::utils::calculate_binary_math;
+
+ /// Spark-compatible implementation of `pow` / `power`.
+ ///
+@@ -79,74 +78,54 @@ impl ScalarUDFImpl for SparkPow {
+     }
+
+     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+-        // Only Float64 × Float64 needs the Spark override.
+-        // Decimal / integer / mixed-type paths are delegated to the standard
+-        // PowerFunc which already handles them correctly (decimal can't
+-        // represent Infinity anyway).
+-        match args.args.as_slice() {
+-            [base, exponent]
+-                if matches!(base.data_type(), DataType::Float64)
+-                    && matches!(exponent.data_type(), DataType::Float64) => {}
+-            _ => return self.inner.invoke_with_args(args),
+-        }
+-
+-        let num_rows = args.number_rows;
+-
+-        // ── Scalar × Scalar fast path ────────────────────────────────────────
+-        // Pattern-match on the slice to avoid any ownership issues.
+-        if let [
+-            ColumnarValue::Scalar(ScalarValue::Float64(base)),
+-            ColumnarValue::Scalar(ScalarValue::Float64(exp)),
+-        ] = args.args.as_slice()
+-        {
+-            // base and exp are &Option<f64>; Option<f64> is Copy.
+-            let result = (*base).zip(*exp).map(|(base, exp)| {
+-                if base == 0.0 && exp < 0.0 {
+-                    f64::INFINITY
+-                } else {
+-                    base.powf(exp)
+-                }
+-            });
+-            return Ok(ColumnarValue::Scalar(ScalarValue::Float64(result)));
+-        }
+-
+-        // ── Array path ───────────────────────────────────────────────────────
+         let [base, exponent] = take_function_args(self.name(), &args.args)?;
+-
+-        let base_arr: ArrayRef = base.to_array(num_rows)?;
+-        let exp_arr: ArrayRef = exponent.to_array(num_rows)?;
+-
+-        let base_f64 = base_arr
+-            .as_any()
+-            .downcast_ref::<Float64Array>()
+-            .expect("base must be Float64Array");
+-        let exp_f64 = exp_arr
+-            .as_any()
+-            .downcast_ref::<Float64Array>()
+-            .expect("exponent must be Float64Array");
+-
+-        // Spark: 0^negative = +Infinity (covers both 0.0 and -0.0)
+-        // IEEE 754: 0.0^-1.0 = +Infinity, -0.0^-1.0 = -Infinity
+-        // Thus we need an explicit guard for base == 0.0 to ensure +Infinity.
+-        let result: Float64Array = base_f64
+-            .iter()
+-            .zip(exp_f64.iter())
+-            .map(|(base, exp)| match (base, exp) {
+-                (Some(base), Some(exp)) => {
+-                    if base == 0.0 && exp < 0.0 {
+-                        Some(f64::INFINITY)
+-                    } else {
+-                        Some(base.powf(exp))
+-                    }
+-                }
+-                _ => None,
+-            })
+-            .collect();
+-
+-        Ok(ColumnarValue::Array(Arc::new(result)))
++        match (base, exponent) {
++            (
++                ColumnarValue::Scalar(ScalarValue::Float64(base)),
++                ColumnarValue::Scalar(ScalarValue::Float64(exponent)),
++            ) => Ok(ColumnarValue::Scalar(ScalarValue::Float64(
++                base.zip(*exponent).map(|(b, e)| spark_pow(b, e)),
++            ))),
++            (ColumnarValue::Scalar(_), ColumnarValue::Array(exponents)) => {
++                Ok(ColumnarValue::Array(calculate_binary_math::<
++                    Float64Type,
++                    Float64Type,
++                    Float64Type,
++                    _,
++                >(
++                    exponents,
++                    base,
++                    |e, b| Ok(spark_pow(b, e)),
++                )?))
++            }
++            (ColumnarValue::Array(bases), _) => {
++                Ok(ColumnarValue::Array(calculate_binary_math::<
++                    Float64Type,
++                    Float64Type,
++                    Float64Type,
++                    _,
++                >(
++                    bases,
++                    exponent,
++                    |b, e| Ok(spark_pow(b, e)),
++                )?))
++            }
++            _ => self.inner.invoke_with_args(args),
++        }
+     }
+
+     fn documentation(&self) -> Option<&Documentation> {
+         self.inner.documentation()
+     }
+ }
++
++// Java Math.pow differs from libm for these NaN/infinity cases. For signed
++// zero, use powf directly so an odd exponent retains the negative sign.
++#[inline]
++fn spark_pow(base: f64, exponent: f64) -> f64 {
++    if exponent.is_nan() || (base.abs() == 1.0 && exponent.is_infinite()) {
++        f64::NAN
++    } else {
++        base.powf(exponent)
++    }
++}
