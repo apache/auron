@@ -636,6 +636,39 @@ class AuronQuerySuite extends AuronQueryTest with BaseAuronSQLSuite with AuronSQ
     }
   }
 
+  private def checkPaddedStringCasts(value: String, castTypes: Seq[String]): Unit = {
+    withSQLConf("spark.auron.cast.trimString" -> "true", "spark.sql.ansi.enabled" -> "false") {
+      withTable("t1") {
+        Seq(
+          " " -> " ",
+          "\t" -> "\t",
+          "" -> "\n",
+          "\r" -> "\r",
+          "\u000b" -> "\f",
+          "\u001c" -> "\u001f",
+          "\u0001" -> "\u007f")
+          .map { case (prefix, suffix) => prefix + value + suffix }
+          .toDF("c1")
+          .write
+          .saveAsTable("t1")
+        checkSparkAnswerAndOperator(
+          castTypes.map(t => s"cast(c1 as $t)").mkString("select ", ", ", " from t1"))
+      }
+    }
+  }
+
+  test("cast string with surrounding whitespace and control characters to integral types") {
+    checkPaddedStringCasts("42", Seq("tinyint", "smallint", "int", "bigint"))
+  }
+
+  test("cast string with surrounding whitespace and control characters to boolean") {
+    checkPaddedStringCasts("true", Seq("boolean"))
+  }
+
+  test("cast string with surrounding whitespace and control characters to fractional types") {
+    checkPaddedStringCasts("1.5", Seq("float", "double", "decimal(10, 2)"))
+  }
+
   test("cast struct to string") {
     // SPARK-32499 SPARK-32501 SPARK-33291
     if (AuronTestUtils.isSparkV31OrGreater) {
