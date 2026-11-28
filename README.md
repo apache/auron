@@ -111,6 +111,10 @@ the table's files already contain field IDs. The reason is recorded in
 `auron.never.convert.reason`; tables without name mapping remain eligible for
 native scans.
 
+Native Iceberg Parquet snapshot scans honor supported top-level scalar `initial-default`
+values when a field ID is absent from a file. This applies to files with field IDs
+and scans without delete files. A NULL stored in the file is preserved.
+
 ## Native conversion diagnostics in the Spark UI
 
 After configuring Auron as described above, enable the Spark UI and Auron tab

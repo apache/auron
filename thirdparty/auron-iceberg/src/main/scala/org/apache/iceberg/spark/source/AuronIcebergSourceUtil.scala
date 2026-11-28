@@ -48,6 +48,22 @@ object AuronIcebergSourceUtil {
     expectedSchema.columns().asScala.map(field => field.name() -> field.fieldId()).toMap
   }
 
+  def snapshotInitialDefaultFields(scan: AnyRef): Seq[Types.NestedField] = {
+    val batchScan = asBatchQueryScan(scan)
+    val fields = batchScan
+      .expectedSchema()
+      .columns()
+      .asScala
+      .filter(field => field.`type`().isPrimitiveType && field.initialDefault() != null)
+      .toSeq
+    // SparkBatchQueryScan also serves incremental append reads.
+    if (fields.nonEmpty && FieldUtils.readField(batchScan, "startSnapshotId", true) != null) {
+      Seq.empty
+    } else {
+      fields
+    }
+  }
+
   def expectedPartitionType(scan: AnyRef): Option[Types.StructType] = {
     val batchScan = asBatchQueryScan(scan)
     Option(batchScan.expectedSchema().findType(MetadataColumns.PARTITION_COLUMN_ID)).map {

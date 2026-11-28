@@ -57,7 +57,8 @@ final case class IcebergScanPlan(
     fileSchema: StructType,
     partitionSchema: StructType,
     pruningPredicates: Seq[pb.PhysicalExprNode],
-    fieldIdsByName: Map[String, Int])
+    fieldIdsByName: Map[String, Int],
+    initialDefaults: Map[Integer, pb.ScalarValue] = Map.empty)
 
 object IcebergScanSupport extends Logging {
   private val scanPlanTag: TreeNodeTag[Option[IcebergScanPlan]] = TreeNodeTag(
@@ -255,7 +256,7 @@ object IcebergScanSupport extends Logging {
     val partitionType = AuronIcebergSourceUtil.expectedPartitionType(scan.asInstanceOf[AnyRef])
     val nativeTasks = fileTasks.map(task =>
       toNativeScanTask(task, partitionSchema, fieldIdsByName, partitionType.orNull))
-    withIdentityPartitions(
+    val plan = withIdentityPartitions(
       IcebergScanPlan(
         nativeTasks,
         format,
@@ -265,6 +266,29 @@ object IcebergScanSupport extends Logging {
         pruningPredicates,
         fieldIdsByName),
       fileTasks)
+    if (format == FileFormat.PARQUET) {
+      plan.map { parquetPlan =>
+        // Identity partition constants already populate columns moved out of the file schema.
+        val fieldsById = parquetPlan.fileSchema.fields.map { field =>
+          fieldIdsByName(field.name) -> field
+        }.toMap
+        val initialDefaults =
+          AuronIcebergSourceUtil
+            .snapshotInitialDefaultFields(scan.asInstanceOf[AnyRef])
+            .flatMap { field =>
+              fieldsById.get(field.fieldId()).map { sparkField =>
+                val value = SparkUtil.internalToSpark(field.`type`(), field.initialDefault())
+                val literal = Literal(value, sparkField.dataType)
+                Integer
+                  .valueOf(field.fieldId()) -> NativeConverters.convertExpr(literal).getLiteral
+              }
+            }
+            .toMap
+        parquetPlan.copy(initialDefaults = initialDefaults)
+      }
+    } else {
+      plan
+    }
   }
 
   private def planChangelogScan(

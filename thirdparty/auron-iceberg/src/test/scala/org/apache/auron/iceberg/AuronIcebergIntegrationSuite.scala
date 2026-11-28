@@ -28,8 +28,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.iceberg.{AddedRowsScanTask, ChangelogScanTask, DataFiles, DeletedDataFileScanTask, FileFormat, FileScanTask, MetadataColumns, PartitionData, ScanTask, Table, TableProperties}
 import org.apache.iceberg.data.{GenericAppenderFactory, GenericRecord, Record}
 import org.apache.iceberg.deletes.PositionDelete
+import org.apache.iceberg.expressions.Expressions
 import org.apache.iceberg.mapping.{MappingUtil, NameMappingParser}
 import org.apache.iceberg.spark.Spark3Util
+import org.apache.iceberg.types.Types
 import org.apache.parquet.column.ParquetProperties.WriterVersion
 import org.apache.parquet.example.data.simple.SimpleGroupFactory
 import org.apache.parquet.hadoop.ParquetFileReader
@@ -588,6 +590,191 @@ class AuronIcebergIntegrationSuite
           checkSparkAnswerAndOperator(
             "select id from local.db.t_drop_add where value is null or value = 'new'")
         }
+      }
+    }
+  }
+
+  test(
+    "iceberg native parquet scan honors top-level initial defaults in projections and filters") {
+    val tableName = "local.db.t_initial_defaults"
+    withTable(tableName) {
+      sql(s"""create table $tableName (id int) using iceberg
+             |tblproperties ('format-version' = '3', 'write.format.default' = 'parquet')
+             |""".stripMargin)
+      sql(s"insert into $tableName values (1)")
+      val table = Spark3Util.loadIcebergTable(spark, tableName)
+      table
+        .updateSchema()
+        .addColumn("country", Types.StringType.get(), Expressions.lit("US"))
+        .addColumn("score", Types.IntegerType.get(), Expressions.lit(7))
+        .addColumn("note", Types.StringType.get())
+        .commit()
+      table.updateSchema().updateColumnDefault("country", Expressions.lit("CA")).commit()
+      sql(s"refresh table $tableName")
+      sql(s"""insert into $tableName values
+             |(2, 'US', 7, 'new2'), (3, null, null, null), (4, 'CA', 0, 'new4')
+             |""".stripMargin)
+      table.refresh()
+      val countryId = table.schema().findField("country").fieldId()
+      val id = table.schema().findField("id").fieldId()
+      val tasks = table.newScan().planFiles()
+      try {
+        val footers = tasks
+          .iterator()
+          .asScala
+          .map { task =>
+            assert(task.deletes().isEmpty)
+            val path = new Path(task.file().location())
+            val reader = ParquetFileReader.open(
+              HadoopInputFile.fromPath(path, spark.sessionState.newHadoopConf()))
+            try {
+              reader.getFooter.getFileMetaData.getSchema.getFields.asScala.map { field =>
+                assert(field.getId != null, s"$path: $field")
+                field.getId.intValue()
+              }.toSet
+            } finally reader.close()
+          }
+          .toList
+        assert(footers.contains(Set(id)), footers)
+        assert(footers.exists(_.contains(countryId)), footers)
+      } finally tasks.close()
+
+      def checkNative(query: String, expected: Seq[Row]): Unit = {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        executedNativeIcebergTableScanExec(df)
+      }
+
+      withSQLConf("spark.auron.enabled" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+        checkNative(
+          s"select id, country, score, note from $tableName",
+          Seq(
+            Row(1, "US", 7, null),
+            Row(2, "US", 7, "new2"),
+            Row(3, null, null, null),
+            Row(4, "CA", 0, "new4")))
+        checkNative(
+          s"select country from $tableName",
+          Seq(Row("US"), Row("US"), Row(null), Row("CA")))
+        val predicates = Seq(
+          "country = 'US'" -> Seq(Row(1), Row(2)),
+          "country = 'CA'" -> Seq(Row(4)),
+          "country is null" -> Seq(Row(3)),
+          "country is not null" -> Seq(Row(1), Row(2), Row(4)),
+          "upper(country) = 'US'" -> Seq(Row(1), Row(2)),
+          "score = 7" -> Seq(Row(1), Row(2)),
+          "score < 7 or score is null" -> Seq(Row(3), Row(4)),
+          "note is null" -> Seq(Row(1), Row(3)))
+        // Iceberg 1.10.1's own Parquet reader can drop matching old rows (#16692).
+        for {
+          pageFiltering <- Seq("false", "true")
+          (predicate, expected) <- predicates
+        } {
+          withSQLConf("spark.auron.parquet.enable.pageFiltering" -> pageFiltering) {
+            checkNative(s"select id from $tableName where $predicate", expected)
+          }
+        }
+      }
+    }
+  }
+
+  test(
+    "iceberg native parquet scan resolves an initial default field despite an unrelated missing ID") {
+    val tableName = "local.db.t_initial_default_partial_ids"
+    withTable(tableName) {
+      withTempDir { dir =>
+        sql(s"""create table $tableName (id int) using iceberg
+               |tblproperties ('format-version' = '3', 'write.format.default' = 'parquet')
+               |""".stripMargin)
+        sql(s"insert into $tableName values (1)")
+        val table = Spark3Util.loadIcebergTable(spark, tableName)
+        table
+          .updateSchema()
+          .addColumn("score", Types.IntegerType.get(), Expressions.lit(7))
+          .commit()
+        table.refresh()
+        val id = table.schema().findField("id").fieldId()
+        val scoreId = table.schema().findField("score").fieldId()
+        val schema = MessageTypeParser.parseMessageType(s"""
+            |message imported {
+            |  required int32 id = $id;
+            |  optional int32 score = $scoreId;
+            |  optional int32 unrelated;
+            |}
+            |""".stripMargin)
+        val path = new Path(dir.toURI.toString, "partial-ids.parquet")
+        val conf = spark.sessionState.newHadoopConf()
+        val writer = ExampleParquetWriter.builder(path).withConf(conf).withType(schema).build()
+        try {
+          val groups = new SimpleGroupFactory(schema)
+          writer.write(
+            groups.newGroup().append("id", 2).append("score", 99).append("unrelated", 1))
+          writer.write(groups.newGroup().append("id", 3).append("unrelated", 2))
+        } finally writer.close()
+        val reader = ParquetFileReader.open(HadoopInputFile.fromPath(path, conf))
+        try {
+          val fileSchema = reader.getFooter.getFileMetaData.getSchema
+          assert(fileSchema.getType(fileSchema.getFieldIndex("id")).getId.intValue() == id)
+          assert(
+            fileSchema.getType(fileSchema.getFieldIndex("score")).getId.intValue() == scoreId)
+          assert(fileSchema.getType(fileSchema.getFieldIndex("unrelated")).getId == null)
+        } finally reader.close()
+        val dataFile = DataFiles
+          .builder(table.spec())
+          .withInputFile(table.io().newInputFile(path.toString))
+          .withRecordCount(2)
+          .build()
+        table.newAppend().appendFile(dataFile).commit()
+        sql(s"refresh table $tableName")
+
+        withSQLConf(
+          "spark.auron.enabled" -> "true",
+          "spark.auron.enable.iceberg.scan" -> "true") {
+          for ((query, expected) <- Seq(
+              s"select id, score from $tableName" -> Seq(Row(1, 7), Row(2, 99), Row(3, null)),
+              s"select id from $tableName where score = 99" -> Seq(Row(2)),
+              s"select id from $tableName where score = 7" -> Seq(Row(1)),
+              s"select id from $tableName where score is null" -> Seq(Row(3)))) {
+            val df = sql(query)
+            checkAnswer(df, expected)
+            val scan = executedNativeIcebergTableScanExec(df, tableName)
+            assert(scan.staticPlan.scanTasks.exists(_.location == dataFile.location()))
+          }
+        }
+      }
+    }
+  }
+
+  test("iceberg native parquet scan preserves date and decimal initial default types") {
+    val tableName = "local.db.t_typed_initial_defaults"
+    withTable(tableName) {
+      sql(s"""create table $tableName (id int) using iceberg
+             |tblproperties ('format-version' = '3', 'write.format.default' = 'parquet')
+             |""".stripMargin)
+      sql(s"insert into $tableName values (1)")
+      Spark3Util
+        .loadIcebergTable(spark, tableName)
+        .updateSchema()
+        .addRequiredColumn("day", Types.DateType.get(), Expressions.lit("2024-01-15"))
+        .addColumn(
+          "amount",
+          Types.DecimalType.of(10, 2),
+          Expressions.lit(new java.math.BigDecimal("12.34")))
+        .commit()
+      sql(s"refresh table $tableName")
+      sql(s"insert into $tableName values (2, date '2024-01-16', null)")
+      withSQLConf("spark.auron.enabled" -> "true", "spark.auron.enable.iceberg.scan" -> "true") {
+        val projected = sql(s"select id, day, amount from $tableName")
+        checkAnswer(
+          projected,
+          Seq(
+            Row(1, java.sql.Date.valueOf("2024-01-15"), new java.math.BigDecimal("12.34")),
+            Row(2, java.sql.Date.valueOf("2024-01-16"), null)))
+        executedNativeIcebergTableScanExec(projected)
+        val filtered =
+          sql(s"select id from $tableName where day = date '2024-01-15' and amount = 12.34")
+        checkAnswer(filtered, Seq(Row(1)))
+        executedNativeIcebergTableScanExec(filtered)
       }
     }
   }

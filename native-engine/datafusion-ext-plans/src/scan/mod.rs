@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use arrow::array::{RecordBatch, RecordBatchOptions};
 use arrow::{
@@ -39,6 +39,21 @@ use datafusion_ext_commons::df_execution_err;
 
 type CastColumn = dyn Fn(&ArrayRef, &Field) -> Result<ArrayRef> + Send + Sync;
 
+fn initial_default<'a>(
+    defaults: &'a HashMap<i32, ScalarValue>,
+    field: &Field,
+) -> Option<&'a ScalarValue> {
+    if defaults.is_empty() {
+        return None;
+    }
+    let id = field
+        .metadata()
+        .get(PARQUET_FIELD_ID_META_KEY)?
+        .parse()
+        .ok()?;
+    defaults.get(&id)
+}
+
 /// Replacement for datafusion's removed `SchemaMapping`, re-implementing the
 /// same field-remapping + per-column casting behavior that was dropped in
 /// favor of `PhysicalExprAdapterFactory`.
@@ -46,6 +61,7 @@ pub struct AuronSchemaMapping {
     table_schema: SchemaRef,
     field_mappings: Vec<Option<usize>>,
     cast_column: Arc<CastColumn>,
+    initial_defaults: Arc<HashMap<i32, ScalarValue>>,
 }
 
 impl Debug for AuronSchemaMapping {
@@ -62,11 +78,13 @@ impl AuronSchemaMapping {
         table_schema: SchemaRef,
         field_mappings: Vec<Option<usize>>,
         cast_column: Arc<CastColumn>,
+        initial_defaults: Arc<HashMap<i32, ScalarValue>>,
     ) -> Self {
         Self {
             table_schema,
             field_mappings,
             cast_column,
+            initial_defaults,
         }
     }
 }
@@ -80,10 +98,13 @@ impl SchemaMapper for AuronSchemaMapping {
             .zip(&self.field_mappings)
             .map(|(field, file_idx)| match file_idx {
                 Some(batch_idx) => (self.cast_column)(batch.column(*batch_idx), field),
-                None => Ok(arrow::array::new_null_array(
-                    field.data_type(),
-                    batch.num_rows(),
-                )),
+                None => match initial_default(&self.initial_defaults, field) {
+                    Some(value) => value.to_array_of_size(batch.num_rows()),
+                    None => Ok(arrow::array::new_null_array(
+                        field.data_type(),
+                        batch.num_rows(),
+                    )),
+                },
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(RecordBatch::try_new_with_options(
@@ -120,8 +141,25 @@ impl SchemaMapper for AuronSchemaMapping {
 pub mod internal_file_reader;
 pub mod parallel;
 
-#[derive(Debug)]
-pub struct AuronSchemaAdapterFactory;
+#[derive(Debug, Default)]
+pub struct AuronSchemaAdapterFactory {
+    initial_defaults: Arc<HashMap<i32, ScalarValue>>,
+}
+
+impl AuronSchemaAdapterFactory {
+    pub fn new(initial_defaults: HashMap<i32, ScalarValue>) -> Self {
+        Self {
+            initial_defaults: Arc::new(initial_defaults),
+        }
+    }
+
+    fn adapter(&self, table_schema: SchemaRef) -> AuronSchemaAdapter {
+        AuronSchemaAdapter {
+            table_schema,
+            initial_defaults: self.initial_defaults.clone(),
+        }
+    }
+}
 
 impl SchemaAdapterFactory for AuronSchemaAdapterFactory {
     fn create(
@@ -129,41 +167,76 @@ impl SchemaAdapterFactory for AuronSchemaAdapterFactory {
         projected_table_schema: SchemaRef,
         _table_schema: SchemaRef,
     ) -> Box<dyn SchemaAdapter> {
-        Box::new(AuronSchemaAdapter::new(projected_table_schema))
+        Box::new(self.adapter(projected_table_schema))
     }
 }
 
-pub struct AuronSchemaAdapter {
+#[derive(Debug)]
+struct AuronSchemaAdapter {
     table_schema: SchemaRef,
+    initial_defaults: Arc<HashMap<i32, ScalarValue>>,
 }
 
 impl AuronSchemaAdapter {
-    pub fn new(table_schema: SchemaRef) -> Self {
-        Self { table_schema }
+    fn resolve_column_index(&self, index: usize, file_schema: &Schema) -> Result<Option<usize>> {
+        let file_index = self.map_column_index(index, file_schema);
+        let field = self.table_schema.field(index);
+        // An unidentified file field could be an earlier name of the defaulted field.
+        if file_index.is_none()
+            && initial_default(&self.initial_defaults, field).is_some()
+            && file_schema
+                .fields()
+                .iter()
+                .any(|field| !field.metadata().contains_key(PARQUET_FIELD_ID_META_KEY))
+        {
+            return df_execution_err!(
+                "Cannot determine whether Iceberg field {} is missing from a Parquet file without complete field IDs",
+                field.name()
+            );
+        }
+        Ok(file_index)
     }
 }
 
 impl SchemaAdapter for AuronSchemaAdapter {
     fn map_column_index(&self, index: usize, file_schema: &Schema) -> Option<usize> {
         let field = self.table_schema.field(index);
+        let requires_id = initial_default(&self.initial_defaults, field).is_some();
 
-        file_schema
-            .fields()
-            .iter()
-            .position(|file_field| fields_match(field, file_field))
+        file_schema.fields().iter().position(|file_field| {
+            (!requires_id
+                || file_field
+                    .metadata()
+                    .contains_key(PARQUET_FIELD_ID_META_KEY))
+                && fields_match(field, file_field)
+        })
     }
 
     fn map_schema(&self, file_schema: &Schema) -> Result<(Arc<dyn SchemaMapper>, Vec<usize>)> {
         let mut projection = Vec::with_capacity(file_schema.fields().len());
         let mut field_mappings = vec![None; self.table_schema.fields().len()];
+        let mut default_matches = HashMap::new();
+        let mut fields_without_default = Vec::with_capacity(self.table_schema.fields().len());
+
+        for (table_idx, field) in self.table_schema.fields().iter().enumerate() {
+            if initial_default(&self.initial_defaults, field).is_some() {
+                if let Some(file_idx) = self.resolve_column_index(table_idx, file_schema)? {
+                    default_matches.insert(file_idx, table_idx);
+                }
+            } else {
+                fields_without_default.push((table_idx, field));
+            }
+        }
 
         for (file_idx, file_field) in file_schema.fields.iter().enumerate() {
-            if let Some(table_idx) = self
-                .table_schema
-                .fields()
-                .iter()
-                .position(|table_field| fields_match(table_field, file_field))
-            {
+            let table_idx = default_matches.get(&file_idx).copied().or_else(|| {
+                fields_without_default
+                    .iter()
+                    .find_map(|&(table_idx, table_field)| {
+                        fields_match(table_field, file_field).then_some(table_idx)
+                    })
+            });
+            if let Some(table_idx) = table_idx {
                 field_mappings[table_idx] = Some(projection.len());
                 projection.push(file_idx);
             }
@@ -173,6 +246,7 @@ impl SchemaAdapter for AuronSchemaAdapter {
             self.table_schema.clone(),
             field_mappings,
             Arc::new(|col, field| schema_adapter_cast_column(col, field)),
+            self.initial_defaults.clone(),
         ));
         Ok((schema_mapper, projection))
     }
@@ -189,19 +263,15 @@ fn fields_match(table_field: &Field, file_field: &Field) -> bool {
     }
 }
 
-/// Resolve predicates by the same identities as projected columns, before
-/// Parquet statistics, Bloom filters or row filters see the physical schema.
-#[derive(Debug)]
-pub struct AuronPhysicalExprAdapterFactory;
-
-impl PhysicalExprAdapterFactory for AuronPhysicalExprAdapterFactory {
+// Adapt predicates with the same field identities and defaults as the projection.
+impl PhysicalExprAdapterFactory for AuronSchemaAdapterFactory {
     fn create(
         &self,
         logical_file_schema: SchemaRef,
         physical_file_schema: SchemaRef,
     ) -> Result<Arc<dyn PhysicalExprAdapter>> {
         Ok(Arc::new(AuronPhysicalExprAdapter {
-            logical_file_schema,
+            logical: self.adapter(logical_file_schema),
             physical_file_schema,
         }))
     }
@@ -209,32 +279,39 @@ impl PhysicalExprAdapterFactory for AuronPhysicalExprAdapterFactory {
 
 #[derive(Debug)]
 struct AuronPhysicalExprAdapter {
-    logical_file_schema: SchemaRef,
+    logical: AuronSchemaAdapter,
     physical_file_schema: SchemaRef,
 }
 
 impl PhysicalExprAdapter for AuronPhysicalExprAdapter {
     fn rewrite(&self, expr: PhysicalExprRef) -> Result<PhysicalExprRef> {
-        let adapter = AuronSchemaAdapter::new(self.logical_file_schema.clone());
         expr.transform_up(|expr| {
             let Some(column) = expr.downcast_ref::<Column>() else {
                 return Ok(Transformed::no(expr));
             };
-            let index = self.logical_file_schema.index_of(column.name())?;
-            let field = self.logical_file_schema.field(index);
-            let mapped: PhysicalExprRef =
-                match adapter.map_column_index(index, &self.physical_file_schema) {
-                    Some(file_index) => {
-                        let file_field = self.physical_file_schema.field(file_index);
-                        let column = Arc::new(Column::new(file_field.name(), file_index));
-                        if file_field.data_type() == field.data_type() {
-                            column
-                        } else {
-                            Arc::new(CastExpr::new(column, field.data_type().clone(), None))
-                        }
+            let index = self.logical.table_schema.index_of(column.name())?;
+            let field = self.logical.table_schema.field(index);
+            let mapped: PhysicalExprRef = match self
+                .logical
+                .resolve_column_index(index, &self.physical_file_schema)?
+            {
+                Some(file_index) => {
+                    let file_field = self.physical_file_schema.field(file_index);
+                    let column = Arc::new(Column::new(file_field.name(), file_index));
+                    if file_field.data_type() == field.data_type() {
+                        column
+                    } else {
+                        Arc::new(CastExpr::new(column, field.data_type().clone(), None))
                     }
-                    None => Arc::new(Literal::new(ScalarValue::try_from(field.data_type())?)),
-                };
+                }
+                None => {
+                    let value = match initial_default(&self.logical.initial_defaults, field) {
+                        Some(value) => value.clone(),
+                        None => ScalarValue::try_from(field.data_type())?,
+                    };
+                    Arc::new(Literal::new(value))
+                }
+            };
             Ok(Transformed::yes(mapped))
         })
         .data()
@@ -249,6 +326,7 @@ pub fn create_auron_schema_mapper(
         table_schema.clone(),
         field_mappings.to_vec(),
         Arc::new(|col, field| schema_adapter_cast_column(col, field)),
+        Arc::default(),
     ))
 }
 
@@ -325,7 +403,7 @@ mod tests {
     #[test]
     fn test_field_ids_take_precedence_over_names() -> Result<()> {
         let table_schema = Arc::new(Schema::new(vec![field_with_id("value", "3")]));
-        let adapter = AuronSchemaAdapter::new(table_schema.clone());
+        let adapter = AuronSchemaAdapterFactory::default().adapter(table_schema.clone());
 
         // A dropped and re-added column has the same name but a new identity.
         // If its field id is absent, the old values must not reappear.
@@ -399,8 +477,11 @@ mod tests {
             }
             let physical_schema = Arc::new(Schema::new(fields));
             let batch = RecordBatch::try_new(physical_schema.clone(), columns)?;
-            let adapter = AuronPhysicalExprAdapterFactory
-                .create(logical_schema.clone(), physical_schema.clone())?;
+            let adapter = PhysicalExprAdapterFactory::create(
+                &AuronSchemaAdapterFactory::default(),
+                logical_schema.clone(),
+                physical_schema.clone(),
+            )?;
             let column = Arc::new(Column::new("value", 0)) as PhysicalExprRef;
             let rewritten = adapter.rewrite(column.clone())?;
             assert_eq!(rewritten.data_type(&physical_schema)?, DataType::Int64);
@@ -424,9 +505,70 @@ mod tests {
     }
 
     #[test]
+    fn test_initial_default_uses_field_identity() -> Result<()> {
+        let logical_schema = Arc::new(Schema::new(vec![field_with_id("value", "3")]));
+        let factory = AuronSchemaAdapterFactory::new([(3, ScalarValue::Int32(Some(7)))].into());
+        let schema_adapter = factory.adapter(logical_schema.clone());
+        for (file_fields, file_columns, expected) in [
+            (
+                vec![field_with_id("value", "2")],
+                vec![Arc::new(Int32Array::from(vec![Some(90)])) as ArrayRef],
+                Some(7),
+            ),
+            (
+                vec![
+                    Field::new("value", DataType::Int32, true),
+                    field_with_id("previous_name", "3"),
+                ],
+                vec![
+                    Arc::new(Int32Array::from(vec![Some(90)])) as ArrayRef,
+                    Arc::new(Int32Array::from(vec![None])),
+                ],
+                None,
+            ),
+        ] {
+            let physical_schema = Arc::new(Schema::new(file_fields));
+            let batch = RecordBatch::try_new(physical_schema.clone(), file_columns)?;
+            let (mapper, projection) = schema_adapter.map_schema(&physical_schema)?;
+            let projected = mapper.map_batch(batch.project(&projection)?)?;
+            let expr_adapter = PhysicalExprAdapterFactory::create(
+                &factory,
+                logical_schema.clone(),
+                physical_schema,
+            )?;
+            let rewritten = expr_adapter.rewrite(Arc::new(Column::new("value", 0)))?;
+            let expr_result = rewritten.evaluate(&batch)?.into_array(1)?;
+            let expected = Int32Array::from(vec![expected]);
+            assert_eq!(
+                projected
+                    .column(0)
+                    .as_primitive::<arrow::datatypes::Int32Type>(),
+                &expected,
+            );
+            assert_eq!(
+                expr_result.as_primitive::<arrow::datatypes::Int32Type>(),
+                &expected
+            );
+        }
+        let idless = Arc::new(Schema::new(vec![Field::new(
+            "unknown",
+            DataType::Int32,
+            true,
+        )]));
+        assert!(schema_adapter.map_schema(&idless).is_err());
+        let expr_adapter = PhysicalExprAdapterFactory::create(&factory, logical_schema, idless)?;
+        assert!(
+            expr_adapter
+                .rewrite(Arc::new(Column::new("value", 0)))
+                .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_empty_projection_preserves_row_count() -> Result<()> {
         let schema = Arc::new(Schema::empty());
-        let adapter = AuronSchemaAdapter::new(schema.clone());
+        let adapter = AuronSchemaAdapterFactory::default().adapter(schema.clone());
         let file_schema = Schema::new(vec![Field::new("value", DataType::Int32, true)]);
         let (mapper, projection) = adapter.map_schema(&file_schema)?;
         assert!(projection.is_empty());
