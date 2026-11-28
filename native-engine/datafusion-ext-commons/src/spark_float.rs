@@ -13,7 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::Arc};
+
+use arrow::{
+    array::{ArrayRef, Float32Array, Float64Array},
+    compute::kernels::arity::unary,
+    datatypes::{DataType, Float32Type, Float64Type},
+};
+use datafusion::common::Result;
+
+use crate::downcast_any;
 
 pub fn spark_float_cmp<T: num::Float>(left: T, right: T) -> Ordering {
     // Spark places all NaNs last and treats signed zeros as equal.
@@ -26,6 +35,26 @@ pub fn spark_float_cmp<T: num::Float>(left: T, right: T) -> Ordering {
     } else {
         Ordering::Greater
     }
+}
+
+pub fn canonical_nan<T: num::Float>(value: T) -> T {
+    if value.is_nan() { T::nan() } else { value }
+}
+
+/// Canonicalizes NaNs for array set operations. Signed zeros are left as-is:
+/// Spark 4.2 and later normalize them separately before calling the set operation.
+pub fn canonicalize_nans(values: &ArrayRef) -> Result<ArrayRef> {
+    Ok(match values.data_type() {
+        DataType::Float32 => Arc::new(unary::<_, _, Float32Type>(
+            downcast_any!(values, Float32Array)?,
+            canonical_nan,
+        )),
+        DataType::Float64 => Arc::new(unary::<_, _, Float64Type>(
+            downcast_any!(values, Float64Array)?,
+            canonical_nan,
+        )),
+        _ => Arc::clone(values),
+    })
 }
 
 #[cfg(test)]
