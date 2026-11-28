@@ -120,29 +120,33 @@ abstract class NativeTakeOrderedBase(
   nativeSortExprs
 
   override def doExecuteNative(): NativeRDD = {
-    val partial = Shims.get.createNativePartialTakeOrderedExec(limit, sortOrder, child, metrics)
-    if (!partial.outputPartitioning.isInstanceOf[UnknownPartitioning]
-      && partial.outputPartitioning.numPartitions <= 1) {
-      return NativeHelper.executeNative(partial)
+    val singlePartitionInput =
+      if (!child.outputPartitioning.isInstanceOf[UnknownPartitioning]
+        && child.outputPartitioning.numPartitions <= 1) {
+        child
+      } else {
+        val partial =
+          Shims.get.createNativePartialTakeOrderedExec(limit, sortOrder, child, metrics)
+        Shims.get.createNativeShuffleExchangeExec(SinglePartition, partial)
+      }
+    val singlePartitionRDD = NativeHelper.executeNative(singlePartitionInput)
+    val nativeSortExprs = this.nativeSortExprs
+    val nativePartitions = singlePartitionRDD.partitions.map { p =>
+      NativePartition[Partition](p.index, p)
     }
 
-    // merge top-K from every children partitions into a single partition
-    val shuffled = Shims.get.createNativeShuffleExchangeExec(SinglePartition, partial)
-    val shuffledRDD = NativeHelper.executeNative(shuffled)
-    val nativeSortExprs = this.nativeSortExprs
-
-    // take top-K from the final partition
     new NativeRDD(
       sparkContext,
-      metrics = SparkMetricNode(metrics, shuffledRDD.metrics :: Nil),
-      shuffledRDD.partitions,
-      shuffledRDD.partitioner,
-      new OneToOneDependency(shuffledRDD) :: Nil,
+      metrics = SparkMetricNode(metrics, singlePartitionRDD.metrics :: Nil),
+      nativePartitions.toArray,
+      singlePartitionRDD.partitioner,
+      new OneToOneDependency(singlePartitionRDD) :: Nil,
       rddShuffleReadFull = false,
-      (inputPartition, taskContext) => {
+      (partition, taskContext) => {
+        val inputPartition = NativePartition.unwrap(partition)
         val nativeTakeOrderedExec = SortExecNode
           .newBuilder()
-          .setInput(shuffledRDD.nativePlan(inputPartition, taskContext))
+          .setInput(singlePartitionRDD.nativePlan(inputPartition, taskContext))
           .addAllExpr(nativeSortExprs.asJava)
           .setFetchLimit(FetchLimit.newBuilder().setLimit(limit).setOffset(offset))
           .build()
